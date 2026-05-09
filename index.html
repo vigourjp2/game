@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Physics Human Mario Gimmick Stage PushWall</title>
-<!-- Multiplayer host solo world join model -->
+<!-- Multiplayer hard rebuild v3: host solo world authority + deadzone camera -->
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;font-family:sans-serif;touch-action:none}
 #renderCanvas{width:100%;height:100%;display:block;touch-action:none}
@@ -404,64 +404,154 @@ function damageBossSynced(b,dmg=1){
  if(b.hp<=0)defeatBoss(b);
 }
 
-function enforceLocalPlayerCamera(){
- if(isViewer)return;
- if(!playerRoot||!camera)return;
- camera.target.x=playerRoot.position.x;
- camera.target.y=playerRoot.position.y+1.4;
- camera.position.x=playerRoot.position.x;
- camera.position.y=playerRoot.position.y+5.2;
-}
+// === MULTIPLAYER HARD REBUILD: HOST SOLO WORLD AUTHORITY ===
+const MP_MODEL="host-solo-world-authority-v3";
+let hostAuthorityReady=false;
+let lastHostWorldSyncAt=0;
+let lastClientInputAt=0;
+let clientCameraY=null;
 
-
-// === HOST SOLO WORLD JOIN MODEL ===
-// ホストのソロ世界へ入るだけ。クライアントは同じseedと生成距離で同じステージを再生成する。
-// 敵・コイン・アイテム等の確定状態は既存 snapshotWorld/remove イベントでホスト確定。
-// カメラだけは各自プレイヤー中心にする。
-const GAME_MULTIPLAYER_MODEL="host-solo-world-join-v1";
-
-function rebuildStageFromHost(seed, genUntil){
+// クライアントは古い/別バージョンの世界生成をしない。
+// ホストからseed+生成距離を受け取り、同じ生成関数で同じ世界を作る。
+// 敵・コイン・アイテム等はsnapshotWorldでホスト確定に寄せる。
+function rebuildClientWorldFromHost(seed,gen,hostX,hostY){
  clearWorldObjects();
  setStageSeed(seed||STAGE_BASE_SEED);
  generatedUntil=0;
  lastPlatformY=0;
- // 参加直後にホストが見ている範囲まで同じ生成処理で再生成
- const target=Math.max(120, Number(genUntil)||0);
+ const target=Math.max(160,Number(gen)||0);
  ensureGeneratedTo(target);
+ worldReady=true;
+ hostAuthorityReady=true;
+ if(!joinRespawnDone){
+  respawnAboveHost(hostX||0,hostY||4,false);
+  joinRespawnDone=true;
+ }
 }
 
+function makeWorldBasisPacket(){
+ return {
+  type:"worldBasisV3",
+  model:MP_MODEL,
+  seed:STAGE_BASE_SEED,
+  gen:generatedUntil,
+  hostX:playerCollider.position.x,
+  hostY:playerCollider.position.y
+ };
+}
 
-let lastWorldBasisSentAt=0;
-function broadcastWorldBasisOccasionally(){
+function sendWorldBasisV3(conn){
+ if(!conn||!conn.open)return;
+ try{conn.send(makeWorldBasisPacket());}catch(e){}
+}
+
+function broadcastWorldBasisV3(){
  if(!isHost)return;
  const now=performance.now();
- if(now-lastWorldBasisSentAt<1200)return;
- lastWorldBasisSentAt=now;
- conns.forEach(c=>sendHostWorldBasis(c));
+ if(now-lastHostWorldSyncAt<700)return;
+ lastHostWorldSyncAt=now;
+ conns.forEach(c=>sendWorldBasisV3(c));
 }
 
-function sendHostWorldBasis(conn){
- if(!conn||!conn.open)return;
+function applyWorldBasisV3(data){
+ if(!data||data.type!=="worldBasisV3")return;
+ rebuildClientWorldFromHost(data.seed,data.gen,data.hostX,data.hostY);
+}
+
+// クライアントは自分の入力だけホストへ送る
+function sendClientInputV3(){
+ if(isHost||isViewer||!hostConn||!hostConn.open)return;
+ const now=performance.now();
+ if(now-lastClientInputAt<33)return;
+ lastClientInputAt=now;
  try{
-  conn.send({
-   type:"worldBasis",
-   model:GAME_MULTIPLAYER_MODEL,
-   seed:STAGE_BASE_SEED,
-   gen:generatedUntil,
-   hostX:playerCollider.position.x,
-   hostY:playerCollider.position.y
+  hostConn.send({
+   type:"inputV3",
+   id:myNetId,
+   pid:myPeerId,
+   left:!!keys.left,
+   right:!!keys.right,
+   jump:!!keys.jump,
+   atk:!!keys.atk,
+   x:playerCollider.position.x,
+   y:playerCollider.position.y
   });
  }catch(e){}
 }
 
-function applyHostWorldBasis(data){
- if(!data||data.type!=="worldBasis")return;
- rebuildStageFromHost(data.seed||STAGE_BASE_SEED,data.gen||0);
- worldReady=true;
- if(!joinRespawnDone){
-  respawnAboveHost(data.hostX||0,data.hostY||4,false);
-  joinRespawnDone=true;
+// ホスト側でクライアントをソロ世界内に存在させるための最低限の入力反映
+function applyClientInputV3(conn,data){
+ if(!isHost||!data||data.type!=="inputV3")return;
+ notePeerMapping(conn.peer,data.id);
+ const rp=makeRemote(data.id,"GUEST");
+ rp.dead=false;
+ rp.root.setEnabled(true);
+
+ // 位置はクライアントカメラ体験を守るため、クライアント申告位置をベースにしつつ
+ // ホストの同一世界内へ置く。世界判定はホストsnapshotで補正される。
+ if(Number.isFinite(data.x)&&Number.isFinite(data.y)){
+  rp.root.position.set(data.x,data.y,0);
  }
+
+ rp.last=performance.now();
+
+ const payload={
+  type:"remote",
+  id:data.id,
+  pid:data.pid,
+  x:rp.root.position.x,
+  y:rp.root.position.y,
+  z:0,
+  vx:0,
+  score:totalScore,
+  dist:Math.floor(bestX),
+  dead:false
+ };
+ broadcast(payload,conn);
+}
+
+// カメラ：横は自分中心。縦はデッドゾーン方式。
+// 上下に細かく追従せず、画面外に出そうな時だけ動かす。
+function enforceDeadzoneCameraV3(){
+ if(isViewer)return;
+ if(!camera||!playerRoot)return;
+
+ const px=playerRoot.position.x;
+ const py=playerRoot.position.y+1.2;
+
+ // 横は常に自分中心
+ camera.target.x=px;
+ camera.position.x=px;
+
+ if(clientCameraY===null)clientCameraY=py;
+
+ // まず現在のカメラでプレイヤーが画面内のどこにいるかを見る
+ const screen=BABYLON.Vector3.Project(
+  new BABYLON.Vector3(px,py,0),
+  BABYLON.Matrix.Identity(),
+  scene.getTransformMatrix(),
+  camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight())
+ );
+
+ const h=engine.getRenderHeight();
+
+ // 画面下に近づいたら即カメラを下げる
+ // 画面上に近づいたら即カメラを上げる
+ const bottomLimit=h*.70;
+ const topLimit=h*.34;
+
+ if(screen.y>bottomLimit){
+  const excess=(screen.y-bottomLimit)/h;
+  clientCameraY-=Math.max(.18,excess*8.5);
+ }else if(screen.y<topLimit){
+  const excess=(topLimit-screen.y)/h;
+  clientCameraY+=Math.max(.14,excess*7.0);
+ }
+
+ // 急激な上下揺れを抑える
+ const desiredTargetY=clientCameraY;
+ camera.target.y=camera.target.y+(desiredTargetY-camera.target.y)*.38;
+ camera.position.y=camera.target.y+4.2;
 }
 
 function applyNetEvent(data,fromConn){
@@ -1447,7 +1537,7 @@ function startHost(){
  });
  peer.on("connection",conn=>{
   conns.push(conn); setNetStatus("ホスト中："+peerIdToRoomCode(roomId)+" / 参加 "+conns.length+"台");
-  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});sendHostWorldBasis(conn);conn.send(snapshotWorld());conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
+  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});sendWorldBasisV3(conn);conn.send(snapshotWorld());conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
   conn.on("data",d=>handleClientData(conn,d));
   conn.on("close",()=>{conns=conns.filter(c=>c!==conn);setNetStatus("ホスト中："+roomId+" / 参加 "+conns.length+"台")});
  });
@@ -1461,7 +1551,7 @@ function joinRoom(code){
   hostConn=peer.connect(roomId);
   hostConn.on("open",()=>setNetStatus("参加中："+code));
   hostConn.on("data",d=>{
-   if(d&&d.type==="hello"){rebuildStageFromHost(d.seed||STAGE_BASE_SEED,d.gen||0);joinGraceUntil=performance.now()+15000;dead=false;msg.style.display="none";if(!joinRespawnDone){joinRespawnDone=true;respawnFromLeader({x:d.hostX||-12,y:(d.hostY||2)+3});}}
+   if(d&&d.type==="hello"){clearWorldObjects();setStageSeed(d.seed||STAGE_BASE_SEED);joinGraceUntil=performance.now()+15000;dead=false;msg.style.display="none";if(!joinRespawnDone){joinRespawnDone=true;respawnFromLeader({x:d.hostX||-12,y:(d.hostY||2)+3});}}
    handleHostData(d);
   });
   hostConn.on("close",()=>setNetStatus("ホスト切断"));
@@ -1482,7 +1572,7 @@ function joinViewer(code){
   hostConn=peer.connect(roomId);
   hostConn.on("open",()=>{setNetStatus("閲覧参加中："+code+" / 操作なし");hostConn.send({type:"viewer",id:myNetId,pid:myPeerId});});
   hostConn.on("data",d=>{
-   if(d&&d.type==="hello"){rebuildStageFromHost(d.seed||STAGE_BASE_SEED,d.gen||0);}
+   if(d&&d.type==="hello"){clearWorldObjects();setStageSeed(d.seed||STAGE_BASE_SEED);}
    handleHostData(d);
   });
   hostConn.on("close",()=>setNetStatus("ホスト切断"));
@@ -1812,8 +1902,9 @@ engine.runRenderLoop(()=>{
   camera.setTarget(new BABYLON.Vector3(playerCollider.position.x,playerCollider.position.y+1.0,0));
  }
  remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);
- broadcastWorldBasisOccasionally();
- enforceLocalPlayerCamera();
+ broadcastWorldBasisV3();
+ sendClientInputV3();
+ enforceDeadzoneCameraV3();
  scene.render();
 });
 window.addEventListener("resize",()=>engine.resize());
