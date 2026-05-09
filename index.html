@@ -1282,6 +1282,9 @@ engine.runRenderLoop(()=>{
   checkPlayerHeadBounce(v);
 
   grounded=stabilizePlayerOnSurface();
+  // スマブラ式：地面に触れている間は空中ジャンプ使用回数を回復。
+  // 崖から歩き落ちた場合は、地上ジャンプを消費していないので空中ジャンプ回数を残す。
+  if(grounded)airJumpUsed=0;
   bestX=Math.max(bestX,playerCollider.position.x);
   distanceScore=Math.max(0,Math.floor(bestX+12));
   if(!isMultiplayerActive()||isHost){let leadX=playerCollider.position.x;remotePlayers.forEach(o=>{if(!o.dead)leadX=Math.max(leadX,o.root.position.x)});generateChunk(leadX+120);cleanupBehind(leadX-70);}
