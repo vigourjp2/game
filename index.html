@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Physics Human Mario Roguelike Multiplayer</title>
+<title>Physics Human Mario Boss Client Hit Fix</title>
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;font-family:sans-serif;touch-action:none}
 #renderCanvas{width:100%;height:100%;display:block;touch-action:none}
@@ -367,9 +367,41 @@ function applyWorldSnapshot(w){
   respawnFromLeader({x:w.hostX||playerCollider.position.x,y:(w.hostY||playerCollider.position.y)+3});
  }
 }
+function findBossByNetId(id){return bosses.find(b=>getNetId(b.mesh)===id);}
+function findBombByNetId(id){return bossBombs.find(b=>getNetId(b.mesh)===id);}
+function damageBossSynced(b,dmg=1){
+ if(!b||!b.mesh||b.mesh.isDisposed())return;
+ b.hp-=dmg;SFX.hit();
+ if(b.hp<=0)defeatBoss(b);
+}
 function applyNetEvent(data,fromConn){
  if(!data||typeof data!=="object")return;
  if(data.type==="remove")removeByNetId(data.oid,false);
+ if(data.type==="bossDamage"){
+  const b=findBossByNetId(data.bossId);
+  if(data.shotId)removeByNetId(data.shotId,false);
+  if(isHost&&b){damageBossSynced(b,Number(data.dmg)||1);broadcast({type:"bossDamage",bossId:data.bossId,shotId:data.shotId,dmg:Number(data.dmg)||1},fromConn);broadcast(snapshotWorld(),null);}
+  else if(!isHost&&b){damageBossSynced(b,Number(data.dmg)||1);}
+  return;
+ }
+ if(data.type==="bombLight"){
+  const bo=findBombByNetId(data.bombId);
+  if(bo){bo.lit=true;bo.fuseAt=data.fuseAt||performance.now()+1800;bo.vx=data.vx||bo.vx||0;bo.vy=data.vy||bo.vy||0;if(bo.mesh)bo.mesh.material=mFuse;}
+  if(isHost){broadcast({type:"bombLight",bombId:data.bombId,fuseAt:bo?bo.fuseAt:data.fuseAt,vx:data.vx||0,vy:data.vy||0},fromConn);broadcast(snapshotWorld(),null);}
+  return;
+ }
+ if(data.type==="bombKick"){
+  const bo=findBombByNetId(data.bombId);
+  if(bo){bo.lit=true;bo.fuseAt=bo.fuseAt||performance.now()+1600;bo.vx=data.vx||0;bo.vy=data.vy||0;if(bo.mesh&&bo.mesh.physicsImpostor)bo.mesh.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(bo.vx,bo.vy,0));if(bo.mesh)bo.mesh.material=mFuse;}
+  if(isHost){broadcast({type:"bombKick",bombId:data.bombId,vx:data.vx||0,vy:data.vy||0},fromConn);broadcast(snapshotWorld(),null);}
+  return;
+ }
+ if(data.type==="bombExplode"){
+  const bo=findBombByNetId(data.bombId);
+  if(isHost&&bo){explodeBossBomb(bo,true);broadcast({type:"bombExplode",bombId:data.bombId,x:data.x,y:data.y},fromConn);broadcast(snapshotWorld(),null);}
+  else if(!isHost&&bo){explodeBossBomb(bo,true);}
+  return;
+ }
  if(data.type==="attackReq"&&isHost){
   let spawned=null;
   if(data.laser)spawned=fireLaser(data.x,data.y,data.dir||1,data.id||"net");
@@ -581,14 +613,22 @@ function spawnBossRoom(lvl){
  SFX.boss();
  return true;
 }
-function explodeBossBomb(o){
+function explodeBossBomb(o,fromNet=false){
+ if(!o||!o.mesh||o.mesh.isDisposed())return;
+ const bombId=getNetId(o.mesh);
  const x=o.mesh.position.x,y=o.mesh.position.y;
  const ex=BABYLON.MeshBuilder.CreateSphere("explosion",{diameter:3.2,segments:16},scene);
  ex.position.set(x,y,0);ex.material=mExplosion;
  setTimeout(()=>{if(ex&&!ex.isDisposed())ex.dispose();},260);
- bosses.slice().forEach(b=>{if(b.mesh&&!b.mesh.isDisposed()&&BABYLON.Vector3.Distance(b.mesh.position,o.mesh.position)<(2.5+(b.mesh.scaling.x||1)*1.15)){b.hp-=5;SFX.hit();if(b.hp<=0){defeatBoss(b);}}});
+ bosses.slice().forEach(b=>{
+  if(b.mesh&&!b.mesh.isDisposed()&&BABYLON.Vector3.Distance(b.mesh.position,o.mesh.position)<(2.5+(b.mesh.scaling.x||1)*1.15)){
+   if(isHost||fromNet){damageBossSynced(b,5);}
+   else{damageBossSynced(b,5);sendToHost({type:"bossDamage",bossId:getNetId(b.mesh),bombId,dmg:5});}
+  }
+ });
  if(nowGlobal()>invincibleUntil&&BABYLON.Vector3.Distance(playerCollider.position,o.mesh.position)<2.15)playerMiss();
- removeMeshSynced(o.mesh);
+ if(!isHost&&!fromNet)sendToHost({type:"bombExplode",bombId,x,y});
+ if(fromNet)removeByNetId(bombId,false);else removeMeshSynced(o.mesh);
 }
 function nowGlobal(){return performance.now();}
 function defeatBoss(b){
@@ -1301,8 +1341,14 @@ engine.runRenderLoop(()=>{
    const bv=bo.physicsImpostor?bo.physicsImpostor.getLinearVelocity():new BABYLON.Vector3(0,0,0);
    if(o.vx||o.vy){bo.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(o.vx,bv.y,0));o.vx*=.985;}
    const dx=Math.abs(playerCollider.position.x-bo.position.x),dy=playerCollider.position.y-bo.position.y;
-   if(!o.lit&&dx<.62&&dy>.45&&dy<1.75&&v.y<0){o.lit=true;o.fuseAt=now+1800;SFX.hit();playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(v.x,5.4,0));}
-   if(o.lit&&dx<1.0&&Math.abs(dy)<1.25){o.vx=(playerCollider.position.x<bo.position.x?1:-1)*7.2;o.vy=1.2;SFX.shoot();}
+   if(!o.lit&&dx<.62&&dy>.45&&dy<1.75&&v.y<0){
+    o.lit=true;o.fuseAt=now+1800;SFX.hit();playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(v.x,5.4,0));
+    if(!isHost&&isMultiplayerActive())sendToHost({type:"bombLight",bombId:getNetId(bo),fuseAt:o.fuseAt,vx:o.vx||0,vy:o.vy||0});
+   }
+   if(o.lit&&dx<1.0&&Math.abs(dy)<1.25){
+    o.vx=(playerCollider.position.x<bo.position.x?1:-1)*7.2;o.vy=1.2;SFX.shoot();
+    if(!isHost&&isMultiplayerActive())sendToHost({type:"bombKick",bombId:getNetId(bo),vx:o.vx,vy:o.vy});
+   }
    bo.material=o.lit?mFuse:mBomb;
    if(o.lit&&now>o.fuseAt)explodeBossBomb(o);
    if(now>invincibleUntil&&o.lit&&BABYLON.Vector3.Distance(playerCollider.position,bo.position)<.72){o.vx=(playerCollider.position.x<bo.position.x?1:-1)*7.8;}
@@ -1323,7 +1369,11 @@ engine.runRenderLoop(()=>{
     if(o.bossRoom&&now-o.lastBomb>Math.max(1200,3000-o.lvl*18)){spawnBossBomb(b.position.x-o.dir*(1.7*scale),b.position.y-(1.05*scale));o.lastBomb=now;}
    }
    if(now>invincibleUntil&&isBodyHit(b,1.05*scale,1.20*scale)){
-    if(playerCollider.position.y>b.position.y+(.78*scale)&&v.y<0){o.hp-=1;SFX.hit();playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(v.x,6.2,0));if(o.hp<=0)defeatBoss(o);}
+    if(playerCollider.position.y>b.position.y+(.78*scale)&&v.y<0){
+     damageBossSynced(o,1);
+     if(!isHost&&isMultiplayerActive())sendToHost({type:"bossDamage",bossId:getNetId(b),dmg:1});
+     playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(v.x,6.2,0));
+    }
     else if(now<shieldUntil){SFX.shield();shieldUntil=0;playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(-o.dir*4,5,0));}
     else playerMiss();
    }
@@ -1331,7 +1381,15 @@ engine.runRenderLoop(()=>{
   projectiles.slice().forEach(o=>{
    o.mesh.position.x+=o.vx/60;o.mesh.position.y+=o.vy/60;o.vy-=.045;
    if(now-o.born>5500){removeMeshSynced(o.mesh);return;}
-   bosses.slice().forEach(b=>{if(o.owner==="player"&&BABYLON.Vector3.Distance(o.mesh.position,b.mesh.position)<((o.size||1)*.42+1.0+(b.mesh.scaling.x||1)*1.05)&&o.born+80<now){b.hp-=o.laser?2:1;removeMeshSynced(o.mesh);if(b.hp<=0){defeatBoss(b);}else SFX.hit();}});
+   bosses.slice().forEach(b=>{
+    if(o.owner!=="boss"&&BABYLON.Vector3.Distance(o.mesh.position,b.mesh.position)<((o.size||1)*.42+1.0+(b.mesh.scaling.x||1)*1.05)&&o.born+80<now){
+     const dmg=o.laser?2:1;
+     const bossId=getNetId(b.mesh),shotId=getNetId(o.mesh);
+     damageBossSynced(b,dmg);
+     removeMeshSynced(o.mesh);
+     if(!isHost&&isMultiplayerActive())sendToHost({type:"bossDamage",bossId,shotId,dmg});
+    }
+   });
    enemies.slice().forEach(en=>{if(BABYLON.Vector3.Distance(o.mesh.position,en.mesh.position)<(.55+(o.size||1)*.35)){removeMeshSynced(en.mesh);removeMeshSynced(o.mesh);coinScore+=2;SFX.kill();}});
    flyingEnemies.slice().forEach(en=>{if(BABYLON.Vector3.Distance(o.mesh.position,en.mesh.position)<(.55+(o.size||1)*.35)){removeMeshSynced(en.mesh);removeMeshSynced(o.mesh);coinScore+=3;SFX.kill();}});
    if(o.owner==="boss"&&now>invincibleUntil&&isBodyHit(o.mesh,.34,.55)){if(now<shieldUntil){SFX.shield();shieldUntil=0;removeMeshSynced(o.mesh);}else playerMiss();}
