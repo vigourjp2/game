@@ -1340,7 +1340,18 @@ engine.runRenderLoop(()=>{
   if(grounded)airJumpUsed=0;
   bestX=Math.max(bestX,playerCollider.position.x);
   distanceScore=Math.max(0,Math.floor(bestX+12));
-  if(!isMultiplayerActive()||isHost){let leadX=playerCollider.position.x;remotePlayers.forEach(o=>{if(!o.dead)leadX=Math.max(leadX,o.root.position.x)});generateChunk(leadX+120);cleanupBehind(leadX-70);}
+  if(!isMultiplayerActive()||isHost){
+   let leadX=playerCollider.position.x;
+   let tailX=playerCollider.position.x;
+   remotePlayers.forEach(o=>{
+    if(!o.dead&&o.root&&o.root.isEnabled()&&performance.now()-o.last<5000){
+     leadX=Math.max(leadX,o.root.position.x);
+     tailX=Math.min(tailX,o.root.position.x);
+    }
+   });
+   generateChunk(leadX+220);
+   cleanupBehind(tailX-650);
+  }
   if(playerCollider.position.y<-7)playerMiss();
 
   playerRoot.position.copyFrom(playerCollider.position);
