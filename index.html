@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Physics Human Mario Gimmick Stage PushWall</title>
+<!-- Client stage sync v2 enabled -->
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;font-family:sans-serif;touch-action:none}
 #renderCanvas{width:100%;height:100%;display:block;touch-action:none}
@@ -402,6 +403,128 @@ function damageBossSynced(b,dmg=1){
  b.hp-=dmg;SFX.hit();
  if(b.hp<=0)defeatBoss(b);
 }
+
+// === STAGE SNAPSHOT SYNC V2: host sends actual generated stage meshes ===
+const GAME_STAGE_VERSION="visible-slope-mesh-v2";
+let lastStageSnapshotAt=0;
+let remoteStageMeshes=[];
+let remoteStageAppliedKey="";
+
+function stageMeshShouldSync(m){
+ if(!m||m.isDisposed())return false;
+ const n=m.name||"";
+ if(n==="body"||n==="head"||n==="legL"||n==="legR")return false;
+ if(n.indexOf("remote")===0)return false;
+ if(n.indexOf("tag")>=0)return false;
+ return /plat|floor|ground|bridge|ramp|rampSafe|rampVisual|ice|oneWay|fall|moving|pendulum|seesaw|skate|bossArena|bossEntry|bossExit|solid|safe|surface/i.test(n);
+}
+
+function makeStageSnapshotV2(){
+ const data=[];
+ scene.meshes.forEach(m=>{
+  if(!stageMeshShouldSync(m))return;
+  const bb=m.getBoundingInfo().boundingBox;
+  data.push({
+   name:m.name||"mesh",
+   mat:m.material&&m.material.name?m.material.name:"brick",
+   px:m.position.x,py:m.position.y,pz:m.position.z,
+   rx:m.rotation.x,ry:m.rotation.y,rz:m.rotation.z,
+   w:bb.maximumWorld.x-bb.minimumWorld.x,
+   h:bb.maximumWorld.y-bb.minimumWorld.y,
+   d:bb.maximumWorld.z-bb.minimumWorld.z,
+   vis:m.visibility===undefined?1:m.visibility,
+   isRamp:!!m.__isRamp,
+   rampAngle:m.__rampAngle||0,
+   rampCenterX:m.__rampCenterX||m.position.x,
+   rampCenterY:m.__rampCenterY||m.position.y,
+   rampWidth:m.__rampWidth||0,
+   rampHeight:m.__rampHeight||0,
+   topSurfaceY:m.__topSurfaceY
+  });
+ });
+ return {type:"stageSnapshotV2",version:GAME_STAGE_VERSION,gen:generatedUntil||0,t:Date.now(),data};
+}
+
+function matByNameStage(n){
+ if(n==="brick")return mBrick;
+ if(n==="ice"&&typeof mIce!=="undefined")return mIce;
+ if(n==="warning"&&typeof mWarning!=="undefined")return mWarning;
+ if(n==="green"&&typeof mGreen!=="undefined")return mGreen;
+ if(n==="red"&&typeof mRed!=="undefined")return mRed;
+ return mBrick;
+}
+
+function clearClientStageMeshes(){
+ remoteStageMeshes.forEach(m=>{
+  try{if(m.physicsImpostor)m.physicsImpostor.dispose();m.dispose();}catch(e){}
+ });
+ remoteStageMeshes=[];
+ if(Array.isArray(jumpSurfaces))jumpSurfaces.length=0;
+ if(Array.isArray(stageObjects))stageObjects.length=0;
+}
+
+function applyStageSnapshotV2(snap){
+ if(!snap||snap.type!=="stageSnapshotV2"||!Array.isArray(snap.data))return;
+ const key=snap.version+"|"+snap.gen+"|"+snap.data.length;
+ if(remoteStageAppliedKey===key)return;
+ remoteStageAppliedKey=key;
+
+ clearClientStageMeshes();
+
+ snap.data.forEach(o=>{
+  const mesh=BABYLON.MeshBuilder.CreateBox(
+   o.name||"remoteStage",
+   {width:Math.max(.1,o.w||1),height:Math.max(.1,o.h||1),depth:Math.max(.1,o.d||5)},
+   scene
+  );
+  mesh.position.set(o.px||0,o.py||0,o.pz||0);
+  mesh.rotation.set(o.rx||0,o.ry||0,o.rz||0);
+  mesh.material=matByNameStage(o.mat);
+  mesh.visibility=o.vis===undefined?1:o.vis;
+  mesh.__remoteStage=true;
+
+  if(o.isRamp){
+   mesh.__isRamp=true;
+   mesh.__rampAngle=o.rampAngle||0;
+   mesh.__rampCenterX=o.rampCenterX||o.px||0;
+   mesh.__rampCenterY=o.rampCenterY||o.py||0;
+   mesh.__rampWidth=o.rampWidth||o.w||1;
+   mesh.__rampHeight=o.rampHeight||o.h||1;
+  }
+  if(o.topSurfaceY!==undefined)mesh.__topSurfaceY=o.topSurfaceY;
+
+  const n=o.name||"";
+  if(/plat|floor|ground|bridge|rampSafe|ice|oneWay|fall|moving|bossArena|bossEntry|bossExit|solid|safe|surface/i.test(n)){
+   try{
+    mesh.physicsImpostor=new BABYLON.PhysicsImpostor(
+     mesh,
+     BABYLON.PhysicsImpostor.BoxImpostor,
+     {mass:0,friction:.88,restitution:.02},
+     scene
+    );
+   }catch(e){}
+   if(typeof registerJumpSurface==="function")registerJumpSurface(mesh);
+   else if(Array.isArray(jumpSurfaces))jumpSurfaces.push(mesh);
+  }
+
+  remoteStageMeshes.push(mesh);
+ });
+}
+
+function sendStageSnapshotTo(conn){
+ if(!conn||!conn.open)return;
+ try{conn.send(makeStageSnapshotV2());}catch(e){}
+}
+
+function broadcastStageSnapshotV2(){
+ if(!isHost)return;
+ const now=performance.now();
+ if(now-lastStageSnapshotAt<600)return;
+ lastStageSnapshotAt=now;
+ const snap=makeStageSnapshotV2();
+ conns.forEach(c=>{if(c&&c.open)c.send(snap);});
+}
+
 function applyNetEvent(data,fromConn){
  if(!data||typeof data!=="object")return;
  if(data.type==="remove"){
@@ -1385,7 +1508,7 @@ function startHost(){
  });
  peer.on("connection",conn=>{
   conns.push(conn); setNetStatus("ホスト中："+peerIdToRoomCode(roomId)+" / 参加 "+conns.length+"台");
-  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});conn.send(snapshotWorld());conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
+  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});conn.send(snapshotWorld());sendStageSnapshotTo(conn);conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
   conn.on("data",d=>handleClientData(conn,d));
   conn.on("close",()=>{conns=conns.filter(c=>c!==conn);setNetStatus("ホスト中："+roomId+" / 参加 "+conns.length+"台")});
  });
@@ -1750,6 +1873,7 @@ engine.runRenderLoop(()=>{
   camera.setTarget(new BABYLON.Vector3(playerCollider.position.x,playerCollider.position.y+1.0,0));
  }
  remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);
+ broadcastStageSnapshotV2();
  scene.render();
 });
 window.addEventListener("resize",()=>engine.resize());
