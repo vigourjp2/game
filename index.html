@@ -73,6 +73,16 @@ sun.intensity=.7;
 function mat(n,r,g,b,a=1){const m=new BABYLON.StandardMaterial(n,scene);m.diffuseColor=new BABYLON.Color3(r,g,b);m.alpha=a;return m}
 const mGround=mat("ground",.28,.7,.22),mBrick=mat("brick",.65,.35,.16),mBody=mat("body",1,.18,.15),mHead=mat("head",1,.75,.55),mCoin=mat("coin",1,.82,.05),mEnemy=mat("enemy",.12,.1,.1),mGoal=mat("goal",.2,.8,1);
 const mSteel=mat("steel",.46,.48,.52),mSpring=mat("spring",.85,.15,.9),mSteam=mat("steam",.9,.95,1,.35),mWater=mat("water",.05,.38,1,.48),mItem=mat("item",.1,1,.55),mBoss=mat("boss",.55,.05,.1),mSky=mat("skyEnemy",1,.08,.08),mLava=mat("lava",1,.25,.04,.78),mParachute=mat("para",1,1,1,.8),mWarning=mat("warning",1,.95,.05,.82),mBomb=mat("bomb",.08,.08,.08),mFuse=mat("fuse",1,.45,.05,.85),mExplosion=mat("explosion",1,.55,.05,.55),mClear=mat("clear",1,1,.2,.8);
+const mShotPower=[mLava,mat("shotLv1",1,.45,.05,.85),mat("shotLv2",1,.05,.05,.9),mat("shotLv3",.75,.05,1,.92),mat("shotLv4",.05,.8,1,.95),mat("shotLv5",1,1,.05,.98)];
+function getShotMaterial(){return mShotPower[Math.min(mShotPower.length-1,Math.max(0,shopAttackLevel||0))];}
+function ownedShotSize(){return 1+Math.min(5,shopBigShotLevel*.38);}
+function ownedLaserThickness(){return .22+Math.min(1.2,shopLaserLevel*.11);}
+function ownedAttackDamage(){return 1+Math.floor(shopAttackLevel/2);}
+function effectDurationMultiplier(){return shopEffectLevel>=10?Infinity:(1+shopEffectLevel*.7);}
+function hasPermanentAttack(){return shopAttackLevel>0;}
+function hasPermanentLaser(){return shopLaserLevel>0;}
+function hasPermanentBigShot(){return shopBigShotLevel>0;}
+function hasPermanentSpeed(){return shopSpeedLevel>0;}
 
 // ---- BGM / SE：外部ファイル不要の内蔵Web Audio ----
 let audioCtx=null, audioReady=false, bgmOn=true, bgmTimer=null, bgmStep=0, bgmGain=null;
@@ -421,7 +431,7 @@ function applyNetEvent(data,fromConn){
  }
  if(data.type==="attackReq"&&isHost){
   let spawned=null;
-  if(data.laser)spawned=fireLaser(data.x,data.y,data.dir||1,data.id||"net");
+  if(data.laser)spawned=fireLaser(data.x,data.y,data.dir||1,data.id||"net",data.size||.22);
   else spawned=fireProjectile(data.x,data.y,data.dir||1,data.id||"player",data.size||1);
   const oid=spawned?getNetId(spawned):null;
   broadcast({type:"attackSpawn",oid,x:data.x,y:data.y,dir:data.dir||1,size:data.size||1,laser:!!data.laser,from:data.id||"guest"},fromConn);
@@ -471,12 +481,13 @@ function fireLocalProjectile(x,y,dir,size=1,laser=false,fromNet=false){
  const now=performance.now();
  let mesh;
  if(laser){
-  mesh=BABYLON.MeshBuilder.CreateBox("localLaser",{width:9.8,height:.22,depth:.35},scene);
-  mesh.position.set(x+dir*5.0,y,0);mesh.material=mLava;
-  projectiles.push({mesh,vx:dir*10.5,vy:0,born:now,owner:"local",size:3,laser:true,predicted:true});
+  const thick=Math.max(.22,size||ownedLaserThickness());
+  mesh=BABYLON.MeshBuilder.CreateBox("localLaser",{width:9.8,height:thick,depth:.35+thick*.25},scene);
+  mesh.position.set(x+dir*5.0,y,0);mesh.material=getShotMaterial();
+  projectiles.push({mesh,vx:dir*10.5,vy:0,born:now,owner:"local",size:thick,laser:true,predicted:true});
  }else{
   mesh=BABYLON.MeshBuilder.CreateSphere("localShot",{diameter:.32*size,segments:12},scene);
-  mesh.position.set(x,y,0);mesh.material=mLava;
+  mesh.position.set(x,y,0);mesh.material=getShotMaterial();
   projectiles.push({mesh,vx:dir*5.6,vy:rand(-.5,1.2),born:now,owner:"local",size,predicted:true});
  }
  return mesh;
@@ -524,13 +535,13 @@ function item(x,y,type){
 }
 
 const SHOP_DEFS={
- jump:{name:"JUMP UP",cost:8,desc:"ジャンプ力UP"},
- double:{name:"2段JUMP",cost:12,desc:"二段ジャンプ"},
- speed:{name:"SPEED UP",cost:10,desc:"移動スピードUP"},
- bigshot:{name:"BIG SHOT",cost:14,desc:"攻撃玉巨大化"},
- extend:{name:"TIME +",cost:16,desc:"効果時間延長"},
- laser:{name:"LASER",cost:22,desc:"横一線レーザー"},
- attack:{name:"ATK",cost:6,desc:"攻撃能力"}
+ jump:{name:"JUMP UP",cost:8,desc:"購入ごとにジャンプ力UP"},
+ double:{name:"MULTI JUMP",cost:12,desc:"購入ごとに空中ジャンプ+1"},
+ speed:{name:"SPEED UP",cost:10,desc:"購入ごとに移動速度UP"},
+ bigshot:{name:"BIG SHOT",cost:14,desc:"購入ごとに攻撃玉巨大化"},
+ extend:{name:"TIME +",cost:16,desc:"購入ごとに通常アイテム時間延長"},
+ laser:{name:"LASER",cost:22,desc:"購入ごとにレーザー太さUP"},
+ attack:{name:"ATK",cost:6,desc:"購入ごとに攻撃力UP・色変化"}
 };
 function shopItem(x,y,type){
  const def=SHOP_DEFS[type]||SHOP_DEFS.jump;
@@ -541,13 +552,13 @@ function shopItem(x,y,type){
 }
 function applyShopEffect(type){
  const forever=Number.POSITIVE_INFINITY;
- if(type==="jump")jumpPowerBonus=Math.min(3.2,jumpPowerBonus+0.85);
- if(type==="double")doubleJumpUntil=forever;
- if(type==="speed")speedBoostUntil=forever;
- if(type==="bigshot")bigShotUntil=forever;
- if(type==="extend")effectBoostUntil=forever;
- if(type==="laser")laserUntil=forever;
- if(type==="attack"){hasAttack=true;attackUntil=forever;}
+ if(type==="jump"){shopJumpLevel++;jumpPowerBonus=Math.min(12,shopJumpLevel*.55);}
+ if(type==="double"){shopAirJumpCount++;doubleJumpUntil=forever;}
+ if(type==="speed"){shopSpeedLevel++;speedBoostUntil=forever;}
+ if(type==="bigshot"){shopBigShotLevel++;bigShotUntil=forever;}
+ if(type==="extend"){shopEffectLevel++;effectBoostUntil=forever;}
+ if(type==="laser"){shopLaserLevel++;laserUntil=forever;}
+ if(type==="attack"){shopAttackLevel++;hasAttack=true;attackUntil=forever;}
  SFX.item();
 }
 function updateShopLabel(o){
@@ -669,16 +680,16 @@ function gameClear(){
 
 function fireProjectile(x,y,dir,owner="player",size=1){
  SFX.shoot();
- const p=BABYLON.MeshBuilder.CreateSphere("shot",{diameter:(owner==="boss"?.42:.32)*size,segments:12},scene);p.position.set(x,y,0);p.material=mLava;
+ const p=BABYLON.MeshBuilder.CreateSphere("shot",{diameter:(owner==="boss"?.42:.32)*size,segments:12},scene);p.position.set(x,y,0);p.material=owner==="boss"?mLava:getShotMaterial();
  projectiles.push({mesh:p,vx:dir*(owner==="boss"?4.4:5.6),vy:owner==="boss"?rand(-.35,.65):rand(-.5,1.2),born:performance.now(),owner,size});remember(p,"shot");return p;
 }
-function fireLaser(x,y,dir,owner="player"){
+function fireLaser(x,y,dir,owner="player",thickness=.22){
  SFX.attack();
- const beam=staticBox("laser",x+dir*5.0,y,0,9.8,.22,.35,mLava);
+ const beam=staticBox("laser",x+dir*5.0,y,0,9.8,Math.max(.22,thickness),.35+Math.max(.22,thickness)*.25,owner==="boss"?mLava:getShotMaterial());
  if(beam.physicsImpostor)beam.physicsImpostor.dispose();
  remember(beam,"shot");
- projectiles.push({mesh:beam,vx:dir*10.5,vy:0,born:performance.now(),owner,size:3,laser:true});
- if(!isHost&&isMultiplayerActive())sendToHost({type:"attackReq",x,y,dir,size:3,laser:true,id:myNetId});
+ projectiles.push({mesh:beam,vx:dir*10.5,vy:0,born:performance.now(),owner,size:Math.max(.22,thickness),laser:true});
+ if(!isHost&&isMultiplayerActive())sendToHost({type:"attackReq",x,y,dir,size:Math.max(.22,thickness),laser:true,id:myNetId});
  return beam;
 }
 function rand(a,b){return a+seededRandom()*(b-a)}
@@ -828,7 +839,8 @@ playerCollider.physicsImpostor=new BABYLON.PhysicsImpostor(playerCollider,BABYLO
 let grounded=false,dead=false;
 let moveL=false,moveR=false;
 let hasAttack=false,attackUntil=0,shieldUntil=0,paraUntil=0,magnetUntil=0,attackCooldown=0;
-let jumpPowerBonus=0,doubleJumpUntil=0,speedBoostUntil=0,bigShotUntil=0,effectBoostUntil=0,laserUntil=0,airJumpUsed=false;
+let jumpPowerBonus=0,doubleJumpUntil=0,speedBoostUntil=0,bigShotUntil=0,effectBoostUntil=0,laserUntil=0,airJumpUsed=0;
+let shopJumpLevel=0,shopAirJumpCount=0,shopSpeedLevel=0,shopBigShotLevel=0,shopEffectLevel=0,shopLaserLevel=0,shopAttackLevel=0;
 function resetPurchasedAndActiveItemsOnMiss(){
  hasAttack=false;
  attackUntil=0;
@@ -841,7 +853,14 @@ function resetPurchasedAndActiveItemsOnMiss(){
  bigShotUntil=0;
  effectBoostUntil=0;
  laserUntil=0;
- airJumpUsed=false;
+ airJumpUsed=0;
+ shopJumpLevel=0;
+ shopAirJumpCount=0;
+ shopSpeedLevel=0;
+ shopBigShotLevel=0;
+ shopEffectLevel=0;
+ shopLaserLevel=0;
+ shopAttackLevel=0;
 }
 function bind(id,on,off){
  const e=document.getElementById(id);
@@ -896,28 +915,28 @@ function jump(){
  const now=performance.now();
  const v=playerCollider.physicsImpostor.getLinearVelocity();
  if(grounded){
-  airJumpUsed=false;
+  airJumpUsed=0;
   playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(v.x,6.7+jumpPowerBonus,0));
   SFX.jump();
   grounded=false;
- }else if(now<doubleJumpUntil&&!airJumpUsed){
-  airJumpUsed=true;
-  playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(v.x,7.2+jumpPowerBonus*.6,0));
+ }else if(now<doubleJumpUntil&&airJumpUsed<shopAirJumpCount){
+  airJumpUsed++;
+  playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(v.x,7.2+jumpPowerBonus*.6+Math.min(3,shopAirJumpCount*.12),0));
   SFX.spring();
  }
 }
 function attack(){
  if(dead||performance.now()<attackCooldown)return;
  const now=performance.now();
- if(!(hasAttack||now<attackUntil))return;
+ if(!(hasAttack||hasPermanentAttack()||now<attackUntil))return;
  attackCooldown=now+360;
  const dir=playerRoot.rotation.y===Math.PI?-1:1;
  SFX.attack();
  const x=playerCollider.position.x+dir*.9, y=playerCollider.position.y+.25;
- const size=now<bigShotUntil?2.15:1;
- if(now<laserUntil){
-  if(isHost||!isMultiplayerActive())fireLaser(x,y,dir);
-  else {fireLocalProjectile(x,y,dir,3,true);sendToHost({type:"attackReq",x,y,dir,size:3,laser:true,id:myNetId});}
+ const size=(now<bigShotUntil||hasPermanentBigShot())?ownedShotSize():1;
+ if(now<laserUntil||hasPermanentLaser()){
+  if(isHost||!isMultiplayerActive())fireLaser(x,y,dir,"player",ownedLaserThickness());
+  else {fireLocalProjectile(x,y,dir,ownedLaserThickness(),true);sendToHost({type:"attackReq",x,y,dir,size:ownedLaserThickness(),laser:true,id:myNetId});}
   return;
  }
  if(isHost||!isMultiplayerActive())fireProjectile(x,y,dir,"player",size);
@@ -1006,15 +1025,15 @@ function updateUI(){
  const now=performance.now();
  let abil=[];
  if(now<shieldUntil)abil.push("盾");
- if(hasAttack||now<attackUntil)abil.push("攻撃");
+ if(hasAttack||hasPermanentAttack()||now<attackUntil)abil.push("攻撃Lv"+Math.max(1,shopAttackLevel));
  if(now<paraUntil)abil.push("パラ");
  if(now<magnetUntil)abil.push("磁石");
- if(jumpPowerBonus>0)abil.push("ジャンプ+"+jumpPowerBonus.toFixed(1));
- if(now<doubleJumpUntil)abil.push("二段JUMP");
- if(now<speedBoostUntil)abil.push("速度UP");
- if(now<bigShotUntil)abil.push("大玉");
- if(now<effectBoostUntil)abil.push("効果延長");
- if(now<laserUntil)abil.push("レーザー");
+ if(shopJumpLevel>0)abil.push("ジャンプLv"+shopJumpLevel);
+ if(shopAirJumpCount>0)abil.push((shopAirJumpCount+1)+"段JUMP");
+ if(shopSpeedLevel>0)abil.push("速度Lv"+shopSpeedLevel);
+ if(shopBigShotLevel>0)abil.push("大玉Lv"+shopBigShotLevel);
+ if(shopEffectLevel>0)abil.push(shopEffectLevel>=10?"効果∞":"効果延長Lv"+shopEffectLevel);
+ if(shopLaserLevel>0)abil.push("レーザーLv"+shopLaserLevel);
  let bossInfo="";
  const liveBoss=bosses.find(b=>b.mesh&&!b.mesh.isDisposed());
  if(liveBoss)bossInfo="<br>BOSS Lv"+liveBoss.lvl+" HP: "+Math.max(0,liveBoss.hp)+"/"+(liveBoss.maxHp||liveBoss.hp)+" / ボス部屋";
@@ -1255,7 +1274,7 @@ engine.runRenderLoop(()=>{
   }
   const v=playerCollider.physicsImpostor.getLinearVelocity();
   let vx=0;
-  const moveSpeed=performance.now()<speedBoostUntil?5.7:4.1;
+  const moveSpeed=(performance.now()<speedBoostUntil||hasPermanentSpeed())?Math.min(9.5,4.1+shopSpeedLevel*.45):4.1;
   if(moveL)vx=-moveSpeed;
   if(moveR)vx=moveSpeed;
   playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(vx,v.y,0));
@@ -1328,11 +1347,11 @@ engine.runRenderLoop(()=>{
   items.slice().forEach(o=>{
    o.mesh.rotation.y+=.06;o.mesh.position.y+=Math.sin(now/180+o.phase)*.002;
    if(BABYLON.Vector3.Distance(o.mesh.position,playerCollider.position)<1.15){
-    const boost=now<effectBoostUntil?1.65:1;
-    if(o.type==="shield")shieldUntil=now+Math.floor(6500*boost);
-    if(o.type==="attack"){hasAttack=true;attackUntil=now+Math.floor(12000*boost);}
-    if(o.type==="para")paraUntil=now+Math.floor(9000*boost);
-    if(o.type==="magnet")magnetUntil=now+Math.floor(7500*boost);
+    const boost=effectDurationMultiplier();
+    if(o.type==="shield")shieldUntil=boost===Infinity?Infinity:now+Math.floor(6500*boost);
+    if(o.type==="attack"){hasAttack=true;attackUntil=boost===Infinity?Infinity:now+Math.floor(12000*boost);}
+    if(o.type==="para")paraUntil=boost===Infinity?Infinity:now+Math.floor(9000*boost);
+    if(o.type==="magnet")magnetUntil=boost===Infinity?Infinity:now+Math.floor(7500*boost);
     SFX.item();
     removeMeshSynced(o.mesh);
    }
@@ -1404,7 +1423,7 @@ engine.runRenderLoop(()=>{
    if(now-o.born>5500){removeMeshSynced(o.mesh);return;}
    bosses.slice().forEach(b=>{
     if(o.owner!=="boss"&&BABYLON.Vector3.Distance(o.mesh.position,b.mesh.position)<((o.size||1)*.42+1.0+(b.mesh.scaling.x||1)*1.05)&&o.born+80<now){
-     const dmg=o.laser?2:1;
+     const dmg=o.laser?Math.max(2,ownedAttackDamage()+1):ownedAttackDamage();
      const bossId=getNetId(b.mesh),shotId=getNetId(o.mesh);
      damageBossSynced(b,dmg);
      removeMeshSynced(o.mesh);
