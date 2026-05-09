@@ -961,33 +961,53 @@ let joinRespawnDone=false;
 let lastPlayerBounceAt=0;
 function isPlayerDown(){return dead||performance.now()<downUntil;}
 function isMultiplayerActive(){return isHost?conns.some(c=>c&&c.open):(hostConn&&hostConn.open)}
-const HOST_FOLLOW_MAX_X=24;
-const HOST_FOLLOW_MAX_Y=16;
-const HOST_FOLLOW_FALL_Y=10;
-function getHostAnchor(){
- if(isHost&&playerCollider)return {x:playerCollider.position.x,y:playerCollider.position.y,dead:isPlayerDown()};
- const h=remotePlayers.get("HOST");
- if(h&&!h.dead&&h.root&&h.root.isEnabled()&&performance.now()-h.last<3500)return {x:h.root.position.x,y:h.root.position.y,dead:false};
- return null;
+const GENERATED_RANGE_RESPAWN_BUFFER=10;
+function getGeneratedWorldBounds(){
+ let minX=Infinity,maxX=-Infinity;
+ stageObjects.forEach(o=>{
+  const m=o&&o.mesh;
+  if(!m||m.isDisposed())return;
+  const k=o.kind;
+  if(!(k==="surface"||k==="water"||k==="spring"||k==="shop"||k==="item"||k==="boss"))return;
+  let left=m.position.x-1,right=m.position.x+1;
+  try{
+   const bi=m.getBoundingInfo();
+   const ex=bi.boundingBox.extendSizeWorld;
+   left=m.position.x-ex.x;
+   right=m.position.x+ex.x;
+  }catch(e){}
+  if(left<minX)minX=left;
+  if(right>maxX)maxX=right;
+ });
+ if(!Number.isFinite(minX)||!Number.isFinite(maxX)){
+  minX=-18;
+  maxX=Math.max(40,generatedUntil+10);
+ }
+ return {minX,maxX};
 }
-function forceWarpAboveHostIfTooFar(){
+function getHostRespawnAnchor(){
+ const h=remotePlayers.get("HOST");
+ if(!isHost&&h&&!h.dead&&h.root&&h.root.isEnabled()&&performance.now()-h.last<5000)return {x:h.root.position.x,y:h.root.position.y};
+ const leader=getLiveLeader();
+ if(leader)return leader;
+ return {x:playerCollider.position.x,y:playerCollider.position.y+2};
+}
+function forceWarpIfOutsideGeneratedWorld(){
  if(isHost||isViewer||!isMultiplayerActive()||!worldReady)return false;
  if(performance.now()<joinGraceUntil)return false;
- const h=getHostAnchor();
- if(!h)return false;
- const dx=Math.abs(playerCollider.position.x-h.x);
- const dy=Math.abs(playerCollider.position.y-h.y);
- const fellBehind=playerCollider.position.y<h.y-HOST_FOLLOW_FALL_Y;
- if(dx>HOST_FOLLOW_MAX_X||dy>HOST_FOLLOW_MAX_Y||fellBehind){
+ const b=getGeneratedWorldBounds();
+ const x=playerCollider.position.x;
+ if(x<b.minX-GENERATED_RANGE_RESPAWN_BUFFER||x>b.maxX+GENERATED_RANGE_RESPAWN_BUFFER){
+  const a=getHostRespawnAnchor();
   const now=performance.now();
-  playerCollider.position.set(h.x,h.y+5.2,0);
+  playerCollider.position.set(a.x,a.y+5.2,0);
   playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0,0,0));
   playerCollider.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0,0,0));
   invincibleUntil=Math.max(invincibleUntil,now+1800);
   downUntil=0;
   playerRoot.setEnabled(true);
   msg.style.display="none";
-  setNetStatus("ホストから離れたため自動合流 / ミス扱いなし");
+  setNetStatus("生成済みステージ範囲外のため自動合流 / ミス扱いなし");
   SFX.respawn();
   return true;
  }
@@ -1304,7 +1324,7 @@ engine.runRenderLoop(()=>{
    playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0,0,0));
    remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);scene.render();return;
   }
-  forceWarpAboveHostIfTooFar();
+  forceWarpIfOutsideGeneratedWorld();
   const v=playerCollider.physicsImpostor.getLinearVelocity();
   let vx=0;
   const moveSpeed=(performance.now()<speedBoostUntil||hasPermanentSpeed())?Math.min(9.5,4.1+shopSpeedLevel*.45):4.1;
@@ -1488,16 +1508,10 @@ engine.runRenderLoop(()=>{
 
   updateUI();
   if(levelFromX(distanceScore)>=100&&!bosses.some(b=>b.mesh&&!b.mesh.isDisposed()))gameClear();
-  // Camera policy:
-  // - World authority / leash remains host-based.
-  // - Play camera is always local-player based for playable clients.
-  // - Viewer mode above still follows HOST.
-  const camX=playerCollider.position.x;
-  const camY=playerCollider.position.y;
-  camera.position.x=camX;
-  camera.position.y=camY+2.6;
+  camera.position.x=playerCollider.position.x;
+  camera.position.y=playerCollider.position.y+2.6;
   camera.position.z=-10;
-  camera.setTarget(new BABYLON.Vector3(camX,camY+1.0,0));
+  camera.setTarget(new BABYLON.Vector3(playerCollider.position.x,playerCollider.position.y+1.0,0));
  }
  remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);
  scene.render();
