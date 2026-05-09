@@ -1488,12 +1488,12 @@ engine.runRenderLoop(()=>{
 
   updateUI();
   if(levelFromX(distanceScore)>=100&&!bosses.some(b=>b.mesh&&!b.mesh.isDisposed()))gameClear();
-  let camX=playerCollider.position.x;
-  let camY=playerCollider.position.y;
-  if(!isHost&&isMultiplayerActive()){
-   const h=getHostAnchor();
-   if(h){camX=h.x;camY=h.y;}
-  }
+  // Camera policy:
+  // - World authority / leash remains host-based.
+  // - Play camera is always local-player based for playable clients.
+  // - Viewer mode above still follows HOST.
+  const camX=playerCollider.position.x;
+  const camY=playerCollider.position.y;
   camera.position.x=camX;
   camera.position.y=camY+2.6;
   camera.position.z=-10;
