@@ -224,6 +224,7 @@ function registerNetObject(mesh,kind){
 }
 function getNetId(mesh){return mesh&&mesh.metadata?mesh.metadata.netId:null;}
 function removeByNetId(id,notify){
+ if(id)tombstoneNetId(id,18000);
  const mesh=netObjects.get(id);
  if(!mesh||mesh.isDisposed())return;
  const kind=mesh.metadata&&mesh.metadata.netKind;
@@ -280,6 +281,7 @@ function snapshotWorld(){
   gen:generatedUntil,
   hostX:playerCollider?playerCollider.position.x:-12,
   hostY:playerCollider?playerCollider.position.y:2,
+  hostDead:(typeof isPlayerDown==="function")?isPlayerDown():false,
   objects:stageObjects.map(meshSnapshot).filter(Boolean)
  };
 }
@@ -337,7 +339,7 @@ function recreateNetObject(o){
 }
 function syncNetObject(o){
  if(!o||!o.id)return;
- if(!isHost&&isNetIdSuppressed(o.id))return;
+ if(!isHost&&(isNetIdSuppressed(o.id)||isNetIdTombstoned(o.id))){removeByNetId(o.id,false);return;}
  if(!isHost&&o.kind==="shot"&&o.extra&&o.extra.owner===myNetId){
   const own=netObjects.get(o.id);
   if(own&&!own.isDisposed())removeByNetId(o.id,false);
@@ -361,7 +363,18 @@ function applyWorldSnapshot(w){
  generatedUntil=w.gen||generatedUntil;
  const alive=new Set(w.objects.map(o=>o.id));
  Array.from(netObjects.keys()).forEach(id=>{if(!alive.has(id))removeByNetId(id,false);});
- w.objects.forEach(syncNetObject);
+ // ホスト位置はworldスナップショットからも強制更新して、クライアント側の頭踏み判定のズレを防ぐ
+ if(typeof w.hostX==="number"&&typeof w.hostY==="number"){
+  const hp=makeRemote("HOST","HOST");
+  hp.dead=!!w.hostDead;
+  hp.root.setEnabled(!hp.dead);
+  if(!hp.dead)hp.root.position.set(w.hostX,w.hostY,0);
+  hp.last=performance.now();
+ }
+ w.objects.forEach(o=>{
+  if(o&&o.id&&isNetIdTombstoned(o.id)){removeByNetId(o.id,false);return;}
+  syncNetObject(o);
+ });
  if(firstWorld&&!isViewer&&!joinRespawnDone){
   joinRespawnDone=true;
   respawnFromLeader({x:w.hostX||playerCollider.position.x,y:(w.hostY||playerCollider.position.y)+3});
@@ -376,7 +389,11 @@ function damageBossSynced(b,dmg=1){
 }
 function applyNetEvent(data,fromConn){
  if(!data||typeof data!=="object")return;
- if(data.type==="remove")removeByNetId(data.oid,false);
+ if(data.type==="remove"){
+  removeByNetId(data.oid,false);
+  if(isHost){broadcast({type:"remove",oid:data.oid},fromConn);broadcast(snapshotWorld(),null);}
+  return;
+ }
  if(data.type==="bossDamage"){
   const b=findBossByNetId(data.bossId);
   if(data.shotId)removeByNetId(data.shotId,false);
@@ -1020,7 +1037,10 @@ let localCamStream=null, localCamVideo=null, camCanvas=null, camCtx=null, lastCa
 const peerToNetId=new Map();
 const remotePlayers=new Map();
 const locallySuppressedNetIds=new Map();
-function suppressNetId(id,ms=2500){if(id)locallySuppressedNetIds.set(id,performance.now()+ms);}
+const remoteRemoveTombstones=new Map();
+function tombstoneNetId(id,ms=18000){if(id)remoteRemoveTombstones.set(id,performance.now()+ms);}
+function isNetIdTombstoned(id){const until=remoteRemoveTombstones.get(id);if(!until)return false;if(performance.now()>until){remoteRemoveTombstones.delete(id);return false;}return true;}
+function suppressNetId(id,ms=18000){if(id){locallySuppressedNetIds.set(id,performance.now()+ms);tombstoneNetId(id,ms);}}
 function isNetIdSuppressed(id){const until=locallySuppressedNetIds.get(id);if(!until)return false;if(performance.now()>until){locallySuppressedNetIds.delete(id);return false;}return true;}
 function setNetStatus(t){netStatus.textContent=t;}
 function openPanel(){netPanel.style.display="block";}
@@ -1111,7 +1131,7 @@ function handleClientData(conn,data){
  if(data.type==="cam"){applyCameraFrame(data.id,data.img);broadcast(data,conn);return;}
  if(data.type==="state"){
   notePeerMapping(data.pid,data.id);
-  const payload={type:"remote",id:data.id,x:data.x,y:data.y,z:data.z,vx:data.vx,score:data.score,dist:data.dist,dead:!!data.dead};
+  const payload={type:"remote",id:data.id,pid:data.pid,x:data.x,y:data.y,z:data.z,vx:data.vx,score:data.score,dist:data.dist,dead:!!data.dead};
   broadcast(payload,conn);
   const rp=makeRemote(data.id,"GUEST");rp.dead=!!data.dead;rp.root.setEnabled(!rp.dead);if(!rp.dead)rp.root.position.set(data.x,data.y,data.z||0);rp.last=performance.now();checkAllDown();
  }
@@ -1216,6 +1236,7 @@ setInterval(()=>{
  }
  remotePlayers.forEach((o,id)=>{if(performance.now()-o.last>8000){o.root.dispose();o.tag.remove();remotePlayers.delete(id)}});
  locallySuppressedNetIds.forEach((until,id)=>{if(performance.now()>until)locallySuppressedNetIds.delete(id)});
+ remoteRemoveTombstones.forEach((until,id)=>{if(performance.now()>until)remoteRemoveTombstones.delete(id)});
  checkAllDown();
 },80);
 
