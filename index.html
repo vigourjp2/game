@@ -961,6 +961,38 @@ let joinRespawnDone=false;
 let lastPlayerBounceAt=0;
 function isPlayerDown(){return dead||performance.now()<downUntil;}
 function isMultiplayerActive(){return isHost?conns.some(c=>c&&c.open):(hostConn&&hostConn.open)}
+const HOST_FOLLOW_MAX_X=24;
+const HOST_FOLLOW_MAX_Y=16;
+const HOST_FOLLOW_FALL_Y=10;
+function getHostAnchor(){
+ if(isHost&&playerCollider)return {x:playerCollider.position.x,y:playerCollider.position.y,dead:isPlayerDown()};
+ const h=remotePlayers.get("HOST");
+ if(h&&!h.dead&&h.root&&h.root.isEnabled()&&performance.now()-h.last<3500)return {x:h.root.position.x,y:h.root.position.y,dead:false};
+ return null;
+}
+function forceWarpAboveHostIfTooFar(){
+ if(isHost||isViewer||!isMultiplayerActive()||!worldReady)return false;
+ if(performance.now()<joinGraceUntil)return false;
+ const h=getHostAnchor();
+ if(!h)return false;
+ const dx=Math.abs(playerCollider.position.x-h.x);
+ const dy=Math.abs(playerCollider.position.y-h.y);
+ const fellBehind=playerCollider.position.y<h.y-HOST_FOLLOW_FALL_Y;
+ if(dx>HOST_FOLLOW_MAX_X||dy>HOST_FOLLOW_MAX_Y||fellBehind){
+  const now=performance.now();
+  playerCollider.position.set(h.x,h.y+5.2,0);
+  playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0,0,0));
+  playerCollider.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0,0,0));
+  invincibleUntil=Math.max(invincibleUntil,now+1800);
+  downUntil=0;
+  playerRoot.setEnabled(true);
+  msg.style.display="none";
+  setNetStatus("ホストから離れたため自動合流 / ミス扱いなし");
+  SFX.respawn();
+  return true;
+ }
+ return false;
+}
 function getLiveLeader(){
  let leader=null;
  remotePlayers.forEach(o=>{
@@ -1272,6 +1304,7 @@ engine.runRenderLoop(()=>{
    playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0,0,0));
    remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);scene.render();return;
   }
+  forceWarpAboveHostIfTooFar();
   const v=playerCollider.physicsImpostor.getLinearVelocity();
   let vx=0;
   const moveSpeed=(performance.now()<speedBoostUntil||hasPermanentSpeed())?Math.min(9.5,4.1+shopSpeedLevel*.45):4.1;
@@ -1455,10 +1488,16 @@ engine.runRenderLoop(()=>{
 
   updateUI();
   if(levelFromX(distanceScore)>=100&&!bosses.some(b=>b.mesh&&!b.mesh.isDisposed()))gameClear();
-  camera.position.x=playerCollider.position.x;
-  camera.position.y=playerCollider.position.y+2.6;
+  let camX=playerCollider.position.x;
+  let camY=playerCollider.position.y;
+  if(!isHost&&isMultiplayerActive()){
+   const h=getHostAnchor();
+   if(h){camX=h.x;camY=h.y;}
+  }
+  camera.position.x=camX;
+  camera.position.y=camY+2.6;
   camera.position.z=-10;
-  camera.setTarget(new BABYLON.Vector3(playerCollider.position.x,playerCollider.position.y+1.0,0));
+  camera.setTarget(new BABYLON.Vector3(camX,camY+1.0,0));
  }
  remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);
  scene.render();
