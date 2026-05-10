@@ -537,9 +537,22 @@ function clampClientToHostWorldV4(){
 function ensureBootWorldVisibleV4(){
  try{
   if(typeof stageObjects!=="undefined" && stageObjects.length>0)return;
-  if(typeof generatedUntil!=="undefined" && generatedUntil>20)return;
-  if(typeof ensureGeneratedTo==="function")ensureGeneratedTo(180);
- }catch(e){console.log("boot world visible guard",e);}
+  if(typeof rebuildWorldTo==="function"){
+   rebuildWorldTo(180,STAGE_BASE_SEED);
+   return;
+  }
+  if(typeof generateChunk==="function"){
+   if(typeof platform==="function"){
+    platform("startGround",-6,-.25,16,mGround);
+    platform("startBridge",8,.9,5,mBrick);
+   }
+   lastPlatformY=.9;
+   generatedUntil=12;
+   generateChunk(180);
+  }
+ }catch(e){
+  console.log("boot world visible guard",e);
+ }
 }
 
 function applyNetEvent(data,fromConn){
@@ -1525,7 +1538,7 @@ function startHost(){
  });
  peer.on("connection",conn=>{
   conns.push(conn); setNetStatus("ホスト中："+peerIdToRoomCode(roomId)+" / 参加 "+conns.length+"台");
-  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});sendBasisV4(conn);sendWorldBasisV3(conn);conn.send(snapshotWorld());conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
+  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});if(typeof sendBasisV4==="function")sendBasisV4(conn);conn.send(snapshotWorld());conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
   conn.on("data",d=>handleClientData(conn,d));
   conn.on("close",()=>{conns=conns.filter(c=>c!==conn);setNetStatus("ホスト中："+roomId+" / 参加 "+conns.length+"台")});
  });
@@ -1892,11 +1905,11 @@ engine.runRenderLoop(()=>{
  remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);
  
  
- if(typeof enforceDeadzoneCameraV3==="function")enforceDeadzoneCameraV3();
- if(typeof broadcastBasisV4==="function")broadcastBasisV4();
- if(typeof sendClientStateV4==="function")sendClientStateV4();
- if(typeof clampClientToHostWorldV4==="function")clampClientToHostWorldV4();
- ensureBootWorldVisibleV4();
+ if(typeof enforceDeadzoneCameraV3==="function")if(typeof enforceDeadzoneCameraV3==="function")enforceDeadzoneCameraV3();
+ if(typeof broadcastBasisV4==="function")if(typeof broadcastBasisV4==="function")broadcastBasisV4();
+ if(typeof sendClientStateV4==="function")if(typeof sendClientStateV4==="function")sendClientStateV4();
+ if(typeof clampClientToHostWorldV4==="function")if(typeof clampClientToHostWorldV4==="function")clampClientToHostWorldV4();
+ if(typeof ensureBootWorldVisibleV4==="function")ensureBootWorldVisibleV4();
  scene.render();
 });
 window.addEventListener("resize",()=>engine.resize());
