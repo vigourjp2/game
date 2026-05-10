@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Physics Human Mario Gimmick Stage PushWall</title>
-<!-- Multiplayer v4 host solo world only -->
-<!-- Multiplayer hard rebuild v3: host solo world authority + deadzone camera -->
+<title>Physics Human Mario Host Solo World Multiplayer Fixed</title>
+<!-- Multiplayer fixed: host solo world only, clients join host-generated solo stage -->
 <style>
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;font-family:sans-serif;touch-action:none}
 #renderCanvas{width:100%;height:100%;display:block;touch-action:none}
@@ -432,7 +431,7 @@ function rebuildClientWorldV4(seed,gen,hostX,hostY){
 
  if(safeGen>clientWorldGenApplied){
   ensureGeneratedTo(safeGen);
-  clientWorldGenApplied=safeGen;
+  clientWorldGenApplied=generatedUntil;
  }
 
  worldReady=true;
@@ -1081,6 +1080,11 @@ function clearWorldObjects(){
  netObjectSeq=0;
  generatedUntil=0;
  lastPlatformY=0;
+ bossMilestones[33]=false;
+ bossMilestones[66]=false;
+ bossMilestones[99]=false;
+ activeBossRoom=null;
+ gameCleared=false;
 }
 function rebuildWorldTo(targetX,seed){
  clearWorldObjects();
@@ -1090,6 +1094,31 @@ function rebuildWorldTo(targetX,seed){
  lastPlatformY=.9;
  generatedUntil=12;
  generateChunk(Math.max(120,targetX||120));
+}
+function ensureGeneratedTo(targetX){
+ const target=Math.max(120,Number(targetX)||120);
+ if(generatedUntil<=0||stageObjects.length===0){
+  setStageSeed(STAGE_BASE_SEED);
+  platform("startGround",-6,-.25,16,mGround);
+  platform("startBridge",8,.9,5,mBrick);
+  lastPlatformY=.9;
+  generatedUntil=12;
+ }
+ if(target>generatedUntil)generateChunk(target);
+}
+function respawnAboveHost(hostX,hostY,playSound=true){
+ const now=performance.now();
+ if(playSound&&typeof SFX!=="undefined"&&SFX.respawn)SFX.respawn();
+ dead=false;
+ downUntil=0;
+ msg.style.display="none";
+ invincibleUntil=Math.max(invincibleUntil,now+2600);
+ playerCollider.position.set(Number(hostX)||-12,(Number(hostY)||2)+5.2,0);
+ if(playerCollider.physicsImpostor){
+  playerCollider.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0,0,0));
+  playerCollider.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0,0,0));
+ }
+ playerRoot.setEnabled(true);
 }
 rebuildWorldTo(120,STAGE_BASE_SEED);
 
@@ -1489,6 +1518,7 @@ function sendToHost(data){if(hostConn&&hostConn.open)hostConn.send(data)}
 function broadcast(data,except){conns.forEach(c=>{if(c!==except&&c.open)c.send(data)})}
 function handleClientData(conn,data){
  if(!data||typeof data!=="object")return;
+ if(data.type==="clientStateV4"){applyClientStateV4(conn,data);return;}
  if(data.type==="viewer"){conn.isViewer=true;return;}
  if(data.type==="remove"){applyNetEvent(data,conn);return;}
  if(data.type==="attackReq"){applyNetEvent(data,conn);return;}
@@ -1502,6 +1532,7 @@ function handleClientData(conn,data){
 }
 function handleHostData(data){
  if(!data||typeof data!=="object")return;
+ if(data.type==="basisV4"){applyBasisV4(data);return;}
  if(data.type==="world"){applyWorldSnapshot(data);return;}
  if(data.type==="remove"){applyNetEvent(data,null);return;}
  if(data.type==="cam"){applyCameraFrame(data.id,data.img);return;}
@@ -1538,7 +1569,7 @@ function startHost(){
  });
  peer.on("connection",conn=>{
   conns.push(conn); setNetStatus("ホスト中："+peerIdToRoomCode(roomId)+" / 参加 "+conns.length+"台");
-  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});if(typeof sendBasisV4==="function")sendBasisV4(conn);conn.send(snapshotWorld());conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
+  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});if(typeof sendBasisV4==="function")sendBasisV4(conn);conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
   conn.on("data",d=>handleClientData(conn,d));
   conn.on("close",()=>{conns=conns.filter(c=>c!==conn);setNetStatus("ホスト中："+roomId+" / 参加 "+conns.length+"台")});
  });
@@ -1573,7 +1604,7 @@ function joinViewer(code){
   hostConn=peer.connect(roomId);
   hostConn.on("open",()=>{setNetStatus("閲覧参加中："+code+" / 操作なし");hostConn.send({type:"viewer",id:myNetId,pid:myPeerId});});
   hostConn.on("data",d=>{
-   if(d&&d.type==="hello"){clearWorldObjects();setStageSeed(d.seed||STAGE_BASE_SEED);}
+   if(d&&d.type==="hello"){rebuildClientWorldV4(d.seed||STAGE_BASE_SEED,d.gen||0,d.hostX||0,d.hostY||4);}
    handleHostData(d);
   });
   hostConn.on("close",()=>setNetStatus("ホスト切断"));
@@ -1587,8 +1618,11 @@ viewerBtn.onclick=()=>{const code=roomInput.value.trim(); if(code!=="")joinViewe
 const m=location.hash.match(/join=([^&]+)/); if(m){roomInput.value=decodeURIComponent(m[1]);openPanel();setTimeout(()=>joinRoom(roomInput.value),500);}
 setInterval(()=>{
  if(!isViewer){
-  const data={type:isHost?"hostState":"state",id:myNetId,pid:myPeerId,x:playerCollider.position.x,y:playerCollider.position.y,z:0,vx:playerCollider.physicsImpostor.getLinearVelocity().x,score:totalScore,dist:distanceScore,dead:isPlayerDown()};
-  if(isHost){broadcast(data);broadcast(snapshotWorld());} else sendToHost(data);
+  if(isHost){
+   const data={type:"hostState",id:"HOST",pid:myPeerId,x:playerCollider.position.x,y:playerCollider.position.y,z:0,vx:playerCollider.physicsImpostor.getLinearVelocity().x,score:totalScore,dist:distanceScore,dead:isPlayerDown()};
+   broadcast(data);
+   if(typeof broadcastBasisV4==="function")broadcastBasisV4();
+  }
   if(performance.now()-lastCamSent>450){
    lastCamSent=performance.now();
    const img=captureCameraFrame();
@@ -1905,10 +1939,10 @@ engine.runRenderLoop(()=>{
  remotePlayers.forEach(updateRemoteTag);shopItems.forEach(updateShopLabel);
  
  
- if(typeof enforceDeadzoneCameraV3==="function")if(typeof enforceDeadzoneCameraV3==="function")enforceDeadzoneCameraV3();
- if(typeof broadcastBasisV4==="function")if(typeof broadcastBasisV4==="function")broadcastBasisV4();
- if(typeof sendClientStateV4==="function")if(typeof sendClientStateV4==="function")sendClientStateV4();
- if(typeof clampClientToHostWorldV4==="function")if(typeof clampClientToHostWorldV4==="function")clampClientToHostWorldV4();
+ if(typeof enforceDeadzoneCameraV3==="function")enforceDeadzoneCameraV3();
+ if(typeof broadcastBasisV4==="function")broadcastBasisV4();
+ if(typeof sendClientStateV4==="function")sendClientStateV4();
+ if(typeof clampClientToHostWorldV4==="function")clampClientToHostWorldV4();
  if(typeof ensureBootWorldVisibleV4==="function")ensureBootWorldVisibleV4();
  scene.render();
 });
