@@ -284,6 +284,8 @@ function meshSnapshot(o){
  if(o.kind==="shot"){const sh=projectiles.find(v=>v.mesh===m); if(sh)extra={vx:sh.vx,vy:sh.vy,owner:sh.owner||"player",size:sh.size||1,laser:!!sh.laser};}
  if(o.kind==="bomb"){const bo=bossBombs.find(v=>v.mesh===m); if(bo)extra={lit:bo.lit,fuseAt:bo.fuseAt,vx:bo.vx,vy:bo.vy,owner:bo.owner};}
  if(o.kind==="spring"){extra={pulse:(springs.find(v=>v.mesh===m)||{}).pulse||0};}
+ if(o.kind==="boulder"){const bd=boulders.find(v=>v.mesh===m); if(bd)extra={dir:bd.dir||-1};}
+ if(o.kind==="ride"){const rd=skateRides.find(v=>v.mesh===m); if(rd)extra={dir:rd.dir||1};}
  if(o.kind==="steam"){const st=steamJets.find(v=>v.mesh===m); if(st)extra={baseY:st.baseY,h:st.h,phase:st.phase};}
  if(o.kind==="water"){const wp=waterPools.find(v=>v.mesh===m); if(wp)extra={w:wp.w};}
  if(o.kind==="surface"){const mp=movingPlatforms.find(v=>v.mesh===m); if(mp)extra={moving:true,baseX:mp.baseX,baseY:mp.baseY,amp:mp.amp,speed:mp.speed,phase:mp.phase,lastX:mp.lastX,lastY:mp.lastY};}
@@ -298,7 +300,7 @@ function snapshotWorld(){
   hostX:playerCollider?playerCollider.position.x:-12,
   hostY:playerCollider?playerCollider.position.y:2,
   hostDead:(typeof isPlayerDown==="function")?isPlayerDown():false,
-  objects:stageObjects.map(meshSnapshot).filter(Boolean)
+  objects:stageObjects.map(meshSnapshot).filter(o=>o&&o.id&&o.kind!=="visual")
  };
 }
 function recreateNetObject(o){
@@ -345,8 +347,18 @@ function recreateNetObject(o){
   mesh=staticBox(o.name||"pendulum",x,y,z,Math.max(.08,w),Math.max(.08,h),Math.max(.08,d),mSteel); if(mesh.physicsImpostor)mesh.physicsImpostor.dispose();
  }else if(o.kind==="seesaw"){
   mesh=staticBox(o.name||"seesaw",x,y,z,Math.max(.1,w),Math.max(.1,h),Math.max(.1,d),mBrick); if(mesh.physicsImpostor)mesh.physicsImpostor.dispose();
+ }else if(o.kind==="marker"){
+  mesh=staticBox(o.name||"marker",x,y,z,Math.max(.1,w),Math.max(.1,h),Math.max(.1,d),mWarning); if(mesh.physicsImpostor)mesh.physicsImpostor.dispose();
+ }else if(o.kind==="visual"){
+  // クライアント側で坂の見た目メッシュを箱コリジョンとして復元すると、別世界の壁になるため描画のみ・衝突なしにする。
+  mesh=staticBox(o.name||"visual",x,y,z,Math.max(.1,w),Math.max(.1,h),Math.max(.1,d),mBrick); if(mesh.physicsImpostor)mesh.physicsImpostor.dispose(); mesh.isPickable=false; mesh.visibility=.18;
+ }else if(o.kind==="boulder"){
+  mesh=BABYLON.MeshBuilder.CreateSphere("boulder",{diameter:Math.max(.4,w||1.05),segments:16},scene);mesh.material=mSteel;mesh.physicsImpostor=new BABYLON.PhysicsImpostor(mesh,BABYLON.PhysicsImpostor.SphereImpostor,{mass:2.4,friction:.55,restitution:.15},scene);boulders.push({mesh,dir:o.extra?.dir||-1,born:performance.now()});
+ }else if(o.kind==="ride"){
+  mesh=staticBox(o.name||"ride",x,y,z,Math.max(.1,w),Math.max(.1,h),Math.max(.1,d),mWarning); if(mesh.physicsImpostor){mesh.physicsImpostor.dispose();mesh.physicsImpostor=new BABYLON.PhysicsImpostor(mesh,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0,friction:.02,restitution:.05},scene);} skateRides.push({mesh,dir:o.extra?.dir||1,used:false});
  }else{
-  mesh=staticBox(o.name||"obj",x,y,z,Math.max(.1,w),Math.max(.1,h),Math.max(.1,d),mBrick);
+  // 未定義kindはクライアントで物理壁にしない。ホストだけが正なので、描画のみで復元する。
+  mesh=staticBox(o.name||"obj",x,y,z,Math.max(.1,w),Math.max(.1,h),Math.max(.1,d),mBrick); if(mesh.physicsImpostor)mesh.physicsImpostor.dispose(); mesh.visibility=.35;
  }
  if(!mesh)return null;
  mesh.position.set(x,y,z);mesh.rotation.set(o.rx||0,o.ry||0,o.rz||0);mesh.scaling.set(o.sx||1,o.sy||1,o.sz||1);
@@ -411,6 +423,8 @@ let clientWorldSeedApplied=null;
 let clientWorldGenApplied=-1;
 let lastBasisSendV4=0;
 let lastClientStateV4=0;
+let lastHostWorldSnapshotV5=0;
+let lastClientWorldApplyV5=0;
 
 // ホストのソロ世界だけを正とする。
 // クライアントはホストの seed と generatedUntil へ追従するだけ。
@@ -534,6 +548,7 @@ function clampClientToHostWorldV4(){
 
 
 function ensureBootWorldVisibleV4(){
+ if(!isHost&&isMultiplayerActive())return;
  try{
   if(typeof stageObjects!=="undefined" && stageObjects.length>0)return;
   if(typeof rebuildWorldTo==="function"){
@@ -1447,7 +1462,7 @@ function makeRemote(id,label){
  const b=BABYLON.MeshBuilder.CreateBox("remoteBody",{width:.8,height:1.25,depth:.45},scene);b.position.y=.65;b.material=mat("rmBody"+id,.15,.25,1);b.parent=root;
  const h=BABYLON.MeshBuilder.CreateSphere("remoteHead",{diameter:.55,segments:12},scene);h.position.y=1.55;h.material=mHead;h.parent=root;
  const tag=document.createElement("div");tag.className="remoteName";tag.textContent=label||"PLAYER";document.body.appendChild(tag);
- const face=BABYLON.MeshBuilder.CreatePlane("face_"+id,{width:1.25,height:2.65},scene);face.position.set(0,.62,-.31);face.parent=root;face.setEnabled(false);
+ const face=BABYLON.MeshBuilder.CreatePlane("face_"+id,{width:.42,height:.34},scene);face.position.set(0,1.55,-.31);face.parent=root;face.setEnabled(false);
  const o={root,tag,face,last:performance.now(),dead:false};remotePlayers.set(id,o);return o;
 }
 function makeVideoTextureForPlane(stream,plane,name){
@@ -1480,16 +1495,8 @@ async function setupCamera(){
  }catch(e){setNetStatus("カメラ許可なし / 映像なしで同期");return null;}
 }
 function applyCameraFrame(id,img){
- if(!id||!img||id===myNetId)return;
- const rp=makeRemote(id,id==="HOST"?"HOST":"GUEST");
- if(!rp.face)return;
- try{
-  if(rp.camTex)rp.camTex.dispose();
-  rp.camTex=new BABYLON.Texture(img,scene,true,false);
-  rp.camTex.vScale=-1;rp.camTex.vOffset=1;
-  if(!rp.camMat){rp.camMat=new BABYLON.StandardMaterial("camMat_"+id,scene);rp.camMat.backFaceCulling=false;rp.face.material=rp.camMat;}
-  rp.camMat.diffuseTexture=rp.camTex;rp.camMat.emissiveTexture=rp.camTex;rp.face.setEnabled(true);
- }catch(e){}
+ // マルチ安定優先。端末カメラ画像を3D面へ貼る機能は、クライアント側で巨大な板として見える原因になるため無効化。
+ return;
 }
 function captureCameraFrame(){
  if(!localCamVideo||!camCtx||localCamVideo.readyState<2)return null;
@@ -1569,7 +1576,7 @@ function startHost(){
  });
  peer.on("connection",conn=>{
   conns.push(conn); setNetStatus("ホスト中："+peerIdToRoomCode(roomId)+" / 参加 "+conns.length+"台");
-  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});if(typeof sendBasisV4==="function")sendBasisV4(conn);conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
+  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});if(typeof sendBasisV4==="function")sendBasisV4(conn);try{conn.send(snapshotWorld());}catch(e){}conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
   conn.on("data",d=>handleClientData(conn,d));
   conn.on("close",()=>{conns=conns.filter(c=>c!==conn);setNetStatus("ホスト中："+roomId+" / 参加 "+conns.length+"台")});
  });
@@ -1622,6 +1629,7 @@ setInterval(()=>{
    const data={type:"hostState",id:"HOST",pid:myPeerId,x:playerCollider.position.x,y:playerCollider.position.y,z:0,vx:playerCollider.physicsImpostor.getLinearVelocity().x,score:totalScore,dist:distanceScore,dead:isPlayerDown()};
    broadcast(data);
    if(typeof broadcastBasisV4==="function")broadcastBasisV4();
+ if(typeof broadcastWorldSnapshotV5==="function")broadcastWorldSnapshotV5();
   }
   if(performance.now()-lastCamSent>450){
    lastCamSent=performance.now();
@@ -1637,6 +1645,15 @@ setInterval(()=>{
  remoteRemoveTombstones.forEach((until,id)=>{if(performance.now()>until)remoteRemoveTombstones.delete(id)});
  checkAllDown();
 },80);
+
+
+function broadcastWorldSnapshotV5(){
+ if(!isHost||!isMultiplayerActive())return;
+ const now=performance.now();
+ if(now-lastHostWorldSnapshotV5<650)return;
+ lastHostWorldSnapshotV5=now;
+ try{broadcast(snapshotWorld(),null);}catch(e){}
+}
 
 engine.runRenderLoop(()=>{
  if(isViewer){
@@ -1941,6 +1958,7 @@ engine.runRenderLoop(()=>{
  
  if(typeof enforceDeadzoneCameraV3==="function")enforceDeadzoneCameraV3();
  if(typeof broadcastBasisV4==="function")broadcastBasisV4();
+ if(typeof broadcastWorldSnapshotV5==="function")broadcastWorldSnapshotV5();
  if(typeof sendClientStateV4==="function")sendClientStateV4();
  if(typeof clampClientToHostWorldV4==="function")clampClientToHostWorldV4();
  if(typeof ensureBootWorldVisibleV4==="function")ensureBootWorldVisibleV4();
