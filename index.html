@@ -1459,7 +1459,7 @@ function makeRemote(id,label){
  const b=BABYLON.MeshBuilder.CreateBox("remoteBody",{width:.8,height:1.25,depth:.45},scene);b.position.y=.65;b.material=mat("rmBody"+id,.15,.25,1);b.parent=root;
  const h=BABYLON.MeshBuilder.CreateSphere("remoteHead",{diameter:.55,segments:12},scene);h.position.y=1.55;h.material=mHead;h.parent=root;
  const tag=document.createElement("div");tag.className="remoteName";tag.textContent=label||"PLAYER";document.body.appendChild(tag);
- const face=BABYLON.MeshBuilder.CreatePlane("face_"+id,{width:.42,height:.34},scene);face.position.set(0,1.55,-.31);face.parent=root;face.setEnabled(false);
+ const face=BABYLON.MeshBuilder.CreatePlane("face_"+id,{width:1.25,height:2.65},scene);face.position.set(0,.62,-.31);face.parent=root;face.setEnabled(false);
  const o={root,tag,face,last:performance.now(),dead:false};remotePlayers.set(id,o);return o;
 }
 function makeVideoTextureForPlane(stream,plane,name){
