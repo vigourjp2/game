@@ -388,7 +388,7 @@ function applyWorldSnapshot(w){
  if(!w.objects){return;}
  const firstWorld=!worldReady;
  worldReady=true;
- generatedUntil=w.gen||generatedUntil;
+ generatedUntil=Math.max(generatedUntil,w.gen||0);
  const alive=new Set(w.objects.map(o=>o.id));
  Array.from(netObjects.keys()).forEach(id=>{if(!alive.has(id))removeByNetId(id,false);});
  // ホスト位置はworldスナップショットからも強制更新して、クライアント側の頭踏み判定のズレを防ぐ
@@ -404,8 +404,8 @@ function applyWorldSnapshot(w){
   syncNetObject(o);
  });
  if(firstWorld&&!isViewer&&!joinRespawnDone){
-  joinRespawnDone=true;
   respawnFromLeader({x:w.hostX||playerCollider.position.x,y:(w.hostY||playerCollider.position.y)+3});
+  joinRespawnDone=true;
  }
 }
 function findBossByNetId(id){return bosses.find(b=>getNetId(b.mesh)===id);}
@@ -431,10 +431,12 @@ let lastClientWorldApplyV5=0;
 // クライアント側の生成先読み・別バージョン化を防ぐ。
 function rebuildClientWorldV4(seed,gen,hostX,hostY){
  const safeSeed=seed||STAGE_BASE_SEED;
- const safeGen=Math.max(160,Number(gen)||0);
+ const safeGen=Math.max(0,Number(gen)||0);
 
- const mustRebuild=(clientWorldSeedApplied!==safeSeed)||(safeGen<clientWorldGenApplied-40);
- if(mustRebuild){
+ // 根本修正：クライアント側でステージを自動生成しない。
+ // ホストのソロ世界を snapshotWorld() で丸ごと受け取り、その実体だけを足場にする。
+ // ここで ensureGeneratedTo() を呼ぶと、クライアントだけ別ID・別順序の足場を作ってズレる。
+ if(clientWorldSeedApplied!==safeSeed){
   clearWorldObjects();
   setStageSeed(safeSeed);
   generatedUntil=0;
@@ -442,13 +444,9 @@ function rebuildClientWorldV4(seed,gen,hostX,hostY){
   clientWorldSeedApplied=safeSeed;
   clientWorldGenApplied=0;
  }
-
- if(safeGen>clientWorldGenApplied){
-  ensureGeneratedTo(safeGen);
-  clientWorldGenApplied=generatedUntil;
- }
-
- worldReady=true;
+ clientWorldGenApplied=Math.max(clientWorldGenApplied,safeGen);
+ generatedUntil=Math.max(generatedUntil,safeGen);
+ worldReady=false;
 
  if(!joinRespawnDone){
   dead=false;
@@ -456,7 +454,6 @@ function rebuildClientWorldV4(seed,gen,hostX,hostY){
   downUntil=0;
   invincibleUntil=performance.now()+15000;
   respawnAboveHost(hostX||0,hostY||4,false);
-  joinRespawnDone=true;
  }
 }
 
@@ -1330,7 +1327,7 @@ function getHostRespawnAnchor(){
  return {x:playerCollider.position.x,y:playerCollider.position.y+2};
 }
 function forceWarpIfOutsideGeneratedWorld(){
- if(isHost||isViewer||!isMultiplayerActive()||!worldReady)return false;
+ if(isHost||isViewer||!isMultiplayerActive()||!worldReady||jumpSurfaces.length===0)return false;
  if(performance.now()<joinGraceUntil)return false;
  const b=getGeneratedWorldBounds();
  const x=playerCollider.position.x;
@@ -1495,8 +1492,24 @@ async function setupCamera(){
  }catch(e){setNetStatus("カメラ許可なし / 映像なしで同期");return null;}
 }
 function applyCameraFrame(id,img){
- // マルチ安定優先。端末カメラ画像を3D面へ貼る機能は、クライアント側で巨大な板として見える原因になるため無効化。
- return;
+ if(!img)return;
+ const key=(id==="HOST")?"HOST":id;
+ const rp=makeRemote(key,key==="HOST"?"HOST":"GUEST");
+ rp.last=performance.now();
+ if(!rp.face||rp.face.isDisposed())return;
+ try{
+  if(rp.camTex){rp.camTex.updateURL(img);return;}
+  const tex=new BABYLON.Texture(img,scene,false,false);
+  tex.vScale=-1;
+  tex.vOffset=1;
+  const mv=new BABYLON.StandardMaterial("camMat_"+key,scene);
+  mv.diffuseTexture=tex;
+  mv.emissiveTexture=tex;
+  mv.backFaceCulling=false;
+  rp.face.material=mv;
+  rp.face.setEnabled(true);
+  rp.camTex=tex;
+ }catch(e){}
 }
 function captureCameraFrame(){
  if(!localCamVideo||!camCtx||localCamVideo.readyState<2)return null;
@@ -1576,7 +1589,7 @@ function startHost(){
  });
  peer.on("connection",conn=>{
   conns.push(conn); setNetStatus("ホスト中："+peerIdToRoomCode(roomId)+" / 参加 "+conns.length+"台");
-  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});if(typeof sendBasisV4==="function")sendBasisV4(conn);try{conn.send(snapshotWorld());}catch(e){}conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
+  conn.on("open",()=>{conn.send({type:"hello",seed:STAGE_BASE_SEED,gen:generatedUntil,hostX:playerCollider.position.x,hostY:playerCollider.position.y,hostId:roomId,hostPeerId:myPeerId});if(typeof sendBasisV4==="function")sendBasisV4(conn);try{conn.send(snapshotWorld());setTimeout(()=>{if(conn.open)conn.send(snapshotWorld());},250);setTimeout(()=>{if(conn.open)conn.send(snapshotWorld());},900);}catch(e){}conn.send({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])});broadcast({type:"peerList",peers:conns.map(c=>c.peer).concat([myPeerId])},null);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},900);setTimeout(()=>{const img=captureCameraFrame();if(img&&conn.open)conn.send({type:"cam",id:"HOST",img});},1800);});
   conn.on("data",d=>handleClientData(conn,d));
   conn.on("close",()=>{conns=conns.filter(c=>c!==conn);setNetStatus("ホスト中："+roomId+" / 参加 "+conns.length+"台")});
  });
@@ -1590,7 +1603,7 @@ function joinRoom(code){
   hostConn=peer.connect(roomId);
   hostConn.on("open",()=>setNetStatus("参加中："+code));
   hostConn.on("data",d=>{
-   if(d&&d.type==="hello"){rebuildClientWorldV4(d.seed||STAGE_BASE_SEED,d.gen||0,d.hostX||0,d.hostY||4);joinGraceUntil=performance.now()+15000;dead=false;msg.style.display="none";if(!joinRespawnDone){joinRespawnDone=true;respawnFromLeader({x:d.hostX||-12,y:(d.hostY||2)+3});}}
+   if(d&&d.type==="hello"){rebuildClientWorldV4(d.seed||STAGE_BASE_SEED,d.gen||0,d.hostX||0,d.hostY||4);joinGraceUntil=performance.now()+15000;dead=false;msg.style.display="none";}
    handleHostData(d);
   });
   hostConn.on("close",()=>setNetStatus("ホスト切断"));
