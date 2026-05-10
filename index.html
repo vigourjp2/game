@@ -1530,8 +1530,10 @@ function notePeerMapping(pid,nid){
 }
 function updateRemoteTag(o){
  if(o.dead){o.tag.style.display="none";return;}
- const p=BABYLON.Vector3.Project(o.root.position,BABYLON.Matrix.Identity(),scene.getTransformMatrix(),camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()));
- o.tag.style.left=(p.x-24)+"px";o.tag.style.top=(p.y-46)+"px";
+ // カメラ画像の前にHOST/GUEST文字が被らないよう、頭上へ表示位置だけ最小変更
+ const labelPos=o.root.position.add(new BABYLON.Vector3(0,2.45,0));
+ const p=BABYLON.Vector3.Project(labelPos,BABYLON.Matrix.Identity(),scene.getTransformMatrix(),camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()));
+ o.tag.style.left=(p.x-24)+"px";o.tag.style.top=(p.y-18)+"px";
  o.tag.style.display=(p.z>=0&&p.z<=1)?"block":"none";
 }
 function sendToHost(data){if(hostConn&&hostConn.open)hostConn.send(data)}
