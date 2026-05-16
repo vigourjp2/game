@@ -70,14 +70,44 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;fon
     };
     next();
   }
-  ensureBabylon(()=>{
+
+  function ensureFirebase(done){
+    if(window.firebase && window.firebase.database){done();return;}
+    const m=panelMsgEarly();
+    if(m)m.textContent='Firebase読込中。HOST/JOIN同期を準備しています。';
+    loadScript('https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js',()=>{
+      loadScript('https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js',()=>done(),()=>{
+        const mm=panelMsgEarly();
+        if(mm)mm.textContent='Firebase読込失敗。https配置と通信状態を確認してください。';
+        done();
+      });
+    },()=>{
+      const mm=panelMsgEarly();
+      if(mm)mm.textContent='Firebase読込失敗。https配置と通信状態を確認してください。';
+      done();
+    });
+  }
+  ensureBabylon(()=>ensureFirebase(()=>{
     if(booted||booting)return;
     booting=true;
     try{
-// LOCAL安定起動版: content:// / file:// で外部module importに失敗して開始ボタンが死ぬ問題を回避する。
-// Firebase同期は使わず、まず確実に一人プレイで開始する。
-const db=null;
-const ref=()=>null,set=async()=>{},update=async()=>{},onValue=()=>{},onDisconnect=()=>({remove(){}}),remove=async()=>{},get=async()=>({exists:()=>false,val:()=>null});
+// Firebase Realtime Database同期版。HOSTは部屋を作り、JOINは既存部屋だけに参加する。
+const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
+let db=null;
+let ref=()=>null,set=async()=>{},update=async()=>{},onValue=()=>{},onDisconnect=()=>({remove(){return Promise.resolve()}}),remove=async()=>{},get=async()=>({exists:()=>false,val:()=>null});
+try{
+  if(window.firebase&&window.firebase.database){
+    if(!window.firebase.apps.length)window.firebase.initializeApp(firebaseConfig);
+    db=window.firebase.database();
+    ref=(database,path)=>database.ref(path);
+    set=(r,v)=>r.set(v);
+    update=(r,v)=>r.update(v);
+    onValue=(r,cb)=>r.on('value',snap=>cb({exists:()=>snap.exists(),val:()=>snap.val()}));
+    onDisconnect=(r)=>r.onDisconnect();
+    remove=(r)=>r.remove();
+    get=(r)=>r.get().then(snap=>({exists:()=>snap.exists(),val:()=>snap.val()}));
+  }
+}catch(e){console.error('Firebase init failed',e);db=null;}
 const $=id=>document.getElementById(id),statusEl=$('status'),panel=$('panel'),panelMsg=$('panelMsg'),nameInput=$('nameInput'),roomInput=$('roomInput'),video=$('cameraPreview'),hud=$('hud'),logEl=$('log'),menu=$('menu'),menuInfo=$('menuInfo'),menuGrid=$('menuGrid');
 const playerId='p_'+Math.random().toString(36).slice(2,10);let roomId='',isHost=false,playerName='かずや',connected=false,roomReady=false,gameCleared=false;
 function safeRoom(s){return(s||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20)}function randomRoom(){return Math.random().toString(36).slice(2,8).toUpperCase()}function setStatus(t){statusEl.textContent=t}function log(t,c='info'){const d=document.createElement('div');d.className='line '+c;d.textContent=t;logEl.prepend(d);while(logEl.children.length>7)logEl.lastChild.remove()}
@@ -414,13 +444,19 @@ async function startGame(host){
       prepareFloorData(1,true);
       if(db) await set(ref(db,'rooms/'+roomId),{meta:{host:playerId,createdAt:Date.now(),seed:floorSeed},players:{}});
     }else{
-      if(db){
-        const snap=await get(ref(db,'rooms/'+roomId));
-        if(!snap.exists()){panelMsg.textContent='そのRoom IDは存在しません。HOSTで開始します。';isHost=true;floorSeed=Date.now()%999999;prepareFloorData(1,true);}
-        else floorSeed=(snap.val().meta&&snap.val().meta.seed)||floorSeed;
-      }else{
-        isHost=true;floorSeed=Date.now()%999999;prepareFloorData(1,true);
+      if(!db){
+        panelMsg.textContent='Firebase未接続のためJOINできません。GitHub Pages等のhttps配置で再読込してください。';
+        transitioningFloor=false;
+        return;
       }
+      const snap=await get(ref(db,'rooms/'+roomId));
+      if(!snap.exists()){
+        panelMsg.textContent='そのRoom IDは存在しません。HOST側で先に開始してください。JOINでは新規部屋を作りません。';
+        transitioningFloor=false;
+        return;
+      }
+      const room=snap.val()||{};
+      floorSeed=(room.meta&&room.meta.seed)||floorSeed;
     }
     if(db){
       await set(ref(db,`rooms/${roomId}/players/${playerId}`),{id:playerId,name:playerName,x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch,face:'',updatedAt:Date.now()});
@@ -437,7 +473,12 @@ async function startGame(host){
     transitioningFloor=false;
   }catch(err){
     console.error(err);
-    panelMsg.textContent='通信開始に失敗。LOCALで開始します。';
+    transitioningFloor=false;
+    if(!host){
+      panelMsg.textContent='JOIN通信に失敗しました。HOST化せず停止します。Room IDとFirebase接続を確認してください。';
+      return;
+    }
+    panelMsg.textContent='HOST通信に失敗。LOCALで開始します。';
     floorSeed=Date.now()%999999;
     isHost=true;
     prepareFloorData(1,true);
@@ -514,7 +555,7 @@ window.addEventListener('resize',()=>{engine.setHardwareScalingLevel(HIGH_RES_SC
       if(m)m.textContent='起動スクリプトエラー: '+(err&&err.message?err.message:err);
       booting=false;
     }
-  });
+  }));
 })();
 </script>
 </body>
