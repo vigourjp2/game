@@ -3,20 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>MiniCraft Rogue</title>
+<title>MiniCraft Rogue - MENU SAFE 0948</title>
 <style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;font-family:system-ui,sans-serif;touch-action:none;user-select:none}#renderCanvas{width:100%;height:100%;display:block;touch-action:none}#ui{display:none}#hud{position:fixed;right:98px;top:10px;color:#fff;background:rgba(0,0,0,.48);padding:8px 10px;border-radius:12px;z-index:9;font-size:12px;line-height:1.45;min-width:150px;max-height:calc(100vh - 120px);overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.28);pointer-events:none}#log{position:fixed;left:10px;top:10px;transform:none;width:min(390px,calc(100vw - 220px));min-width:250px;height:92px;overflow:hidden;color:#fff;background:rgba(0,0,0,.50);border:1px solid rgba(255,255,255,.25);padding:8px 10px;border-radius:12px;z-index:9;font-size:12px;line-height:1.35;text-shadow:0 1px 3px #000;pointer-events:none}.line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.good{color:#bef264}.bad{color:#fca5a5}.gold{color:#fde68a}.info{color:#bfdbfe}#panel{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:30;color:white;display:flex;align-items:center;justify-content:center;padding:20px}#panelInner{width:min(460px,92vw);background:#1f2937;border:1px solid rgba(255,255,255,.2);border-radius:18px;padding:18px}#panel h1{margin:0 0 10px;font-size:24px}input{width:100%;box-sizing:border-box;font-size:18px;padding:12px;border-radius:12px;border:0;margin:8px 0}.panelBtn{width:100%;font-size:18px;touch-action:manipulation;position:relative;z-index:60;font-weight:bold;padding:12px;margin-top:10px;border:0;border-radius:12px;background:#22c55e;color:white}.panelBtn.secondary{background:#3b82f6}#crosshair{position:fixed;left:50%;top:50%;width:22px;height:22px;margin-left:-11px;margin-top:-11px;z-index:6;pointer-events:none}#crosshair:before,#crosshair:after{content:"";position:absolute;background:white;box-shadow:0 1px 4px #000}#crosshair:before{left:10px;top:2px;width:2px;height:18px}#crosshair:after{left:2px;top:10px;width:18px;height:2px}.stick{position:fixed;bottom:24px;width:150px;height:150px;border-radius:50%;background:rgba(0,0,0,.22);border:2px solid rgba(255,255,255,.35);z-index:12;touch-action:none}#moveStick{left:22px}#lookStick{right:22px}.knob{position:absolute;left:50px;top:50px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45);border:2px solid rgba(255,255,255,.75);will-change:transform;transform:translate3d(0,0,0)}#actions{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:8px;z-index:12;align-items:center}.act{width:70px;height:54px;border-radius:15px;border:2px solid rgba(255,255,255,.45);background:rgba(0,0,0,.40);color:white;font-weight:800;font-size:12px}.act.on{background:rgba(34,197,94,.72);border-color:rgba(187,247,208,.95);box-shadow:0 0 14px rgba(34,197,94,.35)}.act.wide{width:86px}#cameraPreview{position:fixed;right:10px;top:10px;width:80px;height:60px;border-radius:10px;z-index:12;border:2px solid rgba(255,255,255,.7);object-fit:cover;background:#111}#status{position:fixed;left:10px;bottom:10px;color:white;background:rgba(0,0,0,.35);padding:6px 10px;border-radius:10px;z-index:8;font-size:12px;pointer-events:none}#menu{position:fixed;inset:12px;background:rgba(10,15,25,.94);z-index:25;color:white;border:1px solid rgba(255,255,255,.22);border-radius:18px;padding:14px;display:none;overflow:auto}#menuTop{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}#menuTop button{padding:9px 12px;border:0;border-radius:10px;font-weight:800}#menuGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.itemCard{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:10px;font-size:13px}.itemCard button{margin-top:6px;width:100%;padding:8px;border:0;border-radius:10px;font-weight:bold}#ending{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.86);z-index:40;color:white;text-align:center;padding:20px}#ending div{max-width:520px;background:#111827;border:1px solid rgba(255,255,255,.25);border-radius:20px;padding:24px}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;font-family:system-ui,sans-serif;touch-action:none;user-select:none}#renderCanvas{width:100%;height:100%;display:block;touch-action:none}#ui{display:none}#hud{position:fixed;right:98px;top:10px;color:#fff;background:rgba(0,0,0,.48);padding:8px 10px;border-radius:12px;z-index:9;font-size:12px;line-height:1.45;min-width:150px;max-height:calc(100vh - 120px);overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.28);pointer-events:none}#log{position:fixed;left:10px;top:10px;transform:none;width:min(390px,calc(100vw - 220px));min-width:250px;height:92px;overflow:hidden;color:#fff;background:rgba(0,0,0,.50);border:1px solid rgba(255,255,255,.25);padding:8px 10px;border-radius:12px;z-index:9;font-size:12px;line-height:1.35;text-shadow:0 1px 3px #000;pointer-events:none}.line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.good{color:#bef264}.bad{color:#fca5a5}.gold{color:#fde68a}.info{color:#bfdbfe}#panel{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:30;color:white;display:flex;align-items:center;justify-content:center;padding:20px}#panelInner{width:min(460px,92vw);background:#1f2937;border:1px solid rgba(255,255,255,.2);border-radius:18px;padding:18px}#panel h1{margin:0 0 10px;font-size:24px}input{width:100%;box-sizing:border-box;font-size:18px;padding:12px;border-radius:12px;border:0;margin:8px 0}input.gpFocus{outline:4px solid #facc15;background:#fff7cc}.panelBtn{width:100%;font-size:18px;touch-action:manipulation;position:relative;z-index:60;font-weight:bold;padding:12px;margin-top:10px;border:0;border-radius:12px;background:#22c55e;color:white}.panelBtn.secondary{background:#3b82f6}#crosshair{position:fixed;left:50%;top:50%;width:22px;height:22px;margin-left:-11px;margin-top:-11px;z-index:6;pointer-events:none}#crosshair:before,#crosshair:after{content:"";position:absolute;background:white;box-shadow:0 1px 4px #000}#crosshair:before{left:10px;top:2px;width:2px;height:18px}#crosshair:after{left:2px;top:10px;width:18px;height:2px}.stick{position:fixed;bottom:24px;width:150px;height:150px;border-radius:50%;background:rgba(0,0,0,.22);border:2px solid rgba(255,255,255,.35);z-index:12;touch-action:none}#moveStick{left:22px}#lookStick{right:22px}.knob{position:absolute;left:50px;top:50px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45);border:2px solid rgba(255,255,255,.75);will-change:transform;transform:translate3d(0,0,0)}#actions{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:8px;z-index:12;align-items:center}.act{width:70px;height:54px;border-radius:15px;border:2px solid rgba(255,255,255,.45);background:rgba(0,0,0,.40);color:white;font-weight:800;font-size:12px}.act.on{background:rgba(34,197,94,.72);border-color:rgba(187,247,208,.95);box-shadow:0 0 14px rgba(34,197,94,.35)}.act.wide{width:86px}#cameraPreview{position:fixed;right:10px;top:10px;width:80px;height:60px;border-radius:10px;z-index:12;border:2px solid rgba(255,255,255,.7);object-fit:cover;background:#111}#status{position:fixed;left:10px;bottom:10px;color:white;background:rgba(0,0,0,.35);padding:6px 10px;border-radius:10px;z-index:8;font-size:12px;pointer-events:none}#menu{position:fixed;inset:12px;background:rgba(10,15,25,.94);z-index:25;color:white;border:1px solid rgba(255,255,255,.22);border-radius:18px;padding:14px;display:none;overflow:auto}#menuTop{display:none!important;gap:8px;flex-wrap:wrap;margin:8px 0 12px}#menuTop button{display:none!important;padding:9px 12px;border:0;border-radius:10px;font-weight:800}
+button[data-legacy-unequip], #unequipBtn, .unequipBtn{display:none!important}#menu{overflow:auto!important;-webkit-overflow-scrolling:touch!important}#menuGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.itemCard{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:10px;font-size:13px}.itemCard.gpSelected{outline:4px solid #facc15;background:rgba(250,204,21,.18);box-shadow:0 0 18px rgba(250,204,21,.28)}.itemCard button{margin-top:6px;width:100%;padding:8px;border:0;border-radius:10px;font-weight:bold}#ending{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.86);z-index:40;color:white;text-align:center;padding:20px}#ending div{max-width:520px;background:#111827;border:1px solid rgba(255,255,255,.25);border-radius:20px;padding:24px}
 @media(max-width:760px){#log{left:8px;top:8px;bottom:auto;width:calc(100vw - 210px);min-width:210px;height:82px;font-size:11px}#hud{top:8px;right:94px;min-width:138px;font-size:11px;max-height:calc(100vh - 120px)}#ui{display:none}.stick{width:142px;height:142px}#moveStick{left:18px}#lookStick{right:18px}.act{width:64px;height:50px;font-size:11px}.act.wide{width:76px}}
 @media(max-width:640px){#log{left:8px;top:8px;bottom:auto;transform:none;width:calc(100vw - 118px);height:58px;min-width:0}#hud{top:72px;right:8px;max-width:42vw;max-height:135px}#actions{bottom:18px}.stick{bottom:18px}}
 
 #equipPanel{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:10px;margin:8px 0 12px;font-size:13px;line-height:1.45}
-.equipRow{background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:9px;margin-top:8px}
+.equipRow{background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:9px;margin-top:8px}.slotReleaseBtn{display:block!important;margin-top:10px;width:100%;padding:9px;border:0;border-radius:10px;font-weight:900;background:#f59e0b;color:#111}
 .equipTitle{font-weight:900;color:#fde68a;font-size:15px}
 .equipStat{color:#dbeafe;margin-top:3px}
 .sealBox{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .seal{padding:3px 6px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);font-weight:800}.seal.empty{color:#9ca3af;background:rgba(255,255,255,.05)}
 .comparePlus{color:#86efac;font-weight:900}.compareMinus{color:#fca5a5;font-weight:900}
 #equipHelp{color:#fef3c7;font-size:12px;margin-top:8px}
+.virtualHidden .stick,.virtualHidden #actions{display:none!important}
+#gamepadHint{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);z-index:31;color:white;background:rgba(0,0,0,.58);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:6px 10px;font-size:11px;pointer-events:none;text-align:center;max-width:calc(100vw - 20px)}
 </style>
 </head>
 <body>
@@ -24,8 +27,8 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#87ceeb;fon
 <div id="ui">MiniCraft Rogue<br>左:移動 / 右:視点<br>BREAK:攻撃または採掘 / PLACE:置く<br>JUMP:1.5段 / ITEM:装備<br>七色ワープ球に触れると次のランダム世界へ進む<br>階層ごとにBGM/世界観が変化</div>
 <div id="hud"></div><div id="log"></div><div id="crosshair"></div><video id="cameraPreview" autoplay playsinline muted></video><div id="status">未接続</div><canvas id="renderCanvas"></canvas>
 <div class="stick" id="moveStick"><div class="knob" id="moveKnob"></div></div><div class="stick" id="lookStick"><div class="knob" id="lookKnob"></div></div>
-<div id="actions"><button class="act" id="breakBtn">BREAK<br>攻撃</button><button class="act" id="placeBtn">PLACE</button><button class="act" id="jumpBtn">JUMP<br>1.5</button><button class="act" id="crouchBtn">CROUCH<br>しゃがむ</button><button class="act wide" id="itemBtn">ITEM<br>装備</button></div>
-<div id="menu"><h2>アイテムメニュー</h2><div id="menuInfo"></div><div id="menuTop"><button id="unequipBtn" type="button">装備全解除</button></div><div id="menuGrid"></div></div>
+<div id="actions"><button class="act" id="breakBtn">BREAK<br>攻撃</button><button class="act" id="placeBtn">PLACE</button><button class="act" id="jumpBtn">JUMP<br>1.5</button><button class="act" id="crouchBtn">CROUCH<br>しゃがむ</button><button class="act wide" id="itemBtn">ITEM<br>装備</button></div><div id="gamepadHint">MIX INPUT 1000: Proコンと画面スティックを同時使用可。Bジャンプ/Y攻撃/X生成/+装備/-表示切替</div>
+<div id="menu"><h2>アイテムメニュー <span style="font-size:12px;color:#fde68a">MENU SAFE 0948: 上下選択・Y決定のみ。X解除なし</span></h2><div id="menuInfo"></div><div id="menuTop" style="display:none!important"></div><div id="menuGrid"></div></div>
 <div id="ending"><div><h1>完全踏破</h1><p>99階の最ボスを倒し、最後の七色ワープ球へ入った。クリア。</p><button class="panelBtn" onclick="location.reload()">もう一度遊ぶ</button></div></div>
 <script>
 (function(){
@@ -201,7 +204,7 @@ const vForward=new BABYLON.Vector3(),vRight=new BABYLON.Vector3();
 let simAccumulator=0,lastFrameTime=performance.now(),lastCullAt=0,lastVisibleCell='';
 function k(x,y,z){return x+','+y+','+z}function ck(x,z){return x+','+z}function columnYs(x,z){return blockColumns.get(ck(x,z))||[]}function addColumnY(x,y,z){const id=ck(x,z);let a=blockColumns.get(id);if(!a){a=[];blockColumns.set(id,a)}if(!a.includes(y)){a.push(y);a.sort((m,n)=>m-n)}}function removeColumnY(x,y,z){const id=ck(x,z),a=blockColumns.get(id);if(!a)return;const i=a.indexOf(y);if(i>=0)a.splice(i,1);if(!a.length)blockColumns.delete(id)}function addBlockLocal(x,y,z,type){const id=k(x,y,z);if(blocks.has(id))return;const b=BABYLON.MeshBuilder.CreateBox('block',{size:1},scene);b.position.set(x,y+.5,z);b.material=mats[type]||mats.grass;b.metadata={kind:'block',x,y,z,type};b.isPickable=false;b.alwaysSelectAsActiveMesh=false;b.doNotSyncBoundingInfo=true;b.freezeWorldMatrix();blocks.set(id,b);addColumnY(x,y,z)}function removeBlockLocal(x,y,z){const id=k(x,y,z),b=blocks.get(id);if(!b)return;b.dispose();blocks.delete(id);removeColumnY(x,y,z);lastVisibleCell=''}function existsBlock(x,y,z){return blocks.has(k(x,y,z))}function topYAt(x,z){const a=columnYs(Math.round(x),Math.round(z));return a.length?a[a.length-1]:-999}
 function exportBlocks(){const out={};for(const[id,b]of blocks)out[id]=b.metadata.type;return out}function loadBlocks(data){const wanted=new Set(Object.keys(data||{}));for(const id of Array.from(blocks.keys()))if(!wanted.has(id)){const b=blocks.get(id),m=b.metadata;b.dispose();blocks.delete(id);removeColumnY(m.x,m.y,m.z)}for(const[id,type]of Object.entries(data||{}))if(!blocks.has(id)){const[x,y,z]=id.split(',').map(Number);addBlockLocal(x,y,z,type)}}function clearWorld(){for(const b of blocks.values())b.dispose();blocks.clear();blockColumns.clear();for(const m of enemyMeshes.values())disposeEnemy(m);enemyMeshes.clear();for(const m of itemMeshes.values())m.dispose();itemMeshes.clear();for(const g of gimmickMeshes.values()){if(g.root)g.root.dispose();else g.dispose&&g.dispose()}gimmickMeshes.clear();for(const pr of projectileMeshes)pr.dispose();projectileMeshes.length=0;if(portal){portal.dispose();portal=null}if(portalLight){portalLight.dispose();portalLight=null}if(portalBeacon){portalBeacon.dispose();portalBeacon=null}portalRings=[];labels.splice(0).forEach(x=>x.dispose());damageTexts.splice(0).forEach(x=>x.mesh.dispose())}
-const player={x:0,y:5,z:-5,vy:0,height:1.75,standHeight:1.75,crouchHeight:1.05,crouching:false,radius:.28,yaw:0,pitch:0,hp:30,maxHp:30,atk:4,def:1,gold:0,floor:1,weapon:null,shield:null,accessory:null,inventory:[],jumpMax:1,jumpsLeft:1,jumpPower:.24,attackRange:4.2,buildRange:6};let moveVec={x:0,y:0},lookVec={x:0,y:0},smoothMove={x:0,y:0},smoothLook={x:0,y:0},lastEnemyHit=0,lastPickup=0,lastStair=0,parachute=null,parachuteActive=false,landingLock=0,floorRespawn={x:0,y:8,z:-5},fallRecoveryLock=0;let floorSeed=Date.now()%999999,nextFloorData=null,nextFloorNo=0,nextFloorPreparing=false,transitioningFloor=false;let saveLoaded=false,saveLastAt=0,saveBusy=false,saveKeyPath='';let camX=player.x,camY=player.y,camZ=player.z,camYaw=player.yaw,camPitch=player.pitch;
+const player={x:0,y:5,z:-5,vy:0,height:1.75,standHeight:1.75,crouchHeight:1.05,crouching:false,radius:.28,yaw:0,pitch:0,hp:30,maxHp:30,atk:4,def:1,gold:0,floor:1,weapon:null,shield:null,accessory:null,inventory:[],jumpMax:1,jumpsLeft:1,jumpPower:.24,attackRange:4.2,buildRange:6};let moveVec={x:0,y:0},lookVec={x:0,y:0},touchMoveVec={x:0,y:0},touchLookVec={x:0,y:0},padMoveVec={x:0,y:0},padLookVec={x:0,y:0},keyMoveVec={x:0,y:0},keyLookVec={x:0,y:0},smoothMove={x:0,y:0},smoothLook={x:0,y:0},lastEnemyHit=0,lastPickup=0,lastStair=0,parachute=null,parachuteActive=false,landingLock=0,floorRespawn={x:0,y:8,z:-5},fallRecoveryLock=0;let floorSeed=Date.now()%999999,nextFloorData=null,nextFloorNo=0,nextFloorPreparing=false,transitioningFloor=false;let saveLoaded=false,saveLastAt=0,saveBusy=false,saveKeyPath='';let camX=player.x,camY=player.y,camZ=player.z,camYaw=player.yaw,camPitch=player.pitch;
 const itemMaster={herb:{name:'薬草',type:'use',desc:'HPを12回復',price:20},bigHerb:{name:'大きな薬草',type:'use',desc:'HPを30回復',price:55},lifeHerb:{name:'命の草',type:'life',desc:'最大HPを5上げてHPも5回復',price:180},sword:{name:'鉄の剣',type:'weapon',atk:4,slots:2,seals:[],desc:'素直な標準剣。印の器が2つある',price:80},flameSword:{name:'炎の剣',type:'weapon',atk:9,slots:3,seals:['炎'],desc:'炎印内蔵。命中時に炎上継続ダメージ',price:260},iceSpear:{name:'氷槍ミストピック',type:'weapon',atk:7,slots:3,seals:['長'],desc:'長印内蔵。槍なので攻撃射程が長い',price:180},thunderAxe:{name:'雷斧ブロック割り',type:'weapon',atk:13,slots:2,seals:['雷','掘'],desc:'雷印と掘印。高火力でブロック破壊も強い',price:360},shield:{name:'木の盾',type:'shield',def:2,slots:2,seals:[],desc:'標準盾。印の器が2つある',price:70},dragonShield:{name:'竜の盾',type:'shield',def:7,slots:3,seals:['竜'],desc:'竜印内蔵。炎や強敵に強い盾',price:260},mirrorShield:{name:'返しの盾',type:'shield',def:5,slots:3,seals:['反'],desc:'反印内蔵。しゃがみ中に敵弾を防ぎ、正面へ跳ね返す',price:300},ring:{name:'ちからの指輪',type:'accessory',atk:3,slots:1,seals:['力'],desc:'攻撃を底上げするアクセサリー',price:120},boots:{name:'はやての靴',type:'accessory',speed:.05,slots:1,seals:['速'],desc:'移動速度が上がるアクセサリー',price:160},jumpPlus:{name:'二段ジャンプ教本',type:'upgrade',stat:'jumpMax',add:1,max:5,desc:'購入ごとにジャンプ回数+1',price:210},jumpPowerPlus:{name:'バネ脚トレーニング',type:'upgrade',stat:'jumpPower',add:.035,max:.42,desc:'購入ごとにジャンプ力アップ',price:190},attackRangePlus:{name:'剣気延長術',type:'upgrade',stat:'attackRange',add:.75,max:8.5,desc:'購入ごとに攻撃射程アップ',price:230},buildRangePlus:{name:'遠隔建築グローブ',type:'upgrade',stat:'buildRange',add:1,max:12,desc:'購入ごとに生成射程アップ',price:220},dashBoots:{name:'疾風ダッシュ靴',type:'upgrade',stat:'speedBonus',add:.025,max:.18,desc:'購入ごとに移動速度アップ',price:240}};
 const sealInfo={炎:'命中した敵を火だるまにし、数秒間炎上ダメージ',長:'槍系。攻撃射程+1.8',雷:'追加の雷ダメージを与える',掘:'ブロック破壊力が上がる',竜:'被ダメージを少し軽減',力:'攻撃+2',速:'移動速度+0.04',守:'防御+2',薬:'回復量アップ',反:'しゃがみ盾で敵弾を跳ね返す'};
 function isEquipType(t){return t==='weapon'||t==='shield'||t==='accessory'}
@@ -220,7 +223,7 @@ function equipPower(it,kind){if(!it)return 0;const def=itemMaster[it.key]||{};le
 function effectiveAttackRange(){let r=player.attackRange||4.2;if(player.weapon&&(player.weapon.seals||[]).includes('長'))r+=1.8;return r}
 function mergeIntoBase(base,mat){base.plus=(base.plus||0)+(mat.plus||0);const slots=base.slots||0;for(const seal of (mat.seals||[])){if(!seal)continue;if((base.seals||[]).includes(seal))continue;base.seals=base.seals||[];if(base.seals.length<slots)base.seals.push(seal);else if(slots>0)base.seals[slots-1]=seal}return base}
 function equipOrFuse(it){const def=itemMaster[it.key];if(!def||!isEquipType(def.type))return false;const slot=def.type;if(player[slot]){mergeIntoBase(player[slot],it);AudioKit.sfx('power');log(`${itemTitle(it)}を合成。ベースの${itemTitle(player[slot])}へ印と+値を移した。印満杯なら最後の印を上書き。`,'gold')}else{player[slot]={...it,seals:[...(it.seals||[])]};AudioKit.sfx('pickup');log(`${itemTitle(it)}を装備した。${itemDesc(it)}`,'good')}return true}
-function unequipAll(){for(const slot of ['weapon','shield','accessory']){if(player[slot]){player.inventory.push(player[slot]);player[slot]=null}}AudioKit.sfx('place');log('装備全解除。武器・盾・アクセをアイテム欄へ戻した。','gold');renderMenu();renderHud(true)}
+function unequipAll(){AudioKit.sfx('deny');log('装備全解除は無効。メニューは上下選択とY決定に統一。','info');renderMenu();renderHud(true)}
 const shopKeys=['lifeHerb','jumpPlus','jumpPowerPlus','attackRangePlus','buildRangePlus','dashBoots','sword','flameSword','iceSpear','thunderAxe','shield','dragonShield','mirrorShield','ring','boots'];
 const dropKeys=['herb','bigHerb','lifeHerb','sword','flameSword','iceSpear','shield','dragonShield','mirrorShield','ring','boots'];
 function rnd(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}function ri(r,a,b){return Math.floor(r()*(b-a+1))+a}function choice(r,a){return a[Math.floor(r()*a.length)]}function floorTheme(f){const themes=[{sky:[.55,.78,1],base:'grass',wall:'dirt',name:'はじまりの草原',bgm:'grass'},{sky:[.45,.72,.95],base:'grass',wall:'wood',name:'巨木の森',bgm:'grass'},{sky:[.92,.76,.45],base:'sand',wall:'stone',name:'砂の遺跡',bgm:'sand'},{sky:[.40,.35,.52],base:'stone',wall:'dark',name:'紫水晶の洞窟',bgm:'stone'},{sky:[.62,.82,.95],base:'ice',wall:'stone',name:'氷雪洞窟',bgm:'ice'},{sky:[.18,.16,.25],base:'stone',wall:'dark',name:'深層洞窟',bgm:'dark'},{sky:[.10,.04,.03],base:'dark',wall:'lava',name:'灼熱火山',bgm:'lava'},{sky:[.06,.03,.09],base:'dark',wall:'lava',name:'魔王城',bgm:'lava'}];if(f>=99)return themes[7];return themes[Math.min(themes.length-2,Math.floor((f-1)/5))]}
@@ -403,7 +406,7 @@ function makeEnemy(e){
  if(shape==='shooter'||shape==='mage'){const wand=BABYLON.MeshBuilder.CreateCylinder('enemyWand',{height:.9,diameter:.06},scene);wand.parent=body;wand.position.set(.48,.2,-.05);wand.rotation.z=.55;wand.material=mats.gold}
  const label=makeLabel(e.name);label.parent=root;label.position.y=boss?3.25:2.05;const obj={root,body,head,eye,label,metadata:{kind:'enemy',...e,maxHp:e.hp,vx:(Math.random()-.5)*.03,vy:0,vz:(Math.random()-.5)*.03,angX:0,angZ:0,spinX:0,spinZ:0,flash:0,hitTextT:0,hitKick:0,label,shotAt:0,skillAt:0,matMain:main,matAccent:accent}};root.position.set(e.x,e.y,e.z);drawEnemyLabel(obj.metadata);enemyMeshes.set(e.id,obj)}
 function disposeEnemy(o){o.root.dispose();if(o.label)o.label.dispose()}function enemyWorld(o){return o.root.position}
-function setupStick(stickId,knobId,target){const stick=$(stickId),knob=$(knobId);let active=null;const max=50;function setK(dx,dy){const len=Math.hypot(dx,dy);if(len>max){dx=dx/len*max;dy=dy/len*max}knob.style.transform=`translate3d(${dx}px,${dy}px,0)`;target.x=dx/max;target.y=dy/max}function reset(){active=null;knob.style.transform='translate3d(0,0,0)';target.x=0;target.y=0}function pos(e){const r=stick.getBoundingClientRect();setK(e.clientX-(r.left+r.width/2),e.clientY-(r.top+r.height/2))}stick.addEventListener('pointerdown',e=>{e.preventDefault();if(active!==null)return;active=e.pointerId;stick.setPointerCapture?.(active);pos(e)},{passive:false});stick.addEventListener('pointermove',e=>{if(e.pointerId!==active)return;e.preventDefault();pos(e)},{passive:false});stick.addEventListener('pointerup',e=>{if(e.pointerId===active)reset()},{passive:false});stick.addEventListener('pointercancel',e=>{if(e.pointerId===active)reset()},{passive:false})}setupStick('moveStick','moveKnob',moveVec);setupStick('lookStick','lookKnob',lookVec);
+function setupStick(stickId,knobId,target){const stick=$(stickId),knob=$(knobId);let active=null;const max=50;function setK(dx,dy){const len=Math.hypot(dx,dy);if(len>max){dx=dx/len*max;dy=dy/len*max}knob.style.transform=`translate3d(${dx}px,${dy}px,0)`;target.x=dx/max;target.y=dy/max}function reset(){active=null;knob.style.transform='translate3d(0,0,0)';target.x=0;target.y=0}function pos(e){const r=stick.getBoundingClientRect();setK(e.clientX-(r.left+r.width/2),e.clientY-(r.top+r.height/2))}stick.addEventListener('pointerdown',e=>{e.preventDefault();if(active!==null)return;active=e.pointerId;stick.setPointerCapture?.(active);pos(e)},{passive:false});stick.addEventListener('pointermove',e=>{if(e.pointerId!==active)return;e.preventDefault();pos(e)},{passive:false});stick.addEventListener('pointerup',e=>{if(e.pointerId===active)reset()},{passive:false});stick.addEventListener('pointercancel',e=>{if(e.pointerId===active)reset()},{passive:false})}setupStick('moveStick','moveKnob',touchMoveVec);setupStick('lookStick','lookKnob',touchLookVec);
 function pickBlock(max=player.buildRange||6){const o=camera.position,d=camera.getForwardRay(max).direction.normalize(),step=.08;let px=Math.round(o.x),py=Math.floor(o.y),pz=Math.round(o.z);for(let t=.12;t<=max;t+=step){const x=Math.round(o.x+d.x*t),y=Math.floor(o.y+d.y*t),z=Math.round(o.z+d.z*t),id=k(x,y,z),mesh=blocks.get(id);if(mesh){const nx=px-x,ny=py-y,nz=pz-z;return{hit:true,pickedMesh:mesh,getNormal:()=>new BABYLON.Vector3(Math.max(-1,Math.min(1,nx)),Math.max(-1,Math.min(1,ny)),Math.max(-1,Math.min(1,nz)))}}px=x;py=y;pz=z}return null}function normalDir(hit){const n=hit.getNormal(true);let x=Math.round(n.x),y=Math.round(n.y),z=Math.round(n.z);if(x===0&&y===0&&z===0)z=-1;return new BABYLON.Vector3(x,y,z)}async function syncBlockSet(x,y,z,type){addBlockLocal(x,y,z,type);if(connected)await set(ref(db,`rooms/${roomId}/blocks/${k(x,y,z)}`),type)}async function syncBlockRemove(x,y,z){removeBlockLocal(x,y,z);if(connected)await remove(ref(db,`rooms/${roomId}/blocks/${k(x,y,z)}`))}
 function targetEnemy(){const range=effectiveAttackRange(),ray=camera.getForwardRay(range);let best=null,bd=99;for(const o of enemyMeshes.values()){const p=enemyWorld(o),to=p.subtract(camera.position),d=to.length();const aim=Math.abs(BABYLON.Vector3.Dot(ray.direction.normalize(),to.normalize()));if(d<bd&&d<range&&aim>.93&&verticalFloorGapToPlayer(p)<=1.4&&!blockBetweenEnemyAndPlayer(p)){best=o;bd=d}}return best}
 
@@ -417,11 +420,180 @@ function reflectProjectile(dir=null,sourceProjectile=null){
 }
 function playAttackMotion(){if(slash)slash.dispose();if(slash2)slash2.dispose();slash=BABYLON.MeshBuilder.CreateTorus('slash',{diameter:1.35,thickness:.055,arc:.65},scene);slash.parent=camera;slash.position.set(.55,-.38,1.28);slash.rotation.set(1.15,0,.8);slash.material=mats.white;slash.metadata={life:13};slash2=BABYLON.MeshBuilder.CreateBox('slashBlade',{width:.12,height:.12,depth:1.65},scene);slash2.parent=camera;slash2.position.set(.25,-.35,1.25);slash2.rotation.set(.55,.35,.15);slash2.material=portalMat;slash2.metadata={life:9}}
 function doBreak(){AudioKit.sfx('attack');playAttackMotion();if(reflectProjectile())return;const e=targetEnemy();if(e){const m=e.metadata,w=player.weapon,seals=w?.seals||[],atk=player.atk+equipPower(w,'atk')+equipPower(player.accessory,'atk'),bonus=seals.includes('雷')?4+Math.floor(player.floor/8):0,dmg=Math.max(1,atk+bonus+Math.floor(Math.random()*4)-m.def);m.hp-=dmg;m.flash=12;m.hitTextT=24;m.hitKick=14;if(seals.includes('炎')){m.burn=(m.burn||0)+5;log(`${m.name}が火だるま。炎上継続ダメージ開始。`,'bad')}const p=enemyWorld(e),dx=p.x-player.x,dz=p.z-player.z,len=Math.max(.001,Math.hypot(dx,dz));m.vx+=dx/len*(m.boss?.65:1.28);m.vz+=dz/len*(m.boss?.65:1.28);m.vy+=m.boss?.18:.42;m.spinX+=(Math.random()-.5)*.55;m.spinZ+=dx/len*.55;spawnDamageText('-'+dmg,p,seals.includes('雷')?'#a7f3d0':seals.includes('炎')?'#fb923c':'#ffef8a');physicsSpark(p,seals.includes('炎')?mats.lava:mats.gold);AudioKit.sfx('hit');drawEnemyLabel(m);log(`${playerName}の${w?itemTitle(w):'素手'}。${m.name}に${dmg}ダメージ。${seals.length?'印:'+seals.join(', '):'印なし'}。`,'good');if(m.hp<=0){const gold=8+player.floor*2+Math.floor(Math.random()*45);player.gold+=gold;log(`${m.name}を倒した。${gold}Gを手に入れた。`,'gold');if(Math.random()<.4){const keys=dropKeys,key=keys[Math.floor(Math.random()*keys.length)],inst=createItemInstance(key);player.inventory.push(inst);log(`${m.name}は${itemTitle(inst)}を落とした。${itemDesc(inst)}`,'gold')}disposeEnemy(e);enemyMeshes.delete(m.id);if(m.boss)unlockPortalAfterBoss(m)}return}const hit=pickBlock();if(hit){const m=hit.pickedMesh.metadata;syncBlockRemove(m.x,m.y,m.z);AudioKit.sfx('break');log('ブロックを砕いた。通路を自分で作れるのがマイクラ要素だ。','info');if((player.weapon?.seals||[]).includes('掘')){const n=normalDir(hit);for(const off of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]){const x=m.x+off[0],y=m.y+off[1],z=m.z+off[2];if(blocks.has(k(x,y,z))){syncBlockRemove(x,y,z);break}}}}}
-$('breakBtn').addEventListener('touchstart',e=>{e.preventDefault();doBreak()},{passive:false});$('breakBtn').addEventListener('mousedown',e=>{e.preventDefault();doBreak()});function placeBlock(){const hit=pickBlock();if(!hit)return;const m=hit.pickedMesh.metadata,n=normalDir(hit),nx=m.x+n.x,ny=m.y+n.y,nz=m.z+n.z,px=Math.round(player.x),pz=Math.round(player.z);if(nx===px&&nz===pz&&ny>=Math.floor(player.y-1.7)&&ny<=Math.floor(player.y))return;syncBlockSet(nx,ny,nz,'dirt');AudioKit.sfx('place');log('土ブロックを置いた。段差攻略に使える。','info')}$('placeBtn').addEventListener('touchstart',e=>{e.preventDefault();placeBlock()},{passive:false});$('placeBtn').addEventListener('mousedown',e=>{e.preventDefault();placeBlock()});function isGrounded(){return Math.abs(player.y-groundHeightAt(player.x,player.z))<.06&&player.vy===0}function doJump(){if(parachuteActive)return;if(isGrounded())player.jumpsLeft=player.jumpMax||1;if((player.jumpsLeft||0)>0){player.vy=player.jumpPower||.24;player.jumpsLeft--;AudioKit.sfx('jump')}}$('jumpBtn').addEventListener('touchstart',e=>{e.preventDefault();doJump()},{passive:false});$('jumpBtn').addEventListener('mousedown',e=>{e.preventDefault();doJump()});
+$('breakBtn').addEventListener('touchstart',e=>{e.preventDefault();doBreak()},{passive:false});$('breakBtn').addEventListener('mousedown',e=>{e.preventDefault();doBreak()});function placeBlock(){
+  const hit=pickBlock();
+  let nx,ny,nz;
+  if(hit){
+    const m=hit.pickedMesh.metadata,n=normalDir(hit);
+    nx=m.x+n.x;ny=m.y+n.y;nz=m.z+n.z;
+  }else{
+    const dist=2.2,fx=Math.sin(player.yaw),fz=Math.cos(player.yaw);
+    nx=Math.round(player.x+fx*dist);nz=Math.round(player.z+fz*dist);ny=Math.floor(player.y-player.height+.25);
+    if(!existsBlock(nx,ny-1,nz))ny=Math.floor(groundHeightAt(nx,nz,player.y)-player.height);
+  }
+  const px=Math.round(player.x),pz=Math.round(player.z);
+  if(nx===px&&nz===pz&&ny>=Math.floor(player.y-1.7)&&ny<=Math.floor(player.y))return;
+  if(existsBlock(nx,ny,nz))return;
+  syncBlockSet(nx,ny,nz,'dirt');AudioKit.sfx('place');log('Xボタンで土ブロック生成。足場・段差攻略に使える。','info')
+}$('placeBtn').addEventListener('touchstart',e=>{e.preventDefault();placeBlock()},{passive:false});$('placeBtn').addEventListener('mousedown',e=>{e.preventDefault();placeBlock()});function isGrounded(){return Math.abs(player.y-groundHeightAt(player.x,player.z))<.06&&player.vy===0}function doJump(){if(parachuteActive)return;if(isGrounded())player.jumpsLeft=player.jumpMax||1;if((player.jumpsLeft||0)>0){player.vy=player.jumpPower||.24;player.jumpsLeft--;AudioKit.sfx('jump')}}$('jumpBtn').addEventListener('touchstart',e=>{e.preventDefault();doJump()},{passive:false});$('jumpBtn').addEventListener('mousedown',e=>{e.preventDefault();doJump()});
 function canStandHere(){const oldH=player.height;player.height=player.standHeight;const ok=!playerBlocked(player.x,player.y+(player.standHeight-oldH),player.z);player.height=oldH;return ok}
 function setCrouch(on){if(on===player.crouching)return;if(on){player.crouching=true;player.height=player.crouchHeight;player.y-=player.standHeight-player.crouchHeight;log('しゃがみ。速度低下、1ブロック穴くぐり、崖落ち防止、盾構え。','info')}else{if(!canStandHere()){AudioKit.sfx('deny');log('頭上が低く、まだ立てない。しゃがみで抜けろ。','bad');return}player.crouching=false;player.y+=player.standHeight-player.crouchHeight;player.height=player.standHeight;log('立ち状態へ戻った。','info')}const b=$('crouchBtn');if(b){b.classList.toggle('on',player.crouching);b.innerHTML=player.crouching?'STAND<br>立つ':'CROUCH<br>しゃがむ'}renderHud(true)}
 function toggleCrouch(){setCrouch(!player.crouching)}
 $('crouchBtn').addEventListener('touchstart',e=>{e.preventDefault();toggleCrouch()},{passive:false});$('crouchBtn').addEventListener('mousedown',e=>{e.preventDefault();toggleCrouch()});
+// Switch Pro Controller / Android controller / keyboard fallback support.
+const gpState={index:null,buttons:Object.create(null),virtualVisible:true,keyboard:Object.create(null),lastInfo:'',panelField:'name',panelCursor:0,menuIndex:0,menuNavAt:0,menuAxisDir:0};
+function ensurePanelDefaults(){
+  if(nameInput&&!nameInput.value)nameInput.value='P'+playerId.slice(-4).toUpperCase();
+  if(roomInput&&!roomInput.value)roomInput.value=randomRoom();
+  updatePanelFocus();
+}
+function updatePanelFocus(){
+  if(!nameInput||!roomInput)return;
+  nameInput.classList.toggle('gpFocus',gpState.panelField==='name');
+  roomInput.classList.toggle('gpFocus',gpState.panelField==='room');
+  const v=(gpState.panelField==='name'?nameInput.value:roomInput.value)||'';
+  gpState.panelCursor=Math.max(0,Math.min(gpState.panelCursor,Math.max(0,v.length-1)));
+  if(panelMsg)panelMsg.textContent='Proコン入力: 十字キー左右=文字変更 / L,R=位置 / A,上下=名前・Room切替 / B=削除 / X=Room再生成 / +=HOST / -=JOIN';
+}
+function activePanelInput(){return gpState.panelField==='name'?nameInput:roomInput}
+function togglePanelField(){gpState.panelField=gpState.panelField==='name'?'room':'name';gpState.panelCursor=0;updatePanelFocus()}
+function panelRandomRoom(){roomInput.value=randomRoom();gpState.panelField='room';gpState.panelCursor=0;updatePanelFocus()}
+function editPanelChar(dir){
+  ensurePanelDefaults();
+  const el=activePanelInput();
+  const chars=gpState.panelField==='name'?'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-':'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-';
+  let v=(el.value||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'');
+  const max=gpState.panelField==='name'?16:20;
+  if(!v)v=gpState.panelField==='name'?'P':'A';
+  gpState.panelCursor=Math.max(0,Math.min(gpState.panelCursor,v.length-1));
+  const cur=v[gpState.panelCursor]||chars[0];
+  let idx=chars.indexOf(cur); if(idx<0)idx=0;
+  idx=(idx+dir+chars.length)%chars.length;
+  v=v.slice(0,gpState.panelCursor)+chars[idx]+v.slice(gpState.panelCursor+1);
+  el.value=v.slice(0,max); updatePanelFocus();
+}
+function movePanelCursor(dir){
+  ensurePanelDefaults();
+  const el=activePanelInput();
+  const len=Math.max(1,(el.value||'').length);
+  gpState.panelCursor=(gpState.panelCursor+dir+len)%len; updatePanelFocus();
+}
+function deletePanelChar(){
+  ensurePanelDefaults();
+  const el=activePanelInput();
+  let v=el.value||'';
+  if(v.length<=1)return;
+  gpState.panelCursor=Math.max(0,Math.min(gpState.panelCursor,v.length-1));
+  v=v.slice(0,gpState.panelCursor)+v.slice(gpState.panelCursor+1);
+  el.value=v;
+  gpState.panelCursor=Math.max(0,Math.min(gpState.panelCursor,v.length-1)); updatePanelFocus();
+}
+function isPanelOpen(){return panel&&panel.style.display!=='none'}
+function setVirtualControllerVisible(on){gpState.virtualVisible=!!on;document.body.classList.toggle('virtualHidden',!gpState.virtualVisible);const h=$('gamepadHint');if(h)h.textContent=gpState.virtualVisible?'Proコン操作: Bジャンプ / Y攻撃 / Xブロック生成 / Aしゃがみ / +装備 / -表示切替 / メニュー中は上下選択・Y決定':'Proコン操作中。バーチャル非表示。-で再表示';}
+function toggleVirtualController(){setVirtualControllerVisible(!gpState.virtualVisible);log(gpState.virtualVisible?'バーチャルコントローラ表示。':'バーチャルコントローラ非表示。','info')}
+function gpPressed(gp,i){const b=gp&&gp.buttons&&gp.buttons[i];return !!(b&&(b.pressed||b.value>.5))}
+function gpAxis(gp,i){const v=(gp&&gp.axes&&typeof gp.axes[i]==='number')?gp.axes[i]:0;return Math.abs(v)<.16?0:v}
+function gpEdge(gp,i){const now=gpPressed(gp,i),prev=!!gpState.buttons['b'+i];gpState.buttons['b'+i]=now;return now&&!prev}
+function anyGpButtonEdge(gp){let hit=false;for(let i=0;i<(gp.buttons?gp.buttons.length:0);i++)if(gpEdge(gp,i))hit=true;return hit}
+function activeGamepad(){const pads=navigator.getGamepads?navigator.getGamepads():[];if(gpState.index!==null&&pads[gpState.index]&&pads[gpState.index].connected)return pads[gpState.index];for(const gp of pads){if(gp&&gp.connected){gpState.index=gp.index;return gp}}return null}
+function isMenuOpen(){return menu&&menu.style.display==='block'}
+function menuItemCount(){return menuGrid?menuGrid.querySelectorAll('.itemCard').length:0}
+function clampMenuIndex(){const n=menuItemCount();gpState.menuIndex=n?Math.max(0,Math.min(gpState.menuIndex,n-1)):0}
+function updateMenuSelection(){
+  if(!menuGrid)return;
+  clampMenuIndex();
+  const cards=Array.from(menuGrid.querySelectorAll('.itemCard'));
+  cards.forEach((card,i)=>card.classList.toggle('gpSelected',i===gpState.menuIndex));
+  const selected=cards[gpState.menuIndex];
+  if(selected){
+    try{selected.focus({preventScroll:true});}catch(e){}
+    try{
+      const parent=menu;
+      const pr=parent.getBoundingClientRect(), sr=selected.getBoundingClientRect();
+      if(sr.top<pr.top+70) parent.scrollTop-=Math.ceil((pr.top+70)-sr.top);
+      if(sr.bottom>pr.bottom-70) parent.scrollTop+=Math.ceil(sr.bottom-(pr.bottom-70));
+    }catch(e){}
+  }
+  const help=$('menuPadHelp');
+  if(help)help.textContent='MIX INPUT 1000: 上下で選択、Yで決定、Bまたは+で閉じる。Xはメニュー中は無効。装備欄のYでその枠だけ解除。';
+}
+function toggleMenuByPad(){if(isMenuOpen())menu.style.display='none';else{menu.style.display='block';gpState.menuIndex=0;renderMenu();updateMenuSelection()}}
+function moveMenuSelection(dir){if(!isMenuOpen())return;const n=menuItemCount();if(!n)return;gpState.menuIndex=(gpState.menuIndex+dir+n)%n;updateMenuSelection()}
+function activateMenuSelection(){if(!isMenuOpen())return;clampMenuIndex();const card=menuGrid.querySelectorAll('.itemCard')[gpState.menuIndex];const btn=card?card.querySelector('button'):null;if(btn)btn.click();else{AudioKit.sfx('select');log('装備内容を確認中。決定操作は不要。','info')}}
+function closeMenuByPad(){if(isMenuOpen())menu.style.display='none'}
+function gamepadStart(host){AudioKit.unlock(); if(window.__miniStartReal)window.__miniStartReal(host); else if(window.__miniStart)window.__miniStart(host); else startGame(host)}
+
+function clampAxis(v){return Math.max(-1,Math.min(1,v||0))}
+function refreshCombinedInput(){
+  moveVec.x=clampAxis(touchMoveVec.x+padMoveVec.x+keyMoveVec.x);
+  moveVec.y=clampAxis(touchMoveVec.y+padMoveVec.y+keyMoveVec.y);
+  lookVec.x=clampAxis(touchLookVec.x+padLookVec.x+keyLookVec.x);
+  lookVec.y=clampAxis(touchLookVec.y+padLookVec.y+keyLookVec.y);
+}
+function clearPadAxes(){padMoveVec.x=padMoveVec.y=padLookVec.x=padLookVec.y=0;refreshCombinedInput()}
+function pollGamepad(){
+  const gp=activeGamepad();
+  const k=gpState.keyboard;
+  keyMoveVec.x=(k.ArrowRight||k.KeyD?1:0)-(k.ArrowLeft||k.KeyA?1:0);
+  keyMoveVec.y=(k.ArrowDown||k.KeyS?1:0)-(k.ArrowUp||k.KeyW?1:0);
+  keyLookVec.x=(k.KeyL?1:0)-(k.KeyJ?1:0);
+  keyLookVec.y=(k.KeyK?1:0)-(k.KeyI?1:0);
+
+  if(gp){
+    padMoveVec.x=gpAxis(gp,0);
+    padMoveVec.y=gpAxis(gp,1);
+    const rx=gpAxis(gp,2), ry=gpAxis(gp,3), altY=gpAxis(gp,4);
+    padLookVec.x=rx;
+    padLookVec.y=ry||altY;
+    refreshCombinedInput();
+
+    if(isPanelOpen()){
+      ensurePanelDefaults();
+      if(gpEdge(gp,9)){gamepadStart(true);return}
+      if(gpEdge(gp,8)){gamepadStart(false);return}
+      if(gpEdge(gp,1)||gpEdge(gp,12)||gpEdge(gp,13))togglePanelField();
+      if(gpEdge(gp,14))editPanelChar(-1);
+      if(gpEdge(gp,15))editPanelChar(1);
+      if(gpEdge(gp,4))movePanelCursor(-1);
+      if(gpEdge(gp,5))movePanelCursor(1);
+      if(gpEdge(gp,0))deletePanelChar();
+      if(gpEdge(gp,3))panelRandomRoom();
+      return;
+    }
+    if(isMenuOpen()){
+      padMoveVec.x=padMoveVec.y=padLookVec.x=padLookVec.y=0;
+      keyMoveVec.x=keyMoveVec.y=keyLookVec.x=keyLookVec.y=0;
+      refreshCombinedInput();
+      const now=Date.now();
+      const ay=gpAxis(gp,1);
+      let axisDir=ay<-.65?-1:(ay>.65?1:0);
+      if(axisDir===0)gpState.menuAxisDir=0;
+      if(gpEdge(gp,12)||gpEdge(gp,14))moveMenuSelection(-1);
+      else if(gpEdge(gp,13)||gpEdge(gp,15))moveMenuSelection(1);
+      else if(axisDir!==0&&(gpState.menuAxisDir!==axisDir||now-gpState.menuNavAt>220)){
+        gpState.menuAxisDir=axisDir;gpState.menuNavAt=now;moveMenuSelection(axisDir);
+      }
+      if(gpEdge(gp,2))activateMenuSelection();
+      if(gpEdge(gp,0)||gpEdge(gp,9))closeMenuByPad();
+      if(gpEdge(gp,8))toggleVirtualController();
+      return;
+    }
+    if(gpEdge(gp,0))doJump();
+    if(gpEdge(gp,2))doBreak();
+    if(gpEdge(gp,3))placeBlock();
+    if(gpEdge(gp,1))toggleCrouch();
+    if(gpEdge(gp,9))toggleMenuByPad();
+    if(gpEdge(gp,8))toggleVirtualController();
+  }else{
+    clearPadAxes();
+  }
+  refreshCombinedInput();
+}
+window.addEventListener('gamepadconnected',e=>{gpState.index=e.gamepad.index;AudioKit.unlock();setVirtualControllerVisible(true);const h=$('gamepadHint');if(h)h.textContent='Proコン接続済み。パネル中は十字キーで文字、+でHOST、-でJOIN。開始後はBジャンプ、Y攻撃、Xブロック生成。';log('Proコン/Gamepad接続。タッチなしで操作できます。','good')});
+window.addEventListener('gamepaddisconnected',e=>{if(gpState.index===e.gamepad.index){gpState.index=null;gpState.buttons=Object.create(null);clearPadAxes();log('Gamepad接続が切れた。','bad')}});
+window.addEventListener('keydown',e=>{gpState.keyboard[e.code]=true;AudioKit.unlock();if(isPanelOpen()){if(e.code==='Enter'||e.code==='NumpadEnter'||e.code==='Space')gamepadStart(true);if(e.code==='KeyY')gamepadStart(false);return}if(isMenuOpen()&&!e.repeat){if(e.code==='ArrowUp'||e.code==='KeyW')moveMenuSelection(-1);else if(e.code==='ArrowDown'||e.code==='KeyS')moveMenuSelection(1);else if(e.code==='KeyY'||e.code==='Enter'||e.code==='Space')activateMenuSelection();else if(e.code==='KeyX'){}else if(e.code==='Escape'||e.code==='KeyB'||e.code==='Equal')closeMenuByPad();else if(e.code==='Minus')toggleVirtualController();return}if(!e.repeat){if(e.code==='Space'||e.code==='KeyB')doJump();if(e.code==='KeyY')doBreak();if(e.code==='KeyX')placeBlock();if(e.code==='KeyC')toggleCrouch();if(e.code==='Escape'||e.code==='Minus')toggleVirtualController();if(e.code==='Equal'||e.code==='Enter')toggleMenuByPad();}});
+window.addEventListener('keyup',e=>{gpState.keyboard[e.code]=false});
+
 function playerBlocked(nx,ny,nz){const feetY=Math.floor(ny-player.height+.10),headY=Math.floor(ny-.18),minX=Math.floor(nx-player.radius+.03),maxX=Math.floor(nx+player.radius-.03),minZ=Math.floor(nz-player.radius+.03),maxZ=Math.floor(nz+player.radius-.03);for(let x=minX;x<=maxX;x++)for(let y=feetY;y<=headY;y++)for(let z=minZ;z<=maxZ;z++)if(existsBlock(x,y,z))return true;return false}function groundHeightAt(px,pz,py=player.y){let best=-999;const minX=Math.floor(px-player.radius+.03),maxX=Math.floor(px+player.radius-.03),minZ=Math.floor(pz-player.radius+.03),maxZ=Math.floor(pz+player.radius-.03),maxStandY=py+.95-player.height;for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++){const a=columnYs(x,z);for(let i=a.length-1;i>=0;i--){const y=a[i];if(y+1<=maxStandY+.001){if(y>best)best=y;break}}}return best+1+player.height}function hasStandClearance(nx,standY,nz){return !playerBlocked(nx,standY,nz)}function tryStepMove(nx,nz){const curGround=groundHeightAt(player.x,player.z,player.y),nextGround=groundHeightAt(nx,nz,player.y+2.05);if(player.crouching&&nextGround-player.height<curGround-player.height-.05)return;if(!playerBlocked(nx,player.y,nz)){player.x=nx;player.z=nz;return}const next=nextGround,step=next-curGround,feetStep=next-player.y;if(!player.crouching&&step>-1.2&&step<=1.62&&feetStep<=1.62&&hasStandClearance(nx,next,nz)){player.x=nx;player.z=nz;player.y=next;player.vy=Math.max(0,player.vy*.15);player.jumpsLeft=player.jumpMax||1;return}if(!player.crouching&&Math.abs(moveVec.x)+Math.abs(moveVec.y)>.15&&player.vy===0){player.vy=Math.max(player.vy,.055)}}
 function restartParachuteFromFall(){
   if(fallRecoveryLock>0)return;
@@ -562,6 +734,18 @@ async function portalTick(){if(parachuteActive||landingLock>0||transitioningFloo
 let lastHudText='',lastHudAt=0;function renderHud(force=false){const now=performance.now();if(!force&&now-lastHudAt<180)return;lastHudAt=now;const text=`<b>${player.floor}F</b> / HP ${player.hp}/${player.maxHp}<br>攻撃 ${player.atk+equipPower(player.weapon,'atk')+equipPower(player.accessory,'atk')} / 防御 ${player.def+equipPower(player.shield,'def')}<br>所持金 ${player.gold}G<br>武器 ${player.weapon?itemTitle(player.weapon)+' 印'+(player.weapon.seals||[]).length+'/'+(player.weapon.slots||0):'なし'}<br>盾 ${player.shield?itemTitle(player.shield)+' 印'+(player.shield.seals||[]).length+'/'+(player.shield.slots||0):'なし'}<br>アクセ ${player.accessory?itemTitle(player.accessory)+' 印'+(player.accessory.seals||[]).length+'/'+(player.accessory.slots||0):'なし'}<br>JUMP ${player.jumpMax}回 / 攻射程 ${Number(effectiveAttackRange()).toFixed(1)} / 生成 ${Number(player.buildRange||6).toFixed(1)}<br>姿勢 ${player.crouching?'しゃがみ:盾構え/崖停止':'立ち'}<br>敵 ${enemyMeshes.size}体 / アイテム ${itemMeshes.size}個<br>セーブ ${saveLastAt?new Date(saveLastAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):saveLoaded?'ロード済':'未作成'}<br>${bossActive?'ボス封印中: 撃破でワープ解放':'ワープ探索可'}`;if(text!==lastHudText){hud.innerHTML=text;lastHudText=text}}
 
 function sealLabel(seal){return seal?`${seal}:${sealInfo[seal]||'特殊効果'}`:'空'}
+
+function unequipSlot(slotName){
+  const slotLabel=slotName==='weapon'?'武器':slotName==='shield'?'盾':'アクセ';
+  const it=player[slotName];
+  if(!it){AudioKit.sfx('deny');log(`${slotLabel}は未装備。解除するものがない。`,'info');return;}
+  player.inventory.push(it);
+  player[slotName]=null;
+  AudioKit.sfx('select');
+  log(`${slotLabel}「${itemTitle(it)}」を解除してアイテム欄へ戻した。`,'good');
+  renderMenu();
+  renderHud(true);
+}
 function equipDetailHtml(slotName,it){
   const slotLabel=slotName==='weapon'?'武器':slotName==='shield'?'盾':'アクセ';
   if(!it)return `<div class="equipRow"><div class="equipTitle">${slotLabel}: 未装備</div><div class="equipStat">この枠は空。装備すると基礎値・+値・印効果がここに出る。</div></div>`;
@@ -572,7 +756,7 @@ function equipDetailHtml(slotName,it){
   const sealHtml=Array.from({length:Math.max(slots,seals.length)},(_,i)=>seals[i]?`<span class="seal">${sealLabel(seals[i])}</span>`:`<span class="seal empty">${i+1}:空き</span>`).join('');
   const overwrite=seals.length>=slots&&slots>0?`<span class="compareMinus">次の合成で最後の印「${seals[seals.length-1]}」が上書き対象</span>`:`<span class="comparePlus">空き印あり。次の合成で印を追加可能</span>`;
   const role=slotName==='weapon'?`実攻撃 +${totalAtk} / 射程 ${Number(effectiveAttackRange()).toFixed(1)}`:slotName==='shield'?`実防御 +${totalDef}`:`攻撃補正 +${totalAtk}${def.speed?` / 速度補正 +${def.speed}`:''}`;
-  return `<div class="equipRow"><div class="equipTitle">${slotLabel}: ${itemTitle(it)}</div><div class="equipStat">基礎攻撃 ${baseAtk} / 基礎防御 ${baseDef} / 強化値 +${plus} / ${role}</div><div class="equipStat">印 ${seals.length}/${slots}</div><div class="sealBox">${sealHtml||'<span class="seal empty">印なし</span>'}</div><div class="equipStat">${overwrite}</div><div class="equipStat">説明: ${def.desc||'説明なし'}</div></div>`;
+  return `<div class="equipRow"><div class="equipTitle">${slotLabel}: ${itemTitle(it)}</div><div class="equipStat">基礎攻撃 ${baseAtk} / 基礎防御 ${baseDef} / 強化値 +${plus} / ${role}</div><div class="equipStat">印 ${seals.length}/${slots}</div><div class="sealBox">${sealHtml||'<span class="seal empty">印なし</span>'}</div><div class="equipStat">${overwrite}</div><div class="equipStat">説明: ${def.desc||'説明なし'}</div><button class="slotReleaseBtn" data-slot="${slotName}">${slotLabel}だけ解除</button></div>`;
 }
 function inventoryCompareHtml(it){
   const def=itemMaster[it.key]||{};
@@ -586,13 +770,68 @@ function inventoryCompareHtml(it){
   return `<br><span class="gold">比較: ${cur?itemTitle(cur):'未装備'} → ${itemTitle(it)} / ${dText} / ${baseHint}</span><br>印状態: ${seals.length}/${slots} ${seals.join(', ')||'空'}`;
 }
 
-function renderMenu(){
-  menuInfo.innerHTML=`<div id="equipPanel"><b>現在装備の詳細</b>${equipDetailHtml('weapon',player.weapon)}${equipDetailHtml('shield',player.shield)}${equipDetailHtml('accessory',player.accessory)}<div id="equipHelp">装備中に別装備を選ぶと、現在装備をベースに+値と印を合成。印が満杯なら最後の印を上書き。</div></div>`;
-  menuGrid.innerHTML='';
-  if(!player.inventory.length){menuGrid.innerHTML='<div class="itemCard">アイテムなし。敵を倒すか拾え。装備全解除すると装備品はここへ戻る。</div>';return}
-  player.inventory.forEach((it,idx)=>{const def=itemMaster[it.key]||{},card=document.createElement('div');card.className='itemCard';card.innerHTML=`<b>${itemTitle(it)}</b><br>${itemDesc(it)}${inventoryCompareHtml(it)}<br>種別: ${def.type||it.type||'不明'}`;const btn=document.createElement('button');btn.textContent=def.type==='use'?'使う':isEquipType(def.type)?(player[def.type]?'合成する':'装備する'):'使う';btn.onclick=()=>{if(def.type==='use'){player.hp=Math.min(player.maxHp,player.hp+(it.key==='bigHerb'?30:12));AudioKit.sfx('heal');log(`${def.name}を使った。HPが回復した。`,'good')}else if(def.type==='life'){player.maxHp+=5;player.hp=Math.min(player.maxHp,player.hp+5);AudioKit.sfx('power');log(`${def.name}を使った。最大HPが${player.maxHp}になった。`,'good')}else if(isEquipType(def.type)){equipOrFuse(it)}else if(def.type==='upgrade'){applyItemEffect(it.key,false)}player.inventory.splice(idx,1);renderMenu();renderHud(true)};card.appendChild(btn);menuGrid.appendChild(card)})}
 
-const itemBtnEl=$('itemBtn');if(itemBtnEl)itemBtnEl.onclick=()=>{menu.style.display=menu.style.display==='block'?'none':'block';renderMenu()};const unequipBtnEl=$('unequipBtn');if(unequipBtnEl)unequipBtnEl.onclick=unequipAll;menu.onclick=e=>{if(e.target===menu)menu.style.display='none'};
+function cleanupMenuLegacyButtons(){
+  if(!menu)return;
+  const tops=Array.from(menu.querySelectorAll('button'));
+  for(const b of tops){
+    const t=(b.textContent||'').trim();
+    if(t.includes('装備全解除')) b.remove();
+  }
+  const help=$('menuPadHelp');
+  if(help)help.innerHTML='MIX INPUT 1000: 十字キー/左スティック上下=選択 / Y=決定 / Bまたは+=閉じる / -=バーチャル表示切替。Xは無効。装備欄のYでその枠だけ解除';
+}
+
+function renderMenu(){
+  if(!menu||!menuInfo||!menuGrid)return;
+  menuInfo.innerHTML=`<div id="equipPanel"><b>MIX INPUT 1000: 装備確認メニュー</b><div id="equipHelp">武器・盾・アクセも上下選択対象。装備中の枠には「この枠だけ解除」ボタンを表示。Yでその枠だけ解除。</div><div id="menuPadHelp">MIX INPUT 1000: 上下で選択、Yで決定、Bまたは+で閉じる。Xはメニュー中は無効。装備欄のYでその枠だけ解除。</div></div>`;
+  menuGrid.innerHTML='';
+  const addCard=(html, action)=>{
+    const card=document.createElement('div');
+    card.className='itemCard';
+    card.setAttribute('tabindex','0');
+    card.innerHTML=html;
+    if(action){
+      const btn=document.createElement('button');
+      btn.textContent=action.label;
+      btn.onclick=action.fn;
+      card.appendChild(btn);
+    }
+    const releaseBtn=card.querySelector('.slotReleaseBtn');
+    if(releaseBtn){
+      releaseBtn.onclick=(ev)=>{ev.stopPropagation();unequipSlot(releaseBtn.dataset.slot)};
+    }
+    menuGrid.appendChild(card);
+  };
+  addCard(equipDetailHtml('weapon',player.weapon), null);
+  addCard(equipDetailHtml('shield',player.shield), null);
+  addCard(equipDetailHtml('accessory',player.accessory), null);
+  if(!player.inventory.length){
+    addCard('<b>アイテムなし</b><br>敵を倒すか拾う。装備枠は上に表示済み。', null);
+    gpState.menuIndex=Math.min(gpState.menuIndex, menuItemCount()-1);
+    updateMenuSelection();
+    return;
+  }
+  player.inventory.forEach((it,idx)=>{
+    const def=itemMaster[it.key]||{};
+    const label=def.type==='use'||def.type==='life'||def.type==='upgrade'?'使う':isEquipType(def.type)?(player[def.type]?'合成する':'装備する'):'決定';
+    addCard(`<b>${itemTitle(it)}</b><br>${itemDesc(it)}${inventoryCompareHtml(it)}<br>種別: ${def.type||it.type||'不明'}`, {label, fn:()=>{
+      if(def.type==='use'){
+        player.hp=Math.min(player.maxHp,player.hp+(it.key==='bigHerb'?30:12));AudioKit.sfx('heal');log(`${def.name}を使った。HPが回復した。`,'good');
+      }else if(def.type==='life'){
+        player.maxHp+=5;player.hp=Math.min(player.maxHp,player.hp+5);AudioKit.sfx('power');log(`${def.name}を使った。最大HPが${player.maxHp}になった。`,'good');
+      }else if(isEquipType(def.type)){
+        equipOrFuse(it);
+      }else if(def.type==='upgrade'){
+        applyItemEffect(it.key,false);
+      }
+      player.inventory.splice(idx,1);renderMenu();renderHud(true);
+    }});
+  });
+  gpState.menuIndex=Math.min(gpState.menuIndex, menuItemCount()-1);
+  updateMenuSelection();
+}
+const itemBtnEl=$('itemBtn');if(itemBtnEl)itemBtnEl.onclick=()=>{menu.style.display=menu.style.display==='block'?'none':'block';if(isMenuOpen()){gpState.menuIndex=0;renderMenu();updateMenuSelection()}};menu.onclick=e=>{if(e.target===menu)menu.style.display='none'};
 const otherPlayers=new Map();function makePlayerMesh(id){const root=new BABYLON.TransformNode('op_'+id,scene),body=BABYLON.MeshBuilder.CreateBox('body_'+id,{width:.65,height:1.25,depth:.35},scene);body.parent=root;body.position.y=.62;body.material=mat('bodyMat_'+id,.2+Math.random()*.6,.2+Math.random()*.6,.4+Math.random()*.5);const face=BABYLON.MeshBuilder.CreatePlane('face_'+id,{width:.75,height:.55},scene);face.parent=root;face.position.y=1.55;face.billboardMode=BABYLON.Mesh.BILLBOARDMODE_ALL;const tex=new BABYLON.DynamicTexture('faceTex_'+id,{width:128,height:96},scene,false),fm=new BABYLON.StandardMaterial('faceMat_'+id,scene);fm.diffuseTexture=tex;fm.emissiveColor=new BABYLON.Color3(1,1,1);face.material=fm;return{root,body,face,tex,lastFace:''}}function drawFace(op,imgData,name){const ctx=op.tex.getContext();ctx.fillStyle='#111';ctx.fillRect(0,0,128,96);if(imgData){const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0,128,96);ctx.fillStyle='white';ctx.font='14px sans-serif';ctx.fillText(name||'P',5,90);op.tex.update()};img.src=imgData}else{ctx.fillStyle='white';ctx.font='18px sans-serif';ctx.fillText(name||'Player',12,52);op.tex.update()}}
 function attachRoomSync(){onValue(ref(db,`rooms/${roomId}/blocks`),snap=>loadBlocks(snap.val()||{}));onValue(ref(db,`rooms/${roomId}/rogue`),snap=>{const data=snap.val();if(data&&!isHost)applyFloorData(data)});onValue(ref(db,`rooms/${roomId}/players`),snap=>{const players=snap.val()||{},seen=new Set(Object.keys(players));for(const[id,p]of Object.entries(players)){if(id===playerId)continue;if(!otherPlayers.has(id)){const op=makePlayerMesh(id);otherPlayers.set(id,op);drawFace(op,p.face,p.name)}const op=otherPlayers.get(id);op.root.position.set(p.x||0,(p.y||2)-1.75,p.z||0);op.root.rotation.y=p.yaw||0;if(op.lastFace!==p.face){op.lastFace=p.face;drawFace(op,p.face,p.name)}}for(const[id,op]of Array.from(otherPlayers.entries()))if(!seen.has(id)){op.root.dispose();otherPlayers.delete(id)}})}async function pushPlayerState(){if(!connected)return;await update(ref(db,`rooms/${roomId}/players/${playerId}`),{x:+player.x.toFixed(3),y:+player.y.toFixed(3),z:+player.z.toFixed(3),yaw:+player.yaw.toFixed(3),pitch:+player.pitch.toFixed(3),floor:player.floor,hp:player.hp,updatedAt:Date.now()})}async function startCamera(){try{const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:160},height:{ideal:120}}});video.srcObject=stream}catch(e){setStatus((isHost?'HOST':'JOIN')+' Room: '+roomId+' / カメラ不可')}}async function pushFaceImage(){if(!connected||!video.videoWidth)return;const c=document.createElement('canvas');c.width=96;c.height=72;const ctx=c.getContext('2d');ctx.drawImage(video,0,0,c.width,c.height);await update(ref(db,`rooms/${roomId}/players/${playerId}`),{face:c.toDataURL('image/jpeg',.38)})}
 function enterLocalGame(label){
@@ -683,11 +922,12 @@ function bindStartButton(id,host){
   el.addEventListener('touchend',fire,{passive:false,capture:true});
   el.addEventListener('pointerdown',fire,{capture:true});
 }
-bindStartButton('hostBtn',true);bindStartButton('joinBtn',false);
+bindStartButton('hostBtn',true);bindStartButton('joinBtn',false);ensurePanelDefaults();
 const marker=BABYLON.MeshBuilder.CreateBox('marker',{size:1.04},scene),markerMat=mat('markerMat',1,1,1,.25);marker.material=markerMat;marker.isVisible=false;
 let lastPickAt=0,lastPickHit=null;
 engine.runRenderLoop(()=>{
   const now=performance.now();
+  pollGamepad();
   let frameDt=Math.min(.05,(now-lastFrameTime)/1000);lastFrameTime=now;simAccumulator+=frameDt;
   let steps=0;
   while(simAccumulator>=FRAME_STEP&&steps<MAX_STEPS){
