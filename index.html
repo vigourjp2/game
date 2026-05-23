@@ -158,23 +158,75 @@ function hostPhysics(dt){updatePaddle(me,dt);updatePaddle(opp,dt);puck.x+=puck.v
 function clientPhysics(dt){
 updatePaddle(me,dt);
 updatePaddle(opp,dt);
-if(!lastRemotePuck){
+
+// WebRTC時は最新値へ追いかけるのではなく、少し過去を時間補間して描画する。
+// これでAndroid/回線揺れの微カクをかなり消す。
+let rp=null;
+
+if(rtcReady && rtcStateBuffer.length>=2){
+  const targetTime=performance.now()-RTC_INTERP_DELAY;
+
+  let a=null,b=null;
+  for(let i=0;i<rtcStateBuffer.length-1;i++){
+    if(rtcStateBuffer[i].recvAt<=targetTime && rtcStateBuffer[i+1].recvAt>=targetTime){
+      a=rtcStateBuffer[i];
+      b=rtcStateBuffer[i+1];
+      break;
+    }
+  }
+
+  if(!a || !b){
+    a=rtcStateBuffer[Math.max(0,rtcStateBuffer.length-2)];
+    b=rtcStateBuffer[rtcStateBuffer.length-1];
+  }
+
+  const span=Math.max(1,b.recvAt-a.recvAt);
+  const t=clamp((targetTime-a.recvAt)/span,0,1);
+
+  const ax=Number(a.puck.x), ay=Number(a.puck.y), avx=Number(a.puck.vx||0), avy=Number(a.puck.vy||0);
+  const bx=Number(b.puck.x), by=Number(b.puck.y), bvx=Number(b.puck.vx||0), bvy=Number(b.puck.vy||0);
+
+  rp={
+    x:ax+(bx-ax)*t,
+    y:ay+(by-ay)*t,
+    vx:avx+(bvx-avx)*t,
+    vy:avy+(bvy-avy)*t
+  };
+}else if(lastRemotePuck){
+  rp=lastRemotePuck;
+}
+
+if(!rp){
   puck.x=world.w/2;
   puck.y=world.h/2;
 }else{
-  const rx=Number(lastRemotePuck.x);
-  const ry=Number(lastRemotePuck.y);
-  const rvx=Number(lastRemotePuck.vx||0);
-  const rvy=Number(lastRemotePuck.vy||0);
-  const predictX=rx+rvx*1.65;
-  const predictY=ry+rvy*1.65;
-  puck.x+=puck.vx*.78;
-  puck.y+=puck.vy*.78;
-  puck.x+=(predictX-puck.x)*.38;
-  puck.y+=(predictY-puck.y)*.38;
-  puck.vx+=(rvx-puck.vx)*.42;
-  puck.vy+=(rvy-puck.vy)*.42;
+  const rvx=Number(rp.vx||0);
+  const rvy=Number(rp.vy||0);
+
+  // 速度で少しだけ先読み。ワープではなく滑らかに寄せる。
+  const predictX=Number(rp.x)+rvx*.85;
+  const predictY=Number(rp.y)+rvy*.85;
+
+  puck.x+=puck.vx*.72;
+  puck.y+=puck.vy*.72;
+
+  const err=Math.hypot(predictX-puck.x,predictY-puck.y);
+
+  if(err>95){
+    // 大ズレ時だけ復帰。小ズレは補間で吸収。
+    puck.x=predictX;
+    puck.y=predictY;
+  }else{
+    const k=err<3 ? 0 : .30;
+    puck.x+=(predictX-puck.x)*k;
+    puck.y+=(predictY-puck.y)*k;
+  }
+
+  puck.vx+=(rvx-puck.vx)*.36;
+  puck.vy+=(rvy-puck.vy)*.36;
 }
+
+// 自分のマレットで押さえ込みはローカル即時反映。
 collidePaddle(me,true);
 }
 async function sendMe(){
@@ -194,6 +246,7 @@ if(isHost&&rtcReady){
     rtcLastStateAt=t;
     rtcSend({
       type:'state',
+      sentAt:performance.now(),
       puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
       host:{x:+me.x.toFixed(2),y:+me.y.toFixed(2),tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2)},
       join:{x:+opp.x.toFixed(2),y:+opp.y.toFixed(2),tx:+opp.tx.toFixed(2),ty:+opp.ty.toFixed(2)},
