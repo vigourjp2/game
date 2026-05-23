@@ -78,6 +78,61 @@ let score={p1:0,p2:0};
 let sideNames={p1:'HOST',p2:'JOIN'};
 let remotePuck=null;
 
+let audioCtx=null;
+let flashTimer=0;
+let shakeTimer=0;
+let particles=[];
+let matchWinText='';
+let matchWinTimer=0;
+
+function ensureAudio(){
+  if(audioCtx) return;
+  try{audioCtx=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
+}
+function tone(freq=440,dur=.08,type='sine',gain=.03){
+  ensureAudio();
+  if(!audioCtx) return;
+  if(audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
+  const o=audioCtx.createOscillator();
+  const g=audioCtx.createGain();
+  o.type=type;
+  o.frequency.value=freq;
+  g.gain.value=gain;
+  o.connect(g);
+  g.connect(audioCtx.destination);
+  o.start();
+  g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+dur);
+  o.stop(audioCtx.currentTime+dur);
+}
+function sfx(name,power=1){
+  if(name==='start'){tone(520,.07,'square',.03);setTimeout(()=>tone(760,.08,'square',.03),80);return}
+  if(name==='hit'){tone(180+power*15,.045,'square',.022);return}
+  if(name==='wall'){tone(260,.035,'triangle',.018);return}
+  if(name==='goal'){tone(360,.08,'square',.035);setTimeout(()=>tone(540,.1,'square',.033),70);setTimeout(()=>tone(760,.14,'square',.03),150);return}
+  if(name==='win'){tone(330,.12,'sawtooth',.035);setTimeout(()=>tone(440,.12,'sawtooth',.035),120);setTimeout(()=>tone(660,.25,'sawtooth',.045),250);return}
+  if(name==='handoff'){tone(620,.045,'triangle',.025);return}
+  if(name==='hold'){tone(120,.03,'sine',.012);return}
+}
+function burst(x,y,color='#fff',count=18,force=7){
+  for(let i=0;i<count;i++){
+    const a=Math.random()*Math.PI*2;
+    const v=Math.random()*force;
+    particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1,color});
+  }
+}
+function updateFx(){
+  if(flashTimer>0) flashTimer*=.88;
+  if(matchWinTimer>0) matchWinTimer--;
+  if(shakeTimer>0) shakeTimer--;
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;
+    p.vx*=.96;p.vy*=.96;
+    p.life*=.94;
+    if(p.life<.04) particles.splice(i,1);
+  }
+}
+
 function safeRoom(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20)}
 function randomRoom(){return Math.random().toString(36).slice(2,8).toUpperCase()}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
@@ -280,6 +335,7 @@ async function startWebRTCJoin(){
 }
 
 async function start(host){
+  ensureAudio();
   if(!initFirebase())return;
 
   name=($('name').value||('P'+playerId.slice(-4))).slice(0,16);
@@ -321,6 +377,7 @@ async function start(host){
     }
 
     panel.classList.add('hidden');
+    sfx('start');
     setMsg((role==='p1'?'下側P1':'上側P2')+'で参加。自分側に来たパックは自端末で物理演算。');
   }catch(e){
     console.error(e);
@@ -342,6 +399,7 @@ $('copy').onclick=async()=>{
 };
 
 function setTargetFromPointer(e){
+  ensureAudio();
   if(!started)return;
   const p=e.touches?e.touches[0]:e;
   const q=inv(p.clientX,p.clientY);
@@ -417,6 +475,9 @@ function collidePaddle(p,isLocal){
       puck.vy=puck.vy/sp*max;
     }
 
+    sfx(hold?'hold':'hit',Math.hypot(puck.vx,puck.vy));
+    burst(puck.x,puck.y,isLocal?'#22c55e':'#60a5fa',hold?8:14,hold?2:6);
+    shakeTimer=Math.max(shakeTimer,hold?2:5);
     return true;
   }
 
@@ -485,30 +546,53 @@ function applyRemoteReset(m){
   setMsg('ゴール。全状態リセットして中央から再開。');
 }
 
+
+function checkMatchWin(){
+  if(score.p1>=7){
+    matchWinText='P1 WIN';
+    matchWinTimer=180;
+    sfx('win');
+    burst(world.w/2,world.h/2,'#86efac',70,10);
+    score={p1:0,p2:0};
+    return true;
+  }
+  if(score.p2>=7){
+    matchWinText='P2 WIN';
+    matchWinTimer=180;
+    sfx('win');
+    burst(world.w/2,world.h/2,'#60a5fa',70,10);
+    score={p1:0,p2:0};
+    return true;
+  }
+  return false;
+}
+
 function scoreCheck(){
   const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;
 
   if(puck.y<world.puckR){
     if(inGoal){
       score.p1++;
+      sfx('goal');flashTimer=1;shakeTimer=16;burst(world.w/2,world.puckR+18,'#86efac',48,9);checkMatchWin();
       hardResetAfterGoal(1,'p1');
       setMsg('P1 GOAL。全リセットして中央再開。');
       return true;
     }else{
       puck.y=world.puckR;
-      puck.vy=Math.abs(puck.vy)*.92;
+      puck.vy=Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
     }
   }
 
   if(puck.y>world.h-world.puckR){
     if(inGoal){
       score.p2++;
+      sfx('goal');flashTimer=1;shakeTimer=16;burst(world.w/2,world.h-world.puckR-18,'#60a5fa',48,9);checkMatchWin();
       hardResetAfterGoal(-1,'p2');
       setMsg('P2 GOAL。全リセットして中央再開。');
       return true;
     }else{
       puck.y=world.h-world.puckR;
-      puck.vy=-Math.abs(puck.vy)*.92;
+      puck.vy=-Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
     }
   }
 
@@ -520,22 +604,22 @@ function keepPuckInTable(){
   const left=world.puckR,right=world.w-world.puckR;
   if(puck.x<left){
     puck.x=left;
-    puck.vx=Math.abs(puck.vx)*.92;
+    puck.vx=Math.abs(puck.vx)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
   }
   if(puck.x>right){
     puck.x=right;
-    puck.vx=-Math.abs(puck.vx)*.92;
+    puck.vx=-Math.abs(puck.vx)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
   }
 
   // ゴール外なら上下も必ず跳ね返す。これで画面外へ流れて終了を防ぐ。
   const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;
   if(puck.y<world.puckR && !inGoal){
     puck.y=world.puckR;
-    puck.vy=Math.abs(puck.vy)*.92;
+    puck.vy=Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
   }
   if(puck.y>world.h-world.puckR && !inGoal){
     puck.y=world.h-world.puckR;
-    puck.vy=-Math.abs(puck.vy)*.92;
+    puck.vy=-Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
   }
 
   // 異常値保険。通信ズレや初動暴発でも盤面へ戻す。
@@ -572,6 +656,7 @@ function simulateLocalAuthority(dt){
       puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
       score
     });
+    sfx('handoff');
     setMsg('中央線を越えたため、相手端末へパック権限を渡した。');
     return;
   }
@@ -659,13 +744,26 @@ function sendPuckState(){
 }
 
 function draw(){
+  updateFx();
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.clearRect(0,0,W,H);
-  const sc=Math.min(W/world.w,H/world.h),x0=W/2-world.w*sc/2,y0=H/2-world.h*sc/2;
+
+  const sc=Math.min(W/world.w,H/world.h);
+  const x0=W/2-world.w*sc/2;
+  const y0=H/2-world.h*sc/2;
+  const shx=shakeTimer>0?(Math.random()-.5)*7:0;
+  const shy=shakeTimer>0?(Math.random()-.5)*7:0;
+
   ctx.save();
-  ctx.translate(x0,y0);
+  ctx.translate(x0+shx,y0+shy);
   ctx.scale(sc,sc);
 
-  ctx.fillStyle='#082445';
+  const grd=ctx.createLinearGradient(0,0,0,world.h);
+  grd.addColorStop(0,'#0b2d57');
+  grd.addColorStop(.5,'#123d6b');
+  grd.addColorStop(1,'#0a2544');
+  ctx.fillStyle=grd;
   roundRect(0,0,world.w,world.h,26,true);
 
   ctx.strokeStyle='rgba(255,255,255,.65)';
@@ -696,6 +794,15 @@ function draw(){
   ctx.lineTo(world.w/2+world.goal/2,world.h-6);
   ctx.stroke();
 
+  for(let i=5;i>=1;i--){
+    ctx.globalAlpha=.055*i;
+    ctx.fillStyle=authority===role?'#86efac':'#ffffff';
+    ctx.beginPath();
+    ctx.arc(puck.x-puck.vx*i*1.5,puck.y-puck.vy*i*1.5,world.puckR*(1-i*.055),0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
   drawPuck();
   drawPaddle(opp,false,'#60a5fa');
   drawPaddle(me,true,'#22c55e');
@@ -705,9 +812,33 @@ function draw(){
   ctx.textAlign='center';
   ctx.fillText(authority===role?'LOCAL PUCK':'REMOTE PUCK',world.w/2,world.h/2+82);
 
+  for(const p of particles){
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color;
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,2+p.life*4,0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  if(flashTimer>.02){
+    ctx.fillStyle='rgba(255,255,255,'+(flashTimer*.22)+')';
+    ctx.fillRect(0,0,world.w,world.h);
+  }
+
+  if(matchWinTimer>0){
+    ctx.fillStyle='rgba(0,0,0,.45)';
+    ctx.fillRect(0,world.h/2-70,world.w,140);
+    ctx.fillStyle='#fff';
+    ctx.font='bold 46px system-ui';
+    ctx.textAlign='center';
+    ctx.fillText(matchWinText,world.w/2,world.h/2+16);
+  }
+
   ctx.restore();
 
-  scoreEl.textContent=`${score.p1||0} - ${score.p2||0}`;
+  scoreEl.textContent=`${score.p1||0} - ${score.p2||0} / 7`;
+  scoreEl.style.transform=`scale(${1+flashTimer*.25})`;
   leftInfo.innerHTML=`<span class="me">${role==='p1'?'あなた P1 下':'あなた P2 上'}</span><br>${name}<br>${rtcReady?'WEBRTC':started?'接続中':'OFFLINE'}<br>${authority===role?'物理担当':'表示側'}`;
   rightInfo.innerHTML=`ROOM ${roomId||'-'}<br><span class="op">相手 ${opp.online?'接続中':'待機中'}</span><br>${opp.name||''}`;
   if(started&&rtcReady&&!opp.online)setMsg('相手待ち。Room IDを共有してJOINしてもらう。');
