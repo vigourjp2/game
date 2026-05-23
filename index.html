@@ -364,8 +364,9 @@ function updatePaddle(p,dt,isMe){
   const follow=isMe&&localTouch?.58:.34;
   p.x+=(p.tx-p.x)*follow;
   p.y+=(p.ty-p.y)*follow;
-  p.vx=(p.x-oldX)/dt;
-  p.vy=(p.y-oldY)/dt;
+  // パック衝突用は「1フレーム移動量」にする。dtで割ると速度が暴発して画面外へ飛ぶ。
+  p.vx=(p.x-oldX);
+  p.vy=(p.y-oldY);
 }
 
 function collidePaddle(p,isLocal){
@@ -391,11 +392,11 @@ function collidePaddle(p,isLocal){
     }
 
     // マレット速度を強くパックへ載せる。タッチで振った時に確実に打てるようにする。
-    puck.vx+=p.vx*.030;
-    puck.vy+=p.vy*.030;
+    puck.vx+=p.vx*.62;
+    puck.vy+=p.vy*.62;
 
     // 低速で真上から押さえた時は止める。速く振った時は強打。
-    const hold=activePad&&dist<world.paddleR+world.puckR*.55&&speed<520;
+    const hold=activePad&&dist<world.paddleR+world.puckR*.55&&speed<8.5;
     if(hold){
       puck.vx*=.28;
       puck.vy*=.28;
@@ -403,7 +404,7 @@ function collidePaddle(p,isLocal){
       puck.y=p.y+ny*min;
     }
 
-    const max=22,sp=Math.hypot(puck.vx,puck.vy);
+    const max=17,sp=Math.hypot(puck.vx,puck.vy);
     if(sp>max){
       puck.vx=puck.vx/sp*max;
       puck.vy=puck.vy/sp*max;
@@ -458,6 +459,35 @@ function scoreCheck(){
   return false;
 }
 
+
+function keepPuckInTable(){
+  const left=world.puckR,right=world.w-world.puckR;
+  if(puck.x<left){
+    puck.x=left;
+    puck.vx=Math.abs(puck.vx)*.92;
+  }
+  if(puck.x>right){
+    puck.x=right;
+    puck.vx=-Math.abs(puck.vx)*.92;
+  }
+
+  // ゴール外なら上下も必ず跳ね返す。これで画面外へ流れて終了を防ぐ。
+  const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;
+  if(puck.y<world.puckR && !inGoal){
+    puck.y=world.puckR;
+    puck.vy=Math.abs(puck.vy)*.92;
+  }
+  if(puck.y>world.h-world.puckR && !inGoal){
+    puck.y=world.h-world.puckR;
+    puck.vy=-Math.abs(puck.vy)*.92;
+  }
+
+  // 異常値保険。通信ズレや初動暴発でも盤面へ戻す。
+  if(!Number.isFinite(puck.x)||!Number.isFinite(puck.y)||Math.abs(puck.x)>world.w*4||Math.abs(puck.y)>world.h*4){
+    resetPuck(role==='p1'?-1:1);
+  }
+}
+
 function simulateLocalAuthority(dt){
   updatePaddle(me,dt,true);
   updatePaddle(opp,dt,false);
@@ -470,9 +500,7 @@ function simulateLocalAuthority(dt){
   collidePaddle(me,true);
   collidePaddle(opp,false);
 
-  const left=world.puckR,right=world.w-world.puckR;
-  if(puck.x<left){puck.x=left;puck.vx=Math.abs(puck.vx)*.92}
-  if(puck.x>right){puck.x=right;puck.vx=-Math.abs(puck.vx)*.92}
+  keepPuckInTable();
 
   if(scoreCheck())return;
 
@@ -490,7 +518,7 @@ function simulateLocalAuthority(dt){
     return;
   }
 
-  const max=18,sp=Math.hypot(puck.vx,puck.vy);
+  const max=17,sp=Math.hypot(puck.vx,puck.vy);
   if(sp>max){
     puck.vx=puck.vx/sp*max;
     puck.vy=puck.vy/sp*max;
@@ -522,6 +550,8 @@ function simulateRemoteView(dt){
     puck.x+=puck.vx*.50;
     puck.y+=puck.vy*.50;
   }
+
+  keepPuckInTable();
 
   // 権限が相手側でも、自分のマレットに当たった瞬間はローカル即打撃へ切替。
   // これを入れないと「見た目では当たっているのに打てない」状態になる。
