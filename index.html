@@ -453,8 +453,20 @@ function updateVehicleDamageFx(m){
 function wreckVehicle(v){const m=v.metadata;if(m.wreck)return;m.wreck=true;m.hp=0;if(currentVehicle===v)exitVehicle(true);if(m.smoke){m.smoke.dispose();m.smoke=null}if(m.fire){m.fire.dispose();m.fire=null}v.root.getChildMeshes().forEach(ch=>{ch.material=mats.wreck;ch.scaling.y*=.55});v.root.rotation.x+=(Math.random()-.5)*.35;v.root.rotation.z+=(Math.random()-.5)*.35;physicsSpark(v.root.position.clone(),mats.fire);for(let i=0;i<12;i++)physicsSpark(v.root.position.clone(),i%2?mats.fire:mats.smoke);AudioKit.sfx('boom');log(`${m.name}が爆発。黒こげの抜け殻が残った。`,'bad')}
 function damageVehicle(v,amount,why='衝突'){if(!v||v.metadata.wreck)return;const m=v.metadata;m.hp-=amount;updateVehicleDamageFx(m);if(m.hp<=0||m.hp/m.maxHp<.12&&Math.random()<.04){wreckVehicle(v)}else if(amount>8){spawnDamageText(why,v.root.position.clone(),'#f97316')}}
 function nearestVehicle(){let best=null,bd=999;for(const v of vehicleMeshes.values()){const m=v.metadata;if(m.wreck)continue;const d=Math.hypot(player.x-v.root.position.x,player.z-v.root.position.z)+Math.abs(player.y-v.root.position.y)*.25;if(d<bd){best=v;bd=d}}return bd<2.8?best:null}
-function enterVehicle(v){if(!v||v.metadata.wreck)return;currentVehicle=v;player.crouching=false;player.height=player.standHeight;parachuteActive=false;player.vy=0;player.yaw=v.root.rotation.y;AudioKit.sfx('pickup');log(`${v.metadata.name}に乗車。RIDEで降車。体当たりで敵を吹っ飛ばせる。`,'gold');renderHud(true)}
-function exitVehicle(force=false){if(!currentVehicle)return;const p=currentVehicle.root.position;player.x=p.x+Math.sin(currentVehicle.root.rotation.y)*1.7;player.z=p.z+Math.cos(currentVehicle.root.rotation.y)*1.7;player.y=Math.max(p.y+player.height+.25,groundHeightAt(player.x,player.z));player.vy=0;const old=currentVehicle;currentVehicle=null;AudioKit.sfx(force?'boom':'select');if(!force)log(`${old.metadata.name}から降車。`,'info');renderHud(true)}
+const RIDE_MODEL_VISIBILITY=.16, RIDE_COCKPIT_VISIBILITY=.12;
+function setVehicleModelOpacity(v,on){
+ if(!v||!v.root)return;
+ const vis=on?RIDE_MODEL_VISIBILITY:1;
+ v.root.getChildMeshes(false).forEach(ch=>{
+  ch.visibility=vis;
+  ch.isPickable=false;
+ });
+}
+function restoreAllVehicleOpacity(){
+ for(const v of vehicleMeshes.values())setVehicleModelOpacity(v,false);
+}
+function enterVehicle(v){if(!v||v.metadata.wreck)return;restoreAllVehicleOpacity();currentVehicle=v;setVehicleModelOpacity(v,true);if(v.label)v.label.setEnabled(false);if(v.metadata?.label)v.metadata.label.setEnabled(false);player.crouching=false;player.height=player.standHeight;parachuteActive=false;player.vy=0;player.yaw=v.root.rotation.y;camYaw=v.root.rotation.y;AudioKit.sfx('pickup');log(`${v.metadata.name}に乗車。車体全体を高透明化して視界を確保。RIDEで降車。`,'gold');renderHud(true)}
+function exitVehicle(force=false){if(!currentVehicle)return;const p=currentVehicle.root.position;player.x=p.x+Math.sin(currentVehicle.root.rotation.y)*1.7;player.z=p.z+Math.cos(currentVehicle.root.rotation.y)*1.7;player.y=Math.max(p.y+player.height+.25,groundHeightAt(player.x,player.z));player.vy=0;const old=currentVehicle;setVehicleModelOpacity(old,false);currentVehicle=null;if(old.label&&!old.metadata?.wreck)old.label.setEnabled(true);if(old.metadata?.label&&!old.metadata?.wreck)old.metadata.label.setEnabled(true);setVehicleCockpitVisible(false);AudioKit.sfx(force?'boom':'select');if(!force)log(`${old.metadata.name}から降車。`,'info');renderHud(true)}
 function toggleVehicle(){if(Date.now()-lastVehicleUse<350)return;lastVehicleUse=Date.now();if(currentVehicle){exitVehicle(false);return}const v=nearestVehicle();if(v)enterVehicle(v);else{AudioKit.sfx('deny');log('近くに乗れる車両がない。屋上にランダム配置される。','info')}}
 function vehicleRamEnemies(v,speed){if(!v||speed<.06||Date.now()-lastVehicleRam<160)return;const m=v.metadata,p=v.root.position;for(const e of enemyMeshes.values()){const ep=enemyWorld(e),d=Math.hypot(ep.x-p.x,ep.z-p.z);if(d<1.35+(m.cat==='tank'?1.0:0)){lastVehicleRam=Date.now();const em=e.metadata,hit=Math.floor((m.def.ram||12)*(speed/.20)*(m.def.weight||1));em.hp-=hit;em.flash=10;em.hitKick=12;const dx=(ep.x-p.x)/Math.max(.001,d),dz=(ep.z-p.z)/Math.max(.001,d);em.vx+=dx*(m.cat==='tank'?2.2:1.1);em.vz+=dz*(m.cat==='tank'?2.2:1.1);em.vy+=m.cat==='tank'?.55:.28;spawnDamageText('車両-'+hit,ep,'#fde047');AudioKit.sfx('hit');damageVehicle(v,m.cat==='tank'?1:Math.max(2,hit*.14),'体当たり');if(em.hp<=0){const gold=10+player.floor*2;player.gold+=gold;log(`${m.name}の体当たりで${em.name}を倒した。${gold}G。`,'gold');disposeEnemy(e);enemyMeshes.delete(em.id);if(em.boss)unlockPortalAfterBoss(em)}break;}}
 }
@@ -810,20 +822,48 @@ function applyItemEffect(key,fromShop=false){const def=itemMaster[key];if(!def)r
  if(def.type==='upgrade'){const cur=player[def.stat]||0,next=Math.min(def.max,cur+def.add);if(next===cur){AudioKit.sfx('deny');log(`${def.name}はこれ以上強化できない。`,'bad');return false}player[def.stat]=next;if(def.stat==='jumpMax')player.jumpsLeft=player.jumpMax;AudioKit.sfx('power');log(`${def.name}${fromShop?'を購入':'を取得'}。${def.desc}。`,'good');return true}
  return null}
 function pickupTick(){if(parachuteActive||landingLock>0)return;if(Date.now()-lastPickup<250)return;lastPickup=Date.now();for(const[id,m]of Array.from(itemMeshes.entries())){const it=m.metadata;if(Math.hypot(player.x-it.x,player.z-it.z)<1.0){if(it.key==='gold'){player.gold+=it.gold||0;AudioKit.sfx('pickup');log(`${it.gold||0}Gを拾った。`,'gold')}else if(it.shop){const def=itemMaster[it.key];if(player.gold>=def.price){const applied=applyItemEffect(it.key,true);if(applied===false)continue;player.gold-=def.price;if(applied===null){const inst=it.inst||createItemInstance(it.key);player.inventory.push(inst);AudioKit.sfx('buy');log(`能力SHOPで${itemTitle(inst)}を${def.price}Gで買った。${itemDesc(inst)}`,'gold')}}else{AudioKit.sfx('deny');log(`${def.name}は${def.price}G。お金が足りない。`,'bad');continue}}else{const applied=applyItemEffect(it.key,false);if(applied===null){const def=itemMaster[it.key];const inst=it.inst||createItemInstance(it.key);player.inventory.push(inst);AudioKit.sfx('pickup');log(`${itemTitle(inst)}を拾った。${itemDesc(inst)}`,'gold')}}m.dispose();itemMeshes.delete(id)}}}
+let vehicleCockpit=null;
+function ensureVehicleCockpit(){
+ if(vehicleCockpit)return vehicleCockpit;
+ const root=new BABYLON.TransformNode('vehicleCockpit',scene);root.parent=camera;
+ const hood=BABYLON.MeshBuilder.CreateBox('cockpitHood',{width:1.25,height:.16,depth:1.15},scene);hood.parent=root;hood.position.set(0,-.64,1.38);hood.material=mats.vehicle;hood.isPickable=false;
+ const dash=BABYLON.MeshBuilder.CreateBox('cockpitDash',{width:1.15,height:.18,depth:.18},scene);dash.parent=root;dash.position.set(0,-.48,.88);dash.material=mats.dark;dash.isPickable=false;
+ const wheel=BABYLON.MeshBuilder.CreateTorus('cockpitWheel',{diameter:.42,thickness:.045,tessellation:18},scene);wheel.parent=root;wheel.position.set(0,-.36,.78);wheel.rotation.x=Math.PI/2;wheel.material=mats.iron;wheel.isPickable=false;
+ const left=BABYLON.MeshBuilder.CreateBox('cockpitHandleL',{width:.44,height:.045,depth:.045},scene);left.parent=root;left.position.set(-.24,-.36,.78);left.rotation.z=.25;left.material=mats.iron;left.isPickable=false;
+ const right=BABYLON.MeshBuilder.CreateBox('cockpitHandleR',{width:.44,height:.045,depth:.045},scene);right.parent=root;right.position.set(.24,-.36,.78);right.rotation.z=-.25;right.material=mats.iron;right.isPickable=false;
+ root.getChildMeshes().forEach(ch=>{ch.alwaysSelectAsActiveMesh=true;ch.renderingGroupId=2;ch.visibility=RIDE_COCKPIT_VISIBILITY;});
+ root.setEnabled(false);vehicleCockpit={root,hood,dash,wheel,left,right};return vehicleCockpit;
+}
+function setVehicleCockpitVisible(show,m=null){
+ const c=ensureVehicleCockpit();c.root.setEnabled(!!show);
+ if(!show)return;
+ const cat=m?.cat||'car';
+ c.root.getChildMeshes(false).forEach(ch=>{ch.visibility=RIDE_COCKPIT_VISIBILITY;});
+ c.hood.material=currentVehicle?.body?.material||mats.vehicle;
+ c.hood.scaling.set(cat==='tank'?1.45:cat==='bike'?.55:cat==='plane'?.85:1,cat==='bike'?.55:1,cat==='plane'?1.35:1);
+ c.hood.position.y=cat==='bike'?-0.70:cat==='tank'?-0.58:-0.64;
+ c.hood.position.z=cat==='plane'?1.62:1.38;
+ c.wheel.setEnabled(cat!=='plane');c.left.setEnabled(true);c.right.setEnabled(true);c.dash.setEnabled(cat!=='plane');
+}
 function updateRenderCamera(){
   if(currentVehicle){
     const v=currentVehicle.root,m=currentVehicle.metadata;
     const t=.72;
-    camX+=(v.position.x-camX)*t;camY+=(v.position.y+(m.cat==='plane'?1.9:1.15)-camY)*t;camZ+=(v.position.z-camZ)*t;
+    const syV=Math.sin(v.rotation.y),cyV=Math.cos(v.rotation.y);
+    const eyeForward=m.cat==='plane'?1.05:m.cat==='tank'?0.72:m.cat==='bike'?.38:.58;
+    const eyeUp=m.cat==='plane'?1.18:m.cat==='tank'?1.48:m.cat==='bike'?.86:1.08;
+    const targetX=v.position.x+syV*eyeForward,targetY=v.position.y+eyeUp,targetZ=v.position.z+cyV*eyeForward;
+    camX+=(targetX-camX)*t;camY+=(targetY-camY)*t;camZ+=(targetZ-camZ)*t;
     let dyaw=v.rotation.y-camYaw;while(dyaw>Math.PI)dyaw-=Math.PI*2;while(dyaw<-Math.PI)dyaw+=Math.PI*2;camYaw+=dyaw*.86;
     camPitch+=(player.pitch-camPitch)*.86;
-    const back=m.cat==='plane'?7:m.cat==='tank'?6:4.8,up=m.cat==='plane'?2.2:1.25,sy=Math.sin(camYaw),cy=Math.cos(camYaw);
-    camera.position.set(camX-sy*back,camY+up,camZ-cy*back);
+    camera.position.set(camX,camY,camZ);
     camera.rotation.x=camPitch;
     camera.rotation.y=camYaw;
     camera.rotation.z=0;
+    setVehicleCockpitVisible(true,m);
     return;
   }
+  setVehicleCockpitVisible(false);
   const t=.72;
   camX+=(player.x-camX)*t;camY+=(player.y-camY)*t;camZ+=(player.z-camZ)*t;
   let dyaw=player.yaw-camYaw;while(dyaw>Math.PI)dyaw-=Math.PI*2;while(dyaw<-Math.PI)dyaw+=Math.PI*2;camYaw+=dyaw*.86;camPitch+=(player.pitch-camPitch)*.86;
