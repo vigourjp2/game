@@ -46,115 +46,216 @@ function resize(){DPR=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight
 function sx(x){const scale=Math.min(W/world.w,H/world.h);return W/2+(x-world.w/2)*scale}function sy(y){const scale=Math.min(W/world.w,H/world.h);return H/2+(y-world.h/2)*scale}function inv(px,py){const scale=Math.min(W/world.w,H/world.h);return{x:(px-W/2)/scale+world.w/2,y:(py-H/2)/scale+world.h/2}}
 function resetPuck(dir){puck.x=world.w/2;puck.y=world.h/2;puck.vx=(Math.random()-.5)*3;puck.vy=(dir||1)*(4.2+Math.random()*1.3)}function resetPlayers(){me.x=world.w/2;me.tx=me.x;opp.x=world.w/2;opp.tx=opp.x;if(role==='p1'){me.y=world.h-105;me.ty=me.y;opp.y=105;opp.ty=opp.y}else{me.y=105;me.ty=me.y;opp.y=world.h-105;opp.ty=opp.y}}
 
-// ===== WebRTC PATCH START =====
-let rtcPeer=null,rtcChannel=null;
+// ===== WebRTC LOW-LAG PATCH START =====
+let rtcPeer=null;
+let rtcChannel=null;
+let rtcReady=false;
+let rtcLastStateAt=0;
+let rtcLastJoinAt=0;
+let rtcRemoteState=null;
+
+function rtcSend(obj){
+  if(!rtcChannel || rtcChannel.readyState!=='open') return false;
+  try{
+    rtcChannel.send(JSON.stringify(obj));
+    return true;
+  }catch(e){
+    return false;
+  }
+}
 
 function initWebRTC(){
-rtcPeer=new RTCPeerConnection({
-iceServers:[{urls:'stun:stun.l.google.com:19302'}]
-});
+  if(rtcPeer) return;
 
-rtcPeer.onicecandidate=async e=>{
-if(!e.candidate||!roomRef)return;
-const path=isHost?'rtc_hostCandidates':'rtc_joinCandidates';
-await roomRef.child(path).push(e.candidate.toJSON());
-};
+  rtcPeer=new RTCPeerConnection({
+    iceServers:[{urls:'stun:stun.l.google.com:19302'}]
+  });
 
-rtcPeer.ondatachannel=e=>{
-setupRTCChannel(e.channel);
-};
+  rtcPeer.onicecandidate=async e=>{
+    if(!e.candidate || !roomRef) return;
+    const path=isHost?'rtc_hostCandidates':'rtc_joinCandidates';
+    try{
+      await roomRef.child(path).push(e.candidate.toJSON());
+    }catch(err){}
+  };
+
+  rtcPeer.ondatachannel=e=>{
+    setupRTCChannel(e.channel);
+  };
 }
 
 function setupRTCChannel(ch){
-rtcChannel=ch;
+  rtcChannel=ch;
+  rtcChannel.binaryType='arraybuffer';
 
-rtcChannel.onopen=()=>{
-setMsg('WebRTC直結完了');
-};
+  rtcChannel.onopen=()=>{
+    rtcReady=true;
+    setMsg('WebRTC直結完了。ゲーム同期はFirebaseではなく端末間直結。');
+  };
 
-rtcChannel.onmessage=e=>{
-try{
-const s=JSON.parse(e.data);
+  rtcChannel.onclose=()=>{
+    rtcReady=false;
+    setMsg('WebRTC切断。Firebase同期へフォールバック。');
+  };
 
-if(!isHost&&s.type==='state'){
-lastRemotePuck=s.puck;
-score=s.score||score;
-}
+  rtcChannel.onerror=()=>{
+    rtcReady=false;
+  };
 
-if(isHost&&s.type==='join'){
-opp.tx=s.tx;
-opp.ty=s.ty;
-}
+  rtcChannel.onmessage=e=>{
+    let m;
+    try{m=JSON.parse(e.data)}catch(err){return}
 
-}catch(err){}
-};
+    if(isHost && m.type==='joinInput'){
+      opp.tx=Number(m.tx);
+      opp.ty=Number(m.ty);
+      opp.x=Number(m.x ?? opp.x);
+      opp.y=Number(m.y ?? opp.y);
+      opp.online=true;
+      return;
+    }
+
+    if(!isHost && m.type==='state'){
+      rtcRemoteState=m;
+      lastRemotePuck=m.puck;
+      score=m.score || score;
+
+      // JOIN側は「受信座標へ即ワープ」禁止。目標値だけ保持してclientPhysicsで滑らかに寄せる。
+      if(m.host){
+        opp.tx=Number(m.host.x);
+        opp.ty=Number(m.host.y);
+      }
+      return;
+    }
+  };
 }
 
 async function startWebRTCHost(){
-initWebRTC();
+  initWebRTC();
 
-rtcChannel=rtcPeer.createDataChannel('game',{ordered:false,maxRetransmits:0});
-setupRTCChannel(rtcChannel);
+  rtcChannel=rtcPeer.createDataChannel('game',{
+    ordered:false,
+    maxRetransmits:0
+  });
+  setupRTCChannel(rtcChannel);
 
-const offer=await rtcPeer.createOffer();
-await rtcPeer.setLocalDescription(offer);
+  const offer=await rtcPeer.createOffer();
+  await rtcPeer.setLocalDescription(offer);
 
-await roomRef.child('rtc_offer').set({
-type:offer.type,
-sdp:offer.sdp
-});
+  await roomRef.child('rtc_offer').set({
+    type:offer.type,
+    sdp:offer.sdp
+  });
 
-roomRef.child('rtc_answer').on('value',async snap=>{
-const v=snap.val();
-if(v&&!rtcPeer.currentRemoteDescription){
-await rtcPeer.setRemoteDescription(new RTCSessionDescription(v));
-}
-});
+  roomRef.child('rtc_answer').on('value',async snap=>{
+    const v=snap.val();
+    if(v && !rtcPeer.currentRemoteDescription){
+      try{
+        await rtcPeer.setRemoteDescription(new RTCSessionDescription(v));
+      }catch(e){}
+    }
+  });
 
-roomRef.child('rtc_joinCandidates').on('child_added',snap=>{
-rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()));
-});
+  roomRef.child('rtc_joinCandidates').on('child_added',snap=>{
+    try{
+      rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()));
+    }catch(e){}
+  });
 }
 
 async function startWebRTCJoin(){
-initWebRTC();
+  initWebRTC();
 
-const offerSnap=await roomRef.child('rtc_offer').get();
+  const offerSnap=await roomRef.child('rtc_offer').get();
+  if(!offerSnap.exists()){
+    setMsg('WebRTC offer待ち。HOST側の部屋作成直後に再JOINしてください。');
+    return;
+  }
 
-if(!offerSnap.exists()) return;
+  await rtcPeer.setRemoteDescription(new RTCSessionDescription(offerSnap.val()));
 
-await rtcPeer.setRemoteDescription(
-new RTCSessionDescription(offerSnap.val())
-);
+  const answer=await rtcPeer.createAnswer();
+  await rtcPeer.setLocalDescription(answer);
 
-const answer=await rtcPeer.createAnswer();
-await rtcPeer.setLocalDescription(answer);
+  await roomRef.child('rtc_answer').set({
+    type:answer.type,
+    sdp:answer.sdp
+  });
 
-await roomRef.child('rtc_answer').set({
-type:answer.type,
-sdp:answer.sdp
-});
-
-roomRef.child('rtc_hostCandidates').on('child_added',snap=>{
-rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()));
-});
+  roomRef.child('rtc_hostCandidates').on('child_added',snap=>{
+    try{
+      rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()));
+    }catch(e){}
+  });
 }
-// ===== WebRTC PATCH END =====
+// ===== WebRTC LOW-LAG PATCH END =====
 
 function initFirebase(){if(db)return true;if(!window.firebase||!firebase.database){setMsg('Firebaseを読み込めない。GitHub Pages等のhttps配置で再読込。');return false}if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);db=firebase.database();return true}
 async function start(host){if(!initFirebase())return;name=($('name').value||('P'+playerId.slice(-4))).slice(0,16);roomId=safeRoom($('room').value)||randomRoom();$('room').value=roomId;isHost=host;role=host?'p1':'p2';roomRef=db.ref('airhockey_rooms/'+roomId);playersRef=roomRef.child('players');stateRef=roomRef.child('state');setMsg((host?'HOST作成中':'JOIN接続中')+' ROOM '+roomId);
 try{if(host){await roomRef.set({meta:{host:playerId,createdAt:firebase.database.ServerValue.TIMESTAMP},state:{puck:{x:world.w/2,y:world.h/2,vx:0,vy:5},score:{p1:0,p2:0},tick:0},players:{}})}else{const snap=await roomRef.get();if(!snap.exists()){setMsg('そのROOMは存在しない。先にHOSTで部屋作成。');return}}
-await playersRef.child(role).set({id:playerId,name,role,x:me.x,y:me.y,tx:me.tx,ty:me.ty,updatedAt:firebase.database.ServerValue.TIMESTAMP});playersRef.child(role).onDisconnect().remove();connected=true;started=true;panel.classList.add('hidden');resetPlayers();if(isHost){resetPuck(-1);startWebRTCHost()}else{startWebRTCJoin()}attachListeners();setMsg((role==='p1'?'下側P1':'上側P2')+'で参加。指で押さえ込むとパックが止まる。');}catch(e){console.error(e);setMsg('接続失敗。Firebase設定・Databaseルール・通信を確認。')}}
-function attachListeners(){playersRef.on('value',snap=>{const p=snap.val()||{};const myRole=role,opRole=myRole==='p1'?'p2':'p1';const po=p[opRole];opp.online=!!po;if(po){opp.name=po.name||'相手';opp.tx=Number(po.tx??po.x??opp.tx);opp.ty=Number(po.ty??po.y??opp.ty);sideNames[opRole]=opp.name}const pm=p[myRole];if(pm)sideNames[myRole]=pm.name||name;});stateRef.on('value',snap=>{const s=snap.val();if(!s)return;score=s.score||score;if(!isHost&&s.puck){lastRemotePuck=s.puck;puck.x=Number(s.puck.x);puck.y=Number(s.puck.y);puck.vx=Number(s.puck.vx);puck.vy=Number(s.puck.vy)}lastState=now();});}
+await playersRef.child(role).set({id:playerId,name,role,x:me.x,y:me.y,tx:me.tx,ty:me.ty,updatedAt:firebase.database.ServerValue.TIMESTAMP});playersRef.child(role).onDisconnect().remove();connected=true;started=true;panel.classList.add('hidden');resetPlayers();if(isHost){resetPuck(-1);await startWebRTCHost()}else{await startWebRTCJoin()}attachListeners();setMsg((role==='p1'?'下側P1':'上側P2')+'で参加。指で押さえ込むとパックが止まる。');}catch(e){console.error(e);setMsg('接続失敗。Firebase設定・Databaseルール・通信を確認。')}}
+function attachListeners(){playersRef.on('value',snap=>{const p=snap.val()||{};const myRole=role,opRole=myRole==='p1'?'p2':'p1';const po=p[opRole];opp.online=!!po;if(po){opp.name=po.name||'相手';opp.tx=Number(po.tx??po.x??opp.tx);opp.ty=Number(po.ty??po.y??opp.ty);sideNames[opRole]=opp.name}const pm=p[myRole];if(pm)sideNames[myRole]=pm.name||name;});stateRef.on('value',snap=>{const s=snap.val();if(!s)return;score=s.score||score;if(!isHost&&s.puck&&!rtcReady){lastRemotePuck=s.puck;puck.x=Number(s.puck.x);puck.y=Number(s.puck.y);puck.vx=Number(s.puck.vx);puck.vy=Number(s.puck.vy)}lastState=now();});}
 $('room').value=randomRoom();$('name').value='P'+playerId.slice(-4).toUpperCase();$('host').onclick=()=>start(true);$('join').onclick=()=>start(false);$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('room').value);setMsg('Room IDをコピーした。相手に送ってJOINしてもらう。')}catch(e){setMsg('Room ID: '+$('room').value)}};
 function setTargetFromPointer(e){if(!started)return;const p=e.touches?e.touches[0]:e;const q=inv(p.clientX,p.clientY);const half=world.h/2;let y=q.y;if(role==='p1')y=clamp(y,half+world.paddleR,world.h-world.paddleR-18);else y=clamp(y,world.paddleR+18,half-world.paddleR);me.tx=clamp(q.x,world.paddleR+10,world.w-world.paddleR-10);me.ty=y;localTouch=true;}
 canvas.addEventListener('touchstart',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});canvas.addEventListener('touchmove',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});canvas.addEventListener('touchend',e=>{e.preventDefault();localTouch=false},{passive:false});canvas.addEventListener('pointerdown',e=>{e.preventDefault();setTargetFromPointer(e)});canvas.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch')setTargetFromPointer(e)});canvas.addEventListener('pointerup',()=>{localTouch=false});
 function updatePaddle(p,dt){const oldX=p.x,oldY=p.y;const follow=localTouch&&p===me?.52:.32;p.x+=(p.tx-p.x)*follow;p.y+=(p.ty-p.y)*follow;p.vx=(p.x-oldX)/dt;p.vy=(p.y-oldY)/dt}
 function collidePaddle(p,isLocal){const dx=puck.x-p.x,dy=puck.y-p.y,dist=Math.hypot(dx,dy),min=world.paddleR+world.puckR;if(dist>0&&dist<min){const nx=dx/dist,ny=dy/dist,over=min-dist;puck.x+=nx*over;puck.y+=ny*over;const rel=(puck.vx-p.vx)*nx+(puck.vy-p.vy)*ny;if(rel<0){puck.vx-=1.55*rel*nx;puck.vy-=1.55*rel*ny}puck.vx+=p.vx*.020;puck.vy+=p.vy*.020;const hold=isLocal&&localTouch&&dist<world.paddleR+world.puckR*.45&&Math.hypot(p.vx,p.vy)<520;if(hold){puck.vx*=.38;puck.vy*=.38;puck.x=p.x+nx*min;puck.y=p.y+ny*min}}}
 function hostPhysics(dt){updatePaddle(me,dt);updatePaddle(opp,dt);puck.x+=puck.vx;puck.y+=puck.vy;puck.vx*=.994;puck.vy*=.994;collidePaddle(me,true);collidePaddle(opp,false);const left=world.puckR,right=world.w-world.puckR;if(puck.x<left){puck.x=left;puck.vx=Math.abs(puck.vx)*.92}if(puck.x>right){puck.x=right;puck.vx=-Math.abs(puck.vx)*.92}const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;if(puck.y<world.puckR){if(inGoal){score.p1++;resetPuck(1);setMsg('P1 GOAL')}else{puck.y=world.puckR;puck.vy=Math.abs(puck.vy)*.92}}if(puck.y>world.h-world.puckR){if(inGoal){score.p2++;resetPuck(-1);setMsg('P2 GOAL')}else{puck.y=world.h-world.puckR;puck.vy=-Math.abs(puck.vy)*.92}}const max=18,sp=Math.hypot(puck.vx,puck.vy);if(sp>max){puck.vx=puck.vx/sp*max;puck.vy=puck.vy/sp*max}}
-function clientPhysics(dt){updatePaddle(me,dt);updatePaddle(opp,dt);if(!lastRemotePuck){puck.x=world.w/2;puck.y=world.h/2}else{puck.x+=puck.vx*.65;puck.y+=puck.vy*.65;puck.x+=(lastRemotePuck.x-puck.x)*.22;puck.y+=(lastRemotePuck.y-puck.y)*.22;puck.vx+=(lastRemotePuck.vx-puck.vx)*.18;puck.vy+=(lastRemotePuck.vy-puck.vy)*.18}collidePaddle(me,true)}
-async function sendMe(){if(rtcChannel&&rtcChannel.readyState==='open'&&!isHost){rtcChannel.send(JSON.stringify({type:'join',tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2)}));return;}if(!connected||!playersRef)return;const t=now();if(t-lastSend<33)return;lastSend=t;try{await playersRef.child(role).update({name,tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2),x:+me.x.toFixed(2),y:+me.y.toFixed(2),updatedAt:firebase.database.ServerValue.TIMESTAMP})}catch(e){}}
-async function sendState(){if(rtcChannel&&rtcChannel.readyState==='open'){rtcChannel.send(JSON.stringify({type:'state',puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},score}));return;}if(!isHost||!connected||!stateRef)return;const t=now();if(t-lastPing<45)return;lastPing=t;try{await stateRef.update({puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},score,tick:t})}catch(e){}}
+function clientPhysics(dt){
+updatePaddle(me,dt);
+updatePaddle(opp,dt);
+
+if(!lastRemotePuck){
+  puck.x=world.w/2;
+  puck.y=world.h/2;
+}else{
+  const rx=Number(lastRemotePuck.x);
+  const ry=Number(lastRemotePuck.y);
+  const rvx=Number(lastRemotePuck.vx||0);
+  const rvy=Number(lastRemotePuck.vy||0);
+
+  // 受信間の穴を速度で先読み。即ワープではなく、予測位置へ滑らかに寄せる。
+  const predictX=rx+rvx*1.65;
+  const predictY=ry+rvy*1.65;
+
+  puck.x+=puck.vx*.78;
+  puck.y+=puck.vy*.78;
+
+  puck.x+=(predictX-puck.x)*.38;
+  puck.y+=(predictY-puck.y)*.38;
+
+  puck.vx+=(rvx-puck.vx)*.42;
+  puck.vy+=(rvy-puck.vy)*.42;
+}
+
+collidePaddle(me,true);
+}
+async function sendMe(){
+const t=now();
+if(rtcReady && !isHost){
+  if(t-rtcLastJoinAt>=16){
+    rtcLastJoinAt=t;
+    rtcSend({type:'joinInput',tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2),x:+me.x.toFixed(2),y:+me.y.toFixed(2)});
+  }
+  return;
+}
+if(!connected||!playersRef)return;const t=now();if(t-lastSend<33)return;lastSend=t;try{await playersRef.child(role).update({name,tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2),x:+me.x.toFixed(2),y:+me.y.toFixed(2),updatedAt:firebase.database.ServerValue.TIMESTAMP})}catch(e){}}
+async function sendState(){
+if(isHost && rtcReady){
+  const t=now();
+  if(t-rtcLastStateAt>=16){
+    rtcLastStateAt=t;
+    rtcSend({
+      type:'state',
+      puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
+      host:{x:+me.x.toFixed(2),y:+me.y.toFixed(2),tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2)},
+      join:{x:+opp.x.toFixed(2),y:+opp.y.toFixed(2),tx:+opp.tx.toFixed(2),ty:+opp.ty.toFixed(2)},
+      score
+    });
+  }
+  return;
+}
+if(!isHost||!connected||!stateRef)return;const t=now();if(t-lastPing<45)return;lastPing=t;try{await stateRef.update({puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},score,tick:t})}catch(e){}}
 function draw(){ctx.clearRect(0,0,W,H);const sc=Math.min(W/world.w,H/world.h),x0=W/2-world.w*sc/2,y0=H/2-world.h*sc/2;ctx.save();ctx.translate(x0,y0);ctx.scale(sc,sc);ctx.fillStyle='#082445';roundRect(0,0,world.w,world.h,26,true);ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=5;roundRect(6,6,world.w-12,world.h-12,22,false);ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(12,world.h/2);ctx.lineTo(world.w-12,world.h/2);ctx.stroke();ctx.beginPath();ctx.arc(world.w/2,world.h/2,58,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#60a5fa';ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(world.w/2-world.goal/2,6);ctx.lineTo(world.w/2+world.goal/2,6);ctx.stroke();ctx.strokeStyle='#86efac';ctx.beginPath();ctx.moveTo(world.w/2-world.goal/2,world.h-6);ctx.lineTo(world.w/2+world.goal/2,world.h-6);ctx.stroke();drawPuck();drawPaddle(opp,role==='p2', '#60a5fa');drawPaddle(me,true,'#22c55e');ctx.restore();scoreEl.textContent=`${score.p1||0} - ${score.p2||0}`;leftInfo.innerHTML=`<span class="me">${role==='p1'?'あなた P1 下':'あなた P2 上'}</span><br>${name}<br>${connected?'ONLINE':'OFFLINE'}`;rightInfo.innerHTML=`ROOM ${roomId||'-'}<br><span class="op">相手 ${opp.online?'接続中':'待機中'}</span><br>${opp.name||''}`;if(started&&!opp.online)setMsg('相手待ち。Room IDを共有してJOINしてもらう。')}
 function drawPaddle(p,mine,color){ctx.save();ctx.shadowColor=color;ctx.shadowBlur=18;ctx.fillStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,world.paddleR,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='rgba(255,255,255,.78)';ctx.beginPath();ctx.arc(p.x,p.y,world.paddleR*.48,0,Math.PI*2);ctx.fill();ctx.restore()}
 function drawPuck(){ctx.save();ctx.shadowColor='#fff';ctx.shadowBlur=16;ctx.fillStyle='#e5e7eb';ctx.beginPath();ctx.arc(puck.x,puck.y,world.puckR,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='#111827';ctx.lineWidth=4;ctx.stroke();ctx.restore()}
