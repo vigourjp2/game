@@ -373,29 +373,46 @@ function collidePaddle(p,isLocal){
   const dist=Math.hypot(dx,dy);
   const min=world.paddleR+world.puckR;
 
-  if(dist>0&&dist<min){
-    const nx=dx/dist,ny=dy/dist,over=min-dist;
-    puck.x+=nx*over;
-    puck.y+=ny*over;
+  // 高速時にすり抜けると「打てない」になるため、当たり判定を少し太らせる。
+  const speed=Math.hypot(p.vx,p.vy);
+  const activePad=isLocal&&localTouch;
+  const hitRange=min+(activePad?18:8);
+
+  if(dist>0&&dist<hitRange){
+    const nx=dx/dist,ny=dy/dist;
+    const over=Math.max(0,min-dist);
+    puck.x+=nx*(over+1.5);
+    puck.y+=ny*(over+1.5);
 
     const rel=(puck.vx-p.vx)*nx+(puck.vy-p.vy)*ny;
     if(rel<0){
-      puck.vx-=1.55*rel*nx;
-      puck.vy-=1.55*rel*ny;
+      puck.vx-=1.72*rel*nx;
+      puck.vy-=1.72*rel*ny;
     }
 
-    puck.vx+=p.vx*.020;
-    puck.vy+=p.vy*.020;
+    // マレット速度を強くパックへ載せる。タッチで振った時に確実に打てるようにする。
+    puck.vx+=p.vx*.030;
+    puck.vy+=p.vy*.030;
 
-    // 指で上から押さえ込むムーブ。低速で深く重なったら摩擦強め。
-    const hold=isLocal&&localTouch&&dist<world.paddleR+world.puckR*.45&&Math.hypot(p.vx,p.vy)<520;
+    // 低速で真上から押さえた時は止める。速く振った時は強打。
+    const hold=activePad&&dist<world.paddleR+world.puckR*.55&&speed<520;
     if(hold){
-      puck.vx*=.34;
-      puck.vy*=.34;
+      puck.vx*=.28;
+      puck.vy*=.28;
       puck.x=p.x+nx*min;
       puck.y=p.y+ny*min;
     }
+
+    const max=22,sp=Math.hypot(puck.vx,puck.vy);
+    if(sp>max){
+      puck.vx=puck.vx/sp*max;
+      puck.vy=puck.vy/sp*max;
+    }
+
+    return true;
   }
+
+  return false;
 }
 
 function resetFromRemote(m){
@@ -506,8 +523,21 @@ function simulateRemoteView(dt){
     puck.y+=puck.vy*.50;
   }
 
-  // 自分側ではない時も、見た目の押さえ感だけ軽く出す。
-  collidePaddle(me,true);
+  // 権限が相手側でも、自分のマレットに当たった瞬間はローカル即打撃へ切替。
+  // これを入れないと「見た目では当たっているのに打てない」状態になる。
+  const localHit=collidePaddle(me,true);
+  if(localHit && localTouch){
+    authority=role;
+    remotePuck=null;
+    rtcSend({
+      type:'puck',
+      handoff:true,
+      authority,
+      puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
+      score
+    });
+    setMsg('ローカル打撃。自端末がパック権限を取得。');
+  }
 }
 
 function sendInput(){
