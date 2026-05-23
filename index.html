@@ -2,59 +2,135 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Online Air Hockey - Firebase</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Online Air Hockey - WebRTC Local Authority</title>
 <style>
-  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07111f;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none;user-select:none}
-  canvas{display:block;width:100vw;height:100vh;touch-action:none;background:#06101e}
-  #panel{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#06101e,#0b2447 55%,#081426);z-index:20;padding:18px}
-  #box{width:min(440px,94vw);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);border-radius:22px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
-  h1{margin:0 0 8px;font-size:28px;letter-spacing:.04em}.sub{font-size:13px;color:#cfe5ff;line-height:1.55;margin-bottom:12px}
-  input{width:100%;box-sizing:border-box;border:0;border-radius:14px;padding:13px 14px;font-size:18px;margin:7px 0;background:#fff;color:#111;font-weight:700;text-transform:uppercase}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}button{border:0;border-radius:14px;padding:13px 10px;font-size:16px;font-weight:900;color:white;background:#22c55e;touch-action:manipulation}button.join{background:#3b82f6}button.copy{background:#64748b;width:100%;margin-top:10px}.small{font-size:12px;color:#bdd7ff;line-height:1.5;margin-top:10px}.warn{font-size:12px;color:#fecaca;line-height:1.5;margin-top:8px}
-  #hud{position:fixed;left:10px;right:10px;top:10px;z-index:10;display:flex;justify-content:space-between;gap:8px;pointer-events:none}.card{background:rgba(0,0,0,.46);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 10px;font-size:12px;line-height:1.35;backdrop-filter:blur(6px)}#score{font-size:24px;font-weight:1000;letter-spacing:.08em;text-align:center;min-width:110px}.me{color:#86efac}.op{color:#93c5fd}#msg{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:11;background:rgba(0,0,0,.50);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 12px;font-size:12px;color:#e0f2fe;text-align:center;max-width:92vw;pointer-events:none}.hidden{display:none!important}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07111f;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none;user-select:none}
+canvas{display:block;width:100vw;height:100vh;touch-action:none;background:#06101e}
+#panel{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#06101e,#0b2447 55%,#081426);z-index:20;padding:18px}
+#box{width:min(440px,94vw);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);border-radius:22px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
+h1{margin:0 0 8px;font-size:26px;letter-spacing:.04em}.sub{font-size:13px;color:#cfe5ff;line-height:1.55;margin-bottom:12px}
+input{width:100%;box-sizing:border-box;border:0;border-radius:14px;padding:13px 14px;font-size:18px;margin:7px 0;background:#fff;color:#111;font-weight:700;text-transform:uppercase}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+button{border:0;border-radius:14px;padding:13px 10px;font-size:16px;font-weight:900;color:white;background:#22c55e;touch-action:manipulation}
+button.join{background:#3b82f6}button.copy{background:#64748b;width:100%;margin-top:10px}
+.small{font-size:12px;color:#bdd7ff;line-height:1.5;margin-top:10px}.warn{font-size:12px;color:#fecaca;line-height:1.5;margin-top:8px}
+#hud{position:fixed;left:10px;right:10px;top:10px;z-index:10;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
+.card{background:rgba(0,0,0,.46);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 10px;font-size:12px;line-height:1.35;backdrop-filter:blur(6px)}
+#score{font-size:24px;font-weight:1000;letter-spacing:.08em;text-align:center;min-width:110px}.me{color:#86efac}.op{color:#93c5fd}
+#msg{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:11;background:rgba(0,0,0,.50);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 12px;font-size:12px;color:#e0f2fe;text-align:center;max-width:92vw;pointer-events:none}
+.hidden{display:none!important}
 </style>
 </head>
 <body>
 <div id="panel">
   <div id="box">
     <h1>ONLINE AIR HOCKEY</h1>
-    <div class="sub">GitHub Pagesの同じindex.htmlへ別端末からアクセスして対戦。HOSTが物理演算を持ち、ゲーム中はWebRTC直結で同期する。Firebaseは部屋作成と接続交換だけに使う。</div>
+    <div class="sub">WebRTC DataChannel対戦。パックが自分側にある端末だけが物理演算を持ち、中央を越えたら相手へ権限を渡す。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16" />
     <input id="room" placeholder="ROOM ID" maxlength="20" />
     <div class="row"><button id="host">HOSTで部屋作成</button><button id="join" class="join">JOINで参加</button></div>
     <button id="copy" class="copy">Room IDをコピー</button>
     <div id="panelMsg" class="small">HOST側が下、JOIN側が上。タッチで自分のマレットを動かす。</div>
-    <div class="warn">同じFirebase設定を使っている。公開運用するならFirebase Realtime Databaseのルールと上限管理は別途必要。</div>
+    <div class="warn">FirebaseはWebRTC接続交換だけに使用。ゲーム中の主通信は端末間直結。</div>
   </div>
 </div>
-<div id="hud"><div class="card" id="leftInfo">未接続</div><div class="card" id="score">0 - 0</div><div class="card" id="rightInfo">ROOM</div></div>
+
+<div id="hud">
+  <div class="card" id="leftInfo">未接続</div>
+  <div class="card" id="score">0 - 0</div>
+  <div class="card" id="rightInfo">ROOM</div>
+</div>
 <div id="msg">待機中</div>
 <canvas id="c"></canvas>
+
 <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js"></script>
 <script>
 (()=>{
 'use strict';
-const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
-const $=id=>document.getElementById(id);const canvas=$('c'),ctx=canvas.getContext('2d'),panel=$('panel'),panelMsg=$('panelMsg'),msg=$('msg'),scoreEl=$('score'),leftInfo=$('leftInfo'),rightInfo=$('rightInfo');
-let W=innerWidth,H=innerHeight,DPR=1,db=null,roomId='',playerId='p_'+Math.random().toString(36).slice(2,10),name='PLAYER',role='',isHost=false,roomRef=null,playersRef=null,stateRef=null,connected=false,lastSend=0,lastState=0,lastPing=0,localTouch=false,started=false;
-const world={w:420,h:760,goal:126,paddleR:34,puckR:17};
-const me={x:0,y:0,tx:0,ty:0,vx:0,vy:0};const opp={x:0,y:0,tx:0,ty:0,vx:0,vy:0,online:false,name:'相手'};const puck={x:0,y:0,vx:0,vy:0};let score={p1:0,p2:0};let sideNames={p1:'HOST',p2:'JOIN'};let lastRemotePuck=null;
-function safeRoom(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20)}function randomRoom(){return Math.random().toString(36).slice(2,8).toUpperCase()}function clamp(v,a,b){return Math.max(a,Math.min(b,v))}function now(){return Date.now()}function setMsg(t){msg.textContent=t;panelMsg.textContent=t}
-function resize(){DPR=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;canvas.width=Math.floor(W*DPR);canvas.height=Math.floor(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0)}addEventListener('resize',resize);resize();
-function sx(x){const scale=Math.min(W/world.w,H/world.h);return W/2+(x-world.w/2)*scale}function sy(y){const scale=Math.min(W/world.w,H/world.h);return H/2+(y-world.h/2)*scale}function inv(px,py){const scale=Math.min(W/world.w,H/world.h);return{x:(px-W/2)/scale+world.w/2,y:(py-H/2)/scale+world.h/2}}
-function resetPuck(dir){puck.x=world.w/2;puck.y=world.h/2;puck.vx=(Math.random()-.5)*3;puck.vy=(dir||1)*(4.2+Math.random()*1.3)}function resetPlayers(){me.x=world.w/2;me.tx=me.x;opp.x=world.w/2;opp.tx=opp.x;if(role==='p1'){me.y=world.h-105;me.ty=me.y;opp.y=105;opp.ty=opp.y}else{me.y=105;me.ty=me.y;opp.y=world.h-105;opp.ty=opp.y}}
 
-// ===== WebRTC LOW-LAG PATCH START =====
-let rtcPeer=null;
-let rtcChannel=null;
-let rtcReady=false;
-let rtcLastStateAt=0;
-let rtcLastJoinAt=0;
+const firebaseConfig={
+  apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",
+  authDomain:"minicra.firebaseapp.com",
+  databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"minicra",
+  storageBucket:"minicra.firebasestorage.app",
+  messagingSenderId:"943025034725",
+  appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"
+};
+
+const $=id=>document.getElementById(id);
+const canvas=$('c'),ctx=canvas.getContext('2d'),panel=$('panel'),panelMsg=$('panelMsg'),msg=$('msg'),scoreEl=$('score'),leftInfo=$('leftInfo'),rightInfo=$('rightInfo');
+
+let W=innerWidth,H=innerHeight,DPR=1,db=null,roomId='',playerId='p_'+Math.random().toString(36).slice(2,10),name='PLAYER';
+let role='',isHost=false,roomRef=null,started=false,connected=false,rtcReady=false;
+let rtcPeer=null,rtcChannel=null,lastSendInput=0,lastSendState=0,lastRemoteAt=0,lastMsgAt=0;
+let authority='p1';
+let localTouch=false;
+
+const world={w:420,h:760,goal:126,paddleR:34,puckR:17,mid:380};
+const me={x:0,y:0,tx:0,ty:0,vx:0,vy:0};
+const opp={x:0,y:0,tx:0,ty:0,vx:0,vy:0,online:false,name:'相手'};
+const puck={x:0,y:0,vx:0,vy:0};
+let score={p1:0,p2:0};
+let sideNames={p1:'HOST',p2:'JOIN'};
+let remotePuck=null;
+
+function safeRoom(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20)}
+function randomRoom(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function now(){return Date.now()}
+function setMsg(t){msg.textContent=t;panelMsg.textContent=t}
+function resize(){DPR=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;canvas.width=Math.floor(W*DPR);canvas.height=Math.floor(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',resize);resize();
+
+function sx(x){const scale=Math.min(W/world.w,H/world.h);return W/2+(x-world.w/2)*scale}
+function sy(y){const scale=Math.min(W/world.w,H/world.h);return H/2+(y-world.h/2)*scale}
+function inv(px,py){const scale=Math.min(W/world.w,H/world.h);return{x:(px-W/2)/scale+world.w/2,y:(py-H/2)/scale+world.h/2}}
+
+function initFirebase(){
+  if(db)return true;
+  if(!window.firebase||!firebase.database){
+    setMsg('Firebaseを読み込めない。GitHub Pages等のhttps配置で再読込。');
+    return false;
+  }
+  if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
+  db=firebase.database();
+  return true;
+}
+
+function resetPuck(dir){
+  puck.x=world.w/2;
+  puck.y=world.h/2;
+  puck.vx=(Math.random()-.5)*3;
+  puck.vy=(dir||1)*(4.2+Math.random()*1.3);
+  authority=puck.y>=world.h/2?'p1':'p2';
+  remotePuck=null;
+}
+
+function resetPlayers(){
+  me.x=world.w/2;me.tx=me.x;
+  opp.x=world.w/2;opp.tx=opp.x;
+  if(role==='p1'){
+    me.y=world.h-105;me.ty=me.y;
+    opp.y=105;opp.ty=opp.y;
+  }else{
+    me.y=105;me.ty=me.y;
+    opp.y=world.h-105;opp.ty=opp.y;
+  }
+}
+
+function roleForPuckY(y){
+  return y>=world.h/2?'p1':'p2';
+}
+
+function isMyAuthority(){
+  return authority===role;
+}
 
 function rtcSend(obj){
-  if(!rtcChannel || rtcChannel.readyState!=='open') return false;
+  if(!rtcChannel||rtcChannel.readyState!=='open')return false;
   try{
     rtcChannel.send(JSON.stringify(obj));
     return true;
@@ -64,46 +140,80 @@ function rtcSend(obj){
 }
 
 function initWebRTC(){
-  if(rtcPeer) return;
-  rtcPeer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  rtcPeer=new RTCPeerConnection({
+    iceServers:[{urls:'stun:stun.l.google.com:19302'}]
+  });
+
   rtcPeer.onicecandidate=async e=>{
-    if(!e.candidate || !roomRef) return;
+    if(!e.candidate||!roomRef)return;
     const path=isHost?'rtc_hostCandidates':'rtc_joinCandidates';
     try{await roomRef.child(path).push(e.candidate.toJSON())}catch(err){}
   };
-  rtcPeer.ondatachannel=e=>setupRTCChannel(e.channel);
+
+  rtcPeer.ondatachannel=e=>{
+    setupRTCChannel(e.channel);
+  };
 }
 
 function setupRTCChannel(ch){
   rtcChannel=ch;
-  rtcChannel.binaryType='arraybuffer';
+
   rtcChannel.onopen=()=>{
     rtcReady=true;
-    setMsg('WebRTC直結完了。ゲーム中の同期はFirebaseではなく端末間直結。');
+    connected=true;
+    setMsg('WebRTC直結完了。パック側端末が物理担当。');
   };
+
   rtcChannel.onclose=()=>{
     rtcReady=false;
-    setMsg('WebRTC切断。Firebase同期へフォールバック。');
+    setMsg('WebRTC切断。再読込して再接続。');
   };
-  rtcChannel.onerror=()=>{rtcReady=false};
+
+  rtcChannel.onerror=()=>{
+    rtcReady=false;
+  };
+
   rtcChannel.onmessage=e=>{
     let m;
     try{m=JSON.parse(e.data)}catch(err){return}
-    if(isHost && m.type==='joinInput'){
-      opp.tx=Number(m.tx);
-      opp.ty=Number(m.ty);
-      if(Number.isFinite(Number(m.x))) opp.x=Number(m.x);
-      if(Number.isFinite(Number(m.y))) opp.y=Number(m.y);
-      opp.online=true;
+
+    if(m.type==='input'){
+      if(m.role!==role){
+        opp.online=true;
+        opp.name=m.name||opp.name;
+        opp.tx=Number(m.tx);
+        opp.ty=Number(m.ty);
+        opp.x=Number(m.x ?? opp.x);
+        opp.y=Number(m.y ?? opp.y);
+        sideNames[m.role]=opp.name;
+      }
       return;
     }
-    if(!isHost && m.type==='state'){
-      lastRemotePuck=m.puck;
-      score=m.score||score;
-      if(m.host){
-        opp.tx=Number(m.host.x);
-        opp.ty=Number(m.host.y);
+
+    if(m.type==='puck'){
+      authority=m.authority || authority;
+      score=m.score || score;
+      remotePuck=m.puck;
+      lastRemoteAt=performance.now();
+
+      // 自分が新しい権限側になった瞬間だけ、相手から受け取った状態をそのまま採用してローカル物理開始。
+      if(authority===role && m.handoff){
+        puck.x=Number(m.puck.x);
+        puck.y=Number(m.puck.y);
+        puck.vx=Number(m.puck.vx||0);
+        puck.vy=Number(m.puck.vy||0);
+        remotePuck=null;
+        if(now()-lastMsgAt>500){
+          lastMsgAt=now();
+          setMsg('パック権限を受け取った。ここから自端末で物理演算。');
+        }
       }
+      return;
+    }
+
+    if(m.type==='score'){
+      score=m.score||score;
+      resetFromRemote(m);
       return;
     }
   };
@@ -111,17 +221,28 @@ function setupRTCChannel(ch){
 
 async function startWebRTCHost(){
   initWebRTC();
-  rtcChannel=rtcPeer.createDataChannel('game',{ordered:false,maxRetransmits:0});
+
+  rtcChannel=rtcPeer.createDataChannel('game',{
+    ordered:false,
+    maxRetransmits:0
+  });
   setupRTCChannel(rtcChannel);
+
   const offer=await rtcPeer.createOffer();
   await rtcPeer.setLocalDescription(offer);
-  await roomRef.child('rtc_offer').set({type:offer.type,sdp:offer.sdp});
+
+  await roomRef.child('rtc_offer').set({
+    type:offer.type,
+    sdp:offer.sdp
+  });
+
   roomRef.child('rtc_answer').on('value',async snap=>{
     const v=snap.val();
-    if(v && !rtcPeer.currentRemoteDescription){
+    if(v&&!rtcPeer.currentRemoteDescription){
       try{await rtcPeer.setRemoteDescription(new RTCSessionDescription(v))}catch(e){}
     }
   });
+
   roomRef.child('rtc_joinCandidates').on('child_added',snap=>{
     try{rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()))}catch(e){}
   });
@@ -129,138 +250,412 @@ async function startWebRTCHost(){
 
 async function startWebRTCJoin(){
   initWebRTC();
+
   const offerSnap=await roomRef.child('rtc_offer').get();
   if(!offerSnap.exists()){
-    setMsg('WebRTC offer待ち。HOST作成後にJOINを押し直してください。');
+    setMsg('ROOMはあるがWebRTC offerなし。HOST側で作り直してからJOIN。');
     return;
   }
+
   await rtcPeer.setRemoteDescription(new RTCSessionDescription(offerSnap.val()));
+
   const answer=await rtcPeer.createAnswer();
   await rtcPeer.setLocalDescription(answer);
-  await roomRef.child('rtc_answer').set({type:answer.type,sdp:answer.sdp});
+
+  await roomRef.child('rtc_answer').set({
+    type:answer.type,
+    sdp:answer.sdp
+  });
+
   roomRef.child('rtc_hostCandidates').on('child_added',snap=>{
     try{rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()))}catch(e){}
   });
 }
-// ===== WebRTC LOW-LAG PATCH END =====
 
-function initFirebase(){if(db)return true;if(!window.firebase||!firebase.database){setMsg('Firebaseを読み込めない。GitHub Pages等のhttps配置で再読込。');return false}if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);db=firebase.database();return true}
-async function start(host){if(!initFirebase())return;name=($('name').value||('P'+playerId.slice(-4))).slice(0,16);roomId=safeRoom($('room').value)||randomRoom();$('room').value=roomId;isHost=host;role=host?'p1':'p2';roomRef=db.ref('airhockey_rooms/'+roomId);playersRef=roomRef.child('players');stateRef=roomRef.child('state');setMsg((host?'HOST作成中':'JOIN接続中')+' ROOM '+roomId);
-try{if(host){await roomRef.set({meta:{host:playerId,createdAt:firebase.database.ServerValue.TIMESTAMP},state:{puck:{x:world.w/2,y:world.h/2,vx:0,vy:5},score:{p1:0,p2:0},tick:0},players:{}})}else{const snap=await roomRef.get();if(!snap.exists()){setMsg('そのROOMは存在しない。先にHOSTで部屋作成。');return}}
-await playersRef.child(role).set({id:playerId,name,role,x:me.x,y:me.y,tx:me.tx,ty:me.ty,updatedAt:firebase.database.ServerValue.TIMESTAMP});playersRef.child(role).onDisconnect().remove();connected=true;started=true;panel.classList.add('hidden');resetPlayers();if(isHost){resetPuck(-1);await startWebRTCHost()}else{await startWebRTCJoin()}attachListeners();setMsg((role==='p1'?'下側P1':'上側P2')+'で参加。指で押さえ込むとパックが止まる。');}catch(e){console.error(e);setMsg('接続失敗。Firebase設定・Databaseルール・通信を確認。')}}
-function attachListeners(){playersRef.on('value',snap=>{const p=snap.val()||{};const myRole=role,opRole=myRole==='p1'?'p2':'p1';const po=p[opRole];opp.online=!!po;if(po){opp.name=po.name||'相手';opp.tx=Number(po.tx??po.x??opp.tx);opp.ty=Number(po.ty??po.y??opp.ty);sideNames[opRole]=opp.name}const pm=p[myRole];if(pm)sideNames[myRole]=pm.name||name;});stateRef.on('value',snap=>{const s=snap.val();if(!s)return;score=s.score||score;if(!isHost&&s.puck&&!rtcReady){lastRemotePuck=s.puck;puck.x=Number(s.puck.x);puck.y=Number(s.puck.y);puck.vx=Number(s.puck.vx);puck.vy=Number(s.puck.vy)}lastState=now();});}
-$('room').value=randomRoom();$('name').value='P'+playerId.slice(-4).toUpperCase();$('host').onclick=()=>start(true);$('join').onclick=()=>start(false);$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('room').value);setMsg('Room IDをコピーした。相手に送ってJOINしてもらう。')}catch(e){setMsg('Room ID: '+$('room').value)}};
-function setTargetFromPointer(e){if(!started)return;const p=e.touches?e.touches[0]:e;const q=inv(p.clientX,p.clientY);const half=world.h/2;let y=q.y;if(role==='p1')y=clamp(y,half+world.paddleR,world.h-world.paddleR-18);else y=clamp(y,world.paddleR+18,half-world.paddleR);me.tx=clamp(q.x,world.paddleR+10,world.w-world.paddleR-10);me.ty=y;localTouch=true;}
-canvas.addEventListener('touchstart',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});canvas.addEventListener('touchmove',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});canvas.addEventListener('touchend',e=>{e.preventDefault();localTouch=false},{passive:false});canvas.addEventListener('pointerdown',e=>{e.preventDefault();setTargetFromPointer(e)});canvas.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch')setTargetFromPointer(e)});canvas.addEventListener('pointerup',()=>{localTouch=false});
-function updatePaddle(p,dt){const oldX=p.x,oldY=p.y;const follow=(p===me && localTouch)?0.52:0.32;p.x+=(p.tx-p.x)*follow;p.y+=(p.ty-p.y)*follow;p.vx=(p.x-oldX)/dt;p.vy=(p.y-oldY)/dt}
-function collidePaddle(p,isLocal){const dx=puck.x-p.x,dy=puck.y-p.y,dist=Math.hypot(dx,dy),min=world.paddleR+world.puckR;if(dist>0&&dist<min){const nx=dx/dist,ny=dy/dist,over=min-dist;puck.x+=nx*over;puck.y+=ny*over;const rel=(puck.vx-p.vx)*nx+(puck.vy-p.vy)*ny;if(rel<0){puck.vx-=1.55*rel*nx;puck.vy-=1.55*rel*ny}puck.vx+=p.vx*.020;puck.vy+=p.vy*.020;const hold=isLocal&&localTouch&&dist<world.paddleR+world.puckR*.45&&Math.hypot(p.vx,p.vy)<520;if(hold){puck.vx*=.38;puck.vy*=.38;puck.x=p.x+nx*min;puck.y=p.y+ny*min}}}
-function hostPhysics(dt){updatePaddle(me,dt);updatePaddle(opp,dt);puck.x+=puck.vx;puck.y+=puck.vy;puck.vx*=.994;puck.vy*=.994;collidePaddle(me,true);collidePaddle(opp,false);const left=world.puckR,right=world.w-world.puckR;if(puck.x<left){puck.x=left;puck.vx=Math.abs(puck.vx)*.92}if(puck.x>right){puck.x=right;puck.vx=-Math.abs(puck.vx)*.92}const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;if(puck.y<world.puckR){if(inGoal){score.p1++;resetPuck(1);setMsg('P1 GOAL')}else{puck.y=world.puckR;puck.vy=Math.abs(puck.vy)*.92}}if(puck.y>world.h-world.puckR){if(inGoal){score.p2++;resetPuck(-1);setMsg('P2 GOAL')}else{puck.y=world.h-world.puckR;puck.vy=-Math.abs(puck.vy)*.92}}const max=18,sp=Math.hypot(puck.vx,puck.vy);if(sp>max){puck.vx=puck.vx/sp*max;puck.vy=puck.vy/sp*max}}
-function clientPhysics(dt){
-updatePaddle(me,dt);
-updatePaddle(opp,dt);
+async function start(host){
+  if(!initFirebase())return;
 
-// WebRTC時は最新値へ追いかけるのではなく、少し過去を時間補間して描画する。
-// これでAndroid/回線揺れの微カクをかなり消す。
-let rp=null;
+  name=($('name').value||('P'+playerId.slice(-4))).slice(0,16);
+  roomId=safeRoom($('room').value)||randomRoom();
+  $('room').value=roomId;
 
-if(rtcReady && rtcStateBuffer.length>=2){
-  const targetTime=performance.now()-RTC_INTERP_DELAY;
+  isHost=host;
+  role=host?'p1':'p2';
+  roomRef=db.ref('airhockey_rooms/'+roomId);
 
-  let a=null,b=null;
-  for(let i=0;i<rtcStateBuffer.length-1;i++){
-    if(rtcStateBuffer[i].recvAt<=targetTime && rtcStateBuffer[i+1].recvAt>=targetTime){
-      a=rtcStateBuffer[i];
-      b=rtcStateBuffer[i+1];
-      break;
+  setMsg((host?'HOST作成中':'JOIN接続中')+' ROOM '+roomId);
+
+  try{
+    if(host){
+      await roomRef.set({
+        meta:{host:playerId,createdAt:firebase.database.ServerValue.TIMESTAMP},
+        rtc_offer:null,
+        rtc_answer:null,
+        rtc_hostCandidates:null,
+        rtc_joinCandidates:null
+      });
+    }else{
+      const snap=await roomRef.get();
+      if(!snap.exists()){
+        setMsg('そのROOMは存在しない。先にHOSTで部屋作成。');
+        return;
+      }
+    }
+
+    started=true;
+    resetPlayers();
+
+    if(isHost){
+      resetPuck(-1);
+      await startWebRTCHost();
+    }else{
+      resetPuck(1);
+      await startWebRTCJoin();
+    }
+
+    panel.classList.add('hidden');
+    setMsg((role==='p1'?'下側P1':'上側P2')+'で参加。自分側に来たパックは自端末で物理演算。');
+  }catch(e){
+    console.error(e);
+    setMsg('接続失敗。Firebase設定・Databaseルール・通信を確認。');
+  }
+}
+
+$('room').value=randomRoom();
+$('name').value='P'+playerId.slice(-4).toUpperCase();
+$('host').onclick=()=>start(true);
+$('join').onclick=()=>start(false);
+$('copy').onclick=async()=>{
+  try{
+    await navigator.clipboard.writeText($('room').value);
+    setMsg('Room IDをコピーした。相手に送ってJOINしてもらう。');
+  }catch(e){
+    setMsg('Room ID: '+$('room').value);
+  }
+};
+
+function setTargetFromPointer(e){
+  if(!started)return;
+  const p=e.touches?e.touches[0]:e;
+  const q=inv(p.clientX,p.clientY);
+  const half=world.h/2;
+  let y=q.y;
+
+  if(role==='p1'){
+    y=clamp(y,half+world.paddleR,world.h-world.paddleR-18);
+  }else{
+    y=clamp(y,world.paddleR+18,half-world.paddleR);
+  }
+
+  me.tx=clamp(q.x,world.paddleR+10,world.w-world.paddleR-10);
+  me.ty=y;
+  localTouch=true;
+}
+
+canvas.addEventListener('touchstart',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});
+canvas.addEventListener('touchmove',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});
+canvas.addEventListener('touchend',e=>{e.preventDefault();localTouch=false},{passive:false});
+canvas.addEventListener('pointerdown',e=>{e.preventDefault();setTargetFromPointer(e)});
+canvas.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch')setTargetFromPointer(e)});
+canvas.addEventListener('pointerup',()=>{localTouch=false});
+
+function updatePaddle(p,dt,isMe){
+  const oldX=p.x,oldY=p.y;
+  const follow=isMe&&localTouch?.58:.34;
+  p.x+=(p.tx-p.x)*follow;
+  p.y+=(p.ty-p.y)*follow;
+  p.vx=(p.x-oldX)/dt;
+  p.vy=(p.y-oldY)/dt;
+}
+
+function collidePaddle(p,isLocal){
+  const dx=puck.x-p.x,dy=puck.y-p.y;
+  const dist=Math.hypot(dx,dy);
+  const min=world.paddleR+world.puckR;
+
+  if(dist>0&&dist<min){
+    const nx=dx/dist,ny=dy/dist,over=min-dist;
+    puck.x+=nx*over;
+    puck.y+=ny*over;
+
+    const rel=(puck.vx-p.vx)*nx+(puck.vy-p.vy)*ny;
+    if(rel<0){
+      puck.vx-=1.55*rel*nx;
+      puck.vy-=1.55*rel*ny;
+    }
+
+    puck.vx+=p.vx*.020;
+    puck.vy+=p.vy*.020;
+
+    // 指で上から押さえ込むムーブ。低速で深く重なったら摩擦強め。
+    const hold=isLocal&&localTouch&&dist<world.paddleR+world.puckR*.45&&Math.hypot(p.vx,p.vy)<520;
+    if(hold){
+      puck.vx*=.34;
+      puck.vy*=.34;
+      puck.x=p.x+nx*min;
+      puck.y=p.y+ny*min;
+    }
+  }
+}
+
+function resetFromRemote(m){
+  if(m.puck){
+    puck.x=Number(m.puck.x);
+    puck.y=Number(m.puck.y);
+    puck.vx=Number(m.puck.vx||0);
+    puck.vy=Number(m.puck.vy||0);
+  }else{
+    resetPuck(role==='p1'?-1:1);
+  }
+}
+
+function scoreCheck(){
+  const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;
+
+  if(puck.y<world.puckR){
+    if(inGoal){
+      score.p1++;
+      resetPuck(1);
+      rtcSend({type:'score',score,puck,authority});
+      setMsg('P1 GOAL');
+      return true;
+    }else{
+      puck.y=world.puckR;
+      puck.vy=Math.abs(puck.vy)*.92;
     }
   }
 
-  if(!a || !b){
-    a=rtcStateBuffer[Math.max(0,rtcStateBuffer.length-2)];
-    b=rtcStateBuffer[rtcStateBuffer.length-1];
+  if(puck.y>world.h-world.puckR){
+    if(inGoal){
+      score.p2++;
+      resetPuck(-1);
+      rtcSend({type:'score',score,puck,authority});
+      setMsg('P2 GOAL');
+      return true;
+    }else{
+      puck.y=world.h-world.puckR;
+      puck.vy=-Math.abs(puck.vy)*.92;
+    }
   }
 
-  const span=Math.max(1,b.recvAt-a.recvAt);
-  const t=clamp((targetTime-a.recvAt)/span,0,1);
-
-  const ax=Number(a.puck.x), ay=Number(a.puck.y), avx=Number(a.puck.vx||0), avy=Number(a.puck.vy||0);
-  const bx=Number(b.puck.x), by=Number(b.puck.y), bvx=Number(b.puck.vx||0), bvy=Number(b.puck.vy||0);
-
-  rp={
-    x:ax+(bx-ax)*t,
-    y:ay+(by-ay)*t,
-    vx:avx+(bvx-avx)*t,
-    vy:avy+(bvy-avy)*t
-  };
-}else if(lastRemotePuck){
-  rp=lastRemotePuck;
+  return false;
 }
 
-if(!rp){
-  puck.x=world.w/2;
-  puck.y=world.h/2;
-}else{
-  const rvx=Number(rp.vx||0);
-  const rvy=Number(rp.vy||0);
+function simulateLocalAuthority(dt){
+  updatePaddle(me,dt,true);
+  updatePaddle(opp,dt,false);
 
-  // 速度で少しだけ先読み。ワープではなく滑らかに寄せる。
-  const predictX=Number(rp.x)+rvx*.85;
-  const predictY=Number(rp.y)+rvy*.85;
+  puck.x+=puck.vx;
+  puck.y+=puck.vy;
+  puck.vx*=.994;
+  puck.vy*=.994;
 
-  puck.x+=puck.vx*.72;
-  puck.y+=puck.vy*.72;
+  collidePaddle(me,true);
+  collidePaddle(opp,false);
 
-  const err=Math.hypot(predictX-puck.x,predictY-puck.y);
+  const left=world.puckR,right=world.w-world.puckR;
+  if(puck.x<left){puck.x=left;puck.vx=Math.abs(puck.vx)*.92}
+  if(puck.x>right){puck.x=right;puck.vx=-Math.abs(puck.vx)*.92}
 
-  if(err>95){
-    // 大ズレ時だけ復帰。小ズレは補間で吸収。
-    puck.x=predictX;
-    puck.y=predictY;
-  }else{
-    const k=err<3 ? 0 : .30;
-    puck.x+=(predictX-puck.x)*k;
-    puck.y+=(predictY-puck.y)*k;
-  }
+  if(scoreCheck())return;
 
-  puck.vx+=(rvx-puck.vx)*.36;
-  puck.vy+=(rvy-puck.vy)*.36;
-}
-
-// 自分のマレットで押さえ込みはローカル即時反映。
-collidePaddle(me,true);
-}
-async function sendMe(){
-const t=now();
-if(rtcReady&&!isHost){
-  if(t-rtcLastJoinAt>=16){
-    rtcLastJoinAt=t;
-    rtcSend({type:'joinInput',tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2),x:+me.x.toFixed(2),y:+me.y.toFixed(2)});
-  }
-  return;
-}
-if(!connected||!playersRef)return;if(t-lastSend<33)return;lastSend=t;try{await playersRef.child(role).update({name,tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2),x:+me.x.toFixed(2),y:+me.y.toFixed(2),updatedAt:firebase.database.ServerValue.TIMESTAMP})}catch(e){}}
-async function sendState(){
-if(isHost&&rtcReady){
-  const t=now();
-  if(t-rtcLastStateAt>=16){
-    rtcLastStateAt=t;
+  const nextAuthority=roleForPuckY(puck.y);
+  if(nextAuthority!==authority){
+    authority=nextAuthority;
     rtcSend({
-      type:'state',
-      sentAt:performance.now(),
+      type:'puck',
+      handoff:true,
+      authority,
       puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
-      host:{x:+me.x.toFixed(2),y:+me.y.toFixed(2),tx:+me.tx.toFixed(2),ty:+me.ty.toFixed(2)},
-      join:{x:+opp.x.toFixed(2),y:+opp.y.toFixed(2),tx:+opp.tx.toFixed(2),ty:+opp.ty.toFixed(2)},
       score
     });
+    setMsg('中央線を越えたため、相手端末へパック権限を渡した。');
+    return;
   }
-  return;
+
+  const max=18,sp=Math.hypot(puck.vx,puck.vy);
+  if(sp>max){
+    puck.vx=puck.vx/sp*max;
+    puck.vy=puck.vy/sp*max;
+  }
 }
-if(!isHost||!connected||!stateRef)return;const ts=now();if(ts-lastPing<45)return;lastPing=ts;try{await stateRef.update({puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},score,tick:ts})}catch(e){}}
-function draw(){ctx.clearRect(0,0,W,H);const sc=Math.min(W/world.w,H/world.h),x0=W/2-world.w*sc/2,y0=H/2-world.h*sc/2;ctx.save();ctx.translate(x0,y0);ctx.scale(sc,sc);ctx.fillStyle='#082445';roundRect(0,0,world.w,world.h,26,true);ctx.strokeStyle='rgba(255,255,255,.65)';ctx.lineWidth=5;roundRect(6,6,world.w-12,world.h-12,22,false);ctx.strokeStyle='rgba(255,255,255,.45)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(12,world.h/2);ctx.lineTo(world.w-12,world.h/2);ctx.stroke();ctx.beginPath();ctx.arc(world.w/2,world.h/2,58,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#60a5fa';ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(world.w/2-world.goal/2,6);ctx.lineTo(world.w/2+world.goal/2,6);ctx.stroke();ctx.strokeStyle='#86efac';ctx.beginPath();ctx.moveTo(world.w/2-world.goal/2,world.h-6);ctx.lineTo(world.w/2+world.goal/2,world.h-6);ctx.stroke();drawPuck();drawPaddle(opp,role==='p2', '#60a5fa');drawPaddle(me,true,'#22c55e');ctx.restore();scoreEl.textContent=`${score.p1||0} - ${score.p2||0}`;leftInfo.innerHTML=`<span class="me">${role==='p1'?'あなた P1 下':'あなた P2 上'}</span><br>${name}<br>${rtcReady?'WEBRTC':(connected?'FIREBASE':'OFFLINE')}`;rightInfo.innerHTML=`ROOM ${roomId||'-'}<br><span class="op">相手 ${opp.online?'接続中':'待機中'}</span><br>${opp.name||''}`;if(started&&!opp.online)setMsg('相手待ち。Room IDを共有してJOINしてもらう。')}
-function drawPaddle(p,mine,color){ctx.save();ctx.shadowColor=color;ctx.shadowBlur=18;ctx.fillStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,world.paddleR,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='rgba(255,255,255,.78)';ctx.beginPath();ctx.arc(p.x,p.y,world.paddleR*.48,0,Math.PI*2);ctx.fill();ctx.restore()}
-function drawPuck(){ctx.save();ctx.shadowColor='#fff';ctx.shadowBlur=16;ctx.fillStyle='#e5e7eb';ctx.beginPath();ctx.arc(puck.x,puck.y,world.puckR,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='#111827';ctx.lineWidth=4;ctx.stroke();ctx.restore()}
-function roundRect(x,y,w,h,r,fill){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);if(fill)ctx.fill();else ctx.stroke()}
-let last=performance.now();function loop(t){const dt=Math.max(.001,Math.min(.033,(t-last)/1000));last=t;if(started){if(isHost)hostPhysics(dt);else clientPhysics(dt);sendMe();sendState()}draw();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+
+function simulateRemoteView(dt){
+  updatePaddle(me,dt,true);
+  updatePaddle(opp,dt,false);
+
+  if(remotePuck){
+    const rx=Number(remotePuck.x),ry=Number(remotePuck.y),rvx=Number(remotePuck.vx||0),rvy=Number(remotePuck.vy||0);
+    const px=rx+rvx*.65,py=ry+rvy*.65;
+
+    puck.x+=puck.vx*.55;
+    puck.y+=puck.vy*.55;
+
+    const err=Math.hypot(px-puck.x,py-puck.y);
+    if(err>85){
+      puck.x=px;puck.y=py;
+    }else{
+      puck.x+=(px-puck.x)*.28;
+      puck.y+=(py-puck.y)*.28;
+    }
+
+    puck.vx+=(rvx-puck.vx)*.32;
+    puck.vy+=(rvy-puck.vy)*.32;
+  }else{
+    puck.x+=puck.vx*.50;
+    puck.y+=puck.vy*.50;
+  }
+
+  // 自分側ではない時も、見た目の押さえ感だけ軽く出す。
+  collidePaddle(me,true);
+}
+
+function sendInput(){
+  if(!started||!rtcReady)return;
+  const t=now();
+  if(t-lastSendInput<16)return;
+  lastSendInput=t;
+  rtcSend({
+    type:'input',
+    role,
+    name,
+    tx:+me.tx.toFixed(2),
+    ty:+me.ty.toFixed(2),
+    x:+me.x.toFixed(2),
+    y:+me.y.toFixed(2)
+  });
+}
+
+function sendPuckState(){
+  if(!started||!rtcReady||!isMyAuthority())return;
+  const t=now();
+  if(t-lastSendState<33)return;
+  lastSendState=t;
+  rtcSend({
+    type:'puck',
+    handoff:false,
+    authority,
+    puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
+    score
+  });
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const sc=Math.min(W/world.w,H/world.h),x0=W/2-world.w*sc/2,y0=H/2-world.h*sc/2;
+  ctx.save();
+  ctx.translate(x0,y0);
+  ctx.scale(sc,sc);
+
+  ctx.fillStyle='#082445';
+  roundRect(0,0,world.w,world.h,26,true);
+
+  ctx.strokeStyle='rgba(255,255,255,.65)';
+  ctx.lineWidth=5;
+  roundRect(6,6,world.w-12,world.h-12,22,false);
+
+  ctx.strokeStyle='rgba(255,255,255,.45)';
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.moveTo(12,world.h/2);
+  ctx.lineTo(world.w-12,world.h/2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(world.w/2,world.h/2,58,0,Math.PI*2);
+  ctx.stroke();
+
+  ctx.strokeStyle='#60a5fa';
+  ctx.lineWidth=9;
+  ctx.beginPath();
+  ctx.moveTo(world.w/2-world.goal/2,6);
+  ctx.lineTo(world.w/2+world.goal/2,6);
+  ctx.stroke();
+
+  ctx.strokeStyle='#86efac';
+  ctx.beginPath();
+  ctx.moveTo(world.w/2-world.goal/2,world.h-6);
+  ctx.lineTo(world.w/2+world.goal/2,world.h-6);
+  ctx.stroke();
+
+  drawPuck();
+  drawPaddle(opp,false,'#60a5fa');
+  drawPaddle(me,true,'#22c55e');
+
+  ctx.fillStyle='rgba(255,255,255,.70)';
+  ctx.font='bold 13px system-ui';
+  ctx.textAlign='center';
+  ctx.fillText(authority===role?'LOCAL PUCK':'REMOTE PUCK',world.w/2,world.h/2+82);
+
+  ctx.restore();
+
+  scoreEl.textContent=`${score.p1||0} - ${score.p2||0}`;
+  leftInfo.innerHTML=`<span class="me">${role==='p1'?'あなた P1 下':'あなた P2 上'}</span><br>${name}<br>${rtcReady?'WEBRTC':started?'接続中':'OFFLINE'}<br>${authority===role?'物理担当':'表示側'}`;
+  rightInfo.innerHTML=`ROOM ${roomId||'-'}<br><span class="op">相手 ${opp.online?'接続中':'待機中'}</span><br>${opp.name||''}`;
+  if(started&&rtcReady&&!opp.online)setMsg('相手待ち。Room IDを共有してJOINしてもらう。');
+}
+
+function drawPaddle(p,mine,color){
+  ctx.save();
+  ctx.shadowColor=color;
+  ctx.shadowBlur=18;
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,world.paddleR,0,Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(255,255,255,.78)';
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,world.paddleR*.48,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPuck(){
+  ctx.save();
+  ctx.shadowColor=authority===role?'#86efac':'#fff';
+  ctx.shadowBlur=16;
+  ctx.fillStyle='#e5e7eb';
+  ctx.beginPath();
+  ctx.arc(puck.x,puck.y,world.puckR,0,Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.strokeStyle='#111827';
+  ctx.lineWidth=4;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function roundRect(x,y,w,h,r,fill){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  if(fill)ctx.fill();else ctx.stroke();
+}
+
+let last=performance.now();
+function loop(t){
+  const dt=Math.max(.001,Math.min(.033,(t-last)/1000));
+  last=t;
+
+  if(started){
+    if(isMyAuthority()){
+      simulateLocalAuthority(dt);
+      sendPuckState();
+    }else{
+      simulateRemoteView(dt);
+    }
+    sendInput();
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
 })();
 </script>
 </body>
