@@ -1,910 +1,941 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Online Air Hockey - WebRTC Local Authority</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SPARK WIRE PUYO - 1ブロック電線対戦</title>
 <style>
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07111f;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none;user-select:none}
-canvas{display:block;width:100vw;height:100vh;touch-action:none;background:#06101e}
-#panel{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#06101e,#0b2447 55%,#081426);z-index:20;padding:18px}
-#box{width:min(440px,94vw);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);border-radius:22px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
-h1{margin:0 0 8px;font-size:26px;letter-spacing:.04em}.sub{font-size:13px;color:#cfe5ff;line-height:1.55;margin-bottom:12px}
-input{width:100%;box-sizing:border-box;border:0;border-radius:14px;padding:13px 14px;font-size:18px;margin:7px 0;background:#fff;color:#111;font-weight:700;text-transform:uppercase}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
-button{border:0;border-radius:14px;padding:13px 10px;font-size:16px;font-weight:900;color:white;background:#22c55e;touch-action:manipulation}
-button.join{background:#3b82f6}button.copy{background:#64748b;width:100%;margin-top:10px}
-.small{font-size:12px;color:#bdd7ff;line-height:1.5;margin-top:10px}.warn{font-size:12px;color:#fecaca;line-height:1.5;margin-top:8px}
-#hud{position:fixed;left:10px;right:10px;top:10px;z-index:10;display:flex;justify-content:space-between;gap:8px;pointer-events:none}
-.card{background:rgba(0,0,0,.46);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 10px;font-size:12px;line-height:1.35;backdrop-filter:blur(6px)}
-#score{font-size:24px;font-weight:1000;letter-spacing:.08em;text-align:center;min-width:110px}.me{color:#86efac}.op{color:#93c5fd}
-#msg{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:11;background:rgba(0,0,0,.50);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 12px;font-size:12px;color:#e0f2fe;text-align:center;max-width:92vw;pointer-events:none}
-.hidden{display:none!important}
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: radial-gradient(circle at top, #25324d 0%, #101522 45%, #070910 100%);
+    color: #f5f7ff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+  #wrap {
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 6px;
+    padding: 8px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    letter-spacing: .04em;
+  }
+  .title {
+    font-size: clamp(14px, 4vw, 24px);
+    text-shadow: 0 0 12px #70d6ff;
+  }
+  .small {
+    font-size: 12px;
+    opacity: .8;
+    text-align: right;
+    line-height: 1.35;
+  }
+  canvas {
+    touch-action: none;
+    width: 100%;
+    height: 100%;
+    display: block;
+    border: 2px solid rgba(148, 207, 255, .45);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+    box-shadow: 0 0 24px rgba(0, 180, 255, .18), inset 0 0 24px rgba(255,255,255,.04);
+  }
+  #controls {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+  button {
+    border: 0;
+    border-radius: 14px;
+    padding: 12px 8px;
+    background: linear-gradient(180deg, #243856, #172234);
+    color: #f7fbff;
+    font-size: 16px;
+    font-weight: 800;
+    box-shadow: inset 0 1px rgba(255,255,255,.18), 0 4px 12px rgba(0,0,0,.35);
+  }
+  button:active { transform: translateY(2px); filter: brightness(1.25); }
+  #msg {
+    position: fixed;
+    left: 50%;
+    top: 52%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    font-size: clamp(28px, 9vw, 72px);
+    font-weight: 1000;
+    color: #fff;
+    text-align: center;
+    text-shadow: 0 0 18px #00e5ff, 0 0 32px #ffef5a, 0 6px 0 rgba(0,0,0,.35);
+    opacity: 0;
+    transition: opacity .2s;
+    white-space: pre-line;
+  }
+
+  #onlinePanel{position:fixed;inset:0;z-index:30;background:rgba(5,10,20,.86);display:flex;align-items:center;justify-content:center;padding:16px}
+  #onlineBox{width:min(430px,94vw);border:1px solid rgba(148,207,255,.45);border-radius:18px;background:linear-gradient(180deg,#15233a,#07101e);box-shadow:0 18px 60px rgba(0,0,0,.55);padding:16px}
+  #onlineBox h2{margin:0 0 8px;font-size:22px}
+  #onlineBox input{width:100%;margin:7px 0;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:#08111f;color:#fff;font-size:16px;font-weight:800;text-transform:uppercase}
+  #onlineBox .row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  #onlineBox button{background:linear-gradient(180deg,#1d9bf0,#0963a5)}
+  #onlineBox .solo{background:linear-gradient(180deg,#475569,#1f2937);width:100%;margin-top:8px}
+  #onlineStatus{font-size:12px;line-height:1.45;color:#dbeafe;margin-top:10px;min-height:34px}
+  #netBadge{position:fixed;left:10px;top:50px;z-index:20;background:rgba(0,0,0,.46);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:6px 9px;font-size:12px;font-weight:900;color:#e0f2fe;pointer-events:none}
+
 </style>
 </head>
 <body>
-<div id="panel">
-  <div id="box">
-    <h1>ONLINE AIR HOCKEY</h1>
-    <div class="sub">WebRTC DataChannel対戦。パックが自分側にある端末だけが物理演算を持ち、中央を越えたら相手へ権限を渡す。</div>
-    <input id="name" placeholder="PLAYER NAME" maxlength="16" />
-    <input id="room" placeholder="ROOM ID" maxlength="20" />
-    <div class="row"><button id="host">HOSTで部屋作成</button><button id="join" class="join">JOINで参加</button></div>
-    <button id="copy" class="copy">Room IDをコピー</button>
-    <div id="panelMsg" class="small">HOST側が下、JOIN側が上。タッチで自分のマレットを動かす。</div>
-    <div class="warn">FirebaseはWebRTC接続交換だけに使用。ゲーム中の主通信は端末間直結。</div>
+
+<div id="onlinePanel">
+  <div id="onlineBox">
+    <h2>SPARK WIRE ONLINE</h2>
+    <div class="small" style="text-align:left">HOSTが左、JOINが右。Room IDを共有して対戦。</div>
+    <input id="playerName" placeholder="PLAYER NAME" maxlength="16">
+    <input id="roomId" placeholder="ROOM ID" maxlength="20">
+    <div class="row"><button id="hostBtn">HOSTで部屋作成</button><button id="joinBtn">JOINで参加</button></div>
+    <button id="soloBtn" class="solo">ソロで開始</button>
+    <div id="onlineStatus">GitHub Pages等のhttps上で使用。</div>
   </div>
 </div>
-
-<div id="hud">
-  <div class="card" id="leftInfo">未接続</div>
-  <div class="card" id="score">0 - 0</div>
-  <div class="card" id="rightInfo">ROOM</div>
+<div id="netBadge">SOLO</div>
+<div id="wrap">
+  <header>
+    <div class="title">SPARK WIRE PUYO</div>
+    <div class="small">1ブロック電線対戦<br>4連結でスパーク、輪で大炎上</div>
+  </header>
+  <canvas id="game"></canvas>
+  <div id="controls">
+    <button data-k="ArrowLeft">←</button>
+    <button data-k="ArrowRight">→</button>
+    <button data-k="ArrowDown">↓加速</button>
+    <button data-k="ArrowUp">回転</button>
+    <button data-k="Space">即落下</button>
+  </div>
 </div>
-<div id="msg">待機中</div>
-<canvas id="c"></canvas>
+<div id="msg"></div>
 
-<script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js"></script>
 <script>
-(()=>{
-'use strict';
+(() => {
+  "use strict";
 
-const firebaseConfig={
-  apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",
-  authDomain:"minicra.firebaseapp.com",
-  databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:"minicra",
-  storageBucket:"minicra.firebasestorage.app",
-  messagingSenderId:"943025034725",
-  appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"
-};
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const msg = document.getElementById("msg");
 
-const $=id=>document.getElementById(id);
-const canvas=$('c'),ctx=canvas.getContext('2d'),panel=$('panel'),panelMsg=$('panelMsg'),msg=$('msg'),scoreEl=$('score'),leftInfo=$('leftInfo'),rightInfo=$('rightInfo');
+  const COLS = 6;
+  const ROWS = 12;
+  const DIRS = [
+    {x:0, y:-1, bit:1, opp:4, name:"N"},
+    {x:1, y:0, bit:2, opp:8, name:"E"},
+    {x:0, y:1, bit:4, opp:1, name:"S"},
+    {x:-1, y:0, bit:8, opp:2, name:"W"}
+  ];
 
-let W=innerWidth,H=innerHeight,DPR=1,db=null,roomId='',playerId='p_'+Math.random().toString(36).slice(2,10),name='PLAYER';
-let role='',isHost=false,roomRef=null,started=false,connected=false,rtcReady=false;
-let rtcPeer=null,rtcChannel=null,lastSendInput=0,lastSendState=0,lastRemoteAt=0,lastMsgAt=0;
-let authority='p1';
-let resetLockUntil=0;
-let localTouch=false;
+  const TYPES = [
+    {name:"STRAIGHT", mask:1|4, color:"#65d7ff"},
+    {name:"CURVE", mask:1|2, color:"#8cff9b"},
+    {name:"TEE", mask:1|2|8, color:"#ffd45d"},
+    {name:"CROSS", mask:1|2|4|8, color:"#ff86e7"},
+    {name:"ZIG", mask:2|4, color:"#9aa7ff"},
+    {name:"END", mask:1, color:"#ff8b69"}
+  ];
 
-const world={w:420,h:760,goal:126,paddleR:34,puckR:17,mid:380};
-const me={x:0,y:0,tx:0,ty:0,vx:0,vy:0};
-const opp={x:0,y:0,tx:0,ty:0,vx:0,vy:0,online:false,name:'相手'};
-const puck={x:0,y:0,vx:0,vy:0};
-let score={p1:0,p2:0};
-let sideNames={p1:'HOST',p2:'JOIN'};
-let remotePuck=null;
+  const SPARK_COLORS = ["#4df6ff", "#ffe75f", "#ff6cf1", "#81ff5d", "#ff5d5d"];
 
-let audioCtx=null;
-let flashTimer=0;
-let shakeTimer=0;
-let particles=[];
-let matchWinText='';
-let matchWinTimer=0;
+  let W = 0, H = 0, cell = 0, gap = 0, boardTop = 0;
+  let leftX = 0, rightX = 0;
+  let running = true;
+  let last = performance.now();
 
-function ensureAudio(){
-  if(audioCtx) return;
-  try{audioCtx=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}
-}
-function tone(freq=440,dur=.08,type='sine',gain=.03){
-  ensureAudio();
-  if(!audioCtx) return;
-  if(audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
-  const o=audioCtx.createOscillator();
-  const g=audioCtx.createGain();
-  o.type=type;
-  o.frequency.value=freq;
-  g.gain.value=gain;
-  o.connect(g);
-  g.connect(audioCtx.destination);
-  o.start();
-  g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+dur);
-  o.stop(audioCtx.currentTime+dur);
-}
-function sfx(name,power=1){
-  if(name==='start'){tone(520,.07,'square',.03);setTimeout(()=>tone(760,.08,'square',.03),80);return}
-  if(name==='hit'){tone(180+power*15,.045,'square',.022);return}
-  if(name==='wall'){tone(260,.035,'triangle',.018);return}
-  if(name==='goal'){tone(360,.08,'square',.035);setTimeout(()=>tone(540,.1,'square',.033),70);setTimeout(()=>tone(760,.14,'square',.03),150);return}
-  if(name==='win'){tone(330,.12,'sawtooth',.035);setTimeout(()=>tone(440,.12,'sawtooth',.035),120);setTimeout(()=>tone(660,.25,'sawtooth',.045),250);return}
-  if(name==='handoff'){tone(620,.045,'triangle',.025);return}
-  if(name==='hold'){tone(120,.03,'sine',.012);return}
-}
-function burst(x,y,color='#fff',count=18,force=7){
-  for(let i=0;i<count;i++){
-    const a=Math.random()*Math.PI*2;
-    const v=Math.random()*force;
-    particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:1,color});
+  const keys = new Set();
+
+  function rnd(n) { return Math.floor(Math.random() * n); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function rotateMask(mask) {
+    let out = 0;
+    if (mask & 1) out |= 2;
+    if (mask & 2) out |= 4;
+    if (mask & 4) out |= 8;
+    if (mask & 8) out |= 1;
+    return out;
   }
-}
-function updateFx(){
-  if(flashTimer>0) flashTimer*=.88;
-  if(matchWinTimer>0) matchWinTimer--;
-  if(shakeTimer>0) shakeTimer--;
-  for(let i=particles.length-1;i>=0;i--){
-    const p=particles[i];
-    p.x+=p.vx;p.y+=p.vy;
-    p.vx*=.96;p.vy*=.96;
-    p.life*=.94;
-    if(p.life<.04) particles.splice(i,1);
+
+  function makeBlock() {
+    const t = TYPES[rnd(TYPES.length)];
+    let rot = rnd(4);
+    let mask = t.mask;
+    for (let i = 0; i < rot; i++) mask = rotateMask(mask);
+    return {
+      mask,
+      base: t.name,
+      color: t.color,
+      charred: false,
+      burn: 0,
+      shock: 0
+    };
   }
-}
 
-function safeRoom(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20)}
-function randomRoom(){return Math.random().toString(36).slice(2,8).toUpperCase()}
-function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
-function now(){return Date.now()}
-function setMsg(t){msg.textContent=t;panelMsg.textContent=t}
-function resize(){DPR=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;canvas.width=Math.floor(W*DPR);canvas.height=Math.floor(H*DPR);ctx.setTransform(DPR,0,0,DPR,0,0)}
-addEventListener('resize',resize);resize();
-
-function sx(x){const scale=Math.min(W/world.w,H/world.h);return W/2+(x-world.w/2)*scale}
-function sy(y){const scale=Math.min(W/world.w,H/world.h);return H/2+(y-world.h/2)*scale}
-function inv(px,py){const scale=Math.min(W/world.w,H/world.h);return{x:(px-W/2)/scale+world.w/2,y:(py-H/2)/scale+world.h/2}}
-
-function initFirebase(){
-  if(db)return true;
-  if(!window.firebase||!firebase.database){
-    setMsg('Firebaseを読み込めない。GitHub Pages等のhttps配置で再読込。');
-    return false;
+  function cloneBlock(b) {
+    return { mask:b.mask, base:b.base, color:b.color, charred:b.charred, burn:b.burn || 0, shock:b.shock || 0 };
   }
-  if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
-  db=firebase.database();
-  return true;
-}
 
-function resetPuck(dir){
-  puck.x=world.w/2;
-  puck.y=world.h/2;
-  puck.vx=(Math.random()-.5)*3;
-  puck.vy=(dir||1)*(4.2+Math.random()*1.3);
-  authority=puck.y>=world.h/2?'p1':'p2';
-  remotePuck=null;
-}
-
-function resetPlayers(){
-  me.x=world.w/2;me.tx=me.x;
-  opp.x=world.w/2;opp.tx=opp.x;
-  if(role==='p1'){
-    me.y=world.h-105;me.ty=me.y;
-    opp.y=105;opp.ty=opp.y;
-  }else{
-    me.y=105;me.ty=me.y;
-    opp.y=world.h-105;opp.ty=opp.y;
+  function makePlayer(side) {
+    return {
+      side,
+      grid: Array.from({length:ROWS}, () => Array(COLS).fill(null)),
+      active: null,
+      next: makeBlock(),
+      score: 0,
+      combo: 0,
+      pendingLightning: 0,
+      fallTimer: 0,
+      aiTimer: 0,
+      spark: { x: rnd(COLS), y: ROWS - 1, fromX: rnd(COLS), fromY: ROWS - 1, renderX: rnd(COLS), renderY: ROWS - 1, dir: rnd(4), t: 0, speed: 6.2, chain: 0, colorIndex: 0, trail: [] },
+      gameOver: false,
+      flash: 0,
+      name: side === "L" ? "PLAYER" : "RIVAL"
+    };
   }
-}
 
-function roleForPuckY(y){
-  return y>=world.h/2?'p1':'p2';
-}
+  const P1 = makePlayer("L");
+  const P2 = makePlayer("R");
 
-function isMyAuthority(){
-  return authority===role;
-}
+  const firebaseConfig = {
+    apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",
+    authDomain:"minicra.firebaseapp.com",
+    databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId:"minicra",
+    storageBucket:"minicra.firebasestorage.app",
+    messagingSenderId:"943025034725",
+    appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"
+  };
 
-function rtcSend(obj){
-  if(!rtcChannel||rtcChannel.readyState!=='open')return false;
-  try{
-    rtcChannel.send(JSON.stringify(obj));
+  const onlinePanel = document.getElementById("onlinePanel");
+  const onlineStatus = document.getElementById("onlineStatus");
+  const netBadge = document.getElementById("netBadge");
+  const playerNameInput = document.getElementById("playerName");
+  const roomIdInput = document.getElementById("roomId");
+
+  let db = null;
+  let roomRef = null;
+  let onlineRole = "solo";
+  let isOnline = false;
+  let isHost = false;
+  let lastNetSend = 0;
+  let remoteInput = {};
+  const remoteKeys = new Set();
+  P1.input = keys;
+  P2.input = remoteKeys;
+
+  function setOnlineStatus(t){ if(onlineStatus) onlineStatus.textContent = t; if(netBadge) netBadge.textContent = t; }
+  function safeRoom(s){ return String(s||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20); }
+  function randomRoom(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
+  function initFirebase(){
+    if(db) return true;
+    if(!window.firebase || !firebase.database){ setOnlineStatus("Firebase読込不可。https配置で再読込。Web版はそのままソロ可"); return false; }
+    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
     return true;
-  }catch(e){
-    return false;
   }
-}
 
-function initWebRTC(){
-  rtcPeer=new RTCPeerConnection({
-    iceServers:[{urls:'stun:stun.l.google.com:19302'}]
-  });
-
-  rtcPeer.onicecandidate=async e=>{
-    if(!e.candidate||!roomRef)return;
-    const path=isHost?'rtc_hostCandidates':'rtc_joinCandidates';
-    try{await roomRef.child(path).push(e.candidate.toJSON())}catch(err){}
-  };
-
-  rtcPeer.ondatachannel=e=>{
-    setupRTCChannel(e.channel);
-  };
-}
-
-function setupRTCChannel(ch){
-  rtcChannel=ch;
-
-  rtcChannel.onopen=()=>{
-    rtcReady=true;
-    connected=true;
-    setMsg('WebRTC直結完了。パック側端末が物理担当。');
-  };
-
-  rtcChannel.onclose=()=>{
-    rtcReady=false;
-    setMsg('WebRTC切断。再読込して再接続。');
-  };
-
-  rtcChannel.onerror=()=>{
-    rtcReady=false;
-  };
-
-  rtcChannel.onmessage=e=>{
-    let m;
-    try{m=JSON.parse(e.data)}catch(err){return}
-
-    if(m.type==='input'){
-      if(m.role!==role){
-        opp.online=true;
-        opp.name=m.name||opp.name;
-        opp.tx=Number(m.tx);
-        opp.ty=Number(m.ty);
-        opp.x=Number(m.x ?? opp.x);
-        opp.y=Number(m.y ?? opp.y);
-        sideNames[m.role]=opp.name;
-      }
-      return;
+  function spawn(p) {
+    p.active = {
+      x: Math.floor(COLS/2),
+      y: 0,
+      block: cloneBlock(p.next)
+    };
+    p.next = makeBlock();
+    if (occupied(p, p.active.x, p.active.y)) {
+      p.gameOver = true;
+      running = false;
+      showMessage(p.side === "L" ? "YOU LOSE" : "YOU WIN");
     }
+  }
 
-    if(m.type==='puck'){
-      authority=m.authority || authority;
-      score=m.score || score;
-      remotePuck=m.puck;
-      lastRemoteAt=performance.now();
-  resetLockUntil=performance.now()+350;
+  function occupied(p, x, y) {
+    return x < 0 || x >= COLS || y < 0 || y >= ROWS || !!p.grid[y][x];
+  }
 
-      // 自分が新しい権限側になった瞬間だけ、相手から受け取った状態をそのまま採用してローカル物理開始。
-      if(authority===role && m.handoff){
-        puck.x=Number(m.puck.x);
-        puck.y=Number(m.puck.y);
-        puck.vx=Number(m.puck.vx||0);
-        puck.vy=Number(m.puck.vy||0);
-        remotePuck=null;
-        if(now()-lastMsgAt>500){
-          lastMsgAt=now();
-          setMsg('パック権限を受け取った。ここから自端末で物理演算。');
+  function canMove(p, dx, dy) {
+    if (!p.active) return false;
+    const x = p.active.x + dx;
+    const y = p.active.y + dy;
+    return x >= 0 && x < COLS && y >= 0 && y < ROWS && !p.grid[y][x];
+  }
+
+  function lockBlock(p) {
+    const a = p.active;
+    if (!a) return;
+    p.grid[a.y][a.x] = cloneBlock(a.block);
+    p.active = null;
+    applyPendingLightning(p);
+    spawn(p);
+  }
+
+  function hardDrop(p) {
+    if (!p.active || p.gameOver) return;
+    while (canMove(p, 0, 1)) p.active.y++;
+    lockBlock(p);
+  }
+
+  function rotateActive(p) {
+    if (!p.active) return;
+    p.active.block.mask = rotateMask(p.active.block.mask);
+  }
+
+  function applyGravity(p) {
+    for (let x = 0; x < COLS; x++) {
+      let write = ROWS - 1;
+      for (let y = ROWS - 1; y >= 0; y--) {
+        if (p.grid[y][x]) {
+          if (write !== y) {
+            p.grid[write][x] = p.grid[y][x];
+            p.grid[y][x] = null;
+          }
+          write--;
         }
       }
-      return;
     }
-
-    if(m.type==='score'){
-      score=m.score||score;
-      resetFromRemote(m);
-      return;
-    }
-
-    if(m.type==='reset'){
-      applyRemoteReset(m);
-      return;
-    }
-  };
-}
-
-async function startWebRTCHost(){
-  initWebRTC();
-
-  rtcChannel=rtcPeer.createDataChannel('game',{
-    ordered:false,
-    maxRetransmits:0
-  });
-  setupRTCChannel(rtcChannel);
-
-  const offer=await rtcPeer.createOffer();
-  await rtcPeer.setLocalDescription(offer);
-
-  await roomRef.child('rtc_offer').set({
-    type:offer.type,
-    sdp:offer.sdp
-  });
-
-  roomRef.child('rtc_answer').on('value',async snap=>{
-    const v=snap.val();
-    if(v&&!rtcPeer.currentRemoteDescription){
-      try{await rtcPeer.setRemoteDescription(new RTCSessionDescription(v))}catch(e){}
-    }
-  });
-
-  roomRef.child('rtc_joinCandidates').on('child_added',snap=>{
-    try{rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()))}catch(e){}
-  });
-}
-
-async function startWebRTCJoin(){
-  initWebRTC();
-
-  const offerSnap=await roomRef.child('rtc_offer').get();
-  if(!offerSnap.exists()){
-    setMsg('ROOMはあるがWebRTC offerなし。HOST側で作り直してからJOIN。');
-    return;
   }
 
-  await rtcPeer.setRemoteDescription(new RTCSessionDescription(offerSnap.val()));
+  function applyPendingLightning(p) {
+    while (p.pendingLightning > 0) {
+      const candidates = [];
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (p.grid[y][x]) candidates.push({x, y});
+        }
+      }
+      if (candidates.length === 0) break;
+      const hit = candidates[rnd(candidates.length)];
+      p.grid[hit.y][hit.x].charred = true;
+      p.grid[hit.y][hit.x].mask = 0;
+      p.grid[hit.y][hit.x].color = "#252525";
+      p.grid[hit.y][hit.x].shock = 28;
+      p.pendingLightning--;
+    }
+  }
 
-  const answer=await rtcPeer.createAnswer();
-  await rtcPeer.setLocalDescription(answer);
+  function getConnections(grid, x, y) {
+    const b = grid[y]?.[x];
+    if (!b) return [];
+    if (b.charred) return [];
+    return DIRS.map((d, i) => ({...d, i})).filter(d => b.mask & d.bit);
+  }
 
-  await roomRef.child('rtc_answer').set({
-    type:answer.type,
-    sdp:answer.sdp
-  });
+  function connectedNeighbors(p, x, y) {
+    const out = [];
+    const b = p.grid[y]?.[x];
+    if (!b || b.charred) return out;
+    for (let i = 0; i < DIRS.length; i++) {
+      const d = DIRS[i];
+      if (!(b.mask & d.bit)) continue;
+      const nx = x + d.x;
+      const ny = y + d.y;
+      const nb = p.grid[ny]?.[nx];
+      if (!nb || nb.charred) continue;
+      if (nb.mask & d.opp) out.push({x:nx, y:ny, dir:i});
+    }
+    return out;
+  }
 
-  roomRef.child('rtc_hostCandidates').on('child_added',snap=>{
-    try{rtcPeer.addIceCandidate(new RTCIceCandidate(snap.val()))}catch(e){}
-  });
-}
+  function findComponent(p, sx, sy) {
+    const start = p.grid[sy]?.[sx];
+    if (!start || start.charred) return {cells:[], edges:0, loop:false};
+    const seen = new Set();
+    const stack = [{x:sx, y:sy}];
+    let edges = 0;
+    while (stack.length) {
+      const c = stack.pop();
+      const k = c.x + "," + c.y;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const ns = connectedNeighbors(p, c.x, c.y);
+      edges += ns.length;
+      for (const n of ns) stack.push({x:n.x, y:n.y});
+    }
+    const cells = [...seen].map(k => {
+      const [x,y] = k.split(",").map(Number);
+      return {x,y};
+    });
+    edges = edges / 2;
+    const loop = cells.length >= 4 && edges >= cells.length;
+    return {cells, edges, loop};
+  }
 
-async function start(host){
-  ensureAudio();
-  if(!initFirebase())return;
-
-  name=($('name').value||('P'+playerId.slice(-4))).slice(0,16);
-  roomId=safeRoom($('room').value)||randomRoom();
-  $('room').value=roomId;
-
-  isHost=host;
-  role=host?'p1':'p2';
-  roomRef=db.ref('airhockey_rooms/'+roomId);
-
-  setMsg((host?'HOST作成中':'JOIN接続中')+' ROOM '+roomId);
-
-  try{
-    if(host){
-      await roomRef.set({
-        meta:{host:playerId,createdAt:firebase.database.ServerValue.TIMESTAMP},
-        rtc_offer:null,
-        rtc_answer:null,
-        rtc_hostCandidates:null,
-        rtc_joinCandidates:null
-      });
-    }else{
-      const snap=await roomRef.get();
-      if(!snap.exists()){
-        setMsg('そのROOMは存在しない。先にHOSTで部屋作成。');
-        return;
+  function burnCells(p, cells, loop) {
+    const set = new Set(cells.map(c => c.x + "," + c.y));
+    if (loop) {
+      for (const c of cells) {
+        for (let yy = c.y - 1; yy <= c.y + 1; yy++) {
+          for (let xx = c.x - 1; xx <= c.x + 1; xx++) {
+            if (xx >= 0 && xx < COLS && yy >= 0 && yy < ROWS && p.grid[yy][xx]) {
+              set.add(xx + "," + yy);
+            }
+          }
+        }
+      }
+    } else {
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const b = p.grid[y][x];
+          if (!b || !b.charred) continue;
+          for (const c of cells) {
+            if (Math.abs(c.x - x) + Math.abs(c.y - y) === 1) set.add(x + "," + y);
+          }
+        }
       }
     }
 
-    started=true;
-    resetPlayers();
-
-    if(isHost){
-      resetPuck(-1);
-      await startWebRTCHost();
-    }else{
-      resetPuck(1);
-      await startWebRTCJoin();
-    }
-
-    panel.classList.add('hidden');
-    sfx('start');
-    setMsg((role==='p1'?'下側P1':'上側P2')+'で参加。自分側に来たパックは自端末で物理演算。');
-  }catch(e){
-    console.error(e);
-    setMsg('接続失敗。Firebase設定・Databaseルール・通信を確認。');
-  }
-}
-
-$('room').value=randomRoom();
-$('name').value='P'+playerId.slice(-4).toUpperCase();
-$('host').onclick=()=>start(true);
-$('join').onclick=()=>start(false);
-$('copy').onclick=async()=>{
-  try{
-    await navigator.clipboard.writeText($('room').value);
-    setMsg('Room IDをコピーした。相手に送ってJOINしてもらう。');
-  }catch(e){
-    setMsg('Room ID: '+$('room').value);
-  }
-};
-
-function setTargetFromPointer(e){
-  ensureAudio();
-  if(!started)return;
-  const p=e.touches?e.touches[0]:e;
-  const q=inv(p.clientX,p.clientY);
-  const half=world.h/2;
-  let y=q.y;
-
-  if(role==='p1'){
-    y=clamp(y,half+world.paddleR,world.h-world.paddleR-18);
-  }else{
-    y=clamp(y,world.paddleR+18,half-world.paddleR);
-  }
-
-  me.tx=clamp(q.x,world.paddleR+10,world.w-world.paddleR-10);
-  me.ty=y;
-  localTouch=true;
-}
-
-canvas.addEventListener('touchstart',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});
-canvas.addEventListener('touchmove',e=>{e.preventDefault();setTargetFromPointer(e)},{passive:false});
-canvas.addEventListener('touchend',e=>{e.preventDefault();localTouch=false},{passive:false});
-canvas.addEventListener('pointerdown',e=>{e.preventDefault();setTargetFromPointer(e)});
-canvas.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch')setTargetFromPointer(e)});
-canvas.addEventListener('pointerup',()=>{localTouch=false});
-
-function updatePaddle(p,dt,isMe){
-  const oldX=p.x,oldY=p.y;
-  const follow=isMe&&localTouch?.58:.34;
-  p.x+=(p.tx-p.x)*follow;
-  p.y+=(p.ty-p.y)*follow;
-  // パック衝突用は「1フレーム移動量」にする。dtで割ると速度が暴発して画面外へ飛ぶ。
-  p.vx=(p.x-oldX);
-  p.vy=(p.y-oldY);
-}
-
-function collidePaddle(p,isLocal){
-  const dx=puck.x-p.x,dy=puck.y-p.y;
-  const dist=Math.hypot(dx,dy);
-  const min=world.paddleR+world.puckR;
-
-  // 高速時にすり抜けると「打てない」になるため、当たり判定を少し太らせる。
-  const speed=Math.hypot(p.vx,p.vy);
-  const activePad=isLocal&&localTouch;
-  const hitRange=min+(activePad?18:8);
-
-  if(dist>0&&dist<hitRange){
-    const nx=dx/dist,ny=dy/dist;
-    const over=Math.max(0,min-dist);
-    puck.x+=nx*(over+1.5);
-    puck.y+=ny*(over+1.5);
-
-    const rel=(puck.vx-p.vx)*nx+(puck.vy-p.vy)*ny;
-    if(rel<0){
-      puck.vx-=1.72*rel*nx;
-      puck.vy-=1.72*rel*ny;
-    }
-
-    // マレット速度を強くパックへ載せる。タッチで振った時に確実に打てるようにする。
-    puck.vx+=p.vx*.62;
-    puck.vy+=p.vy*.62;
-
-    // 低速で真上から押さえた時は止める。速く振った時は強打。
-    const hold=activePad&&dist<world.paddleR+world.puckR*.55&&speed<8.5;
-    if(hold){
-      puck.vx*=.28;
-      puck.vy*=.28;
-      puck.x=p.x+nx*min;
-      puck.y=p.y+ny*min;
-    }
-
-    const max=17,sp=Math.hypot(puck.vx,puck.vy);
-    if(sp>max){
-      puck.vx=puck.vx/sp*max;
-      puck.vy=puck.vy/sp*max;
-    }
-
-    sfx(hold?'hold':'hit',Math.hypot(puck.vx,puck.vy));
-    burst(puck.x,puck.y,isLocal?'#22c55e':'#60a5fa',hold?8:14,hold?2:6);
-    shakeTimer=Math.max(shakeTimer,hold?2:5);
-    return true;
-  }
-
-  return false;
-}
-
-function resetFromRemote(m){
-  applyRemoteReset(m);
-}
-
-
-function hardResetAfterGoal(nextDir, nextAuthority){
-  // ゴール後は残留速度・remotePuck・権限を全消しして中央に置き直す。
-  puck.x=world.w/2;
-  puck.y=world.h/2;
-  puck.vx=(Math.random()-.5)*1.4;
-  puck.vy=nextDir*(4.0+Math.random()*.8);
-
-  authority=nextAuthority || roleForPuckY(puck.y);
-  remotePuck=null;
-  lastRemoteAt=performance.now();
-  resetLockUntil=performance.now()+450;
-
-  // マレットも所定位置へ戻す。ゴール直後の接触暴発を防ぐ。
-  if(role==='p1'){
-    me.x=world.w/2; me.y=world.h-105; me.tx=me.x; me.ty=me.y;
-    opp.x=world.w/2; opp.y=105; opp.tx=opp.x; opp.ty=opp.y;
-  }else{
-    me.x=world.w/2; me.y=105; me.tx=me.x; me.ty=me.y;
-    opp.x=world.w/2; opp.y=world.h-105; opp.tx=opp.x; opp.ty=opp.y;
-  }
-
-  rtcSend({
-    type:'reset',
-    score,
-    authority,
-    puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)}
-  });
-}
-
-function applyRemoteReset(m){
-  score=m.score||score;
-  authority=m.authority||authority;
-  remotePuck=null;
-  if(m.puck){
-    puck.x=Number(m.puck.x);
-    puck.y=Number(m.puck.y);
-    puck.vx=Number(m.puck.vx||0);
-    puck.vy=Number(m.puck.vy||0);
-  }else{
-    puck.x=world.w/2;
-    puck.y=world.h/2;
-    puck.vx=0;
-    puck.vy=0;
-  }
-
-  if(role==='p1'){
-    me.x=world.w/2; me.y=world.h-105; me.tx=me.x; me.ty=me.y;
-    opp.x=world.w/2; opp.y=105; opp.tx=opp.x; opp.ty=opp.y;
-  }else{
-    me.x=world.w/2; me.y=105; me.tx=me.x; me.ty=me.y;
-    opp.x=world.w/2; opp.y=world.h-105; opp.tx=opp.x; opp.ty=opp.y;
-  }
-
-  resetLockUntil=performance.now()+450;
-  setMsg('ゴール。全状態リセットして中央から再開。');
-}
-
-
-function checkMatchWin(){
-  if(score.p1>=7){
-    matchWinText='P1 WIN';
-    matchWinTimer=180;
-    sfx('win');
-    burst(world.w/2,world.h/2,'#86efac',70,10);
-    score={p1:0,p2:0};
-    return true;
-  }
-  if(score.p2>=7){
-    matchWinText='P2 WIN';
-    matchWinTimer=180;
-    sfx('win');
-    burst(world.w/2,world.h/2,'#60a5fa',70,10);
-    score={p1:0,p2:0};
-    return true;
-  }
-  return false;
-}
-
-function scoreCheck(){
-  const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;
-
-  if(puck.y<world.puckR){
-    if(inGoal){
-      score.p1++;
-      sfx('goal');flashTimer=1;shakeTimer=16;burst(world.w/2,world.puckR+18,'#86efac',48,9);checkMatchWin();
-      hardResetAfterGoal(1,'p1');
-      setMsg('P1 GOAL。全リセットして中央再開。');
-      return true;
-    }else{
-      puck.y=world.puckR;
-      puck.vy=Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
-    }
-  }
-
-  if(puck.y>world.h-world.puckR){
-    if(inGoal){
-      score.p2++;
-      sfx('goal');flashTimer=1;shakeTimer=16;burst(world.w/2,world.h-world.puckR-18,'#60a5fa',48,9);checkMatchWin();
-      hardResetAfterGoal(-1,'p2');
-      setMsg('P2 GOAL。全リセットして中央再開。');
-      return true;
-    }else{
-      puck.y=world.h-world.puckR;
-      puck.vy=-Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
-    }
-  }
-
-  return false;
-}
-
-
-function keepPuckInTable(){
-  const left=world.puckR,right=world.w-world.puckR;
-  if(puck.x<left){
-    puck.x=left;
-    puck.vx=Math.abs(puck.vx)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
-  }
-  if(puck.x>right){
-    puck.x=right;
-    puck.vx=-Math.abs(puck.vx)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
-  }
-
-  // ゴール外なら上下も必ず跳ね返す。これで画面外へ流れて終了を防ぐ。
-  const inGoal=Math.abs(puck.x-world.w/2)<world.goal/2;
-  if(puck.y<world.puckR && !inGoal){
-    puck.y=world.puckR;
-    puck.vy=Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
-  }
-  if(puck.y>world.h-world.puckR && !inGoal){
-    puck.y=world.h-world.puckR;
-    puck.vy=-Math.abs(puck.vy)*.92;sfx('wall');shakeTimer=Math.max(shakeTimer,2);
-  }
-
-  // 異常値保険。通信ズレや初動暴発でも盤面へ戻す。
-  if(!Number.isFinite(puck.x)||!Number.isFinite(puck.y)||Math.abs(puck.x)>world.w*4||Math.abs(puck.y)>world.h*4){
-    resetPuck(role==='p1'?-1:1);
-  }
-}
-
-function simulateLocalAuthority(dt){
-  updatePaddle(me,dt,true);
-  updatePaddle(opp,dt,false);
-
-  puck.x+=puck.vx;
-  puck.y+=puck.vy;
-  puck.vx*=.994;
-  puck.vy*=.994;
-
-  if(performance.now()>resetLockUntil){
-    collidePaddle(me,true);
-    collidePaddle(opp,false);
-  }
-
-  keepPuckInTable();
-
-  if(scoreCheck())return;
-
-  const nextAuthority=roleForPuckY(puck.y);
-  if(nextAuthority!==authority){
-    authority=nextAuthority;
-    rtcSend({
-      type:'puck',
-      handoff:true,
-      authority,
-      puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
-      score
+    const finalCells = [...set].map(k => {
+      const [x, y] = k.split(",").map(Number);
+      return {x, y};
     });
-    sfx('handoff');
-    setMsg('中央線を越えたため、相手端末へパック権限を渡した。');
-    return;
-  }
 
-  const max=17,sp=Math.hypot(puck.vx,puck.vy);
-  if(sp>max){
-    puck.vx=puck.vx/sp*max;
-    puck.vy=puck.vy/sp*max;
-  }
-}
-
-function simulateRemoteView(dt){
-  updatePaddle(me,dt,true);
-  updatePaddle(opp,dt,false);
-
-  if(remotePuck){
-    const rx=Number(remotePuck.x),ry=Number(remotePuck.y),rvx=Number(remotePuck.vx||0),rvy=Number(remotePuck.vy||0);
-    const px=rx+rvx*.65,py=ry+rvy*.65;
-
-    puck.x+=puck.vx*.55;
-    puck.y+=puck.vy*.55;
-
-    const err=Math.hypot(px-puck.x,py-puck.y);
-    if(err>85){
-      puck.x=px;puck.y=py;
-    }else{
-      puck.x+=(px-puck.x)*.28;
-      puck.y+=(py-puck.y)*.28;
+    for (const c of finalCells) {
+      const b = p.grid[c.y][c.x];
+      if (b) b.burn = loop ? 46 : 30;
     }
 
-    puck.vx+=(rvx-puck.vx)*.32;
-    puck.vy+=(rvy-puck.vy)*.32;
-  }else{
-    puck.x+=puck.vx*.50;
-    puck.y+=puck.vy*.50;
+    setTimeout(() => {
+      let removed = 0;
+      for (const c of finalCells) {
+        if (p.grid[c.y]?.[c.x]) {
+          p.grid[c.y][c.x] = null;
+          removed++;
+        }
+      }
+      if (removed > 0) {
+        p.combo++;
+        const add = removed * 100 * p.combo + (loop ? 800 : 0);
+        p.score += add;
+        const enemy = p === P1 ? P2 : P1;
+        enemy.pendingLightning += Math.max(1, Math.floor(removed / 3) + p.combo - 1 + (loop ? 2 : 0));
+        p.spark.colorIndex = (p.spark.colorIndex + 1) % SPARK_COLORS.length;
+        p.spark.chain = 0;
+        p.spark.speed = 6.2;
+        p.flash = 22;
+        showMessage((loop ? "大炎上" : "SPARK") + "\n" + removed + " BLOCK x" + p.combo);
+        applyGravity(p);
+        setTimeout(() => {
+          const anyBurn = scanSparkable(p);
+          if (!anyBurn) p.combo = 0;
+        }, 260);
+      }
+    }, loop ? 420 : 300);
   }
 
-  keepPuckInTable();
-
-  // 権限が相手側でも、自分のマレットに当たった瞬間はローカル即打撃へ切替。
-  // これを入れないと「見た目では当たっているのに打てない」状態になる。
-  const localHit=performance.now()>resetLockUntil ? collidePaddle(me,true) : false;
-  if(localHit && localTouch){
-    authority=role;
-    remotePuck=null;
-    rtcSend({
-      type:'puck',
-      handoff:true,
-      authority,
-      puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
-      score
-    });
-    setMsg('ローカル打撃。自端末がパック権限を取得。');
+  function scanSparkable(p) {
+    const checked = new Set();
+    let found = false;
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const b = p.grid[y][x];
+        const k = x + "," + y;
+        if (!b || b.charred || checked.has(k)) continue;
+        const comp = findComponent(p, x, y);
+        for (const c of comp.cells) checked.add(c.x + "," + c.y);
+        if (comp.cells.length >= 4) {
+          found = true;
+          burnCells(p, comp.cells, comp.loop);
+          return true;
+        }
+      }
+    }
+    return found;
   }
-}
 
-function sendInput(){
-  if(!started||!rtcReady)return;
-  const t=now();
-  if(t-lastSendInput<16)return;
-  lastSendInput=t;
-  rtcSend({
-    type:'input',
-    role,
-    name,
-    tx:+me.tx.toFixed(2),
-    ty:+me.ty.toFixed(2),
-    x:+me.x.toFixed(2),
-    y:+me.y.toFixed(2)
-  });
-}
+  function stepSpark(p, dt) {
+    const s = p.spark;
 
-function sendPuckState(){
-  if(!started||!rtcReady||!isMyAuthority())return;
-  const t=now();
-  if(t-lastSendState<33)return;
-  lastSendState=t;
-  rtcSend({
-    type:'puck',
-    handoff:false,
-    authority,
-    puck:{x:+puck.x.toFixed(2),y:+puck.y.toFixed(2),vx:+puck.vx.toFixed(3),vy:+puck.vy.toFixed(3)},
-    score
-  });
-}
+    for (const t of s.trail) t.a *= Math.pow(0.18, dt);
 
-function draw(){
-  updateFx();
+    s.t += dt * s.speed;
 
-  ctx.setTransform(DPR,0,0,DPR,0,0);
-  ctx.clearRect(0,0,W,H);
+    while (s.t >= 1) {
+      s.t -= 1;
 
-  const sc=Math.min(W/world.w,H/world.h);
-  const x0=W/2-world.w*sc/2;
-  const y0=H/2-world.h*sc/2;
-  const shx=shakeTimer>0?(Math.random()-.5)*7:0;
-  const shy=shakeTimer>0?(Math.random()-.5)*7:0;
+      let b = p.grid[s.y]?.[s.x];
+      if (!b || b.charred) {
+        let tries = 0;
+        do {
+          s.x = rnd(COLS);
+          s.y = rnd(ROWS);
+          tries++;
+        } while ((!p.grid[s.y][s.x] || p.grid[s.y][s.x].charred) && tries < 40);
 
-  ctx.save();
-  ctx.translate(x0+shx,y0+shy);
-  ctx.scale(sc,sc);
+        s.fromX = s.x;
+        s.fromY = s.y;
+        s.renderX = s.x;
+        s.renderY = s.y;
+        s.dir = rnd(4);
+        s.chain = 0;
+        s.speed = 6.2;
+        s.t = 0;
+        break;
+      }
 
-  const grd=ctx.createLinearGradient(0,0,0,world.h);
-  grd.addColorStop(0,'#0b2d57');
-  grd.addColorStop(.5,'#123d6b');
-  grd.addColorStop(1,'#0a2544');
-  ctx.fillStyle=grd;
-  roundRect(0,0,world.w,world.h,26,true);
+      const options = connectedNeighbors(p, s.x, s.y);
+      if (options.length) {
+        let next = options.find(n => n.dir !== (s.dir + 2) % 4) || options[rnd(options.length)];
+        if (Math.random() < 0.18) next = options[rnd(options.length)];
 
-  ctx.strokeStyle='rgba(255,255,255,.65)';
-  ctx.lineWidth=5;
-  roundRect(6,6,world.w-12,world.h-12,22,false);
+        s.fromX = s.x;
+        s.fromY = s.y;
+        s.x = next.x;
+        s.y = next.y;
+        s.dir = next.dir;
+        s.chain++;
 
-  ctx.strokeStyle='rgba(255,255,255,.45)';
-  ctx.lineWidth=4;
-  ctx.beginPath();
-  ctx.moveTo(12,world.h/2);
-  ctx.lineTo(world.w-12,world.h/2);
-  ctx.stroke();
+        s.trail.push({x:s.fromX, y:s.fromY, a:1, color:SPARK_COLORS[s.colorIndex]});
+        if (s.trail.length > 26) s.trail.shift();
 
-  ctx.beginPath();
-  ctx.arc(world.w/2,world.h/2,58,0,Math.PI*2);
-  ctx.stroke();
+        const comp = findComponent(p, s.x, s.y);
+        if (comp.cells.length >= 4) {
+          s.speed = Math.max(2.4, 6.2 - comp.cells.length * 0.28);
+          if (s.chain >= Math.max(4, Math.floor(comp.cells.length * 0.85))) {
+            burnCells(p, comp.cells, comp.loop);
+          }
+        } else {
+          s.speed = 6.2;
+        }
+      } else {
+        s.fromX = s.x;
+        s.fromY = s.y;
+        s.dir = rnd(4);
+        s.chain = 0;
+        s.speed = 6.2;
+        const dirs = getConnections(p.grid, s.x, s.y);
+        if (dirs.length) s.dir = dirs[rnd(dirs.length)].i;
+      }
+    }
 
-  ctx.strokeStyle='#60a5fa';
-  ctx.lineWidth=9;
-  ctx.beginPath();
-  ctx.moveTo(world.w/2-world.goal/2,6);
-  ctx.lineTo(world.w/2+world.goal/2,6);
-  ctx.stroke();
+    const ease = s.t * s.t * (3 - 2 * s.t);
+    s.renderX = s.fromX + (s.x - s.fromX) * ease;
+    s.renderY = s.fromY + (s.y - s.fromY) * ease;
+  }
 
-  ctx.strokeStyle='#86efac';
-  ctx.beginPath();
-  ctx.moveTo(world.w/2-world.goal/2,world.h-6);
-  ctx.lineTo(world.w/2+world.goal/2,world.h-6);
-  ctx.stroke();
+  function updatePlayer(p, dt, human) {
+    if (p.gameOver) return;
+    if (!p.active) spawn(p);
 
-  for(let i=5;i>=1;i--){
-    ctx.globalAlpha=.055*i;
-    ctx.fillStyle=authority===role?'#86efac':'#ffffff';
+    if (human) {
+      const input = p.input || keys;
+      if (input.has("ArrowLeft") && canMove(p, -1, 0)) { p.active.x--; input.delete("ArrowLeft"); }
+      if (input.has("ArrowRight") && canMove(p, 1, 0)) { p.active.x++; input.delete("ArrowRight"); }
+      if (input.has("ArrowUp")) { rotateActive(p); input.delete("ArrowUp"); }
+      if (input.has("Space")) { hardDrop(p); input.delete("Space"); }
+      if (input.has("ArrowDown")) p.fallTimer += dt * 5;
+    } else {
+      p.aiTimer += dt;
+      if (p.aiTimer > 0.22) {
+        p.aiTimer = 0;
+        const r = Math.random();
+        if (r < 0.28 && canMove(p, -1, 0)) p.active.x--;
+        else if (r < 0.56 && canMove(p, 1, 0)) p.active.x++;
+        else if (r < 0.72) rotateActive(p);
+      }
+    }
+
+    p.fallTimer += dt;
+    const fallLimit = human ? 0.62 : 0.58;
+    if (p.fallTimer >= fallLimit) {
+      p.fallTimer = 0;
+      if (canMove(p, 0, 1)) p.active.y++;
+      else lockBlock(p);
+    }
+
+    stepSpark(p, dt);
+    if (p.flash > 0) p.flash--;
+  }
+
+  function showMessage(text) {
+    msg.textContent = text;
+    msg.style.opacity = "1";
+    clearTimeout(showMessage.timer);
+    showMessage.timer = setTimeout(() => msg.style.opacity = "0", 650);
+  }
+
+  function resize() {
+    const dpr = Math.max(1, Math.min(devicePixelRatio || 1, 2));
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    W = rect.width;
+    H = rect.height;
+    gap = Math.max(14, W * 0.035);
+    cell = Math.floor(Math.min((W - gap * 3) / (COLS * 2), (H - 48) / ROWS));
+    boardTop = Math.floor((H - cell * ROWS) / 2 + 18);
+    leftX = Math.floor((W / 2) - gap / 2 - cell * COLS);
+    rightX = Math.floor((W / 2) + gap / 2);
+  }
+
+  function drawWire(cx, cy, mask, color, charred) {
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(4, cell * .13);
+    ctx.strokeStyle = charred ? "#111" : color;
+    ctx.shadowColor = charred ? "transparent" : color;
+    ctx.shadowBlur = charred ? 0 : 8;
+
+    for (const d of DIRS) {
+      if (!(mask & d.bit)) continue;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.bezierCurveTo(
+        cx + d.x * cell * .16 - d.y * cell * .05,
+        cy + d.y * cell * .16 + d.x * cell * .05,
+        cx + d.x * cell * .31 + d.y * cell * .05,
+        cy + d.y * cell * .31 - d.x * cell * .05,
+        cx + d.x * cell * .45,
+        cy + d.y * cell * .45
+      );
+      ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = charred ? "#050505" : "#fff";
     ctx.beginPath();
-    ctx.arc(puck.x-puck.vx*i*1.5,puck.y-puck.vy*i*1.5,world.puckR*(1-i*.055),0,Math.PI*2);
+    ctx.arc(cx, cy, Math.max(3, cell * .07), 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.globalAlpha=1;
 
-  drawPuck();
-  drawPaddle(opp,false,'#60a5fa');
-  drawPaddle(me,true,'#22c55e');
-
-  ctx.fillStyle='rgba(255,255,255,.70)';
-  ctx.font='bold 13px system-ui';
-  ctx.textAlign='center';
-  ctx.fillText(authority===role?'LOCAL PUCK':'REMOTE PUCK',world.w/2,world.h/2+82);
-
-  for(const p of particles){
-    ctx.globalAlpha=p.life;
-    ctx.fillStyle=p.color;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,2+p.life*4,0,Math.PI*2);
+  function drawBlock(x, y, b, alpha=1) {
+    const px = x;
+    const py = y;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const grd = ctx.createLinearGradient(px, py, px + cell, py + cell);
+    grd.addColorStop(0, b.charred ? "#3a302a" : "#31405f");
+    grd.addColorStop(1, b.charred ? "#050505" : "#111a2c");
+    ctx.fillStyle = grd;
+    ctx.strokeStyle = b.charred ? "#755034" : "rgba(255,255,255,.25)";
+    ctx.lineWidth = 2;
+    roundRect(px + 2, py + 2, cell - 4, cell - 4, 10);
     ctx.fill();
-  }
-  ctx.globalAlpha=1;
+    ctx.stroke();
 
-  if(flashTimer>.02){
-    ctx.fillStyle='rgba(255,255,255,'+(flashTimer*.22)+')';
-    ctx.fillRect(0,0,world.w,world.h);
-  }
-
-  if(matchWinTimer>0){
-    ctx.fillStyle='rgba(0,0,0,.45)';
-    ctx.fillRect(0,world.h/2-70,world.w,140);
-    ctx.fillStyle='#fff';
-    ctx.font='bold 46px system-ui';
-    ctx.textAlign='center';
-    ctx.fillText(matchWinText,world.w/2,world.h/2+16);
-  }
-
-  ctx.restore();
-
-  scoreEl.textContent=`${score.p1||0} - ${score.p2||0} / 7`;
-  scoreEl.style.transform=`scale(${1+flashTimer*.25})`;
-  leftInfo.innerHTML=`<span class="me">${role==='p1'?'あなた P1 下':'あなた P2 上'}</span><br>${name}<br>${rtcReady?'WEBRTC':started?'接続中':'OFFLINE'}<br>${authority===role?'物理担当':'表示側'}`;
-  rightInfo.innerHTML=`ROOM ${roomId||'-'}<br><span class="op">相手 ${opp.online?'接続中':'待機中'}</span><br>${opp.name||''}`;
-  if(started&&rtcReady&&!opp.online)setMsg('相手待ち。Room IDを共有してJOINしてもらう。');
-}
-
-function drawPaddle(p,mine,color){
-  ctx.save();
-  ctx.shadowColor=color;
-  ctx.shadowBlur=18;
-  ctx.fillStyle=color;
-  ctx.beginPath();
-  ctx.arc(p.x,p.y,world.paddleR,0,Math.PI*2);
-  ctx.fill();
-  ctx.shadowBlur=0;
-  ctx.fillStyle='rgba(255,255,255,.78)';
-  ctx.beginPath();
-  ctx.arc(p.x,p.y,world.paddleR*.48,0,Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawPuck(){
-  ctx.save();
-  ctx.shadowColor=authority===role?'#86efac':'#fff';
-  ctx.shadowBlur=16;
-  ctx.fillStyle='#e5e7eb';
-  ctx.beginPath();
-  ctx.arc(puck.x,puck.y,world.puckR,0,Math.PI*2);
-  ctx.fill();
-  ctx.shadowBlur=0;
-  ctx.strokeStyle='#111827';
-  ctx.lineWidth=4;
-  ctx.stroke();
-  ctx.restore();
-}
-
-function roundRect(x,y,w,h,r,fill){
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.arcTo(x+w,y,x+w,y+h,r);
-  ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r);
-  ctx.arcTo(x,y,x+w,y,r);
-  if(fill)ctx.fill();else ctx.stroke();
-}
-
-let last=performance.now();
-function loop(t){
-  const dt=Math.max(.001,Math.min(.033,(t-last)/1000));
-  last=t;
-
-  if(started){
-    if(isMyAuthority()){
-      simulateLocalAuthority(dt);
-      sendPuckState();
-    }else{
-      simulateRemoteView(dt);
+    if (b.shock > 0) {
+      ctx.strokeStyle = "#fff15a";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(px + cell * .2, py + cell * .12);
+      ctx.lineTo(px + cell * .55, py + cell * .45);
+      ctx.lineTo(px + cell * .38, py + cell * .48);
+      ctx.lineTo(px + cell * .78, py + cell * .9);
+      ctx.stroke();
+      b.shock--;
     }
-    sendInput();
+
+    drawWire(px + cell/2, py + cell/2, b.mask, b.color, b.charred);
+
+    if (b.burn > 0) {
+      const a = b.burn / 46;
+      ctx.globalAlpha = Math.min(1, a);
+      ctx.fillStyle = "#ff5b22";
+      ctx.shadowColor = "#ffde59";
+      ctx.shadowBlur = 18;
+      for (let i = 0; i < 5; i++) {
+        const fx = px + cell * (.22 + i * .14);
+        const fy = py + cell * (.78 - Math.random() * .28);
+        ctx.beginPath();
+        ctx.moveTo(fx, py + cell * .9);
+        ctx.quadraticCurveTo(fx - cell*.18, fy, fx, py + cell * .18);
+        ctx.quadraticCurveTo(fx + cell*.18, fy, fx, py + cell * .9);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+      b.burn--;
+    }
+    ctx.restore();
   }
 
-  draw();
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+  function drawPlayer(p, ox) {
+    const oy = boardTop;
+    ctx.save();
 
+    ctx.fillStyle = "rgba(4,9,18,.68)";
+    ctx.strokeStyle = p.flash > 0 ? "#fff15a" : "rgba(123, 209, 255, .36)";
+    ctx.lineWidth = p.flash > 0 ? 4 : 2;
+    roundRect(ox - 5, oy - 5, cell * COLS + 10, cell * ROWS + 10, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= COLS; x++) {
+      ctx.beginPath();
+      ctx.moveTo(ox + x * cell, oy);
+      ctx.lineTo(ox + x * cell, oy + ROWS * cell);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= ROWS; y++) {
+      ctx.beginPath();
+      ctx.moveTo(ox, oy + y * cell);
+      ctx.lineTo(ox + COLS * cell, oy + y * cell);
+      ctx.stroke();
+    }
+
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const b = p.grid[y][x];
+        if (b) drawBlock(ox + x * cell, oy + y * cell, b);
+      }
+    }
+
+    if (p.active) {
+      drawBlock(ox + p.active.x * cell, oy + p.active.y * cell, p.active.block, .98);
+      let gy = p.active.y;
+      while (gy + 1 < ROWS && !p.grid[gy+1][p.active.x]) gy++;
+      if (gy !== p.active.y) drawBlock(ox + p.active.x * cell, oy + gy * cell, p.active.block, .22);
+    }
+
+    drawSpark(p, ox, oy);
+    drawHud(p, ox, oy);
+    ctx.restore();
+  }
+
+  function drawSpark(p, ox, oy) {
+    const s = p.spark;
+    const color = SPARK_COLORS[s.colorIndex];
+    for (const t of s.trail) {
+      ctx.globalAlpha = t.a * .55;
+      ctx.fillStyle = t.color;
+      ctx.shadowColor = t.color;
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(ox + t.x * cell + cell/2, oy + t.y * cell + cell/2, cell * .12, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#fff";
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 22;
+    ctx.beginPath();
+    ctx.arc(ox + s.renderX * cell + cell/2, oy + s.renderY * cell + cell/2, cell * .18 + Math.sin(performance.now()/90)*2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(ox + s.renderX * cell + cell/2, oy + s.renderY * cell + cell/2, cell * .1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawHud(p, ox, oy) {
+    ctx.fillStyle = "#f5f7ff";
+    ctx.font = `800 ${Math.max(12, cell*.34)}px system-ui`;
+    ctx.textAlign = "left";
+    ctx.fillText(p.name, ox, oy - 24);
+    ctx.font = `700 ${Math.max(10, cell*.27)}px system-ui`;
+    ctx.fillText("SCORE " + p.score, ox, oy - 8);
+    ctx.textAlign = "right";
+    ctx.fillText("⚡" + p.pendingLightning + "  COMBO " + p.combo, ox + cell * COLS, oy - 8);
+
+    const nx = ox + cell * COLS - cell * .9;
+    const ny = oy - 43;
+    ctx.globalAlpha = .85;
+    drawBlock(nx, ny, p.next, .72);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCenterInfo() {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(255,255,255,.88)";
+    ctx.font = `800 ${Math.max(11, cell*.3)}px system-ui`;
+    ctx.fillText("VS", W/2, boardTop + cell * 1.2);
+    ctx.font = `700 ${Math.max(9, cell*.22)}px system-ui`;
+    const lines = ["スマホ: 左右スワイプ移動", "上スワイプ回転", "下スワイプ加速", "長押し即落下", "輪 = 大炎上"];
+    lines.forEach((line, i) => ctx.fillText(line, W/2, boardTop + cell * (2.2 + i*.55)));
+  }
+
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+  }
+
+  function draw() {
+    ctx.clearRect(0,0,W,H);
+    drawPlayer(P1, leftX);
+    drawPlayer(P2, rightX);
+    drawCenterInfo();
+
+    if (!running) {
+      ctx.fillStyle = "rgba(0,0,0,.45)";
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.font = `1000 ${Math.max(26, cell*.85)}px system-ui`;
+      ctx.fillText(P1.gameOver ? "YOU LOSE" : "YOU WIN", W/2, H/2);
+      ctx.font = `800 ${Math.max(13, cell*.35)}px system-ui`;
+      ctx.fillText("画面をタップで再戦", W/2, H/2 + cell);
+    }
+  }
+
+  function packBlock(b){ return b ? {mask:b.mask,base:b.base,color:b.color,charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }\n  function unpackBlock(b){ return b ? {mask:b.mask||0,base:b.base||"",color:b.color||"#65d7ff",charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }\n  function packPlayer(p){\n    return {\n      grid:p.grid.map(r=>r.map(packBlock)),\n      active:p.active?{x:p.active.x,y:p.active.y,block:packBlock(p.active.block)}:null,\n      next:packBlock(p.next),score:p.score,combo:p.combo,pendingLightning:p.pendingLightning,\n      fallTimer:p.fallTimer,aiTimer:p.aiTimer,spark:p.spark,gameOver:p.gameOver,flash:p.flash,name:p.name\n    };\n  }\n  function applyPlayerState(p,s){\n    if(!s) return;\n    p.grid=(s.grid||[]).map(r=>r.map(unpackBlock));\n    while(p.grid.length<ROWS) p.grid.push(Array(COLS).fill(null));\n    p.grid=p.grid.slice(0,ROWS).map(r=>{ while(r.length<COLS) r.push(null); return r.slice(0,COLS); });\n    p.active=s.active?{x:s.active.x,y:s.active.y,block:unpackBlock(s.active.block)}:null;\n    p.next=unpackBlock(s.next)||makeBlock();\n    p.score=s.score||0;p.combo=s.combo||0;p.pendingLightning=s.pendingLightning||0;\n    p.fallTimer=s.fallTimer||0;p.aiTimer=s.aiTimer||0;p.spark=s.spark||p.spark;p.gameOver=!!s.gameOver;p.flash=s.flash||0;p.name=s.name||p.name;\n  }\n  function packState(){ return {running,ts:Date.now(),p1:packPlayer(P1),p2:packPlayer(P2)}; }\n  function applyState(s){ if(!s) return; running=!!s.running; applyPlayerState(P1,s.p1); applyPlayerState(P2,s.p2); }\n  function syncRemoteKeys(){\n    remoteKeys.clear();\n    if(remoteInput.left) remoteKeys.add("ArrowLeft");\n    if(remoteInput.right) remoteKeys.add("ArrowRight");\n    if(remoteInput.rotate) remoteKeys.add("ArrowUp");\n    if(remoteInput.drop) remoteKeys.add("Space");\n    if(remoteInput.down) remoteKeys.add("ArrowDown");\n  }\n  function localInputPayload(){\n    return {\n      left:keys.has("ArrowLeft"),right:keys.has("ArrowRight"),rotate:keys.has("ArrowUp"),\n      drop:keys.has("Space"),down:keys.has("ArrowDown"),ts:Date.now()\n    };\n  }\n  function sendJoinInput(){\n    if(!isOnline || isHost || !roomRef) return;\n    roomRef.child("input/p2").set(localInputPayload()).catch(()=>{});\n  }\n  function sendHostState(){\n    if(!isOnline || !isHost || !roomRef) return;\n    roomRef.child("state").set(packState()).catch(()=>{});\n  }\n  async function startHost(){\n    if(!initFirebase()) return;\n    const rid=safeRoom(roomIdInput.value)||randomRoom();\n    roomIdInput.value=rid;\n    roomRef=db.ref("spark_wire_rooms/"+rid);\n    isOnline=true;isHost=true;onlineRole="host";\n    P1.name=(playerNameInput.value||"HOST").slice(0,16);P2.name="JOIN";P1.input=keys;P2.input=remoteKeys;\n    reset();\n    await roomRef.set({meta:{createdAt:firebase.database.ServerValue.TIMESTAMP,host:P1.name},state:packState(),input:{p2:{}}});\n    roomRef.child("input/p2").on("value",snap=>{ remoteInput=snap.val()||{}; syncRemoteKeys(); });\n    onlinePanel.style.display="none";\n    setOnlineStatus("HOST ROOM "+rid);\n  }\n  async function startJoin(){\n    if(!initFirebase()) return;\n    const rid=safeRoom(roomIdInput.value);\n    if(!rid){ setOnlineStatus("Room IDを入れてJOIN"); return; }\n    roomRef=db.ref("spark_wire_rooms/"+rid);\n    const snap=await roomRef.child("state").get();\n    if(!snap.exists()){ setOnlineStatus("部屋なし。HOST作成後にJOIN"); return; }\n    isOnline=true;isHost=false;onlineRole="join";\n    P2.name=(playerNameInput.value||"JOIN").slice(0,16);\n    await roomRef.child("meta/join").set(P2.name);\n    roomRef.child("state").on("value",s=>applyState(s.val()));\n    setInterval(sendJoinInput,35);\n    onlinePanel.style.display="none";\n    setOnlineStatus("JOIN ROOM "+rid);\n  }\n  function startSolo(){ isOnline=false;isHost=false;onlineRole="solo";onlinePanel.style.display="none";setOnlineStatus("SOLO"); }\n\n  function update(now) {
+    const dt = Math.min(.05, (now - last) / 1000);
+    last = now;
+
+    if (isOnline && !isHost) {
+      draw();
+      requestAnimationFrame(update);
+      return;
+    }
+
+    if (running) {
+      if (isOnline && isHost) {
+        syncRemoteKeys();
+        updatePlayer(P1, dt, true);
+        updatePlayer(P2, dt, true);
+        if (now - lastNetSend > 80) { lastNetSend = now; sendHostState(); }
+      } else {
+        updatePlayer(P1, dt, true);
+        updatePlayer(P2, dt, false);
+      }
+    }
+    draw();
+    requestAnimationFrame(update);
+  }
+
+  function reset() {
+    const fresh1 = makePlayer("L");
+    const fresh2 = makePlayer("R");
+    Object.assign(P1, fresh1);
+    Object.assign(P2, fresh2);
+    running = true;
+    spawn(P1);
+    spawn(P2);
+  }
+
+  document.getElementById("hostBtn").addEventListener("click", startHost);
+  document.getElementById("joinBtn").addEventListener("click", startJoin);
+  document.getElementById("soloBtn").addEventListener("click", startSolo);
+  playerNameInput.value = "P" + Math.random().toString(36).slice(2,6).toUpperCase();
+  roomIdInput.value = randomRoom();
+
+  window.addEventListener("resize", resize);
+  window.addEventListener("keydown", e => {
+    if (["ArrowLeft","ArrowRight","ArrowDown","ArrowUp","Space"].includes(e.code)) {
+      e.preventDefault();
+      keys.add(e.code);
+    }
+    if (!running && e.code === "Space") reset();
+  });
+  window.addEventListener("keyup", e => keys.delete(e.code));
+
+  for (const btn of document.querySelectorAll("button[data-k]")) {
+    const k = btn.dataset.k;
+    btn.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      keys.add(k);
+    });
+    btn.addEventListener("pointerup", e => {
+      e.preventDefault();
+      keys.delete(k);
+    });
+    btn.addEventListener("pointercancel", () => keys.delete(k));
+    btn.addEventListener("pointerleave", () => keys.delete(k));
+  }
+
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchLastX = 0;
+  let touchLastY = 0;
+  let touchActive = false;
+  let longPressTimer = null;
+
+  function tapKey(code) {
+    keys.add(code);
+    setTimeout(() => keys.delete(code), 45);
+  }
+
+  canvas.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    if (!running) {
+      reset();
+      return;
+    }
+    touchActive = true;
+    touchStartX = e.clientX;
+    touchStartY = e.clientY;
+    touchLastX = e.clientX;
+    touchLastY = e.clientY;
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      if (touchActive && running) tapKey("Space");
+    }, 420);
+  });
+
+  canvas.addEventListener("pointermove", e => {
+    if (!touchActive || !running) return;
+    e.preventDefault();
+
+    const dxTotal = e.clientX - touchStartX;
+    const dyTotal = e.clientY - touchStartY;
+    const dx = e.clientX - touchLastX;
+    const dy = e.clientY - touchLastY;
+    const threshold = Math.max(18, cell * 0.36);
+
+    if (Math.abs(dxTotal) > Math.abs(dyTotal)) {
+      if (dx > threshold) {
+        tapKey("ArrowRight");
+        touchLastX = e.clientX;
+        clearTimeout(longPressTimer);
+      } else if (dx < -threshold) {
+        tapKey("ArrowLeft");
+        touchLastX = e.clientX;
+        clearTimeout(longPressTimer);
+      }
+    } else {
+      if (dyTotal < -threshold) {
+        tapKey("ArrowUp");
+        touchStartY = e.clientY;
+        touchLastY = e.clientY;
+        clearTimeout(longPressTimer);
+      } else if (dyTotal > threshold) {
+        keys.add("ArrowDown");
+        touchLastY = e.clientY;
+        clearTimeout(longPressTimer);
+      }
+    }
+  });
+
+  canvas.addEventListener("pointerup", e => {
+    e.preventDefault();
+    touchActive = false;
+    keys.delete("ArrowDown");
+    clearTimeout(longPressTimer);
+  });
+
+  canvas.addEventListener("pointercancel", () => {
+    touchActive = false;
+    keys.delete("ArrowDown");
+    clearTimeout(longPressTimer);
+  });
+
+  resize();
+  spawn(P1);
+  spawn(P2);
+  requestAnimationFrame(update);
 })();
 </script>
 </body>
