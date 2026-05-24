@@ -92,6 +92,7 @@
   #onlineBox button{background:linear-gradient(180deg,#1d9bf0,#0963a5)}
   #onlineBox .solo{background:linear-gradient(180deg,#475569,#1f2937);width:100%;margin-top:8px}
   #onlineStatus{font-size:12px;line-height:1.45;color:#dbeafe;margin-top:10px;min-height:34px}
+  #onlinePanel button{touch-action:manipulation;pointer-events:auto}
   #netBadge{position:fixed;left:10px;top:50px;z-index:20;background:rgba(0,0,0,.46);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:6px 9px;font-size:12px;font-weight:900;color:#e0f2fe;pointer-events:none}
 
 </style>
@@ -126,6 +127,8 @@
 </div>
 <div id="msg"></div>
 
+<script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js"></script>
 <script>
 (() => {
   "use strict";
@@ -203,7 +206,7 @@
       pendingLightning: 0,
       fallTimer: 0,
       aiTimer: 0,
-      spark: { x: rnd(COLS), y: ROWS - 1, fromX: rnd(COLS), fromY: ROWS - 1, renderX: rnd(COLS), renderY: ROWS - 1, dir: rnd(4), t: 0, speed: 6.2, chain: 0, colorIndex: 0, trail: [] },
+      spark: { x: rnd(COLS), y: ROWS - 1, fromX: rnd(COLS), fromY: ROWS - 1, renderX: rnd(COLS), renderY: ROWS - 1, dir: rnd(4), t: 0, speed: 2.8, chain: 0, colorIndex: 0, trail: [] },
       gameOver: false,
       flash: 0,
       name: side === "L" ? "PLAYER" : "RIVAL"
@@ -244,11 +247,19 @@
   function safeRoom(s){ return String(s||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20); }
   function randomRoom(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
   function initFirebase(){
-    if(db) return true;
-    if(!window.firebase || !firebase.database){ setOnlineStatus("Firebase読込不可。https配置で再読込。Web版はそのままソロ可"); return false; }
-    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-    return true;
+    try {
+      if(db) return true;
+      if(!window.firebase || !firebase.database){
+        setOnlineStatus("Firebase読込不可。通信環境またはGitHub Pages反映待ち。ソロは使用可");
+        return false;
+      }
+      if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+      return true;
+    } catch (err) {
+      setOnlineStatus("Firebase初期化エラー: " + (err && err.message ? err.message : err));
+      return false;
+    }
   }
 
   function spawn(p) {
@@ -483,7 +494,7 @@
         s.renderY = s.y;
         s.dir = rnd(4);
         s.chain = 0;
-        s.speed = 6.2;
+        s.speed = 2.8;
         s.t = 0;
         break;
       }
@@ -505,19 +516,19 @@
 
         const comp = findComponent(p, s.x, s.y);
         if (comp.cells.length >= 4) {
-          s.speed = Math.max(2.4, 6.2 - comp.cells.length * 0.28);
+          s.speed = Math.max(1.2, 2.8 - comp.cells.length * 0.12);
           if (s.chain >= Math.max(4, Math.floor(comp.cells.length * 0.85))) {
             burnCells(p, comp.cells, comp.loop);
           }
         } else {
-          s.speed = 6.2;
+          s.speed = 2.8;
         }
       } else {
         s.fromX = s.x;
         s.fromY = s.y;
         s.dir = rnd(4);
         s.chain = 0;
-        s.speed = 6.2;
+        s.speed = 2.8;
         const dirs = getConnections(p.grid, s.x, s.y);
         if (dirs.length) s.dir = dirs[rnd(dirs.length)].i;
       }
@@ -791,7 +802,85 @@
     }
   }
 
-  function packBlock(b){ return b ? {mask:b.mask,base:b.base,color:b.color,charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }\n  function unpackBlock(b){ return b ? {mask:b.mask||0,base:b.base||"",color:b.color||"#65d7ff",charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }\n  function packPlayer(p){\n    return {\n      grid:p.grid.map(r=>r.map(packBlock)),\n      active:p.active?{x:p.active.x,y:p.active.y,block:packBlock(p.active.block)}:null,\n      next:packBlock(p.next),score:p.score,combo:p.combo,pendingLightning:p.pendingLightning,\n      fallTimer:p.fallTimer,aiTimer:p.aiTimer,spark:p.spark,gameOver:p.gameOver,flash:p.flash,name:p.name\n    };\n  }\n  function applyPlayerState(p,s){\n    if(!s) return;\n    p.grid=(s.grid||[]).map(r=>r.map(unpackBlock));\n    while(p.grid.length<ROWS) p.grid.push(Array(COLS).fill(null));\n    p.grid=p.grid.slice(0,ROWS).map(r=>{ while(r.length<COLS) r.push(null); return r.slice(0,COLS); });\n    p.active=s.active?{x:s.active.x,y:s.active.y,block:unpackBlock(s.active.block)}:null;\n    p.next=unpackBlock(s.next)||makeBlock();\n    p.score=s.score||0;p.combo=s.combo||0;p.pendingLightning=s.pendingLightning||0;\n    p.fallTimer=s.fallTimer||0;p.aiTimer=s.aiTimer||0;p.spark=s.spark||p.spark;p.gameOver=!!s.gameOver;p.flash=s.flash||0;p.name=s.name||p.name;\n  }\n  function packState(){ return {running,ts:Date.now(),p1:packPlayer(P1),p2:packPlayer(P2)}; }\n  function applyState(s){ if(!s) return; running=!!s.running; applyPlayerState(P1,s.p1); applyPlayerState(P2,s.p2); }\n  function syncRemoteKeys(){\n    remoteKeys.clear();\n    if(remoteInput.left) remoteKeys.add("ArrowLeft");\n    if(remoteInput.right) remoteKeys.add("ArrowRight");\n    if(remoteInput.rotate) remoteKeys.add("ArrowUp");\n    if(remoteInput.drop) remoteKeys.add("Space");\n    if(remoteInput.down) remoteKeys.add("ArrowDown");\n  }\n  function localInputPayload(){\n    return {\n      left:keys.has("ArrowLeft"),right:keys.has("ArrowRight"),rotate:keys.has("ArrowUp"),\n      drop:keys.has("Space"),down:keys.has("ArrowDown"),ts:Date.now()\n    };\n  }\n  function sendJoinInput(){\n    if(!isOnline || isHost || !roomRef) return;\n    roomRef.child("input/p2").set(localInputPayload()).catch(()=>{});\n  }\n  function sendHostState(){\n    if(!isOnline || !isHost || !roomRef) return;\n    roomRef.child("state").set(packState()).catch(()=>{});\n  }\n  async function startHost(){\n    if(!initFirebase()) return;\n    const rid=safeRoom(roomIdInput.value)||randomRoom();\n    roomIdInput.value=rid;\n    roomRef=db.ref("spark_wire_rooms/"+rid);\n    isOnline=true;isHost=true;onlineRole="host";\n    P1.name=(playerNameInput.value||"HOST").slice(0,16);P2.name="JOIN";P1.input=keys;P2.input=remoteKeys;\n    reset();\n    await roomRef.set({meta:{createdAt:firebase.database.ServerValue.TIMESTAMP,host:P1.name},state:packState(),input:{p2:{}}});\n    roomRef.child("input/p2").on("value",snap=>{ remoteInput=snap.val()||{}; syncRemoteKeys(); });\n    onlinePanel.style.display="none";\n    setOnlineStatus("HOST ROOM "+rid);\n  }\n  async function startJoin(){\n    if(!initFirebase()) return;\n    const rid=safeRoom(roomIdInput.value);\n    if(!rid){ setOnlineStatus("Room IDを入れてJOIN"); return; }\n    roomRef=db.ref("spark_wire_rooms/"+rid);\n    const snap=await roomRef.child("state").get();\n    if(!snap.exists()){ setOnlineStatus("部屋なし。HOST作成後にJOIN"); return; }\n    isOnline=true;isHost=false;onlineRole="join";\n    P2.name=(playerNameInput.value||"JOIN").slice(0,16);\n    await roomRef.child("meta/join").set(P2.name);\n    roomRef.child("state").on("value",s=>applyState(s.val()));\n    setInterval(sendJoinInput,35);\n    onlinePanel.style.display="none";\n    setOnlineStatus("JOIN ROOM "+rid);\n  }\n  function startSolo(){ isOnline=false;isHost=false;onlineRole="solo";onlinePanel.style.display="none";setOnlineStatus("SOLO"); }\n\n  function update(now) {
+  function packBlock(b){ return b ? {mask:b.mask,base:b.base,color:b.color,charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }
+  function unpackBlock(b){ return b ? {mask:b.mask||0,base:b.base||"",color:b.color||"#65d7ff",charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }
+  function packPlayer(p){
+    return {
+      grid:p.grid.map(r=>r.map(packBlock)),
+      active:p.active?{x:p.active.x,y:p.active.y,block:packBlock(p.active.block)}:null,
+      next:packBlock(p.next),score:p.score,combo:p.combo,pendingLightning:p.pendingLightning,
+      fallTimer:p.fallTimer,aiTimer:p.aiTimer,spark:p.spark,gameOver:p.gameOver,flash:p.flash,name:p.name
+    };
+  }
+  function applyPlayerState(p,s){
+    if(!s) return;
+    p.grid=(s.grid||[]).map(r=>r.map(unpackBlock));
+    while(p.grid.length<ROWS) p.grid.push(Array(COLS).fill(null));
+    p.grid=p.grid.slice(0,ROWS).map(r=>{ while(r.length<COLS) r.push(null); return r.slice(0,COLS); });
+    p.active=s.active?{x:s.active.x,y:s.active.y,block:unpackBlock(s.active.block)}:null;
+    p.next=unpackBlock(s.next)||makeBlock();
+    p.score=s.score||0;p.combo=s.combo||0;p.pendingLightning=s.pendingLightning||0;
+    p.fallTimer=s.fallTimer||0;p.aiTimer=s.aiTimer||0;p.spark=s.spark||p.spark;p.gameOver=!!s.gameOver;p.flash=s.flash||0;p.name=s.name||p.name;
+  }
+  function packState(){ return {running,ts:Date.now(),p1:packPlayer(P1),p2:packPlayer(P2)}; }
+  function applyState(s){ if(!s) return; running=!!s.running; applyPlayerState(P1,s.p1); applyPlayerState(P2,s.p2); }
+  function syncRemoteKeys(){
+    remoteKeys.clear();
+    if(remoteInput.left) remoteKeys.add("ArrowLeft");
+    if(remoteInput.right) remoteKeys.add("ArrowRight");
+    if(remoteInput.rotate) remoteKeys.add("ArrowUp");
+    if(remoteInput.drop) remoteKeys.add("Space");
+    if(remoteInput.down) remoteKeys.add("ArrowDown");
+  }
+  function localInputPayload(){
+    return {
+      left:keys.has("ArrowLeft"),right:keys.has("ArrowRight"),rotate:keys.has("ArrowUp"),
+      drop:keys.has("Space"),down:keys.has("ArrowDown"),ts:Date.now()
+    };
+  }
+  function sendJoinInput(){
+    if(!isOnline || isHost || !roomRef) return;
+    roomRef.child("input/p2").set(localInputPayload()).catch(()=>{});
+  }
+  function sendHostState(){
+    if(!isOnline || !isHost || !roomRef) return;
+    roomRef.child("state").set(packState()).catch(()=>{});
+  }
+  async function startHost(){
+    if(!initFirebase()) return;
+    const rid=safeRoom(roomIdInput.value)||randomRoom();
+    roomIdInput.value=rid;
+    roomRef=db.ref("spark_wire_rooms/"+rid);
+    isOnline=true;isHost=true;onlineRole="host";
+    reset();
+    P1.name=(playerNameInput.value||"HOST").slice(0,16);
+    P2.name="JOIN";
+    P1.input=keys;
+    P2.input=remoteKeys;
+    await roomRef.set({meta:{createdAt:firebase.database.ServerValue.TIMESTAMP,host:P1.name},state:packState(),input:{p2:{}}});
+    roomRef.child("input/p2").on("value",snap=>{ remoteInput=snap.val()||{}; syncRemoteKeys(); });
+    onlinePanel.style.display="none";
+    setOnlineStatus("HOST ROOM "+rid);
+  }
+  async function startJoin(){
+    if(!initFirebase()) return;
+    const rid=safeRoom(roomIdInput.value);
+    if(!rid){ setOnlineStatus("Room IDを入れてJOIN"); return; }
+    roomRef=db.ref("spark_wire_rooms/"+rid);
+    const snap=await roomRef.child("state").get();
+    if(!snap.exists()){ setOnlineStatus("部屋なし。HOST作成後にJOIN"); return; }
+    isOnline=true;isHost=false;onlineRole="join";
+    P2.name=(playerNameInput.value||"JOIN").slice(0,16);
+    await roomRef.child("meta/join").set(P2.name);
+    roomRef.child("state").on("value",s=>applyState(s.val()));
+    sendJoinInput();
+    setInterval(sendJoinInput,35);
+    onlinePanel.style.display="none";
+    setOnlineStatus("JOIN ROOM "+rid);
+  }
+  function startSolo(){ isOnline=false;isHost=false;onlineRole="solo";onlinePanel.style.display="none";setOnlineStatus("SOLO"); }
+
+  function update(now) {
     const dt = Math.min(.05, (now - last) / 1000);
     last = now;
 
@@ -821,14 +910,39 @@
     const fresh2 = makePlayer("R");
     Object.assign(P1, fresh1);
     Object.assign(P2, fresh2);
+
+    if (isOnline && isHost) {
+      P1.input = keys;
+      P2.input = remoteKeys;
+      P1.name = (playerNameInput.value || "HOST").slice(0,16);
+      P2.name = "JOIN";
+    }
+
     running = true;
     spawn(P1);
     spawn(P2);
   }
 
-  document.getElementById("hostBtn").addEventListener("click", startHost);
-  document.getElementById("joinBtn").addEventListener("click", startJoin);
-  document.getElementById("soloBtn").addEventListener("click", startSolo);
+  function bindTap(id, fn) {
+    const el = document.getElementById(id);
+    let fired = false;
+
+    const run = e => {
+      if (e) e.preventDefault();
+      if (fired) return;
+      fired = true;
+      setTimeout(() => fired = false, 250);
+      fn();
+    };
+
+    el.addEventListener("click", run);
+    el.addEventListener("pointerdown", run);
+    el.addEventListener("touchend", run, {passive:false});
+  }
+
+  bindTap("hostBtn", startHost);
+  bindTap("joinBtn", startJoin);
+  bindTap("soloBtn", startSolo);
   playerNameInput.value = "P" + Math.random().toString(36).slice(2,6).toUpperCase();
   roomIdInput.value = randomRoom();
 
