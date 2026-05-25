@@ -70,7 +70,7 @@ const DIRS=[{x:0,y:-1,bit:1,opp:4},{x:1,y:0,bit:2,opp:8},{x:0,y:1,bit:4,opp:1},{
 const TYPES=[{mask:5,color:"#66d9ff"},{mask:3,color:"#7cff8c"},{mask:6,color:"#9aa7ff"},{mask:11,color:"#ffd75d"},{mask:15,color:"#ff70e8"},{mask:1,color:"#ff8b68"}];
 const SPARK=["#4df6ff","#ffe75f","#ff6cf1","#81ff5d","#ff5d5d"];
 let W=360,H=520,cell=28,gap=8,leftX=20,rightX=200,boardTop=70,last=performance.now(),running=false;
-let mode="menu",localSide="solo",peer=null,conn=null,lastNet=0;
+let mode="menu",localSide="solo",peer=null,conn=null,lastNet=0,attackSeq=0;
 const keys=new Set(),remoteKeys=new Set();
 function rnd(n){return Math.floor(Math.random()*n)}
 function setStatus(t){statusEl.textContent=t}
@@ -93,14 +93,45 @@ function lightning(p){while(p.pending>0){const a=[];for(let y=0;y<ROWS;y++)for(l
 function neigh(p,x,y){const b=p.grid[y]?.[x],out=[];if(!b||b.charred)return out;for(let i=0;i<DIRS.length;i++){const d=DIRS[i];if(!(b.mask&d.bit))continue;const nx=x+d.x,ny=y+d.y,nb=p.grid[ny]?.[nx];if(nb&&!nb.charred&&(nb.mask&d.opp))out.push({x:nx,y:ny,dir:i})}return out}
 function comp(p,sx,sy){const st=p.grid[sy]?.[sx];if(!st||st.charred)return{cells:[],edges:0,loop:false};const seen=new Set(),stack=[{x:sx,y:sy}];let e=0;while(stack.length){const c=stack.pop(),k=c.x+","+c.y;if(seen.has(k))continue;seen.add(k);const ns=neigh(p,c.x,c.y);e+=ns.length;for(const n of ns)stack.push({x:n.x,y:n.y})}const cells=[...seen].map(k=>{const a=k.split(",").map(Number);return{x:a[0],y:a[1]}});e/=2;return{cells,edges:e,loop:cells.length>=4&&e>=cells.length}}
 function openPort(p,c){const set=new Set(c.cells.map(v=>v.x+","+v.y));for(const v of c.cells){const b=p.grid[v.y]?.[v.x];if(!b||b.charred)continue;for(const d of DIRS){if(!(b.mask&d.bit))continue;const nx=v.x+d.x,ny=v.y+d.y,k=nx+","+ny;if(set.has(k))continue;if(nx<0||nx>=COLS||ny<0||ny>=ROWS)continue;const nb=p.grid[ny]?.[nx];if(!nb)return true;if(!nb.charred&&(nb.mask&d.opp))return true}}return false}
-function burn(p,cells,loop){const s=new Set(cells.map(c=>c.x+","+c.y));if(loop){for(const c of cells)for(let yy=c.y-1;yy<=c.y+1;yy++)for(let xx=c.x-1;xx<=c.x+1;xx++)if(xx>=0&&xx<COLS&&yy>=0&&yy<ROWS&&p.grid[yy][xx])s.add(xx+","+yy)}const arr=[...s].map(k=>{const a=k.split(",").map(Number);return{x:a[0],y:a[1]}});for(const c of arr){const b=p.grid[c.y]?.[c.x];if(b)b.burn=loop?42:28}setTimeout(()=>{let rem=0;for(const c of arr)if(p.grid[c.y]?.[c.x]){p.grid[c.y][c.x]=null;rem++}if(rem){p.combo++;p.score+=rem*100*p.combo+(loop?800:0);const e=p===P1?P2:P1;e.pending+=Math.max(1,Math.floor(rem/3)+p.combo-1+(loop?2:0));p.spark.color=(p.spark.color+1)%SPARK.length;p.spark.chain=0;p.spark.speed=2.8;gravity(p);show((loop?"大炎上":"SPARK")+"\\n"+rem+" BLOCK")}},loop?380:260)}
+function burn(p,cells,loop){const s=new Set(cells.map(c=>c.x+","+c.y));if(loop){for(const c of cells)for(let yy=c.y-1;yy<=c.y+1;yy++)for(let xx=c.x-1;xx<=c.x+1;xx++)if(xx>=0&&xx<COLS&&yy>=0&&yy<ROWS&&p.grid[yy][xx])s.add(xx+","+yy)}const arr=[...s].map(k=>{const a=k.split(",").map(Number);return{x:a[0],y:a[1]}});for(const c of arr){const b=p.grid[c.y]?.[c.x];if(b)b.burn=loop?42:28}setTimeout(()=>{let rem=0;for(const c of arr)if(p.grid[c.y]?.[c.x]){p.grid[c.y][c.x]=null;rem++}if(rem){p.combo++;p.score+=rem*100*p.combo+(loop?800:0);const atk=Math.max(1,Math.floor(rem/3)+p.combo-1+(loop?2:0));sendAttackToOpponent(atk);p.spark.color=(p.spark.color+1)%SPARK.length;p.spark.chain=0;p.spark.speed=2.8;gravity(p);show((loop?"大炎上":"SPARK")+"\\n"+rem+" BLOCK")}},loop?380:260)}
 function tele(p,s){let t=0;do{s.x=rnd(COLS);s.y=rnd(ROWS);t++}while((!p.grid[s.y][s.x]||p.grid[s.y][s.x].charred)&&t<60);s.fx=s.rx=s.x;s.fy=s.ry=s.y;s.t=0;s.chain=0;s.speed=2.8}
 function sparkStep(p,dt){const s=p.spark;for(const tr of s.trail)tr.a*=Math.pow(.2,dt);s.t+=dt*s.speed;while(s.t>=1){s.t-=1;const b=p.grid[s.y]?.[s.x];if(!b||b.charred){tele(p,s);break}const ns=neigh(p,s.x,s.y);if(ns.length){let n=ns.find(v=>v.dir!==(s.dir+2)%4)||ns[rnd(ns.length)];if(Math.random()<.16)n=ns[rnd(ns.length)];s.fx=s.x;s.fy=s.y;s.x=n.x;s.y=n.y;s.dir=n.dir;s.chain++;s.trail.push({x:s.fx,y:s.fy,a:1,color:SPARK[s.color]});if(s.trail.length>24)s.trail.shift();const c=comp(p,s.x,s.y);if(c.cells.length>=4){s.speed=Math.max(1.2,2.8-c.cells.length*.12);if(s.chain>=Math.max(4,Math.floor(c.cells.length*.85)))burn(p,c.cells,c.loop)}else if(!openPort(p,c)){for(const cc of c.cells){const bb=p.grid[cc.y]?.[cc.x];if(bb){bb.charred=true;bb.mask=0;bb.color="#2b2b2b";bb.shock=40}}tele(p,s)}else s.speed=2.8}else{const c=comp(p,s.x,s.y);if(c.cells.length&&!openPort(p,c)){for(const cc of c.cells){const bb=p.grid[cc.y]?.[cc.x];if(bb){bb.charred=true;bb.mask=0;bb.color="#2b2b2b";bb.shock=40}}}tele(p,s);break}}const e=s.t*s.t*(3-2*s.t);s.rx=s.fx+(s.x-s.fx)*e;s.ry=s.fy+(s.y-s.fy)*e}
 function updP(p,dt,human){if(p.gameOver)return;if(!p.active)spawn(p);const input=p.input||keys;if(human){if(input.has("ArrowLeft")&&can(p,-1,0)){p.active.x--;input.delete("ArrowLeft")}if(input.has("ArrowRight")&&can(p,1,0)){p.active.x++;input.delete("ArrowRight")}if(input.has("ArrowUp")){p.active.block.mask=rot(p.active.block.mask);input.delete("ArrowUp")}if(input.has("Space")){drop(p);input.delete("Space")}if(input.has("ArrowDown"))p.fall+=dt*5}else{p.ai+=dt;if(p.ai>.24){p.ai=0;const r=Math.random();if(r<.3&&can(p,-1,0))p.active.x--;else if(r<.6&&can(p,1,0))p.active.x++;else if(r<.75&&p.active)p.active.block.mask=rot(p.active.block.mask)}}p.fall+=dt;if(p.fall>.62){p.fall=0;if(can(p,0,1))p.active.y++;else lock(p)}sparkStep(p,dt)}
 function packP(p){return{grid:p.grid.map(r=>r.map(cb)),active:p.active?{x:p.active.x,y:p.active.y,block:cb(p.active.block)}:null,next:cb(p.next),score:p.score,combo:p.combo,pending:p.pending,fall:p.fall,ai:p.ai,spark:p.spark,gameOver:p.gameOver,name:p.name}}
 function applyP(p,s){if(!s)return;p.grid=(s.grid||[]).map(r=>r.map(cb));while(p.grid.length<ROWS)p.grid.push(Array(COLS).fill(null));p.grid=p.grid.slice(0,ROWS).map(r=>{while(r.length<COLS)r.push(null);return r.slice(0,COLS)});p.active=s.active?{x:s.active.x,y:s.active.y,block:cb(s.active.block)}:null;p.next=cb(s.next)||block();p.score=s.score||0;p.combo=s.combo||0;p.pending=s.pending||0;p.fall=s.fall||0;p.ai=s.ai||0;p.spark=s.spark||p.spark;p.gameOver=!!s.gameOver;p.name=s.name||p.name}
 function send(type,payload){if(conn&&conn.open)conn.send({type,payload})}
-function onData(d){if(!d||!d.type)return;if(d.type==="state"){if(localSide!=="p1")applyP(P1,d.payload.p1);if(localSide!=="p2")applyP(P2,d.payload.p2)}if(d.type==="hello")send("state",{p1:packP(P1),p2:packP(P2)})}
+function sendAttackToOpponent(amount){
+  amount = Math.max(0, Math.floor(amount||0));
+  if(amount <= 0) return;
+
+  const enemy = localSide === "p1" ? P2 : P1;
+  enemy.pending += amount;
+
+  if(mode !== "solo" && conn && conn.open){
+    attackSeq++;
+    send("attack", {amount:amount, from:localSide, seq:attackSeq});
+  }
+}
+
+function onData(d){
+  if(!d||!d.type)return;
+
+  if(d.type==="state"){
+    if(localSide!=="p1")applyP(P1,d.payload.p1);
+    if(localSide!=="p2")applyP(P2,d.payload.p2);
+  }
+
+  if(d.type==="attack"){
+    const amount=Math.max(0,Math.floor((d.payload&&d.payload.amount)||0));
+    const mine=localSide==="p2"?P2:P1;
+    mine.pending+=amount;
+    show("⚡落雷 +" + amount);
+  }
+
+  if(d.type==="hello"){
+    send("state",{p1:packP(P1),p2:packP(P2)});
+  }
+}
 function setup(c){conn=c;conn.on("open",()=>{setStatus("接続完了");send("hello",{})});conn.on("data",onData);conn.on("close",()=>setStatus("接続切断"));conn.on("error",e=>setStatus("通信エラー: "+(e.message||e)))}
 function sendMine(){if(mode==="solo"||!conn||!conn.open)return;send("state",{p1:packP(P1),p2:packP(P2)})}
 function reset(){Object.assign(P1,player("L"));Object.assign(P2,player("R"));if(mode==="host"){P1.input=keys;P2.input=remoteKeys;P1.name=(nameInput.value||"HOST").slice(0,16);P2.name="JOIN"}else if(mode==="join"){P1.input=remoteKeys;P2.input=keys;P1.name="HOST";P2.name=(nameInput.value||"JOIN").slice(0,16)}else{P1.input=keys;P2.input=remoteKeys}running=true;spawn(P1);spawn(P2)}
