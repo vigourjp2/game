@@ -148,7 +148,9 @@ function cellCenter(p,x,y){return{x:boardX(p)+x*cell+cell/2,y:boardTop+y*cell+ce
 function addBolt(x1,y1,x2,y2,color="#fff15a",life=22){bolts.push({x1,y1,x2,y2,color,life,max:life,seed:Math.random()*999});shake=Math.max(shake,10)}
 function addCellBolt(p,x,y,color="#fff15a"){const c=cellCenter(p,x,y);addBolt(c.x+(Math.random()-.5)*cell,boardTop-cell*.8,c.x,c.y,color,24)}
 function winnerOf(loser){return loser===P1?P2:P1}
-function finishGame(loser){
+function playerId(p){return p===P1?"p1":"p2"}
+function playerById(id){return id==="p2"?P2:P1}
+function finishGame(loser,fromNet){
   if(gameEnded)return;
   gameEnded=true;running=false;stopBgm();
   const win=winnerOf(loser),mine=localSide==="p2"?P2:P1;
@@ -159,6 +161,9 @@ function finishGame(loser){
   show((localWin?"勝利":"敗北")+"\nTHUNDER FINISH");
   for(let i=0;i<10;i++){const x1=leftX+rnd(Math.max(1,Math.floor(cell*COLS*2+gap)));addBolt(x1,0,rnd(W),H*.2+rnd(Math.floor(H*.7)),i%2?"#4df6ff":"#fff15a",34+rnd(16))}
   sfx(localWin?"win":"lose");
+  if(!fromNet&&mode!=="solo"&&conn&&conn.open){
+    send("finish",{loser:playerId(loser),winner:playerId(win)});
+  }
 }
 
 function resize(){const dpr=Math.max(1,Math.min(devicePixelRatio||1,2));const r=canvas.getBoundingClientRect();W=Math.max(320,r.width||window.innerWidth||360);H=Math.max(420,r.height||Math.floor((window.innerHeight||720)*.78));canvas.width=Math.floor(W*dpr);canvas.height=Math.floor(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);gap=Math.max(8,Math.floor(W*.018));cell=Math.floor(Math.min((W-gap-24)/(COLS*2),(H-52)/ROWS));cell=Math.max(16,Math.min(cell,42));const tw=cell*COLS*2+gap;leftX=Math.floor((W-tw)/2);rightX=Math.floor(leftX+cell*COLS+gap);boardTop=Math.floor(Math.max(42,(H-cell*ROWS)/2+16))}
@@ -254,6 +259,12 @@ function onData(d){
   }
 
   if(d.type==="attack"){const amount=Math.max(0,Math.floor((d.payload&&d.payload.amount)||0));applyAttackToMine(amount)}
+
+  if(d.type==="finish"){
+    const loser=playerById(d.payload&&d.payload.loser);
+    loser.gameOver=true;
+    finishGame(loser,true);
+  }
 
   if(d.type==="hello"){
     send("state",{p1:packP(P1),p2:packP(P2)});
