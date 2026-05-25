@@ -2,1077 +2,486 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>SPARK WIRE PUYO - 1ブロック電線対戦</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>SPARK WIRE PUYO ONLINE</title>
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: radial-gradient(circle at top, #25324d 0%, #101522 45%, #070910 100%);
-    color: #f5f7ff;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    overflow: hidden;
-    touch-action: none;
-  }
-  #wrap {
-    width: 100vw;
-    height: 100vh;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    gap: 6px;
-    padding: 8px;
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    font-weight: 800;
-    letter-spacing: .04em;
-  }
-  .title {
-    font-size: clamp(14px, 4vw, 24px);
-    text-shadow: 0 0 12px #70d6ff;
-  }
-  .small {
-    font-size: 12px;
-    opacity: .8;
-    text-align: right;
-    line-height: 1.35;
-  }
-  canvas {
-    touch-action: none;
-    width: 100%;
-    height: 100%;
-    display: block;
-    border: 2px solid rgba(148, 207, 255, .45);
-    border-radius: 16px;
-    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
-    box-shadow: 0 0 24px rgba(0, 180, 255, .18), inset 0 0 24px rgba(255,255,255,.04);
-  }
-  #controls {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    padding-bottom: 4px;
-  }
-  button {
-    border: 0;
-    border-radius: 14px;
-    padding: 12px 8px;
-    background: linear-gradient(180deg, #243856, #172234);
-    color: #f7fbff;
-    font-size: 16px;
-    font-weight: 800;
-    box-shadow: inset 0 1px rgba(255,255,255,.18), 0 4px 12px rgba(0,0,0,.35);
-  }
-  button:active { transform: translateY(2px); filter: brightness(1.25); }
-  #msg {
-    position: fixed;
-    left: 50%;
-    top: 52%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    font-size: clamp(28px, 9vw, 72px);
-    font-weight: 1000;
-    color: #fff;
-    text-align: center;
-    text-shadow: 0 0 18px #00e5ff, 0 0 32px #ffef5a, 0 6px 0 rgba(0,0,0,.35);
-    opacity: 0;
-    transition: opacity .2s;
-    white-space: pre-line;
-  }
-
-  #onlinePanel{position:fixed;inset:0;z-index:30;background:rgba(5,10,20,.86);display:flex;align-items:center;justify-content:center;padding:16px}
-  #onlineBox{width:min(430px,94vw);border:1px solid rgba(148,207,255,.45);border-radius:18px;background:linear-gradient(180deg,#15233a,#07101e);box-shadow:0 18px 60px rgba(0,0,0,.55);padding:16px}
-  #onlineBox h2{margin:0 0 8px;font-size:22px}
-  #onlineBox input{width:100%;margin:7px 0;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:#08111f;color:#fff;font-size:16px;font-weight:800;text-transform:uppercase}
-  #onlineBox .row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
-  #onlineBox button{background:linear-gradient(180deg,#1d9bf0,#0963a5)}
-  #onlineBox .solo{background:linear-gradient(180deg,#475569,#1f2937);width:100%;margin-top:8px}
-  #onlineStatus{font-size:12px;line-height:1.45;color:#dbeafe;margin-top:10px;min-height:34px}
-  #netBadge{position:fixed;left:10px;top:50px;z-index:20;background:rgba(0,0,0,.46);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:6px 9px;font-size:12px;font-weight:900;color:#e0f2fe;pointer-events:none}
-
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#07101d;color:#fff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none}
+#wrap{width:100vw;height:100vh;display:grid;grid-template-rows:auto 1fr auto;gap:6px;padding:8px;background:radial-gradient(circle at top,#263653,#0b1020 55%,#04070e)}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+h1{margin:0;font-size:clamp(18px,4vw,28px);letter-spacing:.03em;text-shadow:0 0 12px #6bd7ff}
+#sub{font-size:12px;line-height:1.35;text-align:right;opacity:.85;font-weight:800}
+#stageWrap{position:relative;border:2px solid rgba(127,197,255,.5);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));box-shadow:inset 0 0 28px rgba(255,255,255,.04),0 0 18px rgba(0,180,255,.14);overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#controls{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+button{border:0;border-radius:14px;padding:11px 4px;background:linear-gradient(180deg,#1f9cf0,#0869b1);color:#fff;font-weight:1000;font-size:15px;box-shadow:inset 0 1px rgba(255,255,255,.28),0 4px 10px rgba(0,0,0,.35);touch-action:manipulation}
+button:active{transform:translateY(2px);filter:brightness(1.15)}
+#panel{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,8,18,.72);z-index:10;padding:14px}
+#card{width:min(620px,94vw);border:2px solid rgba(127,197,255,.45);border-radius:18px;background:linear-gradient(180deg,#13233b,#06101f);padding:18px;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+#card h2{margin:0 0 10px;font-size:clamp(24px,7vw,38px)}
+#card p{margin:0 0 12px;color:#cbd5e1;font-weight:700}
+input{width:100%;margin:7px 0;padding:14px 16px;border-radius:14px;border:2px solid rgba(255,255,255,.17);background:#050d1b;color:#fff;font-size:20px;font-weight:900;outline:none}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+#soloBtn{width:100%;margin-top:10px;background:linear-gradient(180deg,#64748b,#334155)}
+#status{margin-top:12px;min-height:38px;color:#dbeafe;font-size:13px;line-height:1.35;font-weight:700}
+.badge{position:absolute;left:10px;top:10px;z-index:5;background:rgba(2,8,18,.65);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px 12px;font-weight:1000;color:#eaf6ff}
+#toast{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);pointer-events:none;z-index:6;font-weight:1000;font-size:clamp(26px,8vw,64px);text-align:center;white-space:pre-line;text-shadow:0 0 16px #00e5ff,0 0 28px #ffeb5c,0 5px 0 rgba(0,0,0,.4);opacity:0;transition:.2s}
 </style>
 </head>
 <body>
-
-<div id="onlinePanel">
-  <div id="onlineBox">
-    <h2>SPARK WIRE ONLINE</h2>
-    <div class="small" style="text-align:left">HOSTが左、JOINが右。Room IDを共有して対戦。</div>
-    <input id="playerName" placeholder="PLAYER NAME" maxlength="16">
-    <input id="roomId" placeholder="ROOM ID" maxlength="20">
-    <div class="row"><button id="hostBtn">HOSTで部屋作成</button><button id="joinBtn">JOINで参加</button></div>
-    <button id="soloBtn" class="solo">ソロで開始</button>
-    <div id="onlineStatus">GitHub Pages等のhttps上で使用。</div>
-  </div>
-</div>
-<div id="netBadge">SOLO</div>
 <div id="wrap">
   <header>
-    <div class="title">SPARK WIRE PUYO</div>
-    <div class="small">1ブロック電線対戦<br>4連結でスパーク、輪で大炎上</div>
+    <h1>SPARK WIRE PUYO</h1>
+    <div id="sub">1ブロック電線対戦<br>4連結でスパーク、輪で大炎上</div>
   </header>
-  <canvas id="game"></canvas>
+  <div id="stageWrap">
+    <div class="badge" id="modeBadge">MENU</div>
+    <canvas id="game"></canvas>
+    <div id="toast"></div>
+    <div id="panel">
+      <div id="card">
+        <h2>SPARK WIRE ONLINE</h2>
+        <p>HOSTが左、JOINが右。Room IDを同じにして対戦。</p>
+        <input id="nameInput" value="P" maxlength="16" placeholder="NAME">
+        <input id="roomInput" value="1" maxlength="18" placeholder="ROOM ID">
+        <div class="row">
+          <button id="hostBtn">HOSTで開始</button>
+          <button id="joinBtn">JOINで開始</button>
+        </div>
+        <button id="soloBtn">ソロで開始</button>
+        <div id="status">GitHub Pages等の https 上で使用。</div>
+      </div>
+    </div>
+  </div>
   <div id="controls">
     <button data-k="ArrowLeft">←</button>
     <button data-k="ArrowRight">→</button>
-    <button data-k="ArrowDown">↓加速</button>
+    <button data-k="ArrowDown">↓</button>
     <button data-k="ArrowUp">回転</button>
-    <button data-k="Space">即落下</button>
+    <button data-k="Space">落下</button>
   </div>
 </div>
-<div id="msg"></div>
 
 <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js"></script>
 <script>
-(() => {
-  "use strict";
+(function(){
+"use strict";
 
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
-  const msg = document.getElementById("msg");
+const firebaseConfig={
+  apiKey:"AIzaSyD-rY3jJ2ITZTqfCsk21vu3d22nR5_0p9o",
+  authDomain:"spark-wire-puyo.firebaseapp.com",
+  databaseURL:"https://spark-wire-puyo-default-rtdb.firebaseio.com",
+  projectId:"spark-wire-puyo",
+  storageBucket:"spark-wire-puyo.firebasestorage.app",
+  messagingSenderId:"486809623043",
+  appId:"1:486809623043:web:8feff1ab8972119d1e2c39"
+};
 
-  const COLS = 6;
-  const ROWS = 12;
-  const DIRS = [
-    {x:0, y:-1, bit:1, opp:4, name:"N"},
-    {x:1, y:0, bit:2, opp:8, name:"E"},
-    {x:0, y:1, bit:4, opp:1, name:"S"},
-    {x:-1, y:0, bit:8, opp:2, name:"W"}
-  ];
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const panel=document.getElementById("panel");
+const statusEl=document.getElementById("status");
+const badge=document.getElementById("modeBadge");
+const toast=document.getElementById("toast");
+const nameInput=document.getElementById("nameInput");
+const roomInput=document.getElementById("roomInput");
 
-  const TYPES = [
-    {name:"STRAIGHT", mask:1|4, color:"#65d7ff"},
-    {name:"CURVE", mask:1|2, color:"#8cff9b"},
-    {name:"TEE", mask:1|2|8, color:"#ffd45d"},
-    {name:"CROSS", mask:1|2|4|8, color:"#ff86e7"},
-    {name:"ZIG", mask:2|4, color:"#9aa7ff"},
-    {name:"END", mask:1, color:"#ff8b69"}
-  ];
+const COLS=6, ROWS=12;
+const DIRS=[
+  {x:0,y:-1,bit:1,opp:4},
+  {x:1,y:0,bit:2,opp:8},
+  {x:0,y:1,bit:4,opp:1},
+  {x:-1,y:0,bit:8,opp:2}
+];
+const TYPES=[
+  {mask:1|4,color:"#66d9ff"},
+  {mask:1|2,color:"#7cff8c"},
+  {mask:2|4,color:"#9aa7ff"},
+  {mask:1|2|8,color:"#ffd75d"},
+  {mask:1|2|4|8,color:"#ff70e8"},
+  {mask:1,color:"#ff8b68"}
+];
+const SPARK_COLORS=["#4df6ff","#ffe75f","#ff6cf1","#81ff5d","#ff5d5d"];
 
-  const SPARK_COLORS = ["#4df6ff", "#ffe75f", "#ff6cf1", "#81ff5d", "#ff5d5d"];
+let W=360,H=520,cell=28,gap=8,leftX=20,rightX=200,boardTop=70;
+let running=false,last=performance.now();
+let db=null,roomRef=null,mode="menu",localSide="solo",lastNet=0;
+const keys=new Set();
+const remoteKeys=new Set();
 
-  let W = 0, H = 0, cell = 0, gap = 0, boardTop = 0;
-  let leftX = 0, rightX = 0;
-  let running = true;
-  let last = performance.now();
+function rnd(n){return Math.floor(Math.random()*n)}
+function msg(t){toast.textContent=t;toast.style.opacity="1";clearTimeout(msg.t);msg.t=setTimeout(()=>toast.style.opacity="0",650)}
+function setStatus(t){statusEl.textContent=t}
+function safeRoom(v){return String(v||"1").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,18)||"1"}
 
-  const keys = new Set();
+function rotateMask(mask){
+  let o=0;
+  if(mask&1)o|=2;
+  if(mask&2)o|=4;
+  if(mask&4)o|=8;
+  if(mask&8)o|=1;
+  return o;
+}
+function makeBlock(){
+  const t=TYPES[rnd(TYPES.length)];
+  let mask=t.mask;
+  for(let i=0;i<rnd(4);i++)mask=rotateMask(mask);
+  return {mask,color:t.color,charred:false,burn:0,shock:0};
+}
+function cloneBlock(b){return b?{mask:b.mask,color:b.color,charred:!!b.charred,burn:b.burn||0,shock:b.shock||0}:null}
 
-  function rnd(n) { return Math.floor(Math.random() * n); }
-  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
-  function rotateMask(mask) {
-    let out = 0;
-    if (mask & 1) out |= 2;
-    if (mask & 2) out |= 4;
-    if (mask & 4) out |= 8;
-    if (mask & 8) out |= 1;
-    return out;
-  }
-
-  function makeBlock() {
-    const t = TYPES[rnd(TYPES.length)];
-    let rot = rnd(4);
-    let mask = t.mask;
-    for (let i = 0; i < rot; i++) mask = rotateMask(mask);
-    return {
-      mask,
-      base: t.name,
-      color: t.color,
-      charred: false,
-      burn: 0,
-      shock: 0
-    };
-  }
-
-  function cloneBlock(b) {
-    return { mask:b.mask, base:b.base, color:b.color, charred:b.charred, burn:b.burn || 0, shock:b.shock || 0 };
-  }
-
-  function makePlayer(side) {
-    return {
-      side,
-      grid: Array.from({length:ROWS}, () => Array(COLS).fill(null)),
-      active: null,
-      next: makeBlock(),
-      score: 0,
-      combo: 0,
-      pendingLightning: 0,
-      fallTimer: 0,
-      aiTimer: 0,
-      spark: { x: rnd(COLS), y: ROWS - 1, fromX: rnd(COLS), fromY: ROWS - 1, renderX: rnd(COLS), renderY: ROWS - 1, dir: rnd(4), t: 0, speed: 2.8, chain: 0, colorIndex: 0, trail: [] },
-      gameOver: false,
-      flash: 0,
-      name: side === "L" ? "PLAYER" : "RIVAL"
-    };
-  }
-
-  const P1 = makePlayer("L");
-  const P2 = makePlayer("R");
-
-  const firebaseConfig = {
-    apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",
-    authDomain:"minicra.firebaseapp.com",
-    databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId:"minicra",
-    storageBucket:"minicra.firebasestorage.app",
-    messagingSenderId:"943025034725",
-    appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"
+function makePlayer(side){
+  return {
+    side,name:side==="L"?"HOST":"JOIN",
+    grid:Array.from({length:ROWS},()=>Array(COLS).fill(null)),
+    active:null,next:makeBlock(),score:0,combo:0,pendingLightning:0,
+    fallTimer:0,aiTimer:0,gameOver:false,flash:0,input:null,
+    spark:{x:rnd(COLS),y:ROWS-1,fromX:0,fromY:ROWS-1,renderX:0,renderY:ROWS-1,dir:rnd(4),t:0,speed:2.8,chain:0,colorIndex:0,trail:[]}
   };
+}
+const P1=makePlayer("L");
+const P2=makePlayer("R");
 
-  const onlinePanel = document.getElementById("onlinePanel");
-  const onlineStatus = document.getElementById("onlineStatus");
-  const netBadge = document.getElementById("netBadge");
-  const playerNameInput = document.getElementById("playerName");
-  const roomIdInput = document.getElementById("roomId");
+function occupied(p,x,y){return x<0||x>=COLS||y<0||y>=ROWS||!!p.grid[y][x]}
+function spawn(p){
+  p.active={x:Math.floor(COLS/2),y:0,block:cloneBlock(p.next)};
+  p.next=makeBlock();
+  if(occupied(p,p.active.x,p.active.y)){p.gameOver=true;running=false;msg(p.side==="L"?"HOST LOSE":"JOIN LOSE")}
+}
+function canMove(p,dx,dy){
+  if(!p.active)return false;
+  const x=p.active.x+dx,y=p.active.y+dy;
+  return x>=0&&x<COLS&&y>=0&&y<ROWS&&!p.grid[y][x];
+}
+function lockBlock(p){
+  if(!p.active)return;
+  p.grid[p.active.y][p.active.x]=cloneBlock(p.active.block);
+  p.active=null;
+  applyPendingLightning(p);
+  spawn(p);
+}
+function hardDrop(p){if(!p.active)return;while(canMove(p,0,1))p.active.y++;lockBlock(p)}
+function rotateActive(p){if(p.active)p.active.block.mask=rotateMask(p.active.block.mask)}
+function gravity(p){
+  for(let x=0;x<COLS;x++){
+    let w=ROWS-1;
+    for(let y=ROWS-1;y>=0;y--){
+      if(p.grid[y][x]){
+        if(w!==y){p.grid[w][x]=p.grid[y][x];p.grid[y][x]=null}
+        w--;
+      }
+    }
+  }
+}
+function applyPendingLightning(p){
+  while(p.pendingLightning>0){
+    const a=[];
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(p.grid[y][x])a.push({x,y});
+    if(!a.length)break;
+    const h=a[rnd(a.length)],b=p.grid[h.y][h.x];
+    b.charred=true;b.mask=0;b.color="#2b2b2b";b.shock=36;
+    p.pendingLightning--;
+  }
+}
 
-  let db = null;
-  let roomRef = null;
-  let onlineRole = "solo";
-  let isOnline = false;
-  let isHost = false;
-  let lastNetSend = 0;
-  let remoteInput = {};
-  let localSide = "solo";
-  const remoteKeys = new Set();
-  P1.input = keys;
-  P2.input = keys;
+function connectedNeighbors(p,x,y){
+  const b=p.grid[y]?.[x],out=[];
+  if(!b||b.charred)return out;
+  for(let i=0;i<DIRS.length;i++){
+    const d=DIRS[i];
+    if(!(b.mask&d.bit))continue;
+    const nx=x+d.x,ny=y+d.y,nb=p.grid[ny]?.[nx];
+    if(nb&&!nb.charred&&(nb.mask&d.opp))out.push({x:nx,y:ny,dir:i});
+  }
+  return out;
+}
+function findComponent(p,sx,sy){
+  const st=p.grid[sy]?.[sx];
+  if(!st||st.charred)return {cells:[],edges:0,loop:false};
+  const seen=new Set(),stack=[{x:sx,y:sy}];let edges=0;
+  while(stack.length){
+    const c=stack.pop(),k=c.x+","+c.y;
+    if(seen.has(k))continue;
+    seen.add(k);
+    const ns=connectedNeighbors(p,c.x,c.y); edges+=ns.length;
+    for(const n of ns)stack.push({x:n.x,y:n.y});
+  }
+  const cells=[...seen].map(k=>{const a=k.split(",").map(Number);return{x:a[0],y:a[1]}});
+  edges/=2;
+  return {cells,edges,loop:cells.length>=4&&edges>=cells.length};
+}
+function hasOpenPort(p,comp){
+  const set=new Set(comp.cells.map(c=>c.x+","+c.y));
+  for(const c of comp.cells){
+    const b=p.grid[c.y]?.[c.x]; if(!b||b.charred)continue;
+    for(const d of DIRS){
+      if(!(b.mask&d.bit))continue;
+      const nx=c.x+d.x,ny=c.y+d.y,k=nx+","+ny;
+      if(set.has(k))continue;
+      if(nx<0||nx>=COLS||ny<0||ny>=ROWS)continue;
+      const nb=p.grid[ny]?.[nx];
+      if(!nb)return true;
+      if(!nb.charred&&(nb.mask&d.opp))return true;
+    }
+  }
+  return false;
+}
+function burnCells(p,cells,loop){
+  const set=new Set(cells.map(c=>c.x+","+c.y));
+  if(loop){
+    for(const c of cells)for(let yy=c.y-1;yy<=c.y+1;yy++)for(let xx=c.x-1;xx<=c.x+1;xx++){
+      if(xx>=0&&xx<COLS&&yy>=0&&yy<ROWS&&p.grid[yy][xx])set.add(xx+","+yy);
+    }
+  }
+  const final=[...set].map(k=>{const a=k.split(",").map(Number);return{x:a[0],y:a[1]}});
+  for(const c of final){const b=p.grid[c.y]?.[c.x];if(b)b.burn=loop?42:28}
+  setTimeout(()=>{
+    let rem=0;
+    for(const c of final)if(p.grid[c.y]?.[c.x]){p.grid[c.y][c.x]=null;rem++}
+    if(rem){
+      p.combo++;
+      p.score+=rem*100*p.combo+(loop?800:0);
+      const e=p===P1?P2:P1;
+      e.pendingLightning+=Math.max(1,Math.floor(rem/3)+p.combo-1+(loop?2:0));
+      p.spark.colorIndex=(p.spark.colorIndex+1)%SPARK_COLORS.length;
+      p.spark.chain=0;p.spark.speed=2.8;p.flash=20;
+      gravity(p);
+      msg((loop?"大炎上":"SPARK")+"\n"+rem+" BLOCK");
+    }
+  },loop?380:260);
+}
+function teleportSpark(p,s){
+  let tries=0;
+  do{s.x=rnd(COLS);s.y=rnd(ROWS);tries++}while((!p.grid[s.y][s.x]||p.grid[s.y][s.x].charred)&&tries<60);
+  s.fromX=s.renderX=s.x;s.fromY=s.renderY=s.y;s.t=0;s.chain=0;s.speed=2.8;
+}
+function stepSpark(p,dt){
+  const s=p.spark;
+  for(const tr of s.trail)tr.a*=Math.pow(.2,dt);
+  s.t+=dt*s.speed;
+  while(s.t>=1){
+    s.t-=1;
+    const b=p.grid[s.y]?.[s.x];
+    if(!b||b.charred){teleportSpark(p,s);break}
+    const options=connectedNeighbors(p,s.x,s.y);
+    if(options.length){
+      let next=options.find(n=>n.dir!==(s.dir+2)%4)||options[rnd(options.length)];
+      if(Math.random()<.16)next=options[rnd(options.length)];
+      s.fromX=s.x;s.fromY=s.y;s.x=next.x;s.y=next.y;s.dir=next.dir;s.chain++;
+      s.trail.push({x:s.fromX,y:s.fromY,a:1,color:SPARK_COLORS[s.colorIndex]});
+      if(s.trail.length>24)s.trail.shift();
+      const comp=findComponent(p,s.x,s.y);
+      if(comp.cells.length>=4){
+        s.speed=Math.max(1.2,2.8-comp.cells.length*.12);
+        if(s.chain>=Math.max(4,Math.floor(comp.cells.length*.85)))burnCells(p,comp.cells,comp.loop);
+      }else if(!hasOpenPort(p,comp)){
+        for(const c of comp.cells){const bb=p.grid[c.y]?.[c.x];if(bb){bb.charred=true;bb.mask=0;bb.color="#2b2b2b";bb.shock=40}}
+        teleportSpark(p,s);
+      }else s.speed=2.8;
+    }else{
+      const comp=findComponent(p,s.x,s.y);
+      if(comp.cells.length&& !hasOpenPort(p,comp)){
+        for(const c of comp.cells){const bb=p.grid[c.y]?.[c.x];if(bb){bb.charred=true;bb.mask=0;bb.color="#2b2b2b";bb.shock=40}}
+      }
+      teleportSpark(p,s);
+      break;
+    }
+  }
+  const e=s.t*s.t*(3-2*s.t);
+  s.renderX=s.fromX+(s.x-s.fromX)*e;
+  s.renderY=s.fromY+(s.y-s.fromY)*e;
+}
+function updatePlayer(p,dt,human){
+  if(p.gameOver)return;
+  if(!p.active)spawn(p);
+  const input=p.input||keys;
+  if(human){
+    if(input.has("ArrowLeft")&&canMove(p,-1,0)){p.active.x--;input.delete("ArrowLeft")}
+    if(input.has("ArrowRight")&&canMove(p,1,0)){p.active.x++;input.delete("ArrowRight")}
+    if(input.has("ArrowUp")){rotateActive(p);input.delete("ArrowUp")}
+    if(input.has("Space")){hardDrop(p);input.delete("Space")}
+    if(input.has("ArrowDown"))p.fallTimer+=dt*5;
+  }else{
+    p.aiTimer+=dt;
+    if(p.aiTimer>.24){
+      p.aiTimer=0;const r=Math.random();
+      if(r<.3&&canMove(p,-1,0))p.active.x--;
+      else if(r<.6&&canMove(p,1,0))p.active.x++;
+      else if(r<.75)rotateActive(p);
+    }
+  }
+  p.fallTimer+=dt;
+  if(p.fallTimer>.62){
+    p.fallTimer=0;
+    if(canMove(p,0,1))p.active.y++;else lockBlock(p);
+  }
+  stepSpark(p,dt);
+  if(p.flash>0)p.flash--;
+}
 
-  function setOnlineStatus(t){ if(onlineStatus) onlineStatus.textContent = t; if(netBadge) netBadge.textContent = t; }
-  function safeRoom(s){ return String(s||"").toUpperCase().replace(/[^A-Z0-9_-]/g,"").slice(0,20); }
-  function randomRoom(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
-  function initFirebase(){
-    if(db) return true;
-    if(!window.firebase || !firebase.database){ setOnlineStatus("Firebase読込不可。https配置で再読込。Web版はそのままソロ可"); return false; }
-    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
+function packBlock(b){return cloneBlock(b)}
+function unpackBlock(b){return cloneBlock(b)}
+function packPlayer(p){
+  return {
+    grid:p.grid.map(r=>r.map(packBlock)),active:p.active?{x:p.active.x,y:p.active.y,block:packBlock(p.active.block)}:null,
+    next:packBlock(p.next),score:p.score,combo:p.combo,pendingLightning:p.pendingLightning,fallTimer:p.fallTimer,
+    aiTimer:p.aiTimer,spark:p.spark,gameOver:p.gameOver,flash:p.flash,name:p.name
+  };
+}
+function applyPlayer(p,s){
+  if(!s)return;
+  p.grid=(s.grid||[]).map(r=>r.map(unpackBlock));
+  while(p.grid.length<ROWS)p.grid.push(Array(COLS).fill(null));
+  p.grid=p.grid.slice(0,ROWS).map(r=>{while(r.length<COLS)r.push(null);return r.slice(0,COLS)});
+  p.active=s.active?{x:s.active.x,y:s.active.y,block:unpackBlock(s.active.block)}:null;
+  p.next=unpackBlock(s.next)||makeBlock();
+  p.score=s.score||0;p.combo=s.combo||0;p.pendingLightning=s.pendingLightning||0;p.fallTimer=s.fallTimer||0;p.aiTimer=s.aiTimer||0;
+  p.spark=s.spark||p.spark;p.gameOver=!!s.gameOver;p.flash=s.flash||0;p.name=s.name||p.name;
+}
+function initFirebase(){
+  try{
+    if(db)return true;
+    if(!window.firebase||!firebase.database){setStatus("Firebase読込不可。GitHub Pagesで再読み込み。");return false}
+    if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
+    db=firebase.database();
     return true;
+  }catch(e){setStatus("Firebase初期化エラー: "+(e.message||e));return false}
+}
+function roomPath(){return "spark_wire_rooms/"+safeRoom(roomInput.value)}
+function listenPlayers(){
+  roomRef.child("players/p1").on("value",s=>{if(localSide!=="p1")applyPlayer(P1,s.val())});
+  roomRef.child("players/p2").on("value",s=>{if(localSide!=="p2")applyPlayer(P2,s.val())});
+}
+function sendMine(){
+  if(!roomRef||mode==="solo"||localSide==="solo")return;
+  const p=localSide==="p1"?P1:P2;
+  roomRef.child("players/"+localSide).set(packPlayer(p)).catch(e=>setStatus("送信エラー: "+(e.message||e)));
+}
+function resize(){
+  const dpr=Math.max(1,Math.min(devicePixelRatio||1,2));
+  const rect=canvas.getBoundingClientRect();
+  W=Math.max(320,rect.width||window.innerWidth||360);
+  H=Math.max(420,rect.height||Math.floor((window.innerHeight||720)*.78));
+  canvas.width=Math.floor(W*dpr);canvas.height=Math.floor(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+  gap=Math.max(8,Math.floor(W*.018));
+  cell=Math.floor(Math.min((W-gap-24)/(COLS*2),(H-52)/ROWS));
+  cell=Math.max(16,Math.min(cell,42));
+  const tw=cell*COLS*2+gap;
+  leftX=Math.floor((W-tw)/2);rightX=Math.floor(leftX+cell*COLS+gap);boardTop=Math.floor(Math.max(42,(H-cell*ROWS)/2+16));
+}
+function reset(){
+  Object.assign(P1,makePlayer("L"));Object.assign(P2,makePlayer("R"));
+  if(mode==="host"){P1.input=keys;P2.input=remoteKeys;P1.name=(nameInput.value||"HOST").slice(0,16);P2.name="JOIN"}
+  else if(mode==="join"){P1.input=remoteKeys;P2.input=keys;P1.name="HOST";P2.name=(nameInput.value||"JOIN").slice(0,16)}
+  else{P1.input=keys;P2.input=remoteKeys}
+  running=true;spawn(P1);spawn(P2);
+}
+async function startHost(){
+  resize();reset();
+  if(!initFirebase())return;
+  mode="host";localSide="p1";roomRef=db.ref(roomPath());
+  await roomRef.set({meta:{host:P1.name,createdAt:firebase.database.ServerValue.TIMESTAMP},players:{p1:packPlayer(P1),p2:packPlayer(P2)}});
+  listenPlayers();panel.style.display="none";badge.textContent="HOST ROOM "+safeRoom(roomInput.value);setStatus("HOST開始");
+}
+async function startJoin(){
+  resize();reset();
+  if(!initFirebase())return;
+  mode="join";localSide="p2";roomRef=db.ref(roomPath());
+  const s=await roomRef.child("players/p1").get();
+  if(!s.exists()){setStatus("部屋なし。HOST作成後にJOIN");return}
+  applyPlayer(P1,s.val());
+  await roomRef.child("meta/join").set(P2.name);
+  await roomRef.child("players/p2").set(packPlayer(P2));
+  listenPlayers();panel.style.display="none";badge.textContent="JOIN ROOM "+safeRoom(roomInput.value);setStatus("JOIN開始");
+}
+function startSolo(){
+  mode="solo";localSide="solo";resize();reset();panel.style.display="none";badge.textContent="SOLO";setStatus("SOLO開始");
+}
+function bind(id,fn){
+  const el=document.getElementById(id);
+  let lock=false;
+  const run=e=>{if(e)e.preventDefault();if(lock)return;lock=true;setTimeout(()=>lock=false,300);fn()};
+  el.addEventListener("click",run);el.addEventListener("touchend",run,{passive:false});el.addEventListener("pointerup",run);
+}
+function roundRect(x,y,w,h,r){r=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function drawWire(cx,cy,mask,color,charred){
+  ctx.lineCap="round";ctx.lineJoin="round";ctx.lineWidth=Math.max(4,cell*.13);ctx.strokeStyle=charred?"#111":color;ctx.shadowColor=charred?"transparent":color;ctx.shadowBlur=charred?0:8;
+  for(const d of DIRS){if(!(mask&d.bit))continue;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+d.x*cell*.42,cy+d.y*cell*.42);ctx.stroke()}
+  ctx.shadowBlur=0;ctx.fillStyle=charred?"#030303":"#fff";ctx.beginPath();ctx.arc(cx,cy,Math.max(3,cell*.07),0,Math.PI*2);ctx.fill();
+}
+function drawBlock(px,py,b,a=1){
+  if(!b)return;ctx.save();ctx.globalAlpha=a;
+  const g=ctx.createLinearGradient(px,py,px+cell,py+cell);g.addColorStop(0,b.charred?"#3a2a20":"#31405f");g.addColorStop(1,b.charred?"#050505":"#101a2c");
+  ctx.fillStyle=g;ctx.strokeStyle=b.charred?"#755034":"rgba(255,255,255,.25)";ctx.lineWidth=2;roundRect(px+2,py+2,cell-4,cell-4,10);ctx.fill();ctx.stroke();
+  if(b.shock>0){ctx.strokeStyle="#fff15a";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px+cell*.2,py+cell*.12);ctx.lineTo(px+cell*.55,py+cell*.45);ctx.lineTo(px+cell*.38,py+cell*.48);ctx.lineTo(px+cell*.78,py+cell*.9);ctx.stroke();b.shock--}
+  drawWire(px+cell/2,py+cell/2,b.mask,b.color,b.charred);
+  if(b.burn>0){ctx.globalAlpha=Math.min(1,b.burn/42);ctx.fillStyle="#ff5b22";ctx.shadowColor="#ffde59";ctx.shadowBlur=18;ctx.beginPath();ctx.arc(px+cell/2,py+cell/2,cell*.36,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;b.burn--}
+  ctx.restore();
+}
+function drawSpark(p,ox,oy){
+  const s=p.spark,c=SPARK_COLORS[s.colorIndex];
+  for(const t of s.trail){ctx.globalAlpha=t.a*.55;ctx.fillStyle=t.color;ctx.shadowColor=t.color;ctx.shadowBlur=14;ctx.beginPath();ctx.arc(ox+t.x*cell+cell/2,oy+t.y*cell+cell/2,cell*.12,0,Math.PI*2);ctx.fill()}
+  ctx.globalAlpha=1;ctx.shadowColor=c;ctx.shadowBlur=22;ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(ox+s.renderX*cell+cell/2,oy+s.renderY*cell+cell/2,cell*.18,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+}
+function drawHud(p,ox,oy){
+  ctx.fillStyle="#f8fbff";ctx.textAlign="left";ctx.font=`900 ${Math.max(11,cell*.32)}px system-ui`;ctx.fillText(p.name,ox,oy-24);
+  ctx.font=`800 ${Math.max(9,cell*.25)}px system-ui`;ctx.fillText("SCORE "+p.score,ox,oy-8);
+  ctx.textAlign="right";ctx.fillText("⚡"+p.pendingLightning+" COMBO "+p.combo,ox+cell*COLS,oy-8);
+  drawBlock(ox+cell*COLS-cell*.9,oy-43,p.next,.72);
+}
+function drawPlayer(p,ox){
+  const oy=boardTop;
+  ctx.fillStyle="rgba(4,9,18,.72)";ctx.strokeStyle=p.flash>0?"#fff15a":"rgba(123,209,255,.38)";ctx.lineWidth=p.flash>0?4:2;roundRect(ox-5,oy-5,cell*COLS+10,cell*ROWS+10,14);ctx.fill();ctx.stroke();
+  ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=1;
+  for(let x=0;x<=COLS;x++){ctx.beginPath();ctx.moveTo(ox+x*cell,oy);ctx.lineTo(ox+x*cell,oy+ROWS*cell);ctx.stroke()}
+  for(let y=0;y<=ROWS;y++){ctx.beginPath();ctx.moveTo(ox,oy+y*cell);ctx.lineTo(ox+COLS*cell,oy+y*cell);ctx.stroke()}
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(p.grid[y][x])drawBlock(ox+x*cell,oy+y*cell,p.grid[y][x]);
+  if(p.active){drawBlock(ox+p.active.x*cell,oy+p.active.y*cell,p.active.block,.98);let gy=p.active.y;while(gy+1<ROWS&&!p.grid[gy+1][p.active.x])gy++;if(gy!==p.active.y)drawBlock(ox+p.active.x*cell,oy+gy*cell,p.active.block,.22)}
+  drawSpark(p,ox,oy);drawHud(p,ox,oy);
+}
+function drawCenterInfo(){
+  ctx.textAlign="center";ctx.fillStyle="rgba(255,255,255,.88)";ctx.font=`900 ${Math.max(10,cell*.28)}px system-ui`;
+  ["HOST左 / JOIN右","左右スワイプ移動","ダブルタップ回転","下スワイプ加速","長押し即落下"].forEach((t,i)=>ctx.fillText(t,W/2,boardTop+cell*(1.8+i*.55)));
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);drawPlayer(P1,leftX);drawPlayer(P2,rightX);drawCenterInfo();
+}
+function update(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  if(running){
+    if(mode==="host")updatePlayer(P1,dt,true);
+    else if(mode==="join")updatePlayer(P2,dt,true);
+    else{updatePlayer(P1,dt,true);updatePlayer(P2,dt,false)}
+    if(mode!=="solo"&&now-lastNet>70){lastNet=now;sendMine()}
   }
-
-  function spawn(p) {
-    p.active = {
-      x: Math.floor(COLS/2),
-      y: 0,
-      block: cloneBlock(p.next)
-    };
-    p.next = makeBlock();
-    if (occupied(p, p.active.x, p.active.y)) {
-      p.gameOver = true;
-      running = false;
-      showMessage(p.side === "L" ? "YOU LOSE" : "YOU WIN");
-    }
-  }
-
-  function occupied(p, x, y) {
-    return x < 0 || x >= COLS || y < 0 || y >= ROWS || !!p.grid[y][x];
-  }
-
-  function canMove(p, dx, dy) {
-    if (!p.active) return false;
-    const x = p.active.x + dx;
-    const y = p.active.y + dy;
-    return x >= 0 && x < COLS && y >= 0 && y < ROWS && !p.grid[y][x];
-  }
-
-  function lockBlock(p) {
-    const a = p.active;
-    if (!a) return;
-    p.grid[a.y][a.x] = cloneBlock(a.block);
-    p.active = null;
-    applyPendingLightning(p);
-    spawn(p);
-  }
-
-  function hardDrop(p) {
-    if (!p.active || p.gameOver) return;
-    while (canMove(p, 0, 1)) p.active.y++;
-    lockBlock(p);
-  }
-
-  function rotateActive(p) {
-    if (!p.active) return;
-    p.active.block.mask = rotateMask(p.active.block.mask);
-  }
-
-  function applyGravity(p) {
-    for (let x = 0; x < COLS; x++) {
-      let write = ROWS - 1;
-      for (let y = ROWS - 1; y >= 0; y--) {
-        if (p.grid[y][x]) {
-          if (write !== y) {
-            p.grid[write][x] = p.grid[y][x];
-            p.grid[y][x] = null;
-          }
-          write--;
-        }
-      }
-    }
-  }
-
-  function applyPendingLightning(p) {
-    while (p.pendingLightning > 0) {
-      const candidates = [];
-      for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-          if (p.grid[y][x]) candidates.push({x, y});
-        }
-      }
-      if (candidates.length === 0) break;
-      const hit = candidates[rnd(candidates.length)];
-      p.grid[hit.y][hit.x].charred = true;
-      p.grid[hit.y][hit.x].mask = 0;
-      p.grid[hit.y][hit.x].color = "#252525";
-      p.grid[hit.y][hit.x].shock = 28;
-      p.pendingLightning--;
-    }
-  }
-
-  function getConnections(grid, x, y) {
-    const b = grid[y]?.[x];
-    if (!b) return [];
-    if (b.charred) return [];
-    return DIRS.map((d, i) => ({...d, i})).filter(d => b.mask & d.bit);
-  }
-
-  function connectedNeighbors(p, x, y) {
-    const out = [];
-    const b = p.grid[y]?.[x];
-    if (!b || b.charred) return out;
-    for (let i = 0; i < DIRS.length; i++) {
-      const d = DIRS[i];
-      if (!(b.mask & d.bit)) continue;
-      const nx = x + d.x;
-      const ny = y + d.y;
-      const nb = p.grid[ny]?.[nx];
-      if (!nb || nb.charred) continue;
-      if (nb.mask & d.opp) out.push({x:nx, y:ny, dir:i});
-    }
-    return out;
-  }
-
-  function findComponent(p, sx, sy) {
-    const start = p.grid[sy]?.[sx];
-    if (!start || start.charred) return {cells:[], edges:0, loop:false};
-    const seen = new Set();
-    const stack = [{x:sx, y:sy}];
-    let edges = 0;
-    while (stack.length) {
-      const c = stack.pop();
-      const k = c.x + "," + c.y;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      const ns = connectedNeighbors(p, c.x, c.y);
-      edges += ns.length;
-      for (const n of ns) stack.push({x:n.x, y:n.y});
-    }
-    const cells = [...seen].map(k => {
-      const [x,y] = k.split(",").map(Number);
-      return {x,y};
-    });
-    edges = edges / 2;
-    const loop = cells.length >= 4 && edges >= cells.length;
-    return {cells, edges, loop};
-  }
-
-  function burnCells(p, cells, loop) {
-    const set = new Set(cells.map(c => c.x + "," + c.y));
-    if (loop) {
-      for (const c of cells) {
-        for (let yy = c.y - 1; yy <= c.y + 1; yy++) {
-          for (let xx = c.x - 1; xx <= c.x + 1; xx++) {
-            if (xx >= 0 && xx < COLS && yy >= 0 && yy < ROWS && p.grid[yy][xx]) {
-              set.add(xx + "," + yy);
-            }
-          }
-        }
-      }
-    } else {
-      for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-          const b = p.grid[y][x];
-          if (!b || !b.charred) continue;
-          for (const c of cells) {
-            if (Math.abs(c.x - x) + Math.abs(c.y - y) === 1) set.add(x + "," + y);
-          }
-        }
-      }
-    }
-
-    const finalCells = [...set].map(k => {
-      const [x, y] = k.split(",").map(Number);
-      return {x, y};
-    });
-
-    for (const c of finalCells) {
-      const b = p.grid[c.y][c.x];
-      if (b) b.burn = loop ? 46 : 30;
-    }
-
-    setTimeout(() => {
-      let removed = 0;
-      for (const c of finalCells) {
-        if (p.grid[c.y]?.[c.x]) {
-          p.grid[c.y][c.x] = null;
-          removed++;
-        }
-      }
-      if (removed > 0) {
-        p.combo++;
-        const add = removed * 100 * p.combo + (loop ? 800 : 0);
-        p.score += add;
-        const enemy = p === P1 ? P2 : P1;
-        enemy.pendingLightning += Math.max(1, Math.floor(removed / 3) + p.combo - 1 + (loop ? 2 : 0));
-        p.spark.colorIndex = (p.spark.colorIndex + 1) % SPARK_COLORS.length;
-        p.spark.chain = 0;
-        p.spark.speed = 6.2;
-        p.flash = 22;
-        showMessage((loop ? "大炎上" : "SPARK") + "\n" + removed + " BLOCK x" + p.combo);
-        applyGravity(p);
-        setTimeout(() => {
-          const anyBurn = scanSparkable(p);
-          if (!anyBurn) p.combo = 0;
-        }, 260);
-      }
-    }, loop ? 420 : 300);
-  }
-
-  function scanSparkable(p) {
-    const checked = new Set();
-    let found = false;
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const b = p.grid[y][x];
-        const k = x + "," + y;
-        if (!b || b.charred || checked.has(k)) continue;
-        const comp = findComponent(p, x, y);
-        for (const c of comp.cells) checked.add(c.x + "," + c.y);
-        if (comp.cells.length >= 4) {
-          found = true;
-          burnCells(p, comp.cells, comp.loop);
-          return true;
-        }
-      }
-    }
-    return found;
-  }
-
-  function stepSpark(p, dt) {
-    const s = p.spark;
-
-    for (const t of s.trail) t.a *= Math.pow(0.18, dt);
-
-    s.t += dt * s.speed;
-
-    while (s.t >= 1) {
-      s.t -= 1;
-
-      let b = p.grid[s.y]?.[s.x];
-      if (!b || b.charred) {
-        let tries = 0;
-        do {
-          s.x = rnd(COLS);
-          s.y = rnd(ROWS);
-          tries++;
-        } while ((!p.grid[s.y][s.x] || p.grid[s.y][s.x].charred) && tries < 40);
-
-        s.fromX = s.x;
-        s.fromY = s.y;
-        s.renderX = s.x;
-        s.renderY = s.y;
-        s.dir = rnd(4);
-        s.chain = 0;
-        s.speed = 2.8;
-        s.t = 0;
-        break;
-      }
-
-      const options = connectedNeighbors(p, s.x, s.y);
-      if (options.length) {
-        let next = options.find(n => n.dir !== (s.dir + 2) % 4) || options[rnd(options.length)];
-        if (Math.random() < 0.18) next = options[rnd(options.length)];
-
-        s.fromX = s.x;
-        s.fromY = s.y;
-        s.x = next.x;
-        s.y = next.y;
-        s.dir = next.dir;
-        s.chain++;
-
-        s.trail.push({x:s.fromX, y:s.fromY, a:1, color:SPARK_COLORS[s.colorIndex]});
-        if (s.trail.length > 26) s.trail.shift();
-
-        const comp = findComponent(p, s.x, s.y);
-        if (comp.cells.length >= 4) {
-          s.speed = Math.max(1.2, 2.8 - comp.cells.length * 0.12);
-          if (s.chain >= Math.max(4, Math.floor(comp.cells.length * 0.85))) {
-            burnCells(p, comp.cells, comp.loop);
-          }
-        } else {
-          s.speed = 2.8;
-        }
-      } else {
-        s.fromX = s.x;
-        s.fromY = s.y;
-        s.dir = rnd(4);
-        s.chain = 0;
-        s.speed = 2.8;
-        const dirs = getConnections(p.grid, s.x, s.y);
-        if (dirs.length) s.dir = dirs[rnd(dirs.length)].i;
-      }
-    }
-
-    const ease = s.t * s.t * (3 - 2 * s.t);
-    s.renderX = s.fromX + (s.x - s.fromX) * ease;
-    s.renderY = s.fromY + (s.y - s.fromY) * ease;
-  }
-
-  function updatePlayer(p, dt, human) {
-    if (p.gameOver) return;
-    if (!p.active) spawn(p);
-
-    if (human) {
-      const input = p.input || keys;
-      if (input.has("ArrowLeft") && canMove(p, -1, 0)) { p.active.x--; input.delete("ArrowLeft"); }
-      if (input.has("ArrowRight") && canMove(p, 1, 0)) { p.active.x++; input.delete("ArrowRight"); }
-      if (input.has("ArrowUp")) { rotateActive(p); input.delete("ArrowUp"); }
-      if (input.has("Space")) { hardDrop(p); input.delete("Space"); }
-      if (input.has("ArrowDown")) p.fallTimer += dt * 5;
-    } else {
-      p.aiTimer += dt;
-      if (p.aiTimer > 0.22) {
-        p.aiTimer = 0;
-        const r = Math.random();
-        if (r < 0.28 && canMove(p, -1, 0)) p.active.x--;
-        else if (r < 0.56 && canMove(p, 1, 0)) p.active.x++;
-        else if (r < 0.72) rotateActive(p);
-      }
-    }
-
-    p.fallTimer += dt;
-    const fallLimit = human ? 0.62 : 0.58;
-    if (p.fallTimer >= fallLimit) {
-      p.fallTimer = 0;
-      if (canMove(p, 0, 1)) p.active.y++;
-      else lockBlock(p);
-    }
-
-    stepSpark(p, dt);
-    if (p.flash > 0) p.flash--;
-  }
-
-  function showMessage(text) {
-    msg.textContent = text;
-    msg.style.opacity = "1";
-    clearTimeout(showMessage.timer);
-    showMessage.timer = setTimeout(() => msg.style.opacity = "0", 650);
-  }
-
-  function resize() {
-    const dpr = Math.max(1, Math.min(devicePixelRatio || 1, 2));
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.floor(rect.width * dpr);
-    canvas.height = Math.floor(rect.height * dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    W = rect.width;
-    H = rect.height;
-    gap = Math.max(8, W * 0.018);
-    cell = Math.floor(Math.min((W - gap - 24) / (COLS * 2), (H - 52) / ROWS));
-    boardTop = Math.floor((H - cell * ROWS) / 2 + 18);
-    leftX = Math.floor((W - (cell * COLS * 2 + gap)) / 2);
-    rightX = Math.floor(leftX + cell * COLS + gap);
-  }
-
-  function drawWire(cx, cy, mask, color, charred) {
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = Math.max(4, cell * .13);
-    ctx.strokeStyle = charred ? "#111" : color;
-    ctx.shadowColor = charred ? "transparent" : color;
-    ctx.shadowBlur = charred ? 0 : 8;
-
-    for (const d of DIRS) {
-      if (!(mask & d.bit)) continue;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.bezierCurveTo(
-        cx + d.x * cell * .16 - d.y * cell * .05,
-        cy + d.y * cell * .16 + d.x * cell * .05,
-        cx + d.x * cell * .31 + d.y * cell * .05,
-        cy + d.y * cell * .31 - d.x * cell * .05,
-        cx + d.x * cell * .45,
-        cy + d.y * cell * .45
-      );
-      ctx.stroke();
-    }
-
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = charred ? "#050505" : "#fff";
-    ctx.beginPath();
-    ctx.arc(cx, cy, Math.max(3, cell * .07), 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  function drawBlock(x, y, b, alpha=1) {
-    const px = x;
-    const py = y;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    const grd = ctx.createLinearGradient(px, py, px + cell, py + cell);
-    grd.addColorStop(0, b.charred ? "#3a302a" : "#31405f");
-    grd.addColorStop(1, b.charred ? "#050505" : "#111a2c");
-    ctx.fillStyle = grd;
-    ctx.strokeStyle = b.charred ? "#755034" : "rgba(255,255,255,.25)";
-    ctx.lineWidth = 2;
-    roundRect(px + 2, py + 2, cell - 4, cell - 4, 10);
-    ctx.fill();
-    ctx.stroke();
-
-    if (b.shock > 0) {
-      ctx.strokeStyle = "#fff15a";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(px + cell * .2, py + cell * .12);
-      ctx.lineTo(px + cell * .55, py + cell * .45);
-      ctx.lineTo(px + cell * .38, py + cell * .48);
-      ctx.lineTo(px + cell * .78, py + cell * .9);
-      ctx.stroke();
-      b.shock--;
-    }
-
-    drawWire(px + cell/2, py + cell/2, b.mask, b.color, b.charred);
-
-    if (b.burn > 0) {
-      const a = b.burn / 46;
-      ctx.globalAlpha = Math.min(1, a);
-      ctx.fillStyle = "#ff5b22";
-      ctx.shadowColor = "#ffde59";
-      ctx.shadowBlur = 18;
-      for (let i = 0; i < 5; i++) {
-        const fx = px + cell * (.22 + i * .14);
-        const fy = py + cell * (.78 - Math.random() * .28);
-        ctx.beginPath();
-        ctx.moveTo(fx, py + cell * .9);
-        ctx.quadraticCurveTo(fx - cell*.18, fy, fx, py + cell * .18);
-        ctx.quadraticCurveTo(fx + cell*.18, fy, fx, py + cell * .9);
-        ctx.fill();
-      }
-      ctx.shadowBlur = 0;
-      b.burn--;
-    }
-    ctx.restore();
-  }
-
-  function drawPlayer(p, ox) {
-    const oy = boardTop;
-    ctx.save();
-
-    ctx.fillStyle = "rgba(4,9,18,.68)";
-    ctx.strokeStyle = p.flash > 0 ? "#fff15a" : "rgba(123, 209, 255, .36)";
-    ctx.lineWidth = p.flash > 0 ? 4 : 2;
-    roundRect(ox - 5, oy - 5, cell * COLS + 10, cell * ROWS + 10, 14);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= COLS; x++) {
-      ctx.beginPath();
-      ctx.moveTo(ox + x * cell, oy);
-      ctx.lineTo(ox + x * cell, oy + ROWS * cell);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= ROWS; y++) {
-      ctx.beginPath();
-      ctx.moveTo(ox, oy + y * cell);
-      ctx.lineTo(ox + COLS * cell, oy + y * cell);
-      ctx.stroke();
-    }
-
-    for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        const b = p.grid[y][x];
-        if (b) drawBlock(ox + x * cell, oy + y * cell, b);
-      }
-    }
-
-    if (p.active) {
-      drawBlock(ox + p.active.x * cell, oy + p.active.y * cell, p.active.block, .98);
-      let gy = p.active.y;
-      while (gy + 1 < ROWS && !p.grid[gy+1][p.active.x]) gy++;
-      if (gy !== p.active.y) drawBlock(ox + p.active.x * cell, oy + gy * cell, p.active.block, .22);
-    }
-
-    drawSpark(p, ox, oy);
-    drawHud(p, ox, oy);
-    ctx.restore();
-  }
-
-  function drawSpark(p, ox, oy) {
-    const s = p.spark;
-    const color = SPARK_COLORS[s.colorIndex];
-    for (const t of s.trail) {
-      ctx.globalAlpha = t.a * .55;
-      ctx.fillStyle = t.color;
-      ctx.shadowColor = t.color;
-      ctx.shadowBlur = 14;
-      ctx.beginPath();
-      ctx.arc(ox + t.x * cell + cell/2, oy + t.y * cell + cell/2, cell * .12, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "#fff";
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 22;
-    ctx.beginPath();
-    ctx.arc(ox + s.renderX * cell + cell/2, oy + s.renderY * cell + cell/2, cell * .18 + Math.sin(performance.now()/90)*2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(ox + s.renderX * cell + cell/2, oy + s.renderY * cell + cell/2, cell * .1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-  function drawHud(p, ox, oy) {
-    ctx.fillStyle = "#f5f7ff";
-    ctx.font = `800 ${Math.max(12, cell*.34)}px system-ui`;
-    ctx.textAlign = "left";
-    ctx.fillText(p.name, ox, oy - 24);
-    ctx.font = `700 ${Math.max(10, cell*.27)}px system-ui`;
-    ctx.fillText("SCORE " + p.score, ox, oy - 8);
-    ctx.textAlign = "right";
-    ctx.fillText("⚡" + p.pendingLightning + "  COMBO " + p.combo, ox + cell * COLS, oy - 8);
-
-    const nx = ox + cell * COLS - cell * .9;
-    const ny = oy - 43;
-    ctx.globalAlpha = .85;
-    drawBlock(nx, ny, p.next, .72);
-    ctx.globalAlpha = 1;
-  }
-
-  function drawCenterInfo() {
-    ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(255,255,255,.88)";
-    ctx.font = `800 ${Math.max(11, cell*.3)}px system-ui`;
-    ctx.fillText("VS", W/2, boardTop + cell * 1.2);
-    ctx.font = `700 ${Math.max(9, cell*.22)}px system-ui`;
-    const lines = ["HOST左 / JOIN右", "左右スワイプ移動", "ダブルタップ回転", "下スワイプ加速", "長押し即落下"];
-    lines.forEach((line, i) => ctx.fillText(line, W/2, boardTop + cell * (2.2 + i*.55)));
-  }
-
-  function roundRect(x, y, w, h, r) {
-    r = Math.min(r, w/2, h/2);
-    ctx.beginPath();
-    ctx.moveTo(x+r, y);
-    ctx.arcTo(x+w, y, x+w, y+h, r);
-    ctx.arcTo(x+w, y+h, x, y+h, r);
-    ctx.arcTo(x, y+h, x, y, r);
-    ctx.arcTo(x, y, x+w, y, r);
-    ctx.closePath();
-  }
-
-  function draw() {
-    ctx.clearRect(0,0,W,H);
-    drawPlayer(P1, leftX);
-    drawPlayer(P2, rightX);
-    drawCenterInfo();
-
-    if (!running) {
-      ctx.fillStyle = "rgba(0,0,0,.45)";
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = "#fff";
-      ctx.textAlign = "center";
-      ctx.font = `1000 ${Math.max(26, cell*.85)}px system-ui`;
-      ctx.fillText(P1.gameOver ? "YOU LOSE" : "YOU WIN", W/2, H/2);
-      ctx.font = `800 ${Math.max(13, cell*.35)}px system-ui`;
-      ctx.fillText("画面をタップで再戦", W/2, H/2 + cell);
-    }
-  }
-
-  function packBlock(b){ return b ? {mask:b.mask,base:b.base,color:b.color,charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }
-  function unpackBlock(b){ return b ? {mask:b.mask||0,base:b.base||"",color:b.color||"#65d7ff",charred:!!b.charred,burn:b.burn||0,shock:b.shock||0} : null; }
-
-  function packPlayer(p){
-    return {
-      grid:p.grid.map(r=>r.map(packBlock)),
-      active:p.active?{x:p.active.x,y:p.active.y,block:packBlock(p.active.block)}:null,
-      next:packBlock(p.next),
-      score:p.score,
-      combo:p.combo,
-      pendingLightning:p.pendingLightning,
-      fallTimer:p.fallTimer,
-      aiTimer:p.aiTimer,
-      spark:p.spark,
-      gameOver:p.gameOver,
-      flash:p.flash,
-      name:p.name,
-      ts:Date.now()
-    };
-  }
-
-  function applyPlayerState(p,s){
-    if(!s) return;
-    p.grid=(s.grid||[]).map(r=>r.map(unpackBlock));
-    while(p.grid.length<ROWS) p.grid.push(Array(COLS).fill(null));
-    p.grid=p.grid.slice(0,ROWS).map(r=>{ while(r.length<COLS) r.push(null); return r.slice(0,COLS); });
-    p.active=s.active?{x:s.active.x,y:s.active.y,block:unpackBlock(s.active.block)}:null;
-    p.next=unpackBlock(s.next)||makeBlock();
-    p.score=s.score||0;
-    p.combo=s.combo||0;
-    p.pendingLightning=s.pendingLightning||0;
-    p.fallTimer=s.fallTimer||0;
-    p.aiTimer=s.aiTimer||0;
-    p.spark=s.spark||p.spark;
-    p.gameOver=!!s.gameOver;
-    p.flash=s.flash||0;
-    p.name=s.name||p.name;
-  }
-
-  function sendMyPlayerState(){
-    if(!isOnline || !roomRef) return;
-    const p = localSide === "p2" ? P2 : P1;
-    roomRef.child("players/" + localSide).set(packPlayer(p)).catch(err=>{
-      setOnlineStatus("送信エラー: " + (err && err.message ? err.message : err));
-    });
-  }
-
-  function listenPlayers(){
-    roomRef.child("players/p1").on("value", snap => {
-      if(localSide !== "p1") applyPlayerState(P1, snap.val());
-    });
-    roomRef.child("players/p2").on("value", snap => {
-      if(localSide !== "p2") applyPlayerState(P2, snap.val());
-    });
-  }
-
-  async function startHost(){
-    if(!initFirebase()) return;
-
-    const rid=safeRoom(roomIdInput.value)||randomRoom();
-    roomIdInput.value=rid;
-    roomRef=db.ref("spark_wire_rooms/"+rid);
-
-    isOnline=true;
-    isHost=true;
-    onlineRole="host";
-    localSide="p1";
-
-    reset();
-    P1.name=(playerNameInput.value||"HOST").slice(0,16);
-    P2.name="JOIN待ち";
-    P1.input=keys;
-    P2.input=remoteKeys;
-
-    await roomRef.set({
-      meta:{createdAt:firebase.database.ServerValue.TIMESTAMP,host:P1.name},
-      players:{p1:packPlayer(P1),p2:packPlayer(P2)}
-    });
-
-    listenPlayers();
-    onlinePanel.style.display="none";
-    setOnlineStatus("HOST ROOM "+rid);
-  }
-
-  async function startJoin(){
-    if(!initFirebase()) return;
-
-    const rid=safeRoom(roomIdInput.value);
-    if(!rid){ setOnlineStatus("Room IDを入れてJOIN"); return; }
-
-    roomRef=db.ref("spark_wire_rooms/"+rid);
-    const snap=await roomRef.child("players/p1").get();
-    if(!snap.exists()){ setOnlineStatus("部屋なし。HOST作成後にJOIN"); return; }
-
-    isOnline=true;
-    isHost=false;
-    onlineRole="join";
-    localSide="p2";
-
-    reset();
-    applyPlayerState(P1, snap.val());
-    P2.name=(playerNameInput.value||"JOIN").slice(0,16);
-    P2.input=keys;
-    P1.input=remoteKeys;
-
-    await roomRef.child("meta/join").set(P2.name);
-    await roomRef.child("players/p2").set(packPlayer(P2));
-
-    listenPlayers();
-    onlinePanel.style.display="none";
-    setOnlineStatus("JOIN ROOM "+rid);
-  }
-
-  function startSolo(){
-    isOnline=false;
-    isHost=false;
-    onlineRole="solo";
-    localSide="solo";
-    P1.input=keys;
-    P2.input=remoteKeys;
-    onlinePanel.style.display="none";
-    setOnlineStatus("SOLO");
-  }
-
-  function update(now) {
-    const dt = Math.min(.05, (now - last) / 1000);
-    last = now;
-
-    if (running) {
-      if (isOnline) {
-        if (localSide === "p1") {
-          updatePlayer(P1, dt, true);
-        } else if (localSide === "p2") {
-          updatePlayer(P2, dt, true);
-        }
-        if (now - lastNetSend > 70) {
-          lastNetSend = now;
-          sendMyPlayerState();
-        }
-      } else {
-        updatePlayer(P1, dt, true);
-        updatePlayer(P2, dt, false);
-      }
-    }
-
-    draw();
-    requestAnimationFrame(update);
-  }
-
-  function reset() {
-    const fresh1 = makePlayer("L");
-    const fresh2 = makePlayer("R");
-    Object.assign(P1, fresh1);
-    Object.assign(P2, fresh2);
-
-    if (isOnline) {
-      if (localSide === "p1") {
-        P1.input = keys;
-        P2.input = remoteKeys;
-        P1.name = (playerNameInput.value || "HOST").slice(0,16);
-      } else if (localSide === "p2") {
-        P1.input = remoteKeys;
-        P2.input = keys;
-        P2.name = (playerNameInput.value || "JOIN").slice(0,16);
-      }
-    } else {
-      P1.input = keys;
-      P2.input = remoteKeys;
-    }
-
-    running = true;
-    spawn(P1);
-    spawn(P2);
-  }
-
-  window.addEventListener("resize", resize);
-  window.addEventListener("keydown", e => {
-    if (["ArrowLeft","ArrowRight","ArrowDown","ArrowUp","Space"].includes(e.code)) {
-      e.preventDefault();
-      keys.add(e.code);
-    }
-    if (!running && e.code === "Space") reset();
-  });
-  window.addEventListener("keyup", e => keys.delete(e.code));
-
-  for (const btn of document.querySelectorAll("button[data-k]")) {
-    const k = btn.dataset.k;
-    btn.addEventListener("pointerdown", e => {
-      e.preventDefault();
-      keys.add(k);
-    });
-    btn.addEventListener("pointerup", e => {
-      e.preventDefault();
-      keys.delete(k);
-    });
-    btn.addEventListener("pointercancel", () => keys.delete(k));
-    btn.addEventListener("pointerleave", () => keys.delete(k));
-  }
-
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchLastX = 0;
-  let touchLastY = 0;
-  let touchActive = false;
-  let longPressTimer = null;
-
-  function tapKey(code) {
-    keys.add(code);
-    setTimeout(() => keys.delete(code), 45);
-  }
-
-  canvas.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    if (!running) {
-      reset();
-      return;
-    }
-    touchActive = true;
-    touchStartX = e.clientX;
-    touchStartY = e.clientY;
-    touchLastX = e.clientX;
-    touchLastY = e.clientY;
-    clearTimeout(longPressTimer);
-    longPressTimer = setTimeout(() => {
-      if (touchActive && running) tapKey("Space");
-    }, 420);
-  });
-
-  canvas.addEventListener("pointermove", e => {
-    if (!touchActive || !running) return;
-    e.preventDefault();
-
-    const dxTotal = e.clientX - touchStartX;
-    const dyTotal = e.clientY - touchStartY;
-    const dx = e.clientX - touchLastX;
-    const dy = e.clientY - touchLastY;
-    const threshold = Math.max(18, cell * 0.36);
-
-    if (Math.abs(dxTotal) > Math.abs(dyTotal)) {
-      if (dx > threshold) {
-        tapKey("ArrowRight");
-        touchLastX = e.clientX;
-        clearTimeout(longPressTimer);
-      } else if (dx < -threshold) {
-        tapKey("ArrowLeft");
-        touchLastX = e.clientX;
-        clearTimeout(longPressTimer);
-      }
-    } else {
-      if (dyTotal < -threshold) {
-        tapKey("ArrowUp");
-        touchStartY = e.clientY;
-        touchLastY = e.clientY;
-        clearTimeout(longPressTimer);
-      } else if (dyTotal > threshold) {
-        keys.add("ArrowDown");
-        touchLastY = e.clientY;
-        clearTimeout(longPressTimer);
-      }
-    }
-  });
-
-  canvas.addEventListener("pointerup", e => {
-    e.preventDefault();
-    touchActive = false;
-    keys.delete("ArrowDown");
-    clearTimeout(longPressTimer);
-  });
-
-  canvas.addEventListener("pointercancel", () => {
-    touchActive = false;
-    keys.delete("ArrowDown");
-    clearTimeout(longPressTimer);
-  });
-
-  resize();
-  spawn(P1);
-  spawn(P2);
-  requestAnimationFrame(update);
+  draw();requestAnimationFrame(update);
+}
+
+let sx=0,sy=0,lx=0,ly=0,touch=false,moved=false,lastTap=0,longTimer=null;
+function tapKey(k){keys.add(k);setTimeout(()=>keys.delete(k),55)}
+canvas.addEventListener("pointerdown",e=>{e.preventDefault();if(!running)return;touch=true;moved=false;sx=lx=e.clientX;sy=ly=e.clientY;clearTimeout(longTimer);longTimer=setTimeout(()=>{if(touch&&!moved){moved=true;tapKey("Space")}},430)});
+canvas.addEventListener("pointermove",e=>{if(!touch)return;e.preventDefault();const dx=e.clientX-sx,dy=e.clientY-sy,step=e.clientX-lx,th=Math.max(22,cell*.42);if(Math.abs(dx)>th||Math.abs(dy)>th){moved=true;clearTimeout(longTimer)}if(Math.abs(dx)>Math.abs(dy)){if(step>th){tapKey("ArrowRight");lx=e.clientX}else if(step<-th){tapKey("ArrowLeft");lx=e.clientX}}else if(dy>th){keys.add("ArrowDown")}});
+canvas.addEventListener("pointerup",e=>{e.preventDefault();touch=false;keys.delete("ArrowDown");clearTimeout(longTimer);if(!moved){const n=performance.now();if(n-lastTap<300){tapKey("ArrowUp");lastTap=0}else lastTap=n}});
+canvas.addEventListener("pointercancel",()=>{touch=false;keys.delete("ArrowDown");clearTimeout(longTimer)});
+
+for(const b of document.querySelectorAll("#controls button")){
+  const k=b.dataset.k;
+  b.addEventListener("pointerdown",e=>{e.preventDefault();keys.add(k)});
+  b.addEventListener("pointerup",e=>{e.preventDefault();keys.delete(k)});
+  b.addEventListener("pointercancel",()=>keys.delete(k));
+  b.addEventListener("pointerleave",()=>keys.delete(k));
+}
+window.addEventListener("keydown",e=>{if(["ArrowLeft","ArrowRight","ArrowDown","ArrowUp","Space"].includes(e.code)){e.preventDefault();keys.add(e.code)}});
+window.addEventListener("keyup",e=>keys.delete(e.code));
+window.addEventListener("resize",resize);
+
+bind("hostBtn",startHost);
+bind("joinBtn",startJoin);
+bind("soloBtn",startSolo);
+
+resize();
+requestAnimationFrame(update);
 })();
 </script>
 </body>
