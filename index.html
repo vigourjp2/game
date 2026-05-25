@@ -100,12 +100,61 @@ function updP(p,dt,human){if(p.gameOver)return;if(!p.active)spawn(p);const input
 function packP(p){return{grid:p.grid.map(r=>r.map(cb)),active:p.active?{x:p.active.x,y:p.active.y,block:cb(p.active.block)}:null,next:cb(p.next),score:p.score,combo:p.combo,pending:p.pending,fall:p.fall,ai:p.ai,spark:p.spark,gameOver:p.gameOver,name:p.name}}
 function applyP(p,s){if(!s)return;p.grid=(s.grid||[]).map(r=>r.map(cb));while(p.grid.length<ROWS)p.grid.push(Array(COLS).fill(null));p.grid=p.grid.slice(0,ROWS).map(r=>{while(r.length<COLS)r.push(null);return r.slice(0,COLS)});p.active=s.active?{x:s.active.x,y:s.active.y,block:cb(s.active.block)}:null;p.next=cb(s.next)||block();p.score=s.score||0;p.combo=s.combo||0;p.pending=s.pending||0;p.fall=s.fall||0;p.ai=s.ai||0;p.spark=s.spark||p.spark;p.gameOver=!!s.gameOver;p.name=s.name||p.name}
 function send(type,payload){if(conn&&conn.open)conn.send({type,payload})}
-function sendAttackToOpponent(amount){
+function applyAttackToMine(amount){
+  amount = Math.max(0, Math.floor(amount||0));
+  if(amount <= 0) return;
+
+  const mine = localSide === "p2" ? P2 : P1;
+
+  for(let i=0;i<amount;i++){
+    const cells=[];
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        if(mine.grid[y][x] && !mine.grid[y][x].charred) cells.push({x,y});
+      }
+    }
+    if(!cells.length) break;
+
+    const hit = cells[rnd(cells.length)];
+    const b = mine.grid[hit.y][hit.x];
+    b.charred = true;
+    b.mask = 0;
+    b.color = "#2b2b2b";
+    b.shock = 48;
+  }
+
+  show("⚡落雷 +" + amount);
+}
+
+function applyAttackToLocalOpponent(amount){
   amount = Math.max(0, Math.floor(amount||0));
   if(amount <= 0) return;
 
   const enemy = localSide === "p1" ? P2 : P1;
-  enemy.pending += amount;
+
+  for(let i=0;i<amount;i++){
+    const cells=[];
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        if(enemy.grid[y][x] && !enemy.grid[y][x].charred) cells.push({x,y});
+      }
+    }
+    if(!cells.length) break;
+
+    const hit = cells[rnd(cells.length)];
+    const b = enemy.grid[hit.y][hit.x];
+    b.charred = true;
+    b.mask = 0;
+    b.color = "#2b2b2b";
+    b.shock = 48;
+  }
+}
+
+function sendAttackToOpponent(amount){
+  amount = Math.max(0, Math.floor(amount||0));
+  if(amount <= 0) return;
+
+  applyAttackToLocalOpponent(amount);
 
   if(mode !== "solo" && conn && conn.open){
     attackSeq++;
@@ -121,12 +170,7 @@ function onData(d){
     if(localSide!=="p2")applyP(P2,d.payload.p2);
   }
 
-  if(d.type==="attack"){
-    const amount=Math.max(0,Math.floor((d.payload&&d.payload.amount)||0));
-    const mine=localSide==="p2"?P2:P1;
-    mine.pending+=amount;
-    show("⚡落雷 +" + amount);
-  }
+  if(d.type==="attack"){const amount=Math.max(0,Math.floor((d.payload&&d.payload.amount)||0));applyAttackToMine(amount)}
 
   if(d.type==="hello"){
     send("state",{p1:packP(P1),p2:packP(P2)});
