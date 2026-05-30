@@ -53,6 +53,7 @@ const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,M
 let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,roomSeed=0,myId=localStorage.pbomberId||('p_'+Math.random().toString(36).slice(2,10));localStorage.pbomberId=myId;
 let lastNet=0,lastStateWrite=0,lastInputWrite=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
 let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
+let netSeq=0,netStateAge=0;
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
 let audioCtx=null,bgmTimer=null;
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
@@ -117,42 +118,66 @@ function serialize(){return{roomSeed,grid,players,members,bombs:bombs.map(b=>({i
 function applyState(s){
   if(!s)return;
 
-  // HOST権威の単一世界＋JOIN本人だけクライアント予測。
-  // 完全HOST待ちは正しいが、入力が往復遅延になる。体感を出すため自機だけ即時に動かし、HOST stateでなめらかに補正する。
+  // HOST権威stateをそのまま描画座標へ叩き込むと、受信間隔の揺れがJOIN側のカクつきになる。
+  // ここではHOST座標を authX/authY として保持し、実際の x/y は毎フレーム補間・予測で動かす。
   const prevPlayers=players||{};
-  const prevMe=prevPlayers[myId]?{...prevPlayers[myId]}:null;
-  lastStateRecv=now();
-  lastStateTs=s.ts||lastStateRecv;
+  const recvAt=now();
+  lastStateRecv=recvAt;
+  lastStateTs=s.ts||recvAt;
+  netSeq++;
   roomSeed=s.roomSeed||roomSeed;
   grid=(s.grid||grid).map(row=>row.slice());
   members=s.members||members;
 
-  players={};
+  const nextPlayers={};
   Object.entries(s.players||{}).forEach(([id,p])=>{
-    let q={...p};
-    q.x=Number(q.x)||0;
-    q.y=Number(q.y)||0;
-    let cell=tc(q.x,q.y);
-    q.c=inside(cell.c,cell.r)?cell.c:(q.c|0);
-    q.r=inside(cell.c,cell.r)?cell.r:(q.r|0);
+    const authX=Number(p.x)||0;
+    const authY=Number(p.y)||0;
+    const prev=prevPlayers[id];
+    let q={...p,authX,authY,netRecvAt:recvAt,netSeq};
+    let cell=tc(authX,authY);
+    q.authC=inside(cell.c,cell.r)?cell.c:(p.c|0);
+    q.authR=inside(cell.c,cell.r)?cell.r:(p.r|0);
 
-    if(mode==='join'&&id===myId&&prevMe&&prevMe.alive&&q.alive){
-      const err=Math.hypot(prevMe.x-q.x,prevMe.y-q.y);
-      const moving=Math.hypot(localInput.dx||0,localInput.dy||0)>.05;
-      if(err<96){
-        // 小さいズレは一気に戻さず、手元の即応感を維持しながらHOST正解へ寄せる。
-        const k=moving?.20:.38;
-        q.x=prevMe.x+(q.x-prevMe.x)*k;
-        q.y=prevMe.y+(q.y-prevMe.y)*k;
-        q.lastDirX=prevMe.lastDirX||q.lastDirX;
-        q.lastDirY=prevMe.lastDirY||q.lastDirY;
+    if(mode==='join'){
+      if(id===myId&&prev&&prev.alive&&q.alive){
+        const err=Math.hypot(prev.x-authX,prev.y-authY);
+        if(err>150){
+          // 大ズレだけは破綻回避で即同期。通常の微差は毎フレーム補正へ回す。
+          q.x=authX;
+          q.y=authY;
+        }else{
+          q.x=prev.x;
+          q.y=prev.y;
+        }
+        q.lastDirX=prev.lastDirX||q.lastDirX;
+        q.lastDirY=prev.lastDirY||q.lastDirY;
+        q.c=prev.c;
+        q.r=prev.r;
+      }else if(id!==myId&&prev){
+        const err=Math.hypot(prev.x-authX,prev.y-authY);
+        q.x=err>170?authX:prev.x;
+        q.y=err>170?authY:prev.y;
+        q.c=prev.c;
+        q.r=prev.r;
+      }else{
+        q.x=authX;
+        q.y=authY;
+        q.c=q.authC;
+        q.r=q.authR;
       }
+    }else{
+      q.x=authX;
+      q.y=authY;
+      q.c=q.authC;
+      q.r=q.authR;
     }
-    players[id]=q;
+    nextPlayers[id]=q;
   });
+  players=nextPlayers;
 
   if(mode==='join'&&!players[myId]){
-    players[myId]=prevMe||makePlayer(myId,nameVal());
+    players[myId]=prevPlayers[myId]||makePlayer(myId,nameVal());
     players[myId].ghost=true;
   }
 
@@ -216,7 +241,7 @@ function spawnWave(){let n=3+Math.floor(wave*1.35);for(let i=0;i<n;i++)spawnEnem
 function queueBomb(){startAudio();localInput.bomb=true;localInput.seq++;localInput.bombSeq=localInput.seq}
 function queueHand(){startAudio();queueBomb()}
 function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)return;localDeathSeq++;lastReportedDeathSeq=localDeathSeq;localInput.deathSeq=localDeathSeq;localInput.dead=true;localInput.deathReason=reason;writeInput(true);sendGameEvent('playerDown',{playerId:myId,deathSeq:localDeathSeq,reason})}
-async function writeInput(force=false){if(mode==='offline')return;let t=now();if(!force&&t-lastInputWrite<16)return;lastInputWrite=t;if(!roomRef)return;let me=players[myId];let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};try{await roomRef.child('inputs/'+myId).set(payload);await roomRef.child('members/'+myId).update({name:nameVal(),last:t})}catch(e){}}
+async function writeInput(force=false){if(mode==='offline')return;let t=now();if(!force&&t-lastInputWrite<16)return;lastInputWrite=t;if(!roomRef)return;let me=players[myId];let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};try{await roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t})}catch(e){}}
 function readLocalInput(){let dx=0,dy=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))dx--;if(keys.has('KeyD')||keys.has('ArrowRight'))dx++;if(keys.has('KeyW')||keys.has('ArrowUp'))dy--;if(keys.has('KeyS')||keys.has('ArrowDown'))dy++;if(touch.active){dx+=localInput.dx;dy+=localInput.dy}let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}localInput.dx=dx;localInput.dy=dy;let me=players[myId];if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy}}
 function bombRect(b){return{x:(b.x||cc(b.c,b.r).x)-T/2+8,y:(b.y||cc(b.c,b.r).y)-T/2+8,w:T-16,h:T-16,type:'bomb',bomb:b}}
 function solidRects(ownerId){let a=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(grid[r][c]!==EMPTY)a.push({x:OX+c*T,y:OY+r*T,w:T,h:T,type:'block'});bombs.forEach(b=>{if(b.carriedBy)return;if(b.passOwner&&b.passOwner===ownerId)return;a.push(bombRect(b))});return a}
@@ -263,7 +288,7 @@ function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+t+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
   if(enemies.length===0){wave++;spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
 }
-async function publishState(){if(mode==='host'&&roomRef&&now()-lastStateWrite>16){lastStateWrite=now();try{await roomRef.child('state').set(serialize())}catch(e){}}}
+async function publishState(){if(mode==='host'&&roomRef&&now()-lastStateWrite>33){lastStateWrite=now();try{await roomRef.child('state').set(serialize())}catch(e){}}}
 function updateHud(){$('roomView').textContent=roomId||'OFFLINE';$('modeView').textContent=mode.toUpperCase();$('waveView').textContent=wave;$('playersView').textContent=Object.values(players).filter(p=>p.alive).length+'/'+Object.keys(players).length;$('enemyView').textContent=enemies.filter(e=>e.alive).length}
 function draw(){ctx.save();ctx.clearRect(0,0,W,H);if(shake>0)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);ctx.fillStyle='#0d1a2e';ctx.fillRect(0,0,W,H);ctx.fillStyle='#14294b';ctx.fillRect(OX,OY,C*T,R*T);for(let r=0;r<R;r++)for(let c=0;c<C;c++){let x=OX+c*T,y=OY+r*T;ctx.strokeStyle='#263d63';ctx.strokeRect(x,y,T,T);if(grid[r][c]===HARD){ctx.fillStyle='#5c6f91';round(x+3,y+3,T-6,T-6,7);ctx.fillStyle='#7386a7';ctx.fillRect(x+8,y+8,T-16,6)}else if(grid[r][c]===SOFT){ctx.fillStyle='#965c30';round(x+5,y+5,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(x+9,y+10,T-18,7)}}
 falling.forEach(f=>{let bx=OX+f.c*T,by=OY+f.r*T;if(f.phase==='warn'){let a=.38+.30*Math.sin(performance.now()/80);ctx.fillStyle=`rgba(255,30,30,${a})`;round(bx+3,by+3,T-6,T-6,9);ctx.strokeStyle='rgba(255,245,120,.98)';ctx.lineWidth=4;ctx.strokeRect(bx+6,by+6,T-12,T-12);ctx.fillStyle='rgba(0,0,0,.38)';ctx.beginPath();ctx.ellipse(bx+T/2,by+T/2+10,T*.34,T*.14,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 19px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.max(1,Math.ceil(f.t/1000)),bx+T/2,by+T/2-2);ctx.font='bold 9px system-ui';ctx.fillText('DROP',bx+T/2,by+T/2+15)}else{ctx.fillStyle='rgba(255,220,80,.35)';round(bx+5,by+5,T-10,T-10,8);ctx.fillStyle='#7d4b2c';round(OX+f.c*T+5,f.y-22,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(OX+f.c*T+10,f.y-16,T-20,7)}});items.forEach(it=>{ctx.fillStyle={fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6'}[it.type];ctx.beginPath();ctx.arc(it.x,it.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#08101b';ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({fire:'F',bomb:'B',speed:'S',shield:'🛡',kick:'K',hand:'H'}[it.type],it.x,it.y+1)});
@@ -297,20 +322,55 @@ function updateJoinEnemyContact(){
   });
   enemies=enemies.filter(e=>e.alive);
 }
+function smoothToward(v,t,dt,rate){return v+(t-v)*(1-Math.exp(-rate*dt))}
 function updateJoinPrediction(dt){
   if(mode!=='join'||!started)return;
-  // JOIN本人だけはHOST返答を待たずに即時移動する。爆弾・敵・炎・アイテムなど世界ルールはHOST stateで確定。
-  // これがないとJOIN操作が常にネット往復遅延になり、リアルタイム体験にならない。
+
+  // 他人はHOST座標を60fpsで補間表示する。受信stateを直描画しないのでカクつきにくい。
+  for(const [id,p] of Object.entries(players)){
+    if(id===myId||p.authX===undefined||p.authY===undefined)continue;
+    const err=Math.hypot(p.x-p.authX,p.y-p.authY);
+    if(err>150){
+      p.x=p.authX;
+      p.y=p.authY;
+    }else{
+      p.x=smoothToward(p.x,p.authX,dt,22);
+      p.y=smoothToward(p.y,p.authY,dt,22);
+    }
+    let cell=tc(p.x,p.y);
+    p.c=cell.c;
+    p.r=cell.r;
+  }
+
+  // JOIN本人は入力を即時反映し、HOST正解へ毎フレーム薄く補正する。
   let p=players[myId];
   if(p&&p.alive){
     let dx=localInput.dx||0,dy=localInput.dy||0;
-    if(Math.hypot(dx,dy)>.02){
+    const moving=Math.hypot(dx,dy)>.02;
+    if(moving){
       p.lastDirX=dx;
       p.lastDirY=dy;
       moveEntity(p,dx,dy,dt,myId);
     }
+    if(p.authX!==undefined&&p.authY!==undefined){
+      const err=Math.hypot(p.x-p.authX,p.y-p.authY);
+      if(err>160){
+        p.x=p.authX;
+        p.y=p.authY;
+      }else if(err>2){
+        // 操作中は弱く、停止中は強めに戻す。これでガクッと戻る動きを消す。
+        const rate=moving?4.5:14;
+        p.x=smoothToward(p.x,p.authX,dt,rate);
+        p.y=smoothToward(p.y,p.authY,dt,rate);
+        depen(p,myId);
+        let cell=tc(p.x,p.y);
+        p.c=cell.c;
+        p.r=cell.r;
+      }
+    }
     if(p.shield>0)p.shield-=dt*1000;
   }
+
   parts.forEach(x=>{if(!x.ring){x.x+=x.vx*dt;x.y+=x.vy*dt;x.vy+=(x.grav||0)*dt;x.vx*=.96;x.vy*=.96}x.life-=dt*1000});
   parts=parts.filter(x=>x.life>0);
   if(shake>0)shake-=dt*18;
