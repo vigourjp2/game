@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: join-bomb-reliable-fuse-fix-20260530-2338 -->
+<!-- build: join-world-sync-rewrite-20260530 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -61,6 +61,7 @@ const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
 let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0;
+let joinBooted=false,joinLastAuthoritative=0,joinStateCount=0,joinRemoteClock=0,joinSendFastAt=0;
 const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
 const touch={active:false,id:null,sx:0,sy:0,x:0,y:0,started:0,moved:false,lastTap:0,lastX:-999,lastY:-999};
 const keys=new Set();addEventListener('keydown',e=>{startAudio();keys.add(e.code);if(e.code==='Space'){queueBomb();e.preventDefault()}if(e.code==='KeyE'||e.code==='ShiftLeft'||e.code==='ShiftRight'){queueHand();e.preventDefault()}});addEventListener('keyup',e=>keys.delete(e.code));
@@ -122,114 +123,60 @@ function serialize(){return{roomSeed,grid,players,members,bombs:bombs.map(b=>({i
 function applyState(s){
   if(!s)return;
 
-  // HOST権威stateをそのまま描画座標へ叩き込むと、受信間隔の揺れがJOIN側のカクつきになる。
-  // ここではHOST座標を authX/authY として保持し、実際の x/y は毎フレーム補間・予測で動かす。
-  const prevPlayers=players||{};
   const recvAt=now();
   lastStateRecv=recvAt;
   lastStateTs=s.ts||recvAt;
-  netSeq++;
+  joinLastAuthoritative=recvAt;
+  joinStateCount++;
   roomSeed=s.roomSeed||roomSeed;
-  if(s.grid)grid=s.grid.map(row=>row.slice());
+
+  if(s.grid&&Array.isArray(s.grid)&&s.grid.length===R)grid=s.grid.map(row=>row.slice());
   if(s.members)members=s.members;
 
+  const prevPlayers=players||{};
   const nextPlayers={};
-  Object.entries(s.players||{}).forEach(([id,p])=>{
-    const authX=Number(p.x)||0;
-    const authY=Number(p.y)||0;
+  Object.entries(s.players||{}).forEach(([id,src])=>{
     const prev=prevPlayers[id];
-    let q={...p,authX,authY,netRecvAt:recvAt,netSeq};
-    let cell=tc(authX,authY);
-    q.authC=inside(cell.c,cell.r)?cell.c:(p.c|0);
-    q.authR=inside(cell.c,cell.r)?cell.r:(p.r|0);
-
+    const tx=Number(src.x)||0;
+    const ty=Number(src.y)||0;
+    const cell=tc(tx,ty);
+    const q={...src,id,tx,ty,authX:tx,authY:ty,netRecvAt:recvAt,netSeq:joinStateCount};
     if(mode==='join'){
-      if(id===myId&&prev){
-        // JOIN本人の操作体感を最優先する。
-        // HOST座標で自機をスナップ/補正すると、受信揺れのたびに操作が引っ掛かるため、x/y/c/rはローカルを絶対維持する。
-        // HOST値は authX/authY として保持し、死亡・強化値などのゲーム状態だけ取り込む。
-        q.x=prev.x;
-        q.y=prev.y;
-        q.c=prev.c;
-        q.r=prev.r;
-        q.vx=prev.vx||0;
-        q.vy=prev.vy||0;
-        q.lastDirX=prev.lastDirX||q.lastDirX;
-        q.lastDirY=prev.lastDirY||q.lastDirY;
-        // JOIN本人の死亡はHOST座標では確定しない。
-        // 移動をローカル即時操作にした以上、HOST側の少しズレた座標で死ぬと「見えてない爆風で突然死亡」になる。
-        // この端末で見えている炎・落下物に当たった時だけ local death としてHOSTへ報告する。
-        q.alive=prev.alive;
-        q.remoteAlive=p.alive!==false;
-      }else if(id!==myId&&prev){
-        const err=Math.hypot(prev.x-authX,prev.y-authY);
-        q.x=err>170?authX:prev.x;
-        q.y=err>170?authY:prev.y;
-        q.c=prev.c;
-        q.r=prev.r;
+      if(prev){
+        const err=Math.hypot((prev.x||tx)-tx,(prev.y||ty)-ty);
+        q.x=err>150?tx:(Number(prev.x)||tx);
+        q.y=err>150?ty:(Number(prev.y)||ty);
+        q.vx=src.vx||prev.vx||0;
+        q.vy=src.vy||prev.vy||0;
+        q.lastDirX=src.lastDirX||prev.lastDirX||1;
+        q.lastDirY=src.lastDirY||prev.lastDirY||0;
       }else{
-        q.x=authX;
-        q.y=authY;
-        q.c=q.authC;
-        q.r=q.authR;
+        q.x=tx;q.y=ty;q.vx=src.vx||0;q.vy=src.vy||0;
       }
+      if(id===myId&&src.alive===false){q.x=tx;q.y=ty;}
     }else{
-      q.x=authX;
-      q.y=authY;
-      q.c=q.authC;
-      q.r=q.authR;
+      q.x=tx;q.y=ty;q.vx=src.vx||0;q.vy=src.vy||0;
     }
+    q.c=inside(cell.c,cell.r)?cell.c:(src.c|0);
+    q.r=inside(cell.c,cell.r)?cell.r:(src.r|0);
     nextPlayers[id]=q;
   });
   players=nextPlayers;
 
-  if(mode==='join'&&!players[myId]){
-    players[myId]=prevPlayers[myId]||makePlayer(myId,nameVal());
-    players[myId].ghost=true;
-  }
-
-  const localBombById=new Map((bombs||[]).filter(b=>b&&b.id).map(b=>[b.id,b]));
-  const remoteBombs=(s.bombs||[]).map(b=>{
-    const prev=localBombById.get(b.id);
-    const merged={...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed};
-    // JOIN本人のBOMBはHOST版に置き換わっても、ローカル爆発予定時刻を絶対に失わせない。
-    if(mode==='join'&&merged.owner===myId&&prev&&prev.localMadeAt){
-      merged.localMadeAt=prev.localMadeAt;
-      merged.localDetonateAt=prev.localDetonateAt||now()+Math.max(0,prev.timer||BOMB_FUSE);
-    }
-    return merged;
-  });
-  if(mode==='join'){
-    // JOIN本人が置いた爆弾は、HOST反映待ちでもローカル側で必ず爆発まで進める。
-    // ここで remoteBombs だけに置換すると、2個目設置直後に受信stateで消える。
-    const remoteIds=new Set(remoteBombs.map(b=>b.id).filter(Boolean));
-    const pendingLocalBombs=(bombs||[]).filter(b=>{
-      if(!b||b.owner!==myId||!b.localMadeAt)return false;
-      if(remoteIds.has(b.id))return false;
-      return now()-(b.localMadeAt||now())<9000;
-    });
-    bombs=remoteBombs.concat(pendingLocalBombs);
-  }else{
-    bombs=remoteBombs;
-  }
-  const prevFlameSeen=new Map((flames||[]).map(f=>[(f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r)),f.seenAt||recvAt]));
-  const remoteFlames=(s.flames||[]).map(f=>{let k=f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r);return {...f,owner:f.owner||null,localOwner:f.localOwner||null,seenAt:prevFlameSeen.get(k)||recvAt};});
-  if(mode==='join'){
-    const remoteFlameIds=new Set(remoteFlames.map(f=>f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r)));
-    const localFlames=(flames||[]).filter(f=>{
-      const k=f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r);
-      return f.localOwner===myId&&f.t>0&&!remoteFlameIds.has(k);
-    });
-    flames=remoteFlames.concat(localFlames);
-  }else{
-    flames=remoteFlames;
-  }
-  enemies=(s.enemies||[]).map(e=>({...e}));
+  bombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
+  flames=(s.flames||[]).map(f=>({...f,owner:f.owner||null,localOwner:null,seenAt:recvAt}));
+  enemies=(s.enemies||[]).map(e=>({...e,tx:Number(e.x)||0,ty:Number(e.y)||0}));
   items=normalizeItems(s.items||[]);
   falling=(s.falling||[]).map(f=>({...f}));
   wave=s.wave||wave;
   msg=s.msg||msg;
   shake=s.shake||0;
+
+  if(mode==='join'){
+    joinBooted=true;
+    started=true;
+    $('panel').classList.add('hidden');
+  }
 }
 async function startCamera(){
   if(camOn||camStream)return;
@@ -343,23 +290,51 @@ async function setupRtcJoin(){
   if(!window.RTCPeerConnection||!roomRef)return;
   const pc=new RTCPeerConnection(RTC_CONFIG);
   rtcPeers.host=pc;
-  const ch=pc.createDataChannel('game',{ordered:false,maxRetransmits:0});
+  const ch=pc.createDataChannel('game',{ordered:false,maxRetransmits:2});
   rtcInputChannel=ch;
   ch.binaryType='arraybuffer';
-  ch.onopen=()=>{rtcConnected=true;msg='P2P REALTIME LINK';writeInput(true);};
-  ch.onclose=()=>{rtcConnected=false;};
+  ch.onopen=()=>{rtcConnected=true;msg='P2P WORLD SYNC';writeInput(true);};
+  ch.onclose=()=>{rtcConnected=false;msg='FIREBASE SYNC';};
+  ch.onerror=()=>{rtcConnected=false;};
   ch.onmessage=e=>handleRtcMessage('host',e.data);
+  pc.onconnectionstatechange=()=>{rtcConnected=(pc.connectionState==='connected'||pc.connectionState==='completed')&&ch.readyState==='open'};
   pc.onicecandidate=e=>{if(e.candidate)roomRef.child('rtc/joinCandidates/'+myId).push(e.candidate.toJSON()).catch(()=>{})};
-  const offer=await pc.createOffer();
+  const offer=await pc.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
   await pc.setLocalDescription(offer);
   await roomRef.child('rtc/offers/'+myId).set({type:offer.type,sdp:offer.sdp,ts:now()});
   roomRef.child('rtc/answers/'+myId).on('value',s=>{let ans=s.val();if(ans&&pc.signalingState!=='stable')pc.setRemoteDescription(new RTCSessionDescription(ans)).catch(()=>{})});
   roomRef.child('rtc/hostCandidates/'+myId).on('child_added',s=>{let c=s.val();if(c)pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{})});
 }
 
+
 async function registerMember(){if(!roomRef)return;let payload={id:myId,name:nameVal(),joined:now(),last:now()};await roomRef.child('members/'+myId).set(payload);roomRef.child('members/'+myId).onDisconnect().remove();roomRef.child('inputs/'+myId).onDisconnect().remove()}
 async function startHost(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
-async function startJoin(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value);if(!roomId){setPanel('ROOM IDを入力');return}roomSeed=hashSeed(roomId);mode='join';isHost=false;rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);let exists=await roomRef.child('created').get();if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}roomRef.child('state').on('value',s=>{if(rtcConnected)return;const st=s.val();if(st){pendingRemoteState=st;started=true;$('panel').classList.add('hidden');updateHud()}});await registerMember();await setupRtcJoin().catch(()=>{});await writeInput(true);setPanel('JOIN参加中 ROOM '+roomId)}
+async function startJoin(){
+  startAudio();
+  if(!initFirebase())return;
+  roomId=safeRoom($('room').value);
+  if(!roomId){setPanel('ROOM IDを入力');return}
+  roomSeed=hashSeed(roomId);
+  mode='join';isHost=false;started=false;joinBooted=false;joinLastAuthoritative=0;joinStateCount=0;
+  rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;pendingRemoteState=null;
+  players={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];members={};inputs={};
+  startCamera();
+  roomRef=db.ref('pbomber_rooms/'+roomId);
+  let exists=await roomRef.child('created').get();
+  if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}
+  roomRef.child('members').on('value',s=>{members=s.val()||members||{}});
+  roomRef.child('state').on('value',s=>{
+    const st=s.val();
+    if(!st)return;
+    // WebRTCが生きている時はFirebase stateを保険に留める。切断時だけ最新世界として使う。
+    if(rtcConnected&&joinLastAuthoritative&&now()-joinLastAuthoritative<900)return;
+    pendingRemoteState=st;
+  });
+  await registerMember();
+  await setupRtcJoin().catch(()=>{});
+  await writeInput(true);
+  setPanel('JOIN参加中 ROOM '+roomId+'。HOST世界をリアルタイム同期中');
+}
 function startOffline(){startAudio();roomId='OFFLINE';roomSeed=hashSeed(roomId+'_'+Date.now());mode='offline';isHost=true;bootGame();members={[myId]:{id:myId,name:nameVal(),joined:now(),last:now()}};players[myId]=makePlayer(myId,nameVal());$('panel').classList.add('hidden');updateHud()}
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
@@ -372,12 +347,14 @@ function queueBomb(){
   localInput.bomb=true;
   localInput.seq++;
   localInput.bombSeq=localInput.seq;
-  if(mode==='join'&&started){
-    let p=players[myId];
-    if(p&&p.alive){
-      placeBomb(p,localInput.bombSeq);
-    }
+  if(mode==='join'){
+    // JOIN側は世界を作らない。爆弾設置もHOSTへ入力として送って、HOST権威stateで全端末へ同時反映する。
     writeInput(true);
+    return;
+  }
+  if(started){
+    let p=players[myId];
+    if(p&&p.alive)placeBomb(p,localInput.bombSeq);
   }
 }
 function queueHand(){startAudio();queueBomb()}
@@ -385,33 +362,27 @@ function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)retu
 async function writeInput(force=false){
   if(mode==='offline')return;
   let t=now();
-  // 操作入力は最優先。ただし同じフレーム内で何度も送らない。
   if(!force&&t-lastInputWrite<16)return;
   lastInputWrite=t;
   if(!roomRef)return;
   let me=players[myId];
   let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};
 
-  // P2P成立中はFirebaseへ毎フレーム書かない。
-  // 重要: DataChannelが一瞬詰まってrtcSendがfalseでもFirebaseへ逃がさない。
-  // ここでFirebaseへ逃がすとJOIN端末のメインスレッドに重い書き込みが復活して操作がカクつく。
-  if(mode==='join'&&rtcConnected){
+  if(mode==='join'&&rtcInputChannel&&rtcInputChannel.readyState==='open'){
+    rtcConnected=true;
     const sent=rtcSend(rtcInputChannel,{type:'input',id:myId,input:payload,t});
     if(!sent)lastDroppedInput=t;
-    // BOMBなどの単発入力は落ちるとゲーム不能になるため、force時だけFirebaseにも退避送信する。
-    // 毎フレームではないのでJOINカクつき原因には戻さない。
-    if(force){
+    if(force||t-joinSendFastAt>140){
+      joinSendFastAt=t;
+      // 単発操作と生存確認だけFirebaseへ保険送信。毎フレーム書かないのでJOIN画面を詰まらせない。
       roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t}).catch(()=>{});
     }
     if(t-lastRtcPing>1000){lastRtcPing=t;rtcSend(rtcInputChannel,{type:'ping',t});}
-    if(!force&&t-lastMemberHeartbeat>2500){
-      lastMemberHeartbeat=t;
-      roomRef.child('members/'+myId).update({name:nameVal(),last:t}).catch(()=>{});
-    }
     return;
   }
 
-  // WebRTC未接続時だけFirebase入力へフォールバック。ここもawaitしない。
+  if(mode==='join'&&!force&&t-lastMemberHeartbeat<90)return;
+  lastMemberHeartbeat=t;
   roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t}).catch(()=>{});
 }
 function readLocalInput(){let dx=0,dy=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))dx--;if(keys.has('KeyD')||keys.has('ArrowRight'))dx++;if(keys.has('KeyW')||keys.has('ArrowUp'))dy--;if(keys.has('KeyS')||keys.has('ArrowDown'))dy++;if(touch.active){dx+=localInput.dx;dy+=localInput.dy}let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}localInput.dx=dx;localInput.dy=dy;let me=players[myId];if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy}}
@@ -541,53 +512,45 @@ function updateJoinLocalBombs(dt){
 function smoothToward(v,t,dt,rate){return v+(t-v)*(1-Math.exp(-rate*dt))}
 function updateJoinPrediction(dt){
   if(mode!=='join'||!started)return;
+  const t=now();
 
-  // 他人はHOST座標を60fpsで補間表示する。受信stateを直描画しないのでカクつきにくい。
-  for(const [id,p] of Object.entries(players)){
-    if(id===myId||p.authX===undefined||p.authY===undefined)continue;
-    const err=Math.hypot(p.x-p.authX,p.y-p.authY);
-    if(err>150){
-      p.x=p.authX;
-      p.y=p.authY;
+  // HOSTから来た世界をJOIN側で60fps補間する。JOINは物理・敵AI・爆発判定を作らず、全員が同じ世界を見る。
+  for(const p of Object.values(players)){
+    if(p.tx===undefined)p.tx=p.authX!==undefined?p.authX:p.x;
+    if(p.ty===undefined)p.ty=p.authY!==undefined?p.authY:p.y;
+    const targetX=p.tx,targetY=p.ty;
+    const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
+    if(err>170||!Number.isFinite(err)){
+      p.x=targetX;p.y=targetY;
     }else{
-      p.x=smoothToward(p.x,p.authX,dt,22);
-      p.y=smoothToward(p.y,p.authY,dt,22);
+      const rate=p.id===myId?28:20;
+      p.x=smoothToward(p.x,targetX,dt,rate);
+      p.y=smoothToward(p.y,targetY,dt,rate);
     }
-    let cell=tc(p.x,p.y);
-    p.c=cell.c;
-    p.r=cell.r;
-  }
-
-  // JOIN本人は入力を即時反映し、HOST正解へ毎フレーム薄く補正する。
-  let p=players[myId];
-  if(p&&p.alive){
-    let dx=localInput.dx||0,dy=localInput.dy||0;
-    const moving=Math.hypot(dx,dy)>.02;
-    if(moving){
-      p.lastDirX=dx;
-      p.lastDirY=dy;
-      moveEntity(p,dx,dy,dt,myId);
-    }
-    // JOIN本人はHOST座標へ補正しない。
-    // 体感操作を止めないため、自機は常にこの端末の入力で60fps移動する。
-    // HOSTとの差は相手画面側で吸収し、この画面では操作不能感を絶対に出さない。
+    let cell=tc(p.x,p.y);p.c=cell.c;p.r=cell.r;
     if(p.shield>0)p.shield-=dt*1000;
   }
 
-  updateJoinLocalBombs(dt);
-  damageSelfFromVisibleFlame();
-  damageSelfFromVisibleDrop(dt);
-  updateJoinEnemyContact();
+  enemies.forEach(e=>{
+    if(e.tx===undefined)e.tx=e.x;if(e.ty===undefined)e.ty=e.y;
+    e.x=smoothToward(e.x,e.tx,dt,18);
+    e.y=smoothToward(e.y,e.ty,dt,18);
+    let cell=tc(e.x,e.y);e.c=cell.c;e.r=cell.r;
+  });
 
+  flames.forEach(f=>{f.t-=dt*1000});
+  flames=flames.filter(f=>f.t>0);
+  bombs.forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer>0)b.timer-=dt*1000});
   parts.forEach(x=>{if(!x.ring){x.x+=x.vx*dt;x.y+=x.vy*dt;x.vy+=(x.grav||0)*dt;x.vx*=.96;x.vy*=.96}x.life-=dt*1000});
   parts=parts.filter(x=>x.life>0);
   if(shake>0)shake-=dt*18;
+  if(t-joinLastAuthoritative>1800){msg=rtcConnected?'HOST SYNC WAIT':'FIREBASE SYNC WAIT'}
 }
 function loop(ts){
   let dt=Math.min(.035,(ts-last)/1000||.016);last=ts;
   try{
     readLocalInput();
-    if(mode==='join'&&pendingRemoteState&&now()-lastRemoteApply>45){
+    if(mode==='join'&&pendingRemoteState&&now()-lastRemoteApply>16){
       const st=pendingRemoteState;
       pendingRemoteState=null;
       applyState(st);
