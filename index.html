@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Physics Bomber Roguelike Online</title>
-<!-- fixed: wave/join spawn invincibility, meaningful enemy HP, no yellow bomb residue, join enemy collision/damage sync -->
+<!-- fixed-v3: start-safe, spawn invincibility, join flame one-hit per explosion, join block break one-shot, meaningful HP -->
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07101d;color:#eef3ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none}.app{height:100dvh;display:grid;grid-template-rows:auto 1fr auto;gap:6px;padding:7px;background:radial-gradient(circle at top,#142543,#07101d 58%,#03070f)}.top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:34px}.pill{background:#12203a;border:1px solid #31476e;border-radius:999px;padding:6px 9px;font-size:12px;white-space:nowrap;box-shadow:0 4px 16px #0004}.pill b{color:#ffe66d}.main{min-height:0;display:flex;align-items:center;justify-content:center}canvas{display:block;max-width:100%;max-height:100%;aspect-ratio:832/704;background:#06101b;border:3px solid #506589;border-radius:13px;box-shadow:0 12px 44px #000b;image-rendering:pixelated;touch-action:none}.items{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#0b1426;border:1px solid #263d63;border-radius:14px;padding:6px}.item{background:#13213a;border:1px solid #36517b;border-radius:12px;padding:7px 8px;min-height:52px;font-size:11px;line-height:1.25}.item b{display:block;font-size:13px;margin-bottom:2px;color:#fff}.item.fire b{color:#ffb84d}.item.bomb b{color:#ffef72}.item.speed b{color:#79e6ff}.item.shield b{color:#9bff9b}.item.kick b{color:#ff9bf0}.item.hand b{color:#ffd0a6}#panel{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:18px;background:linear-gradient(155deg,#05101f,#12335f 54%,#07101d)}#box{width:min(520px,94vw);background:#ffffff12;border:1px solid #ffffff38;border-radius:22px;padding:18px;box-shadow:0 18px 60px #0008}h1{margin:0 0 6px;font-size:25px;letter-spacing:.03em}.sub{font-size:13px;line-height:1.55;color:#d8e7ff;margin-bottom:10px}input{width:100%;border:0;border-radius:14px;padding:13px 14px;margin:6px 0;background:#fff;color:#111;font-size:17px;font-weight:900;text-transform:uppercase}.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}button{border:0;border-radius:14px;padding:13px 7px;color:white;font-size:15px;font-weight:1000;background:#22c55e;touch-action:manipulation}button.join{background:#3b82f6}button.off{background:#64748b}.small{font-size:12px;line-height:1.45;color:#cfe5ff;margin-top:10px}.warn{font-size:11px;color:#fecaca;margin-top:7px;line-height:1.45}.hidden{display:none!important}.stickBase{position:fixed;width:76px;height:76px;margin:-38px 0 0 -38px;border:2px solid #ffe66d;border-radius:50%;opacity:0;z-index:18;pointer-events:none;background:#ffe66d22}.stickKnob{position:fixed;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#ffe66dcc;opacity:0;z-index:19;pointer-events:none}.stickBase.on,.stickKnob.on{opacity:.9}.roomTag{font-family:ui-monospace,monospace}@media(max-width:640px){.app{padding:5px;gap:5px}.pill{font-size:11px;padding:5px 7px}.top{overflow-x:auto}.items{grid-template-columns:repeat(2,1fr)}.item{font-size:10px;padding:6px 7px;min-height:38px}.item b{font-size:12px}canvas{border-width:2px}}
 </style>
@@ -53,7 +53,7 @@ const W=832,H=704,T=48,C=15,R=13,OX=Math.floor((W-C*T)/2),OY=58,EMPTY=0,SOFT=1,H
 const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,myId=localStorage.pbomberId||('p_'+Math.random().toString(36).slice(2,10));localStorage.pbomberId=myId;
 let lastNet=0,lastStateWrite=0,lastInputWrite=0,joinSeenBombSeq=0,gameEventSeq=0;
-let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},flameSeq=0;
+let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},localBlockBreakSent={},seenGameEvents={},flameSeq=0;
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
 let audioCtx=null,bgmTimer=null;
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
@@ -111,7 +111,7 @@ function markLocalBlockClear(c,r){localClearedBlocks.add(blockKey(c,r));if(insid
 function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
-function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY;if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item&&had)applyItemStats(p,ev.item)}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){let p=players[ev.playerId];if(p){p.alive=false;p.shield=0}}}
+function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY;if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item&&had)applyItemStats(p,ev.item)}else if(ev.type==='enemyHit'){let hk=ev.hitId||((ev.owner||'join')+':'+ev.enemyId+':'+(ev.flameId||''));if(localEnemyHitAt[hk])return;localEnemyHitAt[hk]=true;let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){let p=players[ev.playerId];if(p){p.alive=false;p.shield=0}}}
 function serialize(){return{grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
@@ -129,7 +129,7 @@ function applyState(s){
     me.vx=prevMe.vx||0;me.vy=prevMe.vy||0;
     let remoteMe=(s.players&&s.players[myId])?s.players[myId]:null;
     me.alive=(prevMe.alive===false||remoteMe?.alive===false)?false:true;
-    me.shield=Math.min(prevMe.shield??0,remoteMe?.shield??prevMe.shield??0);
+    me.shield=(incomingWave!==wave)?Math.max(prevMe.shield??0,remoteMe?.shield??0,2600):Math.min(prevMe.shield??0,remoteMe?.shield??prevMe.shield??0);
     me.score=prevMe.score;
     me.speed=prevMe.speed;me.bombMax=prevMe.bombMax;me.range=prevMe.range;
     me.kick=prevMe.kick;me.kickLevel=prevMe.kickLevel;me.handLevel=prevMe.handLevel;
@@ -145,7 +145,7 @@ function applyState(s){
   }else{
     bombs=incomingBombs;
   }
-  let incomingFlames=(s.flames||[]).map(f=>({...f,owner:f.owner||null,localOwner:f.localOwner||null}));
+  let incomingFlames=(s.flames||[]).map(f=>({...f,owner:f.owner||null,localOwner:f.localOwner||null,explosionId:f.explosionId||f.id||null}));
   flames=mode==='join'?[...incomingFlames.filter(f=>f.owner!==myId&&f.localOwner!==myId),...localFlames]:incomingFlames;
   enemies=(s.enemies||[]).filter(e=>!localKilledEnemies.has(e.id));items=normalizeItems(s.items||[]);if(mode==='join')items=items.filter(it=>!localCollectedItems.has(itemKey(it)));falling=s.falling||[];wave=s.wave||wave;msg=s.msg||msg;shake=s.shake||0;
 }
@@ -193,7 +193,7 @@ async function startJoin(){startAudio();if(!initFirebase())return;roomId=safeRoo
 function startOffline(){startAudio();roomId='OFFLINE';mode='offline';isHost=true;bootGame();members={[myId]:{id:myId,name:nameVal(),joined:now(),last:now()}};players[myId]=makePlayer(myId,nameVal());$('panel').classList.add('hidden');updateHud()}
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
-function bootGame(){makeGrid();players={};members={};inputs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};flameSeq=0;spawnWave(true);started=true;last=performance.now()}
+function bootGame(){makeGrid();players={};members={};inputs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};localBlockBreakSent={};seenGameEvents={};flameSeq=0;spawnWave(true);started=true;last=performance.now()}
 function emptyCell(center){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]!==EMPTY)continue;if(center&&(c<3||r<3||c>C-4||r>R-4))continue;if(Object.values(players).some(p=>p.alive&&Math.hypot(p.x-cc(c,r).x,p.y-cc(c,r).y)<T*.7))continue;if(enemies.some(e=>e.alive&&e.c===c&&e.r===r))continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:null}
 function spawnEnemy(type='grunt'){let p=emptyCell(true)||emptyCell(false);if(!p)return;let [c,r]=p,o=cc(c,r);let e={id:'e'+Math.random(),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,color:'#ff6767',spawnGrace:520};if(type==='fast'){e.speed+=60;e.color='#ffb247'}if(type==='tank'){e.hp=e.max=4+Math.floor(wave/2);e.rad=18;e.speed-=8;e.color='#b983ff'}if(type==='boss'){e.hp=e.max=18+wave*6;e.rad=25;e.speed=72+wave*2;e.boss=true;e.color='#ff3d90'}enemies.push(e)}
 function grantSpawnShield(ms=2300){Object.values(players).forEach(p=>{if(p&&p.alive)p.shield=Math.max(p.shield||0,ms)})}
@@ -245,7 +245,7 @@ function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||
   bombs.forEach(b=>{if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(b.vx||b.vy){let ox=b.x,oy=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;let fr=(b.slideT>0)?.982:.90;b.vx*=fr;b.vy*=fr;if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b)}let cell=tc(b.x,b.y);let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);if(blocked){b.vx=0;b.vy=0;b.x=cc(b.c,b.r).x;b.y=cc(b.c,b.r).y;sfx('hit',b.power||1);partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2)}else{b.c=cell.c;b.r=cell.r;impactBomb(b)}}});bombs.slice().forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
   flames.forEach(f=>f.t-=dt*1000);flames=flames.filter(f=>f.t>0);
   Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r))damagePlayer(p,isHost?'local':'remote');for(let i=items.length-1;i>=0;i--){let it=items[i];if(Math.hypot(p.x-it.x,p.y-it.y)<26){itemApply(p,it);items.splice(i,1)}}});
-  enemies.forEach(e=>{if(!e.alive)return;if(e.spawnGrace>0)e.spawnGrace=Math.max(0,e.spawnGrace-dt*1000);e.think-=dt*1000;if(e.think<=0){let alive=Object.values(players).filter(p=>p.alive);let target=alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0];if(target){let ax=target.x-e.x,ay=target.y-e.y;if(Math.random()<.7)e.dir=Math.abs(ax)>Math.abs(ay)?[Math.sign(ax),0]:[0,Math.sign(ay)];else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=rnd(250,760)}let moved=moveEntity(e,e.dir[0],e.dir[1],dt,null);if(!moved)e.think=0;damageEnemyFromFlame(e);Object.values(players).forEach(p=>{if(p.alive&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p)})});enemies=enemies.filter(e=>e.alive);
+  enemies.forEach(e=>{if(!e.alive)return;if(e.spawnGrace>0)e.spawnGrace=Math.max(0,e.spawnGrace-dt*1000);e.think-=dt*1000;if(e.think<=0){let alive=Object.values(players).filter(p=>p.alive);let target=alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0];if(target){let ax=target.x-e.x,ay=target.y-e.y;if(Math.random()<.7)e.dir=Math.abs(ax)>Math.abs(ay)?[Math.sign(ax),0]:[0,Math.sign(ay)];else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=rnd(250,760)}let moved=moveEntity(e,e.dir[0],e.dir[1],dt,null);if(!moved)e.think=0;damageEnemyFromFlame(e);Object.values(players).forEach(p=>{if(p.alive&&(e.spawnGrace||0)<=0&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p)})});enemies=enemies.filter(e=>e.alive);
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
   if(enemies.length===0){wave++;spawnWave(false);sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
 }
@@ -279,11 +279,12 @@ function updateJoinEnemyContact(){
   if(!p||!p.alive)return;
   enemies.forEach(e=>{
     if(!e.alive)return;
-    if(damageEnemyFromFlame(e,myId)){
+    let hit=damageEnemyFromJoinFlameOnce(e);
+    if(hit){
       if(!e.alive)localKilledEnemies.add(e.id);
-      sendGameEvent('enemyHit',{enemyId:e.id,damage:1});
+      sendGameEvent('enemyHit',{enemyId:e.id,damage:1,hitId:hit.hitId,flameId:hit.flameId});
     }
-    if(p.alive&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p,'local');
+    if(p.alive&&(e.spawnGrace||0)<=0&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p,'local');
   });
   enemies=enemies.filter(e=>e.alive);
 }
@@ -327,7 +328,7 @@ function updateJoinPrediction(dt){
   updateJoinEnemyContact();
   for(let i=items.length-1;i>=0;i--){let it=items[i];if(Math.hypot(p.x-it.x,p.y-it.y)<26){itemApply(p,it);items.splice(i,1)}}
 }
-function loop(ts){let dt=Math.min(.035,(ts-last)/1000||.016);last=ts;try{readLocalInput();writeInput();publishCamera();if(started&&isHost){updateHost(dt);publishState()}else if(started&&mode==='join'){updateJoinPrediction(dt)}updateHud();if(!grid||grid.length!==R||!grid[0])drawBoot();else draw()}catch(e){console.error(e);drawBoot()}requestAnimationFrame(loop)}makeGrid();requestAnimationFrame(loop);
+function loop(ts){let dt=Math.min(.035,(ts-last)/1000||.016);last=ts;try{readLocalInput();writeInput();publishCamera();if(started&&isHost){updateHost(dt);publishState()}else if(started&&mode==='join'){updateJoinPrediction(dt)}updateHud();if(!grid||grid.length!==R||!grid[0])drawBoot();else draw()}catch(e){console.error(e);msg='ERROR: '+(e&&e.message?e.message:e);drawBoot()}requestAnimationFrame(loop)}makeGrid();requestAnimationFrame(loop);
 function canvasPoint(e){return{x:e.clientX,y:e.clientY}}
 function setStickVisual(){const base=$('stickBase'),knob=$('stickKnob');if(!touch.active){base.classList.remove('on');knob.classList.remove('on');return}base.style.left=touch.sx+'px';base.style.top=touch.sy+'px';knob.style.left=(touch.sx+localInput.dx*34)+'px';knob.style.top=(touch.sy+localInput.dy*34)+'px';base.classList.add('on');knob.classList.add('on')}
 function updateStick(x,y){touch.x=x;touch.y=y;let vx=x-touch.sx,vy=y-touch.sy,len=Math.hypot(vx,vy);if(len>10)touch.moved=true;let max=54,pow=clamp(len/max,0,1);if(len<12){localInput.dx=0;localInput.dy=0}else{localInput.dx=vx/len*pow;localInput.dy=vy/len*pow}setStickVisual()}
