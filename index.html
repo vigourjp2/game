@@ -90,12 +90,21 @@ function audioPath(src){
   return new URL(src,location.href).href;
 }
 function retryBgm(){
-  if(bgmCurrent)playBgm(bgmCurrent,true);
+  if(!bgmCurrent||!bgmAudio)return;
+  // プレイ中のBGMは触らない。SFXや入力のたびにcurrentTime=0へ戻る事故を防ぐ。
+  if(bgmAudio.dataset&&bgmAudio.dataset.src===bgmCurrent&&!bgmAudio.paused)return;
+  playBgm(bgmCurrent,true);
 }
 function playBgm(src,force=false){
   if(!src)return;
   bgmCurrent=src;
-  if(bgmAudio&&!force&&bgmAudio.dataset&&bgmAudio.dataset.src===src&&!bgmAudio.paused)return;
+  // 同じ曲が既に存在する場合は作り直さない。再生許可待ちの再試行でも再生位置を維持する。
+  if(bgmAudio&&bgmAudio.dataset&&bgmAudio.dataset.src===src){
+    if(!bgmAudio.paused)return;
+    const p=bgmAudio.play();
+    if(p&&p.catch)p.catch(()=>{document.body.dataset.bgmBlocked=src;});
+    return;
+  }
   stopBgm();
   bgmAudio=new Audio();
   bgmAudio.dataset.src=src;
