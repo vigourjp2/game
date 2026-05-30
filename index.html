@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: join-local-bomb-explode-fix-20260530-2329 -->
+<!-- build: join-bomb-reliable-fuse-fix-20260530-2338 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -188,15 +188,25 @@ function applyState(s){
     players[myId].ghost=true;
   }
 
-  const remoteBombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
+  const localBombById=new Map((bombs||[]).filter(b=>b&&b.id).map(b=>[b.id,b]));
+  const remoteBombs=(s.bombs||[]).map(b=>{
+    const prev=localBombById.get(b.id);
+    const merged={...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed};
+    // JOIN本人のBOMBはHOST版に置き換わっても、ローカル爆発予定時刻を絶対に失わせない。
+    if(mode==='join'&&merged.owner===myId&&prev&&prev.localMadeAt){
+      merged.localMadeAt=prev.localMadeAt;
+      merged.localDetonateAt=prev.localDetonateAt||now()+Math.max(0,prev.timer||BOMB_FUSE);
+    }
+    return merged;
+  });
   if(mode==='join'){
-    // JOIN本人が置いた爆弾は、HOST反映待ちの短い間だけローカル予測を残す。
+    // JOIN本人が置いた爆弾は、HOST反映待ちでもローカル側で必ず爆発まで進める。
     // ここで remoteBombs だけに置換すると、2個目設置直後に受信stateで消える。
     const remoteIds=new Set(remoteBombs.map(b=>b.id).filter(Boolean));
     const pendingLocalBombs=(bombs||[]).filter(b=>{
       if(!b||b.owner!==myId||!b.localMadeAt)return false;
       if(remoteIds.has(b.id))return false;
-      return now()-b.localMadeAt<5200;
+      return now()-(b.localMadeAt||now())<9000;
     });
     bombs=remoteBombs.concat(pendingLocalBombs);
   }else{
@@ -388,8 +398,13 @@ async function writeInput(force=false){
   if(mode==='join'&&rtcConnected){
     const sent=rtcSend(rtcInputChannel,{type:'input',id:myId,input:payload,t});
     if(!sent)lastDroppedInput=t;
+    // BOMBなどの単発入力は落ちるとゲーム不能になるため、force時だけFirebaseにも退避送信する。
+    // 毎フレームではないのでJOINカクつき原因には戻さない。
+    if(force){
+      roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t}).catch(()=>{});
+    }
     if(t-lastRtcPing>1000){lastRtcPing=t;rtcSend(rtcInputChannel,{type:'ping',t});}
-    if(force||t-lastMemberHeartbeat>2500){
+    if(!force&&t-lastMemberHeartbeat>2500){
       lastMemberHeartbeat=t;
       roomRef.child('members/'+myId).update({name:nameVal(),last:t}).catch(()=>{});
     }
@@ -420,7 +435,7 @@ function tryKick(ent,dx,dy,ownerId){let lv=kickPower(ent);if(!lv)return;let cell
 function bombUnderPlayer(p){let best=null,bd=9999;for(const b of bombs){if(b.carriedBy)continue;let d=Math.hypot((b.x||cc(b.c,b.r).x)-p.x,(b.y||cc(b.c,b.r).y)-p.y);if(d<26&&d<bd){best=b;bd=d}}return best}
 function liftBomb(p){let lv=handPower(p);if(!p||!p.alive||!lv||p.carryBombId)return false;let b=bombUnderPlayer(p);if(!b)return false;b.carriedBy=p.id;b.passOwner=null;b.vx=0;b.vy=0;b.slideT=0;b.hop=null;b.thrownBy=p.id;b.power=Math.max(b.power||0,lv);b.carryOff=30+Math.min(18,lv*2);b.timer=BOMB_FUSE;b.armed=false;b.fusePaused=true;b.landed=false;p.carryBombId=b.id||(b.id='b_'+Math.random().toString(36).slice(2,10));shake=Math.max(shake,1.5+lv*.35);sfx('throw',lv*.6);partsBurst(b.x,b.y,'#ffd0a6',12+lv*3);msg=`${p.name} LIFT Lv${lv} / FUSE RESET` ;return true}
 function throwCarriedBomb(p){let lv=handPower(p);if(!p||!p.alive||!p.carryBombId)return false;let b=bombs.find(q=>q.id===p.carryBombId&&q.carriedBy===p.id);if(!b){p.carryBombId=null;return false}let rawDx=p.lastDirX||1,rawDy=p.lastDirY||0,d=snapThrowDir(rawDx,rawDy),dx=d.x,dy=d.y,len=Math.hypot(dx,dy)||1;dx/=len;dy/=len;b.carriedBy=null;b.passOwner=null;b.x=p.x+dx*(p.rad+20);b.y=p.y+dy*(p.rad+20);let cell=tc(b.x,b.y);b.c=cell.c;b.r=cell.r;b.vx=0;b.vy=0;b.power=Math.max(b.power||0,lv+1);b.thrownBy=p.id;b.timer=BOMB_FUSE;b.armed=false;b.fusePaused=true;b.landed=false;b.spin=(b.spin||0)+14+lv*4;startBombHop(b,dx,dy,lv);p.carryBombId=null;shake=Math.max(shake,3+lv*.9);sfx('throw',lv);partsBurst(b.x,b.y,'#ffd0a6',16+lv*6);msg=`${p.name} THROW Lv${lv} / LAND THEN COUNT`;return true}
-function placeBomb(p,seq=null){if(!p||!p.alive)return;if(throwCarriedBomb(p))return;if(liftBomb(p))return;if(p.placed>=p.bombMax)return;let cell=tc(p.x,p.y);if(!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY)return;let id=seq?('b_'+p.id+'_'+seq):('b_'+p.id+'_'+now()+'_'+Math.random().toString(36).slice(2,6));if(bombs.some(b=>b.id===id))return;if(bombs.some(b=>!b.carriedBy&&b.c===cell.c&&b.r===cell.r))return;let o=cc(cell.c,cell.r);bombs.push({id,c:cell.c,r:cell.r,x:o.x,y:o.y,owner:p.id,passOwner:p.id,range:p.range,timer:BOMB_FUSE,rad:17,vx:0,vy:0,power:0,slideT:0,thrownBy:null,spin:0,carriedBy:null,carryOff:0,armed:true,fusePaused:false,hop:null,landed:true,localMadeAt:now()});p.placed++;sfx('bomb')}
+function placeBomb(p,seq=null){if(!p||!p.alive)return;if(throwCarriedBomb(p))return;if(liftBomb(p))return;if(p.placed>=p.bombMax)return;let cell=tc(p.x,p.y);if(!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY)return;let id=seq?('b_'+p.id+'_'+seq):('b_'+p.id+'_'+now()+'_'+Math.random().toString(36).slice(2,6));if(bombs.some(b=>b.id===id))return;if(bombs.some(b=>!b.carriedBy&&b.c===cell.c&&b.r===cell.r))return;let o=cc(cell.c,cell.r),madeAt=now();bombs.push({id,c:cell.c,r:cell.r,x:o.x,y:o.y,owner:p.id,passOwner:p.id,range:p.range,timer:BOMB_FUSE,rad:17,vx:0,vy:0,power:0,slideT:0,thrownBy:null,spin:0,carriedBy:null,carryOff:0,armed:true,fusePaused:false,hop:null,landed:true,localMadeAt:madeAt,localDetonateAt:(mode==='join'&&p.id===myId)?madeAt+BOMB_FUSE:null});p.placed++;sfx('bomb')}
 function throwBomb(p){return placeBomb(p)}
 function updateBombPasses(){bombs.forEach(b=>{if(b.carriedBy){let p=players[b.carriedBy];if(!p||!p.alive){b.carriedBy=null;if(p)p.carryBombId=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=p.x;b.y=p.y-(b.carryOff||32);let cell=tc(p.x,p.y);b.c=cell.c;b.r=cell.r}return}if(!b.passOwner)return;let p=players[b.passOwner];if(!p||!p.alive){b.passOwner=null;return}if(!circleRectHit(p.x,p.y,p.rad,bombRect(b)))b.passOwner=null})}
 function explode(b){if(!bombs.includes(b))return;bombs=bombs.filter(x=>x!==b);if(b.carriedBy&&players[b.carriedBy])players[b.carriedBy].carryBombId=null;let op=players[b.owner];if(op)op.placed=Math.max(0,op.placed-1);let boomPower=b.power||0,isJoinPrediction=(mode==='join'&&b.owner===myId),expId=b.id||('exp_'+now()+'_'+Math.random().toString(36).slice(2));shake=Math.max(shake,9+boomPower*1.8);sfx('explode');let cells=[[b.c,b.r]];for(const[dX,dY]of DIRS){for(let i=1;i<=b.range+Math.floor(boomPower/3);i++){let c=b.c+dX*i,r=b.r+dY*i;if(!inside(c,r)||grid[r][c]===HARD)break;cells.push([c,r]);if(grid[r][c]===SOFT){markLocalBlockClear(c,r);if(!isJoinPrediction&&Math.random()<.34)dropItem(c,r);break}}}cells.forEach(([c,r])=>{let o=cc(c,r);flames.push({c,r,x:o.x,y:o.y,t:430,owner:b.owner||null,localOwner:isJoinPrediction?myId:null,expId})});bombs.slice().forEach(ob=>{if(cells.some(([c,r])=>ob.c===c&&ob.r===r))explode(ob)});shockwave(b.x,b.y,70+boomPower*18,'#ffdc5e');partsBurst(b.x,b.y,'#ffdc5e',28+boomPower*8)}
@@ -510,13 +525,15 @@ function updateJoinEnemyContact(){
 }
 function updateJoinLocalBombs(dt){
   if(mode!=='join')return;
+  const t=now();
   bombs.forEach(b=>{
     if(!b||b.owner!==myId||!b.localMadeAt)return;
     if(b.carriedBy||b.fusePaused||b.armed===false)return;
-    b.timer-=dt*1000;
+    if(!b.localDetonateAt)b.localDetonateAt=t+Math.max(0,b.timer||BOMB_FUSE);
+    b.timer=Math.max(0,b.localDetonateAt-t);
   });
   bombs.slice().forEach(b=>{
-    if(b&&b.owner===myId&&b.localMadeAt&&b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b);
+    if(b&&b.owner===myId&&b.localMadeAt&&b.armed!==false&&!b.fusePaused&&(b.timer<=0||t>=(b.localDetonateAt||Infinity)))explode(b);
   });
   flames.forEach(f=>{if(f.localOwner===myId)f.t-=dt*1000});
   flames=flames.filter(f=>f.t>0);
