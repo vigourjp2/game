@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: full-deterministic-lockstep-smash-authority-20260531-v3-camera-items-bomberdrop -->
+<!-- build: full-deterministic-lockstep-smash-authority-20260531-v4-github-pages-bgm-user-gesture-unlock -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -68,29 +68,45 @@ let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostLi
 let joinBooted=false,joinLastAuthoritative=0,joinStateCount=0,joinRemoteClock=0,joinSendFastAt=0;
 const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
 const touch={active:false,id:null,sx:0,sy:0,x:0,y:0,started:0,moved:false,lastTap:0,lastX:-999,lastY:-999};
-const keys=new Set();addEventListener('keydown',e=>{startAudio();keys.add(e.code);if(e.code==='Space'){queueBomb();e.preventDefault()}if(e.code==='KeyE'||e.code==='ShiftLeft'||e.code==='ShiftRight'){queueHand();e.preventDefault()}});addEventListener('keyup',e=>keys.delete(e.code));
+const keys=new Set();addEventListener('keydown',e=>{startAudio();keys.add(e.code);if(e.code==='Space'){queueBomb();e.preventDefault()}if(e.code==='KeyE'||e.code==='ShiftLeft'||e.code==='ShiftRight'){queueHand();e.preventDefault()}});addEventListener('keyup',e=>keys.delete(e.code));document.addEventListener('pointerdown',()=>startAudio(),{passive:true,capture:true});document.addEventListener('click',()=>startAudio(),{passive:true,capture:true});
 
 function startAudio(){
+  unlockAudio();
+  if(!started)playMenuBgm();
+  else retryBgm();
+}
+function unlockAudio(){
   if(!audioCtx){
     const AC=window.AudioContext||window.webkitAudioContext;
     if(AC)audioCtx=new AC();
   }
   if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
-  if(!started)playMenuBgm();
 }
 function stopBgm(){
   if(!bgmAudio)return;
   try{bgmAudio.pause();bgmAudio.currentTime=0}catch(e){}
 }
-function playBgm(src){
-  if(!src||bgmCurrent===src)return;
-  stopBgm();
+function audioPath(src){
+  return new URL(src,location.href).href;
+}
+function retryBgm(){
+  if(bgmCurrent)playBgm(bgmCurrent,true);
+}
+function playBgm(src,force=false){
+  if(!src)return;
   bgmCurrent=src;
-  bgmAudio=new Audio(src);
+  if(bgmAudio&&!force&&bgmAudio.dataset&&bgmAudio.dataset.src===src&&!bgmAudio.paused)return;
+  stopBgm();
+  bgmAudio=new Audio();
+  bgmAudio.dataset.src=src;
   bgmAudio.loop=true;
   bgmAudio.volume=.48;
   bgmAudio.preload='auto';
-  bgmAudio.play().catch(()=>{});
+  bgmAudio.src=audioPath(src);
+  const p=bgmAudio.play();
+  if(p&&p.catch)p.catch(()=>{
+    document.body.dataset.bgmBlocked=src;
+  });
 }
 function playMenuBgm(){
   playBgm('bomb0.flac');
@@ -98,13 +114,22 @@ function playMenuBgm(){
 function resetGameBgmPool(){
   bgmUsed=[];
 }
-function playNextGameBgm(){
+function pickNextGameBgm(){
   let pool=[];
   for(let i=1;i<=9;i++)if(!bgmUsed.includes(i))pool.push(i);
   if(!pool.length){bgmUsed=[];for(let i=1;i<=9;i++)pool.push(i)}
   let n=pool[Math.floor(Math.random()*pool.length)];
   bgmUsed.push(n);
-  playBgm('bomb'+n+'.flac');
+  return 'bomb'+n+'.flac';
+}
+function playNextGameBgm(){
+  playBgm(pickNextGameBgm());
+}
+function beginGameBgmFromUserGesture(){
+  unlockAudio();
+  resetGameBgmPool();
+  playNextGameBgm();
+  started=true;
 }
 function tone(freq,dur=.08,vol=.04,type='square',slide=0){
   if(!audioCtx)return;
@@ -358,9 +383,9 @@ async function setupRtcJoin(){
 
 
 async function registerMember(){if(!roomRef)return;let payload={id:myId,name:nameVal(),joined:now(),last:now()};await roomRef.child('members/'+myId).set(payload);roomRef.child('members/'+myId).onDisconnect().remove();roomRef.child('inputs/'+myId).onDisconnect().remove()}
-async function startHost(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
+async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
 async function startJoin(){
-  startAudio();
+  beginGameBgmFromUserGesture();
   if(!initFirebase())return;
   roomId=safeRoom($('room').value);
   if(!roomId){setPanel('ROOM IDを入力');return}
@@ -388,12 +413,12 @@ async function startJoin(){
   msg='JOIN LOCKSTEP INPUT READY';
   setPanel('JOIN参加中 ROOM '+roomId+'。入力だけ送信し、敵・落下ブロック・爆弾はHOST確定フレームで全員同時処理');
 }
-function startOffline(){startAudio();roomId='OFFLINE';roomSeed=hashSeed(roomId+'_'+Date.now());mode='offline';isHost=true;bootGame();members={[myId]:{id:myId,name:nameVal(),joined:now(),last:now()}};players[myId]=makePlayer(myId,nameVal());$('panel').classList.add('hidden');updateHud()}
+function startOffline(){beginGameBgmFromUserGesture();roomId='OFFLINE';roomSeed=hashSeed(roomId+'_'+Date.now());mode='offline';isHost=true;bootGame();members={[myId]:{id:myId,name:nameVal(),joined:now(),last:now()}};players[myId]=makePlayer(myId,nameVal());$('panel').classList.add('hidden');updateHud()}
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
 function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;}
-function bootGame(){resetGameBgmPool();playNextGameBgm();resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};members={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();spawnWave();started=true;last=performance.now()}
-function bootJoinLocal(){resetGameBgmPool();playNextGameBgm();resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
+function bootGame(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};members={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();spawnWave();started=true;last=performance.now()}
+function bootJoinLocal(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
 function emptyCell(center){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]!==EMPTY)continue;if(center&&(c<3||r<3||c>C-4||r>R-4))continue;if(Object.values(players).some(p=>p.alive&&Math.hypot(p.x-cc(c,r).x,p.y-cc(c,r).y)<T*.7))continue;if(enemies.some(e=>e.alive&&e.c===c&&e.r===r))continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:null}
 function grantAllPlayersEnemySpawnInvuln(){Object.values(players).forEach(p=>{if(p&&p.alive)p.invuln=Math.max(p.invuln||0,ENEMY_SPAWN_PLAYER_INVULN_MS)})}
 function spawnEnemy(type='grunt'){let p=emptyCell(true)||emptyCell(false);if(!p)return;let [c,r]=p,o=cc(c,r);let e={id:'e'+(++enemySeq),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,invuln:0,color:'#ff6767'};if(type==='fast'){e.speed+=60;e.color='#ffb247'}if(type==='tank'){e.hp=e.max=3+Math.floor(wave/3);e.rad=18;e.speed-=8;e.color='#b983ff'}if(type==='boss'){e.hp=e.max=16+wave*5;e.rad=25;e.speed=72+wave*2;e.boss=true;e.color='#ff3d90'}enemies.push(e)}
@@ -704,3 +729,5 @@ document.addEventListener('gesturestart',e=>e.preventDefault());
 </script>
 </body>
 </html>
+
+<!-- bgm patch: github pages user gesture unlock, relative URL, blocked retry marker -->
