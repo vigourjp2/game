@@ -12,12 +12,12 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行・共有状態を担当。JOIN側の自機操作はローカル即時描画で、HOST座標による自機ワープを抑止。</div>
+    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行・全プレイヤー座標を担当。JOIN側は入力だけを送り、HOSTの世界状態をそのまま描画。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
     <div class="row"><button id="hostBtn">HOST</button><button id="joinBtn" class="join">JOIN</button><button id="offBtn" class="off">OFFLINE</button></div><button id="copyBtn" class="off" style="width:100%;margin-top:8px">ROOM ID COPY</button>
     <div id="panelMsg" class="small">HOSTでROOMを作成し、他端末は同じROOM IDでJOIN。JOINした端末はmembersへ登録され、HOSTが人数分のプレイヤーを自動生成。操作は画面どこでも仮想スティック移動、短いダブルタップで爆弾。</div>
-    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋JOIN自機はローカル正、HOSTは他プレイヤー・共通要素を同期。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
+    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋HOST権威の単一世界を全端末へ同期。JOIN側ローカル予測による座標ズレを禁止。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
   </div>
 </div>
 <div class="app">
@@ -116,53 +116,38 @@ function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[
 function serialize(){return{roomSeed,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
-  let prevMe=players&&players[myId]?{...players[myId]}:null;
-  let prevBombs=(mode==='join')?bombs.map(b=>({...b})) : [];
-  let prevFlames=(mode==='join')?flames.filter(f=>f&&(f.owner===myId||f.localOwner===myId)).map(f=>({...f})) : [];
+
+  // HOST権威の単一世界。JOIN側で自機座標・爆弾・炎・アイテムを勝手に保持しない。
+  // ここをローカル優先にすると、端末ごとのdt差・衝突判定差でJOINプレイヤー位置が必ずズレる。
   roomSeed=s.roomSeed||roomSeed;
   grid=(s.grid||grid).map(row=>row.slice());
-  if(mode==='join'){localClearedBlocks.forEach(k=>{let a=k.split(','),c=+a[0],r=+a[1];if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY})}
   members=s.members||members;
 
-  let incomingPlayers=s.players||{};
   players={};
-  Object.entries(incomingPlayers).forEach(([id,p])=>{players[id]={...p}});
+  Object.entries(s.players||{}).forEach(([id,p])=>{
+    let q={...p};
+    q.x=Number(q.x)||0;
+    q.y=Number(q.y)||0;
+    let cell=tc(q.x,q.y);
+    q.c=inside(cell.c,cell.r)?cell.c:(q.c|0);
+    q.r=inside(cell.c,cell.r)?cell.r:(q.r|0);
+    players[id]=q;
+  });
 
-  if(mode==='join'){
-    if(!players[myId])players[myId]=prevMe||makePlayer(myId,nameVal());
-    if(prevMe){
-      let me=players[myId],rx=me.x,ry=me.y,dist=Math.hypot((prevMe.x||rx)-rx,(prevMe.y||ry)-ry);
-      if(dist<96&&prevMe.alive!==false){
-        me.x=prevMe.x;me.y=prevMe.y;me.c=prevMe.c;me.r=prevMe.r;
-        me.vx=prevMe.vx||0;me.vy=prevMe.vy||0;
-      }else{
-        me.x=rx;me.y=ry;let cell=tc(me.x,me.y);me.c=cell.c;me.r=cell.r;
-      }
-      if(prevMe.alive===false)me.alive=false;
-      me.lastDirX=prevMe.lastDirX||me.lastDirX||1;
-      me.lastDirY=prevMe.lastDirY||me.lastDirY||0;
-      me.lastBombSeq=prevMe.lastBombSeq||me.lastBombSeq;
-      me.lastHandSeq=prevMe.lastHandSeq||me.lastHandSeq;
-    }
+  if(mode==='join'&&!players[myId]){
+    // HOSTがまだJOINメンバーを生成する前だけ仮表示。次のHOST stateで必ず上書きされる。
+    players[myId]=makePlayer(myId,nameVal());
+    players[myId].ghost=true;
   }
 
-  let incomingBombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
-  if(mode==='join'){
-    let ids=new Set(incomingBombs.map(b=>b.id).filter(Boolean));
-    let predicted=prevBombs.filter(b=>b.owner===myId&&b.id&&!ids.has(b.id)&&(now()-(b.localMadeAt||0)<650));
-    bombs=[...incomingBombs,...predicted];
-  }else bombs=incomingBombs;
-
-  let incomingFlames=(s.flames||[]).map(f=>({...f,owner:f.owner||null,localOwner:f.localOwner||null}));
-  if(mode==='join'){
-    let fkeys=new Set(incomingFlames.map(f=>(f.expId||'')+':'+f.c+','+f.r));
-    let predictedFlames=prevFlames.filter(f=>!fkeys.has((f.expId||'')+':'+f.c+','+f.r)&&f.t>0);
-    flames=[...incomingFlames,...predictedFlames];
-  }else flames=incomingFlames;
-  enemies=s.enemies||[];
+  bombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
+  flames=(s.flames||[]).map(f=>({...f,owner:f.owner||null,localOwner:f.localOwner||null}));
+  enemies=(s.enemies||[]).map(e=>({...e}));
   items=normalizeItems(s.items||[]);
-  if(mode==='join')items=items.filter(it=>!localCollectedItems.has(itemKey(it)));
-  falling=s.falling||[];wave=s.wave||wave;msg=s.msg||msg;shake=s.shake||0;
+  falling=(s.falling||[]).map(f=>({...f}));
+  wave=s.wave||wave;
+  msg=s.msg||msg;
+  shake=s.shake||0;
 }
 async function startCamera(){
   if(camOn||camStream)return;
@@ -215,7 +200,7 @@ function spawnWave(){let n=3+Math.floor(wave*1.35);for(let i=0;i<n;i++)spawnEnem
 function queueBomb(){startAudio();localInput.bomb=true;localInput.seq++;localInput.bombSeq=localInput.seq}
 function queueHand(){startAudio();queueBomb()}
 function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)return;localDeathSeq++;lastReportedDeathSeq=localDeathSeq;localInput.deathSeq=localDeathSeq;localInput.dead=true;localInput.deathReason=reason;writeInput(true);sendGameEvent('playerDown',{playerId:myId,deathSeq:localDeathSeq,reason})}
-async function writeInput(force=false){if(mode==='offline')return;let t=now();if(!force&&t-lastInputWrite<25)return;lastInputWrite=t;if(!roomRef)return;let me=players[myId];let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};try{await roomRef.child('inputs/'+myId).set(payload);await roomRef.child('members/'+myId).update({name:nameVal(),last:t})}catch(e){}}
+async function writeInput(force=false){if(mode==='offline')return;let t=now();if(!force&&t-lastInputWrite<25)return;lastInputWrite=t;if(!roomRef)return;let me=players[myId];let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};try{await roomRef.child('inputs/'+myId).set(payload);await roomRef.child('members/'+myId).update({name:nameVal(),last:t})}catch(e){}}
 function readLocalInput(){let dx=0,dy=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))dx--;if(keys.has('KeyD')||keys.has('ArrowRight'))dx++;if(keys.has('KeyW')||keys.has('ArrowUp'))dy--;if(keys.has('KeyS')||keys.has('ArrowDown'))dy++;if(touch.active){dx+=localInput.dx;dy+=localInput.dy}let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}localInput.dx=dx;localInput.dy=dy;let me=players[myId];if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy}}
 function bombRect(b){return{x:(b.x||cc(b.c,b.r).x)-T/2+8,y:(b.y||cc(b.c,b.r).y)-T/2+8,w:T-16,h:T-16,type:'bomb',bomb:b}}
 function solidRects(ownerId){let a=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(grid[r][c]!==EMPTY)a.push({x:OX+c*T,y:OY+r*T,w:T,h:T,type:'block'});bombs.forEach(b=>{if(b.carriedBy)return;if(b.passOwner&&b.passOwner===ownerId)return;a.push(bombRect(b))});return a}
@@ -262,7 +247,7 @@ function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+t+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
   if(enemies.length===0){wave++;spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
 }
-async function publishState(){if(mode==='host'&&roomRef&&now()-lastStateWrite>33){lastStateWrite=now();try{await roomRef.child('state').set(serialize())}catch(e){}}}
+async function publishState(){if(mode==='host'&&roomRef&&now()-lastStateWrite>20){lastStateWrite=now();try{await roomRef.child('state').set(serialize())}catch(e){}}}
 function updateHud(){$('roomView').textContent=roomId||'OFFLINE';$('modeView').textContent=mode.toUpperCase();$('waveView').textContent=wave;$('playersView').textContent=Object.values(players).filter(p=>p.alive).length+'/'+Object.keys(players).length;$('enemyView').textContent=enemies.filter(e=>e.alive).length}
 function draw(){ctx.save();ctx.clearRect(0,0,W,H);if(shake>0)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);ctx.fillStyle='#0d1a2e';ctx.fillRect(0,0,W,H);ctx.fillStyle='#14294b';ctx.fillRect(OX,OY,C*T,R*T);for(let r=0;r<R;r++)for(let c=0;c<C;c++){let x=OX+c*T,y=OY+r*T;ctx.strokeStyle='#263d63';ctx.strokeRect(x,y,T,T);if(grid[r][c]===HARD){ctx.fillStyle='#5c6f91';round(x+3,y+3,T-6,T-6,7);ctx.fillStyle='#7386a7';ctx.fillRect(x+8,y+8,T-16,6)}else if(grid[r][c]===SOFT){ctx.fillStyle='#965c30';round(x+5,y+5,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(x+9,y+10,T-18,7)}}
 falling.forEach(f=>{let bx=OX+f.c*T,by=OY+f.r*T;if(f.phase==='warn'){let a=.38+.30*Math.sin(performance.now()/80);ctx.fillStyle=`rgba(255,30,30,${a})`;round(bx+3,by+3,T-6,T-6,9);ctx.strokeStyle='rgba(255,245,120,.98)';ctx.lineWidth=4;ctx.strokeRect(bx+6,by+6,T-12,T-12);ctx.fillStyle='rgba(0,0,0,.38)';ctx.beginPath();ctx.ellipse(bx+T/2,by+T/2+10,T*.34,T*.14,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 19px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.max(1,Math.ceil(f.t/1000)),bx+T/2,by+T/2-2);ctx.font='bold 9px system-ui';ctx.fillText('DROP',bx+T/2,by+T/2+15)}else{ctx.fillStyle='rgba(255,220,80,.35)';round(bx+5,by+5,T-10,T-10,8);ctx.fillStyle='#7d4b2c';round(OX+f.c*T+5,f.y-22,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(OX+f.c*T+10,f.y-16,T-20,7)}});items.forEach(it=>{ctx.fillStyle={fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6'}[it.type];ctx.beginPath();ctx.arc(it.x,it.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#08101b';ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({fire:'F',bomb:'B',speed:'S',shield:'🛡',kick:'K',hand:'H'}[it.type],it.x,it.y+1)});
@@ -298,57 +283,16 @@ function updateJoinEnemyContact(){
 }
 function updateJoinPrediction(dt){
   if(mode!=='join'||!started)return;
+  // JOINは入力送信だけ。世界更新はHOSTだけが行う。
+  // ローカルで座標・爆弾・炎・アイテムを進めると、HOST/JOINで別世界になり位置ズレが発生する。
   let p=players[myId];
-  if(!p||!p.alive)return;
-  let mdx=localInput.dx||0,mdy=localInput.dy||0;
-  if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}
-  moveEntity(p,mdx,mdy,dt,myId);
-  if(localInput.seq&&localInput.seq!==joinSeenBombSeq){
-    placeBomb(p,localInput.seq);
-    joinSeenBombSeq=localInput.seq;
-    p.lastBombSeq=localInput.seq;
+  if(p&&Math.hypot(localInput.dx||0,localInput.dy||0)>.2){
+    p.lastDirX=localInput.dx;
+    p.lastDirY=localInput.dy;
   }
-  updateBombPasses();
-  bombs.forEach(b=>{
-    if(b.owner!==myId)return;
-    if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;
-    if(b.carriedBy)return;
-    if(updateBombHop(b,dt))return;
-    if(b.vx||b.vy){
-      let ox=b.x,oy=b.y;
-      b.x+=b.vx*dt;b.y+=b.vy*dt;
-      b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);
-      b.slideT=(b.slideT||0)-dt*1000;
-      let fr=(b.slideT>0)?.982:.90;
-      b.vx*=fr;
-      b.vy*=fr;
-      if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){
-        b.vx=0;b.vy=0;
-        if(b.armed===false||b.fusePaused)armBombAfterLanding(b);
-      }
-      let cell=tc(b.x,b.y);
-      let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);
-      if(blocked){
-        b.vx=0;b.vy=0;
-        b.x=cc(b.c,b.r).x;
-        b.y=cc(b.c,b.r).y;
-        sfx('hit',b.power||1);
-        partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2);
-        if(b.armed===false||b.fusePaused)armBombAfterLanding(b);
-      }else{
-        b.c=cell.c;
-        b.r=cell.r;
-        impactBomb(b);
-      }
-    }
-  });
-  bombs.slice().forEach(b=>{if(b.owner===myId&&b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
-  flames.forEach(f=>{if(f.owner===myId||f.localOwner===myId)f.t-=dt*1000});
-  flames=flames.filter(f=>f.t>0);
-  damageSelfFromVisibleFlame();
-  damageSelfFromVisibleDrop(dt);
-  updateJoinEnemyContact();
-  for(let i=items.length-1;i>=0;i--){let it=items[i];if(Math.hypot(p.x-it.x,p.y-it.y)<26){itemApply(p,it);items.splice(i,1)}}
+  parts.forEach(x=>{if(!x.ring){x.x+=x.vx*dt;x.y+=x.vy*dt;x.vy+=(x.grav||0)*dt;x.vx*=.96;x.vy*=.96}x.life-=dt*1000});
+  parts=parts.filter(x=>x.life>0);
+  if(shake>0)shake-=dt*18;
 }
 function loop(ts){let dt=Math.min(.035,(ts-last)/1000||.016);last=ts;try{readLocalInput();writeInput();publishCamera();if(started&&isHost){updateHost(dt);publishState()}else if(started&&mode==='join'){updateJoinPrediction(dt)}updateHud();if(!grid||grid.length!==R||!grid[0])drawBoot();else draw()}catch(e){console.error(e);drawBoot()}requestAnimationFrame(loop)}makeGrid();requestAnimationFrame(loop);
 function canvasPoint(e){return{x:e.clientX,y:e.clientY}}
