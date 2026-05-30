@@ -51,13 +51,16 @@ const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>documen
 const W=832,H=704,T=48,C=15,R=13,OX=Math.floor((W-C*T)/2),OY=58,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
 const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,roomSeed=0,myId=localStorage.pbomberId||('p_'+Math.random().toString(36).slice(2,10));localStorage.pbomberId=myId;
-let lastNet=0,lastStateWrite=0,lastInputWrite=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
+let lastNet=0,lastStateWrite=0,lastInputWrite=0,lastMemberWrite=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
 let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
 let netSeq=0,netStateAge=0;
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
 let audioCtx=null,bgmTimer=null;
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
+// Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
+let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0;
+const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
 const touch={active:false,id:null,sx:0,sy:0,x:0,y:0,started:0,moved:false,lastTap:0,lastX:-999,lastY:-999};
 const keys=new Set();addEventListener('keydown',e=>{startAudio();keys.add(e.code);if(e.code==='Space'){queueBomb();e.preventDefault()}if(e.code==='KeyE'||e.code==='ShiftLeft'||e.code==='ShiftRight'){queueHand();e.preventDefault()}});addEventListener('keyup',e=>keys.delete(e.code));
 
@@ -228,9 +231,82 @@ function drawPlayerCamera(p){
   return true;
 }
 
+
+function compactState(){
+  // DataChannel用。毎フレーム近く流すため、Firebase保存用serializeより軽くする。
+  const s=serialize();
+  s.fast=true;
+  return s;
+}
+function rtcSend(ch,obj){
+  if(!ch||ch.readyState!=='open')return false;
+  try{
+    // bufferedAmountが溜まった古いstateは送らない。これがカクつき対策の核心。
+    if(obj&&obj.type==='state'&&ch.bufferedAmount>262144)return false;
+    ch.send(JSON.stringify(obj));
+    return true;
+  }catch(e){return false;}
+}
+function handleRtcMessage(fromId,data){
+  let m=null;try{m=JSON.parse(data)}catch(e){return;}
+  if(!m||!m.type)return;
+  if(isHost&&m.type==='input'){
+    inputs[fromId]=m.input||{};
+    if(inputs[fromId])inputs[fromId].last=now();
+  }else if(mode==='join'&&m.type==='state'){
+    applyState(m.state);
+    started=true;
+    $('panel').classList.add('hidden');
+    updateHud();
+  }else if(m.type==='ping'){
+    rtcSend(isHost?rtcChannels[fromId]:rtcInputChannel,{type:'pong',t:m.t,ts:now()});
+  }
+}
+async function createRtcPeerForJoiner(joinId,offer){
+  if(!window.RTCPeerConnection||!roomRef||rtcPeers[joinId])return;
+  const pc=new RTCPeerConnection(RTC_CONFIG);
+  rtcPeers[joinId]=pc;
+  pc.onicecandidate=e=>{if(e.candidate)roomRef.child('rtc/hostCandidates/'+joinId).push(e.candidate.toJSON()).catch(()=>{})};
+  pc.ondatachannel=e=>{
+    const ch=e.channel;
+    ch.binaryType='arraybuffer';
+    ch.onopen=()=>{rtcChannels[joinId]=ch;rtcConnected=true;msg='P2P REALTIME LINK';rtcSend(ch,{type:'state',state:compactState(),t:now()});};
+    ch.onclose=()=>{delete rtcChannels[joinId];};
+    ch.onmessage=ev=>handleRtcMessage(joinId,ev.data);
+  };
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const ans=await pc.createAnswer();
+  await pc.setLocalDescription(ans);
+  await roomRef.child('rtc/answers/'+joinId).set({type:ans.type,sdp:ans.sdp,ts:now()});
+  roomRef.child('rtc/joinCandidates/'+joinId).on('child_added',s=>{let c=s.val();if(c)pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{})});
+}
+function setupRtcHost(){
+  if(!window.RTCPeerConnection||!roomRef||rtcHostListenerOff)return;
+  rtcHostListenerOff=true;
+  roomRef.child('rtc/offers').on('child_added',s=>{let offer=s.val();let joinId=s.key;if(offer&&joinId&&joinId!==myId)createRtcPeerForJoiner(joinId,offer).catch(()=>{})});
+  roomRef.child('rtc/offers').on('child_changed',s=>{let offer=s.val();let joinId=s.key;if(offer&&joinId&&joinId!==myId&&!rtcPeers[joinId])createRtcPeerForJoiner(joinId,offer).catch(()=>{})});
+}
+async function setupRtcJoin(){
+  if(!window.RTCPeerConnection||!roomRef)return;
+  const pc=new RTCPeerConnection(RTC_CONFIG);
+  rtcPeers.host=pc;
+  const ch=pc.createDataChannel('game',{ordered:false,maxRetransmits:0});
+  rtcInputChannel=ch;
+  ch.binaryType='arraybuffer';
+  ch.onopen=()=>{rtcConnected=true;msg='P2P REALTIME LINK';writeInput(true);};
+  ch.onclose=()=>{rtcConnected=false;};
+  ch.onmessage=e=>handleRtcMessage('host',e.data);
+  pc.onicecandidate=e=>{if(e.candidate)roomRef.child('rtc/joinCandidates/'+myId).push(e.candidate.toJSON()).catch(()=>{})};
+  const offer=await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await roomRef.child('rtc/offers/'+myId).set({type:offer.type,sdp:offer.sdp,ts:now()});
+  roomRef.child('rtc/answers/'+myId).on('value',s=>{let ans=s.val();if(ans&&pc.signalingState!=='stable')pc.setRemoteDescription(new RTCSessionDescription(ans)).catch(()=>{})});
+  roomRef.child('rtc/hostCandidates/'+myId).on('child_added',s=>{let c=s.val();if(c)pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{})});
+}
+
 async function registerMember(){if(!roomRef)return;let payload={id:myId,name:nameVal(),joined:now(),last:now()};await roomRef.child('members/'+myId).set(payload);roomRef.child('members/'+myId).onDisconnect().remove();roomRef.child('inputs/'+myId).onDisconnect().remove()}
-async function startHost(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
-async function startJoin(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value);if(!roomId){setPanel('ROOM IDを入力');return}roomSeed=hashSeed(roomId);mode='join';isHost=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);let exists=await roomRef.child('created').get();if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}roomRef.child('state').on('value',s=>{const st=s.val();if(st){applyState(st);started=true;$('panel').classList.add('hidden');updateHud()}});await registerMember();await writeInput(true);setPanel('JOIN参加中 ROOM '+roomId)}
+async function startHost(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
+async function startJoin(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value);if(!roomId){setPanel('ROOM IDを入力');return}roomSeed=hashSeed(roomId);mode='join';isHost=false;rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);let exists=await roomRef.child('created').get();if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}roomRef.child('state').on('value',s=>{if(rtcConnected)return;const st=s.val();if(st){applyState(st);started=true;$('panel').classList.add('hidden');updateHud()}});await registerMember();await setupRtcJoin().catch(()=>{});await writeInput(true);setPanel('JOIN参加中 ROOM '+roomId)}
 function startOffline(){startAudio();roomId='OFFLINE';roomSeed=hashSeed(roomId+'_'+Date.now());mode='offline';isHost=true;bootGame();members={[myId]:{id:myId,name:nameVal(),joined:now(),last:now()}};players[myId]=makePlayer(myId,nameVal());$('panel').classList.add('hidden');updateHud()}
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
@@ -241,7 +317,7 @@ function spawnWave(){let n=3+Math.floor(wave*1.35);for(let i=0;i<n;i++)spawnEnem
 function queueBomb(){startAudio();localInput.bomb=true;localInput.seq++;localInput.bombSeq=localInput.seq}
 function queueHand(){startAudio();queueBomb()}
 function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)return;localDeathSeq++;lastReportedDeathSeq=localDeathSeq;localInput.deathSeq=localDeathSeq;localInput.dead=true;localInput.deathReason=reason;writeInput(true);sendGameEvent('playerDown',{playerId:myId,deathSeq:localDeathSeq,reason})}
-async function writeInput(force=false){if(mode==='offline')return;let t=now();if(!force&&t-lastInputWrite<16)return;lastInputWrite=t;if(!roomRef)return;let me=players[myId];let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};try{await roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t})}catch(e){}}
+async function writeInput(force=false){if(mode==='offline')return;let t=now();if(!force&&t-lastInputWrite<16)return;lastInputWrite=t;if(!roomRef)return;let me=players[myId];let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};if(mode==='join'&&rtcSend(rtcInputChannel,{type:'input',id:myId,input:payload,t})){if(t-lastRtcPing>1000){lastRtcPing=t;rtcSend(rtcInputChannel,{type:'ping',t});}try{if(force||t-lastMemberWrite>1000){lastMemberWrite=t;roomRef.child('members/'+myId).update({name:nameVal(),last:t}).catch(()=>{})}}catch(e){}return;}try{await roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t})}catch(e){}}
 function readLocalInput(){let dx=0,dy=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))dx--;if(keys.has('KeyD')||keys.has('ArrowRight'))dx++;if(keys.has('KeyW')||keys.has('ArrowUp'))dy--;if(keys.has('KeyS')||keys.has('ArrowDown'))dy++;if(touch.active){dx+=localInput.dx;dy+=localInput.dy}let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}localInput.dx=dx;localInput.dy=dy;let me=players[myId];if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy}}
 function bombRect(b){return{x:(b.x||cc(b.c,b.r).x)-T/2+8,y:(b.y||cc(b.c,b.r).y)-T/2+8,w:T-16,h:T-16,type:'bomb',bomb:b}}
 function solidRects(ownerId){let a=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(grid[r][c]!==EMPTY)a.push({x:OX+c*T,y:OY+r*T,w:T,h:T,type:'block'});bombs.forEach(b=>{if(b.carriedBy)return;if(b.passOwner&&b.passOwner===ownerId)return;a.push(bombRect(b))});return a}
@@ -288,8 +364,8 @@ function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+t+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
   if(enemies.length===0){wave++;spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
 }
-async function publishState(){if(mode==='host'&&roomRef&&now()-lastStateWrite>33){lastStateWrite=now();try{await roomRef.child('state').set(serialize())}catch(e){}}}
-function updateHud(){$('roomView').textContent=roomId||'OFFLINE';$('modeView').textContent=mode.toUpperCase();$('waveView').textContent=wave;$('playersView').textContent=Object.values(players).filter(p=>p.alive).length+'/'+Object.keys(players).length;$('enemyView').textContent=enemies.filter(e=>e.alive).length}
+async function publishState(){if(mode!=='host'||!roomRef)return;let t=now();let hasRtc=Object.values(rtcChannels).some(ch=>ch&&ch.readyState==='open');if(hasRtc&&t-lastStateWrite>16){lastStateWrite=t;let packet={type:'state',state:compactState(),t};Object.values(rtcChannels).forEach(ch=>rtcSend(ch,packet));return;}if(!hasRtc&&t-lastStateWrite>50){lastStateWrite=t;try{await roomRef.child('state').set(serialize())}catch(e){}}}
+function updateHud(){$('roomView').textContent=roomId||'OFFLINE';$('modeView').textContent=(rtcConnected?'P2P ': '')+mode.toUpperCase();$('waveView').textContent=wave;$('playersView').textContent=Object.values(players).filter(p=>p.alive).length+'/'+Object.keys(players).length;$('enemyView').textContent=enemies.filter(e=>e.alive).length}
 function draw(){ctx.save();ctx.clearRect(0,0,W,H);if(shake>0)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);ctx.fillStyle='#0d1a2e';ctx.fillRect(0,0,W,H);ctx.fillStyle='#14294b';ctx.fillRect(OX,OY,C*T,R*T);for(let r=0;r<R;r++)for(let c=0;c<C;c++){let x=OX+c*T,y=OY+r*T;ctx.strokeStyle='#263d63';ctx.strokeRect(x,y,T,T);if(grid[r][c]===HARD){ctx.fillStyle='#5c6f91';round(x+3,y+3,T-6,T-6,7);ctx.fillStyle='#7386a7';ctx.fillRect(x+8,y+8,T-16,6)}else if(grid[r][c]===SOFT){ctx.fillStyle='#965c30';round(x+5,y+5,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(x+9,y+10,T-18,7)}}
 falling.forEach(f=>{let bx=OX+f.c*T,by=OY+f.r*T;if(f.phase==='warn'){let a=.38+.30*Math.sin(performance.now()/80);ctx.fillStyle=`rgba(255,30,30,${a})`;round(bx+3,by+3,T-6,T-6,9);ctx.strokeStyle='rgba(255,245,120,.98)';ctx.lineWidth=4;ctx.strokeRect(bx+6,by+6,T-12,T-12);ctx.fillStyle='rgba(0,0,0,.38)';ctx.beginPath();ctx.ellipse(bx+T/2,by+T/2+10,T*.34,T*.14,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 19px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.max(1,Math.ceil(f.t/1000)),bx+T/2,by+T/2-2);ctx.font='bold 9px system-ui';ctx.fillText('DROP',bx+T/2,by+T/2+15)}else{ctx.fillStyle='rgba(255,220,80,.35)';round(bx+5,by+5,T-10,T-10,8);ctx.fillStyle='#7d4b2c';round(OX+f.c*T+5,f.y-22,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(OX+f.c*T+10,f.y-16,T-20,7)}});items.forEach(it=>{ctx.fillStyle={fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6'}[it.type];ctx.beginPath();ctx.arc(it.x,it.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#08101b';ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({fire:'F',bomb:'B',speed:'S',shield:'🛡',kick:'K',hand:'H'}[it.type],it.x,it.y+1)});
 bombs.forEach(b=>{let pulse=Math.sin(performance.now()/95)*3,sp=Math.hypot(b.vx||0,b.vy||0),ang=Math.atan2(b.vy||0,b.vx||1)+(b.spin||0);if(sp>40){ctx.strokeStyle='rgba(255,208,166,.38)';ctx.lineWidth=3+Math.min(8,(b.power||0));ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b.x-(b.vx||0)*.08,b.y-(b.vy||0)*.08);ctx.stroke()}if(b.carriedBy){ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(b.x,b.y,24+Math.sin(performance.now()/80)*2,0,Math.PI*2);ctx.stroke()}ctx.fillStyle='#10131c';ctx.beginPath();ctx.arc(b.x,b.y,17+pulse,0,Math.PI*2);ctx.fill();ctx.strokeStyle=b.carriedBy?'#ffffff':(b.power?'#ffd0a6':'#2d3445');ctx.lineWidth=2;ctx.beginPath();ctx.arc(b.x,b.y,19+pulse*.3,ang,ang+Math.PI*1.2);ctx.stroke();ctx.fillStyle='#ffec5b';ctx.beginPath();ctx.arc(b.x-5,b.y-6,5,0,Math.PI*2);ctx.fill();if(b.fusePaused||b.armed===false){ctx.fillStyle='#9ff';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(b.carriedBy?'HOLD':'WAIT',b.x,b.y+31)}else{ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(Math.max(1,Math.ceil((b.timer||0)/1000)),b.x,b.y+31)}});flames.forEach(f=>{let a=Math.max(0,f.t/430);ctx.fillStyle=`rgba(255,205,58,${.82*a})`;round(OX+f.c*T+4,OY+f.r*T+4,T-8,T-8,8);ctx.fillStyle=`rgba(255,74,40,${.65*a})`;round(OX+f.c*T+13,OY+f.r*T+13,T-26,T-26,7)});
