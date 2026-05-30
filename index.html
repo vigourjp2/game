@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: full-deterministic-lockstep-smash-authority-20260531-v2 -->
+<!-- build: full-deterministic-lockstep-smash-authority-20260531-v3-camera-items-bomberdrop -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -114,7 +114,7 @@ function seededRandom(seed){let x=seed>>>0;return function(){x=(x+0x6D2B79F5)>>>
 function makeGrid(seed=roomSeed||hashSeed(roomId||'OFFLINE')){let rr=seededRandom(seed);grid=Array.from({length:R},(_,r)=>Array.from({length:C},(_,c)=>{if(r===0||r===R-1||c===0||c===C-1)return HARD;if(c%2===0&&r%2===0)return HARD;return rr()<.72?SOFT:EMPTY}));[[1,1],[C-2,R-2],[C-2,1],[1,R-2],[Math.floor(C/2),1],[Math.floor(C/2),R-2]].forEach(([c,r])=>clearSpawn(c,r))}
 function clearSpawn(c,r){[[c,r],[c+1,r],[c,r+1],[c-1,r],[c,r-1]].forEach(([x,y])=>{if(inside(x,y)&&grid[y][x]!==HARD)grid[y][x]=EMPTY})}
 function spawnCell(){let base=[[1,1],[C-2,R-2],[C-2,1],[1,R-2],[Math.floor(C/2),1],[Math.floor(C/2),R-2]];for(const [c,r] of base){if(!Object.values(players).some(p=>p.alive&&p.c===c&&p.r===r))return[c,r]}return emptyCell(false)||[1,1]}
-function makePlayer(id,name){let [c,r]=spawnCell(),o=cc(c,r);return{id,name:name||'PLAYER',c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,color:colorFor(id),speed:170,bombMax:1,range:2,placed:0,score:0,shield:2200,invuln:PLAYER_SPAWN_INVULN_MS,kick:false,kickLevel:0,handLevel:0,lastDirX:1,lastDirY:0,carryBombId:null,lastSeen:now()}}
+function makePlayer(id,name){let [c,r]=spawnCell(),o=cc(c,r);return{id,name:name||'PLAYER',c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,color:colorFor(id),speed:170,bombMax:1,range:2,placed:0,score:0,shield:2200,invuln:PLAYER_SPAWN_INVULN_MS,kick:false,kickLevel:0,handLevel:0,items:{fire:0,bomb:0,speed:0,shield:0,kick:0,hand:0},lastDirX:1,lastDirY:0,carryBombId:null,lastSeen:now()}}
 function colorFor(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return`hsl(${h},88%,66%)`}
 function blockKey(c,r){return c+','+r}
 function itemKey(it){return (it&&it.id)?it.id:((it&&it.c)+','+(it&&it.r)+','+(it&&it.type||''))}
@@ -141,7 +141,17 @@ function applyState(s){
   if(Number.isFinite(s.dropTimer))dropTimer=+s.dropTimer;
 
   if(s.grid&&Array.isArray(s.grid)&&s.grid.length===R)grid=s.grid.map(row=>row.slice());
-  if(s.members)members=s.members;
+  if(s.members){
+    const prevMembers=members||{};
+    const merged={...prevMembers};
+    Object.entries(s.members||{}).forEach(([id,m])=>{
+      const prev=prevMembers[id]||{};
+      merged[id]={...prev,...m};
+      if(prev.cam&&!m.cam)merged[id].cam=prev.cam;
+      if(prev.camAt&&!m.camAt)merged[id].camAt=prev.camAt;
+    });
+    members=merged;
+  }
 
   const prevPlayers=players||{};
   const nextPlayers={};
@@ -215,11 +225,11 @@ async function publishCamera(){
   try{await roomRef.child('members/'+myId).update({cam:camLocalData,camAt:t});}catch(e){}
 }
 function camImageFor(id){
-  if(id===myId&&camLocalData){let im=camImgs[id]||(camImgs[id]=new Image());if(im.src!==camLocalData)im.src=camLocalData;return im.complete?im:null;}
+  if(id===myId&&camLocalData){let im=camImgs[id]||(camImgs[id]=new Image());if(im.src!==camLocalData)im.src=camLocalData;return (im.complete&&im.naturalWidth>0)?im:null;}
   let m=members&&members[id],src=m&&m.cam;if(!src)return null;
   let im=camImgs[id]||(camImgs[id]=new Image());
   if(im.src!==src)im.src=src;
-  return im.complete?im:null;
+  return (im.complete&&im.naturalWidth>0)?im:null;
 }
 function drawPlayerCamera(p){
   let im=camImageFor(p.id);if(!im)return false;
@@ -441,12 +451,15 @@ function placeBomb(p,seq=null){if(!p||!p.alive)return;if(throwCarriedBomb(p))ret
 function throwBomb(p){return placeBomb(p)}
 function updateBombPasses(){bombs.forEach(b=>{if(b.carriedBy){let p=players[b.carriedBy];if(!p||!p.alive){b.carriedBy=null;if(p)p.carryBombId=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=p.x;b.y=p.y-(b.carryOff||32);let cell=tc(p.x,p.y);b.c=cell.c;b.r=cell.r}return}if(!b.passOwner)return;let p=players[b.passOwner];if(!p||!p.alive){b.passOwner=null;return}if(!circleRectHit(p.x,p.y,p.rad,bombRect(b)))b.passOwner=null})}
 function explode(b){if(!bombs.includes(b))return;bombs=bombs.filter(x=>x!==b);if(b.carriedBy&&players[b.carriedBy])players[b.carriedBy].carryBombId=null;let op=players[b.owner];if(op)op.placed=Math.max(0,op.placed-1);let boomPower=b.power||0,isJoinPrediction=false,expId=b.id||('exp_f'+lockFrame+'_'+(++itemSeq));shake=Math.max(shake,9+boomPower*1.8);sfx('explode');let cells=[[b.c,b.r]];for(const[dX,dY]of DIRS){for(let i=1;i<=b.range+Math.floor(boomPower/3);i++){let c=b.c+dX*i,r=b.r+dY*i;if(!inside(c,r)||grid[r][c]===HARD)break;cells.push([c,r]);if(grid[r][c]===SOFT){markLocalBlockClear(c,r);if(rand()<.34)dropItem(c,r);break}}}cells.forEach(([c,r])=>{let o=cc(c,r);flames.push({c,r,x:o.x,y:o.y,t:430,owner:b.owner||null,localOwner:isJoinPrediction?myId:null,expId})});bombs.slice().forEach(ob=>{if(cells.some(([c,r])=>ob.c===c&&ob.r===r))explode(ob)});shockwave(b.x,b.y,70+boomPower*18,'#ffdc5e');partsBurst(b.x,b.y,'#ffdc5e',28+boomPower*8)}
-function dropItem(c,r){let types=['fire','bomb','speed','shield','kick','hand'];let type=types[rnd(0,types.length-1)],o=cc(c,r);items.push({id:'it_'+(++itemSeq)+'_'+c+'_'+r+'_'+type,c,r,x:o.x,y:o.y,type})}
-function applyItemStats(p,it){if(it.type==='fire')p.range=Math.min(12,p.range+1);if(it.type==='bomb')p.bombMax=Math.min(12,p.bombMax+1);if(it.type==='speed')p.speed=Math.min(320,p.speed+18);if(it.type==='shield')p.shield=Math.max(p.shield,3600)+900;if(it.type==='kick'){p.kick=true;p.kickLevel=Math.min(9,(p.kickLevel||0)+1)}if(it.type==='hand')p.handLevel=Math.min(9,(p.handLevel||0)+1)}
+function dropItem(c,r,type=null){let types=['fire','bomb','speed','shield','kick','hand'];type=type||types[rnd(0,types.length-1)];let o=cc(c,r);items.push({id:'it_'+(++itemSeq)+'_'+c+'_'+r+'_'+type,c,r,x:o.x,y:o.y,type})}
+function ensureItemBag(p){if(!p.items)p.items={fire:0,bomb:0,speed:0,shield:0,kick:0,hand:0};return p.items}
+function applyItemStats(p,it){let bag=ensureItemBag(p);if(bag[it.type]!==undefined)bag[it.type]++;if(it.type==='fire')p.range=Math.min(12,p.range+1);if(it.type==='bomb')p.bombMax=Math.min(12,p.bombMax+1);if(it.type==='speed')p.speed=Math.min(320,p.speed+18);if(it.type==='shield')p.shield=Math.max(p.shield,3600)+900;if(it.type==='kick'){p.kick=true;p.kickLevel=Math.min(9,(p.kickLevel||0)+1)}if(it.type==='hand')p.handLevel=Math.min(9,(p.handLevel||0)+1)}
+function emptyItemDropCellsNear(p,count){let base=tc(p.x,p.y),cells=[];for(let ring=0;ring<7&&cells.length<count;ring++){for(let dy=-ring;dy<=ring;dy++)for(let dx=-ring;dx<=ring;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==ring)continue;let c=base.c+dx,r=base.r+dy;if(!inside(c,r)||c<=0||r<=0||c>=C-1||r>=R-1)continue;if(grid[r][c]!==EMPTY)continue;if(bombs.some(b=>!b.carriedBy&&b.c===c&&b.r===r))continue;if(items.some(it=>it.c===c&&it.r===r))continue;if(cells.some(q=>q[0]===c&&q[1]===r))continue;cells.push([c,r]);if(cells.length>=count)break;} }return cells}
+function releasePlayerItems(p){if(!p)return;let bag=ensureItemBag(p),drops=[];['fire','bomb','speed','shield','kick','hand'].forEach(type=>{let n=Math.max(0,bag[type]|0);for(let i=0;i<n;i++)drops.push(type)});if(!drops.length)return;let cells=emptyItemDropCellsNear(p,drops.length);for(let i=0;i<drops.length&&i<cells.length;i++){dropItem(cells[i][0],cells[i][1],drops[i])}p.items={fire:0,bomb:0,speed:0,shield:0,kick:0,hand:0};p.range=2;p.bombMax=1;p.speed=170;p.kick=false;p.kickLevel=0;p.handLevel=0;msg=`${p.name} DROPPED ${Math.min(drops.length,cells.length)} ITEMS`;partsBurst(p.x,p.y,'#fff176',10+Math.min(40,drops.length*4))}
 function itemApply(p,it,emit=true){it={...it,id:itemKey(it)};applyItemStats(p,it);sfx('item',1+((p.kickLevel||0)+(p.handLevel||0))*.05);partsBurst(it.x,it.y,{fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6'}[it.type]||'#fff',18);msg=`${p.name} GET ${it.type.toUpperCase()} Lv ${it.type==='kick'?p.kickLevel:it.type==='hand'?p.handLevel:''}`;if(mode==='join'&&p.id===myId){markLocalItemCollected(it);if(emit)sendGameEvent('itemCollect',{playerId:p.id,itemId:itemKey(it),item:it,c:it.c,r:it.r,type:it.type})}}
 function collectItemsForPlayer(p,emit=true){if(!p||!p.alive)return;for(let i=items.length-1;i>=0;i--){let it=items[i];if(localCollectedItems.has(itemKey(it))){items.splice(i,1);continue}if(Math.hypot(p.x-it.x,p.y-it.y)<32){itemApply(p,it,emit);items.splice(i,1)}}}
 function flameHit(c,r,ownerFilter=null){return flames.some(f=>f.c===c&&f.r===r&&(!ownerFilter||f.owner===ownerFilter||f.localOwner===ownerFilter))}
-function damagePlayer(p,src='local'){if(!p||!p.alive||p.shield>0||p.invuln>0)return;if(mode==='join'&&p.id===myId&&src==='remote')return;p.alive=false;sfx('down');partsBurst(p.x,p.y,p.color,30);msg=`${p.name} DOWN`;if(mode==='join'&&p.id===myId&&src==='local')reportLocalDeath(p,'local')}
+function damagePlayer(p,src='local'){if(!p||!p.alive||p.shield>0||p.invuln>0)return;if(mode==='join'&&p.id===myId&&src==='remote')return;releasePlayerItems(p);p.alive=false;sfx('down');partsBurst(p.x,p.y,p.color,30);msg=`${p.name} DOWN`;if(mode==='join'&&p.id===myId&&src==='local')reportLocalDeath(p,'local')}
 function damageSelfFromVisibleFlame(){
   let p=players[myId];
   if(mode!=='join'||!p||!p.alive)return;
@@ -479,7 +492,7 @@ function runJoinLockstep(dt){let steps=0;while(lockstepPackets[lockFrame+1]&&ste
 function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&((input.deathSeq||0)!==(players[id].remoteDeathSeq||0)||players[id].alive!==false)){players[id].remoteDeathSeq=input.deathSeq||players[id].remoteDeathSeq||1;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}moveEntity(p,mdx,mdy,dt,id);
         // スマブラ寄せ: JOIN端末の自分操作感を正にするため、HOSTもJOIN本人の申告座標へ追従する。
         // これでHOST側のアイテム取得・接触判定がJOIN画面と割れにくくなる。
-        if(id!==myId&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0){
+        if(Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0){
           let err=Math.hypot((p.x||0)-inp.clientX,(p.y||0)-inp.clientY);
           if(err>10){
             let tx=clamp(inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(inp.clientY,OY+p.rad,OY+R*T-p.rad);
