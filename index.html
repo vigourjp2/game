@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: join-lockstep-feel-rewrite-20260530-v2 -->
+<!-- build: all-clients-host-feel-local-first-20260530-v3 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -13,12 +13,12 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN側は参加直後から同じ操作関数で即時移動し、P2P入力同期＋HOST正解への軽補正でリアルタイム操作に寄せる。</div>
+    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN側もHOSTと同じく自端末の入力で即移動し、通信による座標引き戻しを通常時は行わない。P2P入力同期＋巨大ズレ時だけ再同期で、全端末HOST操作感に寄せる。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
     <div class="row"><button id="hostBtn">HOST</button><button id="joinBtn" class="join">JOIN</button><button id="offBtn" class="off">OFFLINE</button></div><button id="copyBtn" class="off" style="width:100%;margin-top:8px">ROOM ID COPY</button>
     <div id="panelMsg" class="small">HOSTでROOMを作成し、他端末は同じROOM IDでJOIN。JOINした端末はmembersへ登録され、HOSTが人数分のプレイヤーを自動生成。操作は画面どこでも仮想スティック移動、短いダブルタップで爆弾。</div>
-    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。JOIN本人は参加直後から入力即時反映＋HOST正解への軽補正で、通信揺れでも操作が止まらない構成。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
+    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。JOIN本人はHOST stateで毎回引き戻さず、参加直後から入力即時反映。通信揺れでも自分の操作が止まらない構成。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
   </div>
 </div>
 <div class="app">
@@ -56,6 +56,7 @@ let lastNet=0,lastStateWrite=0,lastFullStateWrite=0,lastInputWrite=0,lastMemberH
 let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
 let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
+const LOCAL_FIRST_AUTHORITY=true; // 全端末HOST操作感: 自分の描画位置は通信で引き戻さず、巨大ズレ時だけ再同期
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
 let audioCtx=null,bgmTimer=null;
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
@@ -145,8 +146,18 @@ function applyState(s){
     if(mode==='join'){
       if(prev){
         const err=Math.hypot((prev.x||tx)-tx,(prev.y||ty)-ty);
-        q.x=err>150?tx:(Number(prev.x)||tx);
-        q.y=err>150?ty:(Number(prev.y)||ty);
+        if(id===myId&&LOCAL_FIRST_AUTHORITY&&src.alive!==false){
+          // 自分だけはHOST stateで座標を引き戻さない。
+          // HOST端末と同じく、押した瞬間にローカルのmoveEntity結果をそのまま描画する。
+          // HOST座標はauthX/authYとして保持し、巨大ズレ・死亡・復帰時だけ使う。
+          q.x=Number(prev.x)||tx;
+          q.y=Number(prev.y)||ty;
+          q.tx=q.x;
+          q.ty=q.y;
+        }else{
+          q.x=err>260?tx:(Number(prev.x)||tx);
+          q.y=err>260?ty:(Number(prev.y)||ty);
+        }
         q.vx=src.vx||prev.vx||0;
         q.vy=src.vy||prev.vy||0;
         q.lastDirX=src.lastDirX||prev.lastDirX||1;
@@ -154,7 +165,7 @@ function applyState(s){
       }else{
         q.x=tx;q.y=ty;q.vx=src.vx||0;q.vy=src.vy||0;
       }
-      if(id===myId&&src.alive===false){q.x=tx;q.y=ty;}
+      if(id===myId&&src.alive===false){q.x=tx;q.y=ty;q.tx=tx;q.ty=ty;}
     }else{
       q.x=tx;q.y=ty;q.vx=src.vx||0;q.vy=src.vy||0;
     }
@@ -399,7 +410,8 @@ function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)retu
 async function writeInput(force=false){
   if(mode==='offline')return;
   let t=now();
-  if(!force&&t-lastInputWrite<8)return;
+  // 入力は全端末でHOST同等の手触りを優先。P2P時は可能な限り高頻度送信する。
+  if(!force&&t-lastInputWrite<(mode==='join'&&rtcConnected?0:8))return;
   lastInputWrite=t;
   if(!roomRef)return;
   let me=players[myId];
@@ -418,7 +430,7 @@ async function writeInput(force=false){
     return;
   }
 
-  if(mode==='join'&&!force&&t-lastMemberHeartbeat<90)return;
+  if(mode==='join'&&!force&&t-lastMemberHeartbeat<24)return;
   lastMemberHeartbeat=t;
   roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t}).catch(()=>{});
 }
@@ -560,14 +572,14 @@ function updateJoinPrediction(dt){
     if(p.id===myId&&p.alive){
       let mdx=localInput.dx||0,mdy=localInput.dy||0;
       if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}
+      // HOST操作感の本体。自分の端末ではHOSTを待たず毎フレーム即移動する。
+      // 通信由来のtargetX/targetYへ毎回寄せるとJOINだけ重くなるため、通常時は補正しない。
       moveEntity(p,mdx,mdy,dt,myId);
       const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
-      if(err>96||!Number.isFinite(err)){
+      if((err>420||!Number.isFinite(err))&&!LOCAL_FIRST_AUTHORITY){
         p.x=targetX;p.y=targetY;
-      }else if(err>18){
-        p.x=smoothToward(p.x,targetX,dt,4.5);
-        p.y=smoothToward(p.y,targetY,dt,4.5);
       }
+      p.tx=p.x;p.ty=p.y;
     }else{
       const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
       if(err>170||!Number.isFinite(err)){
