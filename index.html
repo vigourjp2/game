@@ -305,17 +305,31 @@ function updateJoinPrediction(dt){
     if(b.carriedBy)return;
     if(updateBombHop(b,dt))return;
     if(b.vx||b.vy){
+      let ox=b.x,oy=b.y;
       b.x+=b.vx*dt;b.y+=b.vy*dt;
       b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);
       b.slideT=(b.slideT||0)-dt*1000;
-      b.vx*=b.slideT>0 ? .982 : .90;
-      b.vy*=b.slideT>0 ? .982 : .90;
+      let fr=(b.slideT>0)?.982:.90;
+      b.vx*=fr;
+      b.vy*=fr;
       if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){
         b.vx=0;b.vy=0;
         if(b.armed===false||b.fusePaused)armBombAfterLanding(b);
       }
       let cell=tc(b.x,b.y);
-      if(inside(cell.c,cell.r)){b.c=cell.c;b.r=cell.r}
+      let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);
+      if(blocked){
+        b.vx=0;b.vy=0;
+        b.x=cc(b.c,b.r).x;
+        b.y=cc(b.c,b.r).y;
+        sfx('hit',b.power||1);
+        partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2);
+        if(b.armed===false||b.fusePaused)armBombAfterLanding(b);
+      }else{
+        b.c=cell.c;
+        b.r=cell.r;
+        impactBomb(b);
+      }
     }
   });
   bombs.slice().forEach(b=>{if(b.owner===myId&&b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
