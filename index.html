@@ -51,7 +51,7 @@ const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>documen
 const W=832,H=704,T=48,C=15,R=13,OX=Math.floor((W-C*T)/2),OY=58,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
 const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,roomSeed=0,myId=localStorage.pbomberId||('p_'+Math.random().toString(36).slice(2,10));localStorage.pbomberId=myId;
-let lastNet=0,lastStateWrite=0,lastInputWrite=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
+let lastNet=0,lastStateWrite=0,lastFullStateWrite=0,lastInputWrite=0,lastMemberHeartbeat=0,lastHudUpdate=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
 let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
 let netSeq=0,netStateAge=0;
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
@@ -129,8 +129,8 @@ function applyState(s){
   lastStateTs=s.ts||recvAt;
   netSeq++;
   roomSeed=s.roomSeed||roomSeed;
-  grid=(s.grid||grid).map(row=>row.slice());
-  members=s.members||members;
+  if(s.grid)grid=s.grid.map(row=>row.slice());
+  if(s.members)members=s.members;
 
   const nextPlayers={};
   Object.entries(s.players||{}).forEach(([id,p])=>{
@@ -232,17 +232,33 @@ function drawPlayerCamera(p){
 }
 
 
-function compactState(){
-  // DataChannel用。毎フレーム近く流すため、Firebase保存用serializeより軽くする。
-  const s=serialize();
-  s.fast=true;
-  return s;
+function compactState(includeGrid=false){
+  // DataChannel用の軽量state。JOINカクカクの主因だった cam入りmembers/grid丸ごと送信を通常フレームから外す。
+  // 位置系は高頻度、地形gridだけ低頻度で同期する。
+  const lightMembers={};
+  Object.entries(members||{}).forEach(([id,m])=>{lightMembers[id]={id,name:m&&m.name||'PLAYER',last:m&&m.last||0};});
+  return {
+    fast:true,
+    roomSeed,
+    grid:includeGrid?grid:undefined,
+    members:lightMembers,
+    players,
+    bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed})),
+    flames,
+    enemies,
+    items:normalizeItems(items),
+    falling,
+    wave,
+    msg,
+    shake,
+    ts:now()
+  };
 }
 function rtcSend(ch,obj){
   if(!ch||ch.readyState!=='open')return false;
   try{
     // bufferedAmountが溜まった古いstateは送らない。これがカクつき対策の核心。
-    if(obj&&obj.type==='state'&&ch.bufferedAmount>32768)return false;
+    if(obj&&obj.type==='state'&&ch.bufferedAmount>4096)return false;
     ch.send(JSON.stringify(obj));
     return true;
   }catch(e){return false;}
@@ -316,7 +332,29 @@ function spawnWave(){let n=3+Math.floor(wave*1.35);for(let i=0;i<n;i++)spawnEnem
 function queueBomb(){startAudio();localInput.bomb=true;localInput.seq++;localInput.bombSeq=localInput.seq}
 function queueHand(){startAudio();queueBomb()}
 function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)return;localDeathSeq++;lastReportedDeathSeq=localDeathSeq;localInput.deathSeq=localDeathSeq;localInput.dead=true;localInput.deathReason=reason;writeInput(true);sendGameEvent('playerDown',{playerId:myId,deathSeq:localDeathSeq,reason})}
-async function writeInput(force=false){if(mode==='offline')return;let t=now();if(!force&&t-lastInputWrite<16)return;lastInputWrite=t;if(!roomRef)return;let me=players[myId];let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};if(mode==='join'&&rtcSend(rtcInputChannel,{type:'input',id:myId,input:payload,t})){if(t-lastRtcPing>1000){lastRtcPing=t;rtcSend(rtcInputChannel,{type:'ping',t});}try{if(force||t-lastInputWrite<20)roomRef.child('members/'+myId).update({name:nameVal(),last:t}).catch(()=>{})}catch(e){}return;}try{await roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t})}catch(e){}}
+async function writeInput(force=false){
+  if(mode==='offline')return;
+  let t=now();
+  // 操作入力は最優先。ただし同じフレーム内で何度も送らない。
+  if(!force&&t-lastInputWrite<16)return;
+  lastInputWrite=t;
+  if(!roomRef)return;
+  let me=players[myId];
+  let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};
+
+  // P2P成立中はFirebaseへ毎フレーム書かない。これがJOIN端末のカクつき対策の核心。
+  if(mode==='join'&&rtcSend(rtcInputChannel,{type:'input',id:myId,input:payload,t})){
+    if(t-lastRtcPing>1000){lastRtcPing=t;rtcSend(rtcInputChannel,{type:'ping',t});}
+    if(force||t-lastMemberHeartbeat>2000){
+      lastMemberHeartbeat=t;
+      roomRef.child('members/'+myId).update({name:nameVal(),last:t}).catch(()=>{});
+    }
+    return;
+  }
+
+  // WebRTC未接続時だけFirebase入力へフォールバック。ここもawaitしない。
+  roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t}).catch(()=>{});
+}
 function readLocalInput(){let dx=0,dy=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))dx--;if(keys.has('KeyD')||keys.has('ArrowRight'))dx++;if(keys.has('KeyW')||keys.has('ArrowUp'))dy--;if(keys.has('KeyS')||keys.has('ArrowDown'))dy++;if(touch.active){dx+=localInput.dx;dy+=localInput.dy}let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}localInput.dx=dx;localInput.dy=dy;let me=players[myId];if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy}}
 function bombRect(b){return{x:(b.x||cc(b.c,b.r).x)-T/2+8,y:(b.y||cc(b.c,b.r).y)-T/2+8,w:T-16,h:T-16,type:'bomb',bomb:b}}
 function solidRects(ownerId){let a=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(grid[r][c]!==EMPTY)a.push({x:OX+c*T,y:OY+r*T,w:T,h:T,type:'block'});bombs.forEach(b=>{if(b.carriedBy)return;if(b.passOwner&&b.passOwner===ownerId)return;a.push(bombRect(b))});return a}
@@ -368,17 +406,17 @@ async function publishState(){
   let t=now();
   let openChannels=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');
   let hasRtc=openChannels.length>0;
-  // 60fpsで巨大stateを投げるとJOIN側がJSON受信・applyで詰まる。
-  // 権威stateは20fps、描画はJOIN側60fps補間に分離する。
   if(hasRtc&&t-lastStateWrite>50){
     lastStateWrite=t;
-    let packet={type:'state',state:compactState(),t};
+    const includeGrid=t-lastFullStateWrite>260;
+    if(includeGrid)lastFullStateWrite=t;
+    let packet={type:'state',state:compactState(includeGrid),t};
     openChannels.forEach(ch=>rtcSend(ch,packet));
     return;
   }
-  if(!hasRtc&&t-lastStateWrite>100){
+  if(!hasRtc&&t-lastStateWrite>120){
     lastStateWrite=t;
-    try{await roomRef.child('state').set(serialize())}catch(e){}
+    roomRef.child('state').set(serialize()).catch(()=>{});
   }
 }
 function updateHud(){$('roomView').textContent=roomId||'OFFLINE';$('modeView').textContent=(rtcConnected?'P2P ': '')+mode.toUpperCase();$('waveView').textContent=wave;$('playersView').textContent=Object.values(players).filter(p=>p.alive).length+'/'+Object.keys(players).length;$('enemyView').textContent=enemies.filter(e=>e.alive).length}
@@ -483,7 +521,7 @@ function loop(ts){
     publishCamera();
     if(started&&isHost){updateHost(dt);publishState()}
     else if(started&&mode==='join'){updateJoinPrediction(dt)}
-    updateHud();
+    if(now()-lastHudUpdate>120){lastHudUpdate=now();updateHud();}
     if(!grid||grid.length!==R||!grid[0])drawBoot();else draw()
   }catch(e){console.error(e);drawBoot()}
   requestAnimationFrame(loop)
