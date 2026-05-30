@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: all-clients-host-feel-local-first-20260530-v3 -->
+<!-- build: join-lockstep-feel-rewrite-20260530-v2 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -13,12 +13,12 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN側もHOSTと同じく自端末の入力で即移動し、通信による座標引き戻しを通常時は行わない。P2P入力同期＋巨大ズレ時だけ再同期で、全端末HOST操作感に寄せる。</div>
+    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN側は参加直後から同じ操作関数で即時移動し、P2P入力同期＋HOST正解への軽補正でリアルタイム操作に寄せる。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
     <div class="row"><button id="hostBtn">HOST</button><button id="joinBtn" class="join">JOIN</button><button id="offBtn" class="off">OFFLINE</button></div><button id="copyBtn" class="off" style="width:100%;margin-top:8px">ROOM ID COPY</button>
     <div id="panelMsg" class="small">HOSTでROOMを作成し、他端末は同じROOM IDでJOIN。JOINした端末はmembersへ登録され、HOSTが人数分のプレイヤーを自動生成。操作は画面どこでも仮想スティック移動、短いダブルタップで爆弾。</div>
-    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。JOIN本人はHOST stateで毎回引き戻さず、参加直後から入力即時反映。通信揺れでも自分の操作が止まらない構成。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
+    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。JOIN本人は参加直後から入力即時反映＋HOST正解への軽補正で、通信揺れでも操作が止まらない構成。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
   </div>
 </div>
 <div class="app">
@@ -56,7 +56,7 @@ let lastNet=0,lastStateWrite=0,lastFullStateWrite=0,lastInputWrite=0,lastMemberH
 let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
 let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
-const LOCAL_FIRST_AUTHORITY=true; // 全端末HOST操作感: 自分の描画位置は通信で引き戻さず、巨大ズレ時だけ再同期
+let pendingItemGrants={};
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
 let audioCtx=null,bgmTimer=null;
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
@@ -120,7 +120,7 @@ function markLocalBlockClear(c,r){localClearedBlocks.add(blockKey(c,r));if(insid
 function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
-function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY;if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item&&had)applyItemStats(p,ev.item)}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
+function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY;if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
 function serialize(){return{roomSeed,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
@@ -146,18 +146,8 @@ function applyState(s){
     if(mode==='join'){
       if(prev){
         const err=Math.hypot((prev.x||tx)-tx,(prev.y||ty)-ty);
-        if(id===myId&&LOCAL_FIRST_AUTHORITY&&src.alive!==false){
-          // 自分だけはHOST stateで座標を引き戻さない。
-          // HOST端末と同じく、押した瞬間にローカルのmoveEntity結果をそのまま描画する。
-          // HOST座標はauthX/authYとして保持し、巨大ズレ・死亡・復帰時だけ使う。
-          q.x=Number(prev.x)||tx;
-          q.y=Number(prev.y)||ty;
-          q.tx=q.x;
-          q.ty=q.y;
-        }else{
-          q.x=err>260?tx:(Number(prev.x)||tx);
-          q.y=err>260?ty:(Number(prev.y)||ty);
-        }
+        q.x=err>150?tx:(Number(prev.x)||tx);
+        q.y=err>150?ty:(Number(prev.y)||ty);
         q.vx=src.vx||prev.vx||0;
         q.vy=src.vy||prev.vy||0;
         q.lastDirX=src.lastDirX||prev.lastDirX||1;
@@ -165,7 +155,7 @@ function applyState(s){
       }else{
         q.x=tx;q.y=ty;q.vx=src.vx||0;q.vy=src.vy||0;
       }
-      if(id===myId&&src.alive===false){q.x=tx;q.y=ty;q.tx=tx;q.ty=ty;}
+      if(id===myId&&src.alive===false){q.x=tx;q.y=ty;}
     }else{
       q.x=tx;q.y=ty;q.vx=src.vx||0;q.vy=src.vy||0;
     }
@@ -190,7 +180,7 @@ function applyState(s){
   }
   flames=(s.flames||[]).map(f=>({...f,owner:f.owner||null,localOwner:null,seenAt:recvAt}));
   enemies=(s.enemies||[]).map(e=>({...e,tx:Number(e.x)||0,ty:Number(e.y)||0}));
-  items=normalizeItems(s.items||[]);
+  items=normalizeItems(s.items||[]).filter(it=>!localCollectedItems.has(itemKey(it)));
   falling=(s.falling||[]).map(f=>({...f}));
   wave=s.wave||wave;
   msg=s.msg||msg;
@@ -410,8 +400,7 @@ function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)retu
 async function writeInput(force=false){
   if(mode==='offline')return;
   let t=now();
-  // 入力は全端末でHOST同等の手触りを優先。P2P時は可能な限り高頻度送信する。
-  if(!force&&t-lastInputWrite<(mode==='join'&&rtcConnected?0:8))return;
+  if(!force&&t-lastInputWrite<8)return;
   lastInputWrite=t;
   if(!roomRef)return;
   let me=players[myId];
@@ -430,7 +419,7 @@ async function writeInput(force=false){
     return;
   }
 
-  if(mode==='join'&&!force&&t-lastMemberHeartbeat<24)return;
+  if(mode==='join'&&!force&&t-lastMemberHeartbeat<90)return;
   lastMemberHeartbeat=t;
   roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t}).catch(()=>{});
 }
@@ -462,6 +451,7 @@ function explode(b){if(!bombs.includes(b))return;bombs=bombs.filter(x=>x!==b);if
 function dropItem(c,r){let types=['fire','bomb','speed','shield','kick','hand'];let type=types[rnd(0,types.length-1)],o=cc(c,r);items.push({id:'it_'+c+'_'+r+'_'+type,c,r,x:o.x,y:o.y,type})}
 function applyItemStats(p,it){if(it.type==='fire')p.range=Math.min(12,p.range+1);if(it.type==='bomb')p.bombMax=Math.min(12,p.bombMax+1);if(it.type==='speed')p.speed=Math.min(320,p.speed+18);if(it.type==='shield')p.shield=Math.max(p.shield,3600)+900;if(it.type==='kick'){p.kick=true;p.kickLevel=Math.min(9,(p.kickLevel||0)+1)}if(it.type==='hand')p.handLevel=Math.min(9,(p.handLevel||0)+1)}
 function itemApply(p,it,emit=true){it={...it,id:itemKey(it)};applyItemStats(p,it);sfx('item',1+((p.kickLevel||0)+(p.handLevel||0))*.05);partsBurst(it.x,it.y,{fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6'}[it.type]||'#fff',18);msg=`${p.name} GET ${it.type.toUpperCase()} Lv ${it.type==='kick'?p.kickLevel:it.type==='hand'?p.handLevel:''}`;if(mode==='join'&&p.id===myId){markLocalItemCollected(it);if(emit)sendGameEvent('itemCollect',{playerId:p.id,itemId:itemKey(it),item:it,c:it.c,r:it.r,type:it.type})}}
+function collectItemsForPlayer(p,emit=true){if(!p||!p.alive)return;for(let i=items.length-1;i>=0;i--){let it=items[i];if(localCollectedItems.has(itemKey(it))){items.splice(i,1);continue}if(Math.hypot(p.x-it.x,p.y-it.y)<32){itemApply(p,it,emit);items.splice(i,1)}}}
 function flameHit(c,r,ownerFilter=null){return flames.some(f=>f.c===c&&f.r===r&&(!ownerFilter||f.owner===ownerFilter||f.localOwner===ownerFilter))}
 function damagePlayer(p,src='local'){if(!p||!p.alive||p.shield>0)return;if(mode==='join'&&p.id===myId&&src==='remote')return;p.alive=false;sfx('down');partsBurst(p.x,p.y,p.color,30);msg=`${p.name} DOWN`;if(mode==='join'&&p.id===myId&&src==='local')reportLocalDeath(p,'local')}
 function damageSelfFromVisibleFlame(){
@@ -483,11 +473,21 @@ function shockwave(x,y,rad,col){parts.push({x,y,vx:0,vy:0,life:330,col,ring:true
 function impactBomb(b){let sp=Math.hypot(b.vx||0,b.vy||0),lv=b.power||0;if(sp<150)return;for(const e of enemies){if(!e.alive)continue;if(Math.hypot(e.x-b.x,e.y-b.y)<e.rad+20){let d=1+Math.floor(lv/2);damageEnemy(e,d);e.x+=Math.sign(b.vx||1)*(12+lv*7);e.y+=Math.sign(b.vy||1)*(12+lv*7);b.vx*=.55;b.vy*=.55;shake=Math.max(shake,4+lv);sfx('hit',lv);shockwave(b.x,b.y,38+lv*8,'#ffd0a6');partsBurst(b.x,b.y,'#ffd0a6',14+lv*3);break}}for(const p of Object.values(players)){if(!p.alive||p.id===b.thrownBy)continue;if(Math.hypot(p.x-b.x,p.y-b.y)<p.rad+20){if(p.shield>0){p.shield=Math.max(0,p.shield-280-lv*130)}else if(lv>=4){damagePlayer(p)}else{p.x+=Math.sign(b.vx||1)*(18+lv*9);p.y+=Math.sign(b.vy||1)*(18+lv*9);depen(p,p.id)}b.vx*=.45;b.vy*=.45;shake=Math.max(shake,5+lv);sfx('hit',lv);partsBurst(b.x,b.y,p.color,12+lv*3);break}}}
 function emptyDropCell(){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]!==EMPTY)continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;if(items.some(it=>it.c===c&&it.r===r))continue;let nearPlayer=Object.values(players).some(p=>p.alive&&Math.hypot(p.x-cc(c,r).x,p.y-cc(c,r).y)<T*1.25);if(nearPlayer)continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:(emptyCell(false)||null)}
 
-function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&((input.deathSeq||0)!==(players[id].remoteDeathSeq||0)||players[id].alive!==false)){players[id].remoteDeathSeq=input.deathSeq||players[id].remoteDeathSeq||1;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}moveEntity(p,mdx,mdy,dt,id);if(p.shield>0)p.shield-=dt*1000;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){placeBomb(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}}}
+function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&((input.deathSeq||0)!==(players[id].remoteDeathSeq||0)||players[id].alive!==false)){players[id].remoteDeathSeq=input.deathSeq||players[id].remoteDeathSeq||1;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}moveEntity(p,mdx,mdy,dt,id);
+        // スマブラ寄せ: JOIN端末の自分操作感を正にするため、HOSTもJOIN本人の申告座標へ追従する。
+        // これでHOST側のアイテム取得・接触判定がJOIN画面と割れにくくなる。
+        if(id!==myId&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0){
+          let err=Math.hypot((p.x||0)-inp.clientX,(p.y||0)-inp.clientY);
+          if(err>10){
+            let tx=clamp(inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(inp.clientY,OY+p.rad,OY+R*T-p.rad);
+            if(canAt(p,tx,ty,id)||err>70){p.x=err>70?tx:smoothToward(p.x,tx,dt,28);p.y=err>70?ty:smoothToward(p.y,ty,dt,28);let cc2=tc(p.x,p.y);p.c=cc2.c;p.r=cc2.r;}
+          }
+        }
+        if(p.shield>0)p.shield-=dt*1000;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){placeBomb(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}}}
   updateBombPasses();
   bombs.forEach(b=>{if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(b.vx||b.vy){let ox=b.x,oy=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;let fr=(b.slideT>0)?.982:.90;b.vx*=fr;b.vy*=fr;if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b)}let cell=tc(b.x,b.y);let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);if(blocked){b.vx=0;b.vy=0;b.x=cc(b.c,b.r).x;b.y=cc(b.c,b.r).y;sfx('hit',b.power||1);partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2)}else{b.c=cell.c;b.r=cell.r;impactBomb(b)}}});bombs.slice().forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
   flames.forEach(f=>f.t-=dt*1000);flames=flames.filter(f=>f.t>0);
-  Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r))damagePlayer(p,isHost?'local':'remote');for(let i=items.length-1;i>=0;i--){let it=items[i];if(Math.hypot(p.x-it.x,p.y-it.y)<26){itemApply(p,it);items.splice(i,1)}}});
+  Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r))damagePlayer(p,isHost?'local':'remote');collectItemsForPlayer(p,false);});
   enemies.forEach(e=>{if(!e.alive)return;e.think-=dt*1000;if(e.think<=0){let alive=Object.values(players).filter(p=>p.alive);let target=alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0];if(target){let ax=target.x-e.x,ay=target.y-e.y;if(Math.random()<.7)e.dir=Math.abs(ax)>Math.abs(ay)?[Math.sign(ax),0]:[0,Math.sign(ay)];else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=rnd(250,760)}let moved=moveEntity(e,e.dir[0],e.dir[1],dt,null);if(!moved)e.think=0;damageEnemyByFlamesOnce(e);Object.values(players).forEach(p=>{if(p.alive&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p)})});enemies=enemies.filter(e=>e.alive);
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+t+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
   if(enemies.length===0){wave++;spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
@@ -572,14 +572,14 @@ function updateJoinPrediction(dt){
     if(p.id===myId&&p.alive){
       let mdx=localInput.dx||0,mdy=localInput.dy||0;
       if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}
-      // HOST操作感の本体。自分の端末ではHOSTを待たず毎フレーム即移動する。
-      // 通信由来のtargetX/targetYへ毎回寄せるとJOINだけ重くなるため、通常時は補正しない。
       moveEntity(p,mdx,mdy,dt,myId);
       const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
-      if((err>420||!Number.isFinite(err))&&!LOCAL_FIRST_AUTHORITY){
+      if(err>96||!Number.isFinite(err)){
         p.x=targetX;p.y=targetY;
+      }else if(err>18){
+        p.x=smoothToward(p.x,targetX,dt,4.5);
+        p.y=smoothToward(p.y,targetY,dt,4.5);
       }
-      p.tx=p.x;p.ty=p.y;
     }else{
       const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
       if(err>170||!Number.isFinite(err)){
@@ -590,6 +590,7 @@ function updateJoinPrediction(dt){
       }
     }
     let cell=tc(p.x,p.y);p.c=cell.c;p.r=cell.r;
+    if(p.id===myId)collectItemsForPlayer(p,true);
     if(p.shield>0)p.shield-=dt*1000;
   }
 
