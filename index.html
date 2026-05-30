@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: bomb-sync-fix-20260530-2318 -->
+<!-- build: join-local-bomb-explode-fix-20260530-2329 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -203,7 +203,17 @@ function applyState(s){
     bombs=remoteBombs;
   }
   const prevFlameSeen=new Map((flames||[]).map(f=>[(f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r)),f.seenAt||recvAt]));
-  flames=(s.flames||[]).map(f=>{let k=f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r);return {...f,owner:f.owner||null,localOwner:f.localOwner||null,seenAt:prevFlameSeen.get(k)||recvAt};});
+  const remoteFlames=(s.flames||[]).map(f=>{let k=f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r);return {...f,owner:f.owner||null,localOwner:f.localOwner||null,seenAt:prevFlameSeen.get(k)||recvAt};});
+  if(mode==='join'){
+    const remoteFlameIds=new Set(remoteFlames.map(f=>f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r)));
+    const localFlames=(flames||[]).filter(f=>{
+      const k=f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r);
+      return f.localOwner===myId&&f.t>0&&!remoteFlameIds.has(k);
+    });
+    flames=remoteFlames.concat(localFlames);
+  }else{
+    flames=remoteFlames;
+  }
   enemies=(s.enemies||[]).map(e=>({...e}));
   items=normalizeItems(s.items||[]);
   falling=(s.falling||[]).map(f=>({...f}));
@@ -498,6 +508,19 @@ function updateJoinEnemyContact(){
   });
   enemies=enemies.filter(e=>e.alive);
 }
+function updateJoinLocalBombs(dt){
+  if(mode!=='join')return;
+  bombs.forEach(b=>{
+    if(!b||b.owner!==myId||!b.localMadeAt)return;
+    if(b.carriedBy||b.fusePaused||b.armed===false)return;
+    b.timer-=dt*1000;
+  });
+  bombs.slice().forEach(b=>{
+    if(b&&b.owner===myId&&b.localMadeAt&&b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b);
+  });
+  flames.forEach(f=>{if(f.localOwner===myId)f.t-=dt*1000});
+  flames=flames.filter(f=>f.t>0);
+}
 function smoothToward(v,t,dt,rate){return v+(t-v)*(1-Math.exp(-rate*dt))}
 function updateJoinPrediction(dt){
   if(mode!=='join'||!started)return;
@@ -534,6 +557,7 @@ function updateJoinPrediction(dt){
     if(p.shield>0)p.shield-=dt*1000;
   }
 
+  updateJoinLocalBombs(dt);
   damageSelfFromVisibleFlame();
   damageSelfFromVisibleDrop(dt);
   updateJoinEnemyContact();
