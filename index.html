@@ -1,11 +1,12 @@
 <!doctype html>
+<!-- build: bomb-sync-fix-20260530-2318 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Physics Bomber Roguelike Online</title>
 <style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07101d;color:#eef3ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none}.app{height:100dvh;display:grid;grid-template-rows:auto 1fr auto;gap:6px;padding:7px;background:radial-gradient(circle at top,#142543,#07101d 58%,#03070f)}.top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:34px}.pill{background:#12203a;border:1px solid #31476e;border-radius:999px;padding:6px 9px;font-size:12px;white-space:nowrap;box-shadow:0 4px 16px #0004}.pill b{color:#ffe66d}.main{min-height:0;display:flex;align-items:center;justify-content:center}canvas{display:block;max-width:100%;max-height:100%;aspect-ratio:832/704;background:#06101b;border:3px solid #506589;border-radius:13px;box-shadow:0 12px 44px #000b;image-rendering:pixelated;touch-action:none}.items{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#0b1426;border:1px solid #263d63;border-radius:14px;padding:6px}.item{background:#13213a;border:1px solid #36517b;border-radius:12px;padding:7px 8px;min-height:52px;font-size:11px;line-height:1.25}.item b{display:block;font-size:13px;margin-bottom:2px;color:#fff}.item.fire b{color:#ffb84d}.item.bomb b{color:#ffef72}.item.speed b{color:#79e6ff}.item.shield b{color:#9bff9b}.item.kick b{color:#ff9bf0}.item.hand b{color:#ffd0a6}#panel{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:18px;background:linear-gradient(155deg,#05101f,#12335f 54%,#07101d)}#box{width:min(520px,94vw);background:#ffffff12;border:1px solid #ffffff38;border-radius:22px;padding:18px;box-shadow:0 18px 60px #0008}h1{margin:0 0 6px;font-size:25px;letter-spacing:.03em}.sub{font-size:13px;line-height:1.55;color:#d8e7ff;margin-bottom:10px}input{width:100%;border:0;border-radius:14px;padding:13px 14px;margin:6px 0;background:#fff;color:#111;font-size:17px;font-weight:900;text-transform:uppercase}.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}button{border:0;border-radius:14px;padding:13px 7px;color:white;font-size:15px;font-weight:1000;background:#22c55e;touch-action:manipulation}button.join{background:#3b82f6}button.off{background:#64748b}.small{font-size:12px;line-height:1.45;color:#cfe5ff;margin-top:10px}.warn{font-size:11px;color:#fecaca;margin-top:7px;line-height:1.45}.hidden{display:none!important}.stickBase{position:fixed;width:76px;height:76px;margin:-38px 0 0 -38px;border:2px solid #ffe66d;border-radius:50%;opacity:0;z-index:18;pointer-events:none;background:#ffe66d22}.stickKnob{position:fixed;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#ffe66dcc;opacity:0;z-index:19;pointer-events:none}.stickBase.on,.stickKnob.on{opacity:.9}.bombBtn{position:fixed;right:18px;bottom:86px;z-index:25;width:82px;height:82px;border-radius:50%;border:3px solid #fff3;background:radial-gradient(circle at 35% 30%,#fff176,#f59e0b 58%,#7c2d12);color:#111;font-size:15px;font-weight:1000;box-shadow:0 10px 32px #0009,0 0 0 5px #ffef7240;touch-action:manipulation}.bombBtn:active{transform:scale(.94);filter:brightness(1.12)}.roomTag{font-family:ui-monospace,monospace}@media(max-width:640px){.app{padding:5px;gap:5px}.pill{font-size:11px;padding:5px 7px}.top{overflow-x:auto}.items{grid-template-columns:repeat(2,1fr)}.item{font-size:10px;padding:6px 7px;min-height:38px}.item b{font-size:12px}canvas{border-width:2px}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07101d;color:#eef3ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none}.app{height:100dvh;display:grid;grid-template-rows:auto 1fr auto;gap:6px;padding:7px;background:radial-gradient(circle at top,#142543,#07101d 58%,#03070f)}.top{display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:34px}.pill{background:#12203a;border:1px solid #31476e;border-radius:999px;padding:6px 9px;font-size:12px;white-space:nowrap;box-shadow:0 4px 16px #0004}.pill b{color:#ffe66d}.main{min-height:0;display:flex;align-items:center;justify-content:center}canvas{display:block;max-width:100%;max-height:100%;aspect-ratio:832/704;background:#06101b;border:3px solid #506589;border-radius:13px;box-shadow:0 12px 44px #000b;image-rendering:pixelated;touch-action:none}.items{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#0b1426;border:1px solid #263d63;border-radius:14px;padding:6px}.item{background:#13213a;border:1px solid #36517b;border-radius:12px;padding:7px 8px;min-height:52px;font-size:11px;line-height:1.25}.item b{display:block;font-size:13px;margin-bottom:2px;color:#fff}.item.fire b{color:#ffb84d}.item.bomb b{color:#ffef72}.item.speed b{color:#79e6ff}.item.shield b{color:#9bff9b}.item.kick b{color:#ff9bf0}.item.hand b{color:#ffd0a6}#panel{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:18px;background:linear-gradient(155deg,#05101f,#12335f 54%,#07101d)}#box{width:min(520px,94vw);background:#ffffff12;border:1px solid #ffffff38;border-radius:22px;padding:18px;box-shadow:0 18px 60px #0008}h1{margin:0 0 6px;font-size:25px;letter-spacing:.03em}.sub{font-size:13px;line-height:1.55;color:#d8e7ff;margin-bottom:10px}input{width:100%;border:0;border-radius:14px;padding:13px 14px;margin:6px 0;background:#fff;color:#111;font-size:17px;font-weight:900;text-transform:uppercase}.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px}button{border:0;border-radius:14px;padding:13px 7px;color:white;font-size:15px;font-weight:1000;background:#22c55e;touch-action:manipulation}button.join{background:#3b82f6}button.off{background:#64748b}.small{font-size:12px;line-height:1.45;color:#cfe5ff;margin-top:10px}.warn{font-size:11px;color:#fecaca;margin-top:7px;line-height:1.45}.hidden{display:none!important}.stickBase{position:fixed;width:76px;height:76px;margin:-38px 0 0 -38px;border:2px solid #ffe66d;border-radius:50%;opacity:0;z-index:18;pointer-events:none;background:#ffe66d22}.stickKnob{position:fixed;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#ffe66dcc;opacity:0;z-index:19;pointer-events:none}.stickBase.on,.stickKnob.on{opacity:.9}.roomTag{font-family:ui-monospace,monospace}@media(max-width:640px){.app{padding:5px;gap:5px}.pill{font-size:11px;padding:5px 7px}.top{overflow-x:auto}.items{grid-template-columns:repeat(2,1fr)}.item{font-size:10px;padding:6px 7px;min-height:38px}.item b{font-size:12px}canvas{border-width:2px}}
 </style>
 </head>
 <body>
@@ -40,7 +41,6 @@
     <div class="item"><b>🌐 MULTI</b>HOSTが部屋を作成。JOIN端末は人数固定なしで追加。</div>
   </div>
 </div>
-<button id="bombBtn" class="bombBtn" aria-label="BOMB">💣<br>BOMB</button>
 <div id="stickBase" class="stickBase"></div><div id="stickKnob" class="stickKnob"></div>
 <video id="camVideo" playsinline autoplay muted style="display:none"></video><canvas id="camCanvas" width="48" height="48" style="display:none"></canvas>
 <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js"></script>
@@ -188,7 +188,20 @@ function applyState(s){
     players[myId].ghost=true;
   }
 
-  bombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
+  const remoteBombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
+  if(mode==='join'){
+    // JOIN本人が置いた爆弾は、HOST反映待ちの短い間だけローカル予測を残す。
+    // ここで remoteBombs だけに置換すると、2個目設置直後に受信stateで消える。
+    const remoteIds=new Set(remoteBombs.map(b=>b.id).filter(Boolean));
+    const pendingLocalBombs=(bombs||[]).filter(b=>{
+      if(!b||b.owner!==myId||!b.localMadeAt)return false;
+      if(remoteIds.has(b.id))return false;
+      return now()-b.localMadeAt<5200;
+    });
+    bombs=remoteBombs.concat(pendingLocalBombs);
+  }else{
+    bombs=remoteBombs;
+  }
   const prevFlameSeen=new Map((flames||[]).map(f=>[(f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r)),f.seenAt||recvAt]));
   flames=(s.flames||[]).map(f=>{let k=f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r);return {...f,owner:f.owner||null,localOwner:f.localOwner||null,seenAt:prevFlameSeen.get(k)||recvAt};});
   enemies=(s.enemies||[]).map(e=>({...e}));
@@ -334,7 +347,19 @@ function bootGame(){makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};m
 function emptyCell(center){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]!==EMPTY)continue;if(center&&(c<3||r<3||c>C-4||r>R-4))continue;if(Object.values(players).some(p=>p.alive&&Math.hypot(p.x-cc(c,r).x,p.y-cc(c,r).y)<T*.7))continue;if(enemies.some(e=>e.alive&&e.c===c&&e.r===r))continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:null}
 function spawnEnemy(type='grunt'){let p=emptyCell(true)||emptyCell(false);if(!p)return;let [c,r]=p,o=cc(c,r);let e={id:'e'+Math.random(),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,color:'#ff6767'};if(type==='fast'){e.speed+=60;e.color='#ffb247'}if(type==='tank'){e.hp=e.max=3+Math.floor(wave/3);e.rad=18;e.speed-=8;e.color='#b983ff'}if(type==='boss'){e.hp=e.max=16+wave*5;e.rad=25;e.speed=72+wave*2;e.boss=true;e.color='#ff3d90'}enemies.push(e)}
 function spawnWave(){let n=3+Math.floor(wave*1.35);for(let i=0;i<n;i++)spawnEnemy(i%5===0?'tank':i%3===0?'fast':'grunt');if(wave%5===0){spawnEnemy('boss');msg='BOSS WAVE '+wave}else msg='WAVE '+wave}
-function queueBomb(){startAudio();localInput.bomb=true;localInput.seq++;localInput.bombSeq=localInput.seq;let p=players[myId];if(mode==='join'&&started&&p&&p.alive){placeBomb(p,localInput.seq)}}
+function queueBomb(){
+  startAudio();
+  localInput.bomb=true;
+  localInput.seq++;
+  localInput.bombSeq=localInput.seq;
+  if(mode==='join'&&started){
+    let p=players[myId];
+    if(p&&p.alive){
+      placeBomb(p,localInput.bombSeq);
+    }
+    writeInput(true);
+  }
+}
 function queueHand(){startAudio();queueBomb()}
 function reportLocalDeath(p,reason='hit'){if(mode!=='join'||!p||p.id!==myId)return;localDeathSeq++;lastReportedDeathSeq=localDeathSeq;localInput.deathSeq=localDeathSeq;localInput.dead=true;localInput.deathReason=reason;writeInput(true);sendGameEvent('playerDown',{playerId:myId,deathSeq:localDeathSeq,reason})}
 async function writeInput(force=false){
@@ -400,14 +425,9 @@ function damageSelfFromVisibleFlame(){
   let cell=tc(p.x,p.y);
   if(!inside(cell.c,cell.r))return;
   let t=now();
-  // JOIN本人だけは「この画面で見えて、猶予時間を過ぎた炎」だけを死亡対象にする。
-  // 受信直後の爆風・HOST側だけで当たった判定は採用しない。
-  let hit=flames.some(f=>{
-    if(f.c!==cell.c||f.r!==cell.r)return false;
-    let age=t-(f.seenAt||t);
-    if(f.localOwner===myId)return age>80;
-    return age>260;
-  });
+  // JOIN本人だけは「画面に表示され、少し経過した炎」だけを死亡対象にする。
+  // HOST座標や受信直後の爆風で即死させると、遅延時に理不尽死亡になる。
+  let hit=flames.some(f=>f.c===cell.c&&f.r===cell.r&&(t-(f.seenAt||t)>130));
   if(hit)damagePlayer(p,'local');
 }
 function damageSelfFromVisibleDrop(dt){let p=players[myId];if(mode!=='join'||!p||!p.alive)return;falling.forEach(f=>{if(f.phase==='fall'&&p.c===f.c&&p.r===f.r){let landingSoon=(f.t||0)<=120||((f.y||0)>=OY+f.r*T+T*.25);if(landingSoon)damagePlayer(p,'local')}})}
@@ -565,7 +585,6 @@ function beginPointer(e){
 }
 function movePointer(e){if(!touch.active||touch.id!==e.pointerId)return;e.preventDefault();updateStick(e.clientX,e.clientY)}
 function endPointer(e){if(!touch.active||touch.id!==e.pointerId)return;e.preventDefault();let dur=performance.now()-touch.started,dist=Math.hypot(e.clientX-touch.sx,e.clientY-touch.sy);if(dur>360&&dist<24)queueHand();touch.active=false;touch.id=null;localInput.dx=0;localInput.dy=0;setStickVisual()}
-const bombBtn=$('bombBtn');if(bombBtn){bombBtn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();queueBomb();writeInput(true)},{passive:false});bombBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation()});}
 document.addEventListener('pointerdown',beginPointer,{passive:false,capture:true});
 document.addEventListener('pointermove',movePointer,{passive:false,capture:true});
 document.addEventListener('pointerup',endPointer,{passive:false,capture:true});
