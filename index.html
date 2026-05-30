@@ -59,7 +59,7 @@ let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
 let pendingItemGrants={};
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
-let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[];
+let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[],bgmSrcKey='';
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
 const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=5;let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
@@ -72,8 +72,13 @@ const keys=new Set();addEventListener('keydown',e=>{startAudio();keys.add(e.code
 
 function startAudio(){
   unlockAudio();
+  // タップ・クリック・SFX経由ではBGMを作り直さない。
+  // 既にBGMがある場合は、停止中の再開だけ行い、再生位置は絶対に戻さない。
+  if(bgmAudio){
+    resumeBgmOnly();
+    return;
+  }
   if(!started)playMenuBgm();
-  else retryBgm();
 }
 function unlockAudio(){
   if(!audioCtx){
@@ -82,32 +87,37 @@ function unlockAudio(){
   }
   if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
 }
-function stopBgm(){
+function stopBgm(reset=true){
   if(!bgmAudio)return;
-  try{bgmAudio.pause();bgmAudio.currentTime=0}catch(e){}
+  try{
+    bgmAudio.pause();
+    if(reset)bgmAudio.currentTime=0;
+  }catch(e){}
 }
 function audioPath(src){
   return new URL(src,location.href).href;
 }
+function resumeBgmOnly(){
+  if(!bgmAudio)return;
+  if(!bgmAudio.paused)return;
+  const p=bgmAudio.play();
+  if(p&&p.catch)p.catch(()=>{document.body.dataset.bgmBlocked=bgmCurrent||bgmSrcKey||'';});
+}
 function retryBgm(){
-  if(!bgmCurrent||!bgmAudio)return;
-  // プレイ中のBGMは触らない。SFXや入力のたびにcurrentTime=0へ戻る事故を防ぐ。
-  if(bgmAudio.dataset&&bgmAudio.dataset.src===bgmCurrent&&!bgmAudio.paused)return;
-  playBgm(bgmCurrent,true);
+  resumeBgmOnly();
 }
 function playBgm(src,force=false){
   if(!src)return;
-  bgmCurrent=src;
-  // 同じ曲が既に存在する場合は作り直さない。再生許可待ちの再試行でも再生位置を維持する。
-  if(bgmAudio&&bgmAudio.dataset&&bgmAudio.dataset.src===src){
-    if(!bgmAudio.paused)return;
-    const p=bgmAudio.play();
-    if(p&&p.catch)p.catch(()=>{document.body.dataset.bgmBlocked=src;});
+  // 同じ曲はAudioを作り直さない。タップ連打でも頭出しさせない。
+  if(bgmAudio&&bgmSrcKey===src){
+    bgmCurrent=src;
+    resumeBgmOnly();
     return;
   }
-  stopBgm();
+  bgmCurrent=src;
+  stopBgm(true);
   bgmAudio=new Audio();
-  bgmAudio.dataset.src=src;
+  bgmSrcKey=src;
   bgmAudio.loop=true;
   bgmAudio.volume=.48;
   bgmAudio.preload='auto';
@@ -136,9 +146,9 @@ function playNextGameBgm(){
 }
 function beginGameBgmFromUserGesture(){
   unlockAudio();
+  started=true;
   resetGameBgmPool();
   playNextGameBgm();
-  started=true;
 }
 function tone(freq,dur=.08,vol=.04,type='square',slide=0){
   if(!audioCtx)return;
@@ -752,4 +762,4 @@ document.addEventListener('gesturestart',e=>e.preventDefault());
 </body>
 </html>
 
-<!-- bgm patch: github pages user gesture unlock, relative URL, blocked retry marker -->
+<!-- bgm patch: no restart on tap, persistent audio instance -->
