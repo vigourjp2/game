@@ -12,12 +12,12 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行・全プレイヤー座標を担当。JOIN側は自機だけ即時予測し、HOSTの世界状態で補正して描画。</div>
+    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN側は自機を完全ローカル即時操作し、相手と世界イベントだけ軽量同期。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
     <div class="row"><button id="hostBtn">HOST</button><button id="joinBtn" class="join">JOIN</button><button id="offBtn" class="off">OFFLINE</button></div><button id="copyBtn" class="off" style="width:100%;margin-top:8px">ROOM ID COPY</button>
     <div id="panelMsg" class="small">HOSTでROOMを作成し、他端末は同じROOM IDでJOIN。JOINした端末はmembersへ登録され、HOSTが人数分のプレイヤーを自動生成。操作は画面どこでも仮想スティック移動、短いダブルタップで爆弾。</div>
-    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋HOST権威の単一世界を全端末へ同期。JOIN本人だけローカル即時予測し、HOST state到着時にズレを補正。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
+    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。JOIN本人の座標補正をやめ、通信揺れで操作が止まらない構成。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
   </div>
 </div>
 <div class="app">
@@ -59,7 +59,7 @@ let audioCtx=null,bgmTimer=null;
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
-let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0;
+let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0;
 const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
 const touch={active:false,id:null,sx:0,sy:0,x:0,y:0,started:0,moved:false,lastTap:0,lastX:-999,lastY:-999};
 const keys=new Set();addEventListener('keydown',e=>{startAudio();keys.add(e.code);if(e.code==='Space'){queueBomb();e.preventDefault()}if(e.code==='KeyE'||e.code==='ShiftLeft'||e.code==='ShiftRight'){queueHand();e.preventDefault()}});addEventListener('keyup',e=>keys.delete(e.code));
@@ -143,20 +143,19 @@ function applyState(s){
     q.authR=inside(cell.c,cell.r)?cell.r:(p.r|0);
 
     if(mode==='join'){
-      if(id===myId&&prev&&prev.alive&&q.alive){
-        const err=Math.hypot(prev.x-authX,prev.y-authY);
-        if(err>150){
-          // 大ズレだけは破綻回避で即同期。通常の微差は毎フレーム補正へ回す。
-          q.x=authX;
-          q.y=authY;
-        }else{
-          q.x=prev.x;
-          q.y=prev.y;
-        }
-        q.lastDirX=prev.lastDirX||q.lastDirX;
-        q.lastDirY=prev.lastDirY||q.lastDirY;
+      if(id===myId&&prev){
+        // JOIN本人の操作体感を最優先する。
+        // HOST座標で自機をスナップ/補正すると、受信揺れのたびに操作が引っ掛かるため、x/y/c/rはローカルを絶対維持する。
+        // HOST値は authX/authY として保持し、死亡・強化値などのゲーム状態だけ取り込む。
+        q.x=prev.x;
+        q.y=prev.y;
         q.c=prev.c;
         q.r=prev.r;
+        q.vx=prev.vx||0;
+        q.vy=prev.vy||0;
+        q.lastDirX=prev.lastDirX||q.lastDirX;
+        q.lastDirY=prev.lastDirY||q.lastDirY;
+        q.alive=prev.alive===false?false:q.alive;
       }else if(id!==myId&&prev){
         const err=Math.hypot(prev.x-authX,prev.y-authY);
         q.x=err>170?authX:prev.x;
@@ -258,7 +257,7 @@ function rtcSend(ch,obj){
   if(!ch||ch.readyState!=='open')return false;
   try{
     // bufferedAmountが溜まった古いstateは送らない。これがカクつき対策の核心。
-    if(obj&&obj.type==='state'&&ch.bufferedAmount>4096)return false;
+    if(obj&&obj.type==='state'&&ch.bufferedAmount>2048)return false;
     ch.send(JSON.stringify(obj));
     return true;
   }catch(e){return false;}
@@ -342,10 +341,14 @@ async function writeInput(force=false){
   let me=players[myId];
   let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};
 
-  // P2P成立中はFirebaseへ毎フレーム書かない。これがJOIN端末のカクつき対策の核心。
-  if(mode==='join'&&rtcSend(rtcInputChannel,{type:'input',id:myId,input:payload,t})){
+  // P2P成立中はFirebaseへ毎フレーム書かない。
+  // 重要: DataChannelが一瞬詰まってrtcSendがfalseでもFirebaseへ逃がさない。
+  // ここでFirebaseへ逃がすとJOIN端末のメインスレッドに重い書き込みが復活して操作がカクつく。
+  if(mode==='join'&&rtcConnected){
+    const sent=rtcSend(rtcInputChannel,{type:'input',id:myId,input:payload,t});
+    if(!sent)lastDroppedInput=t;
     if(t-lastRtcPing>1000){lastRtcPing=t;rtcSend(rtcInputChannel,{type:'ping',t});}
-    if(force||t-lastMemberHeartbeat>2000){
+    if(force||t-lastMemberHeartbeat>2500){
       lastMemberHeartbeat=t;
       roomRef.child('members/'+myId).update({name:nameVal(),last:t}).catch(()=>{});
     }
@@ -406,9 +409,9 @@ async function publishState(){
   let t=now();
   let openChannels=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');
   let hasRtc=openChannels.length>0;
-  if(hasRtc&&t-lastStateWrite>50){
+  if(hasRtc&&t-lastStateWrite>90){
     lastStateWrite=t;
-    const includeGrid=t-lastFullStateWrite>260;
+    const includeGrid=t-lastFullStateWrite>1200;
     if(includeGrid)lastFullStateWrite=t;
     let packet={type:'state',state:compactState(includeGrid),t};
     openChannels.forEach(ch=>rtcSend(ch,packet));
@@ -482,22 +485,9 @@ function updateJoinPrediction(dt){
       p.lastDirY=dy;
       moveEntity(p,dx,dy,dt,myId);
     }
-    if(p.authX!==undefined&&p.authY!==undefined){
-      const err=Math.hypot(p.x-p.authX,p.y-p.authY);
-      if(err>280){
-        p.x=p.authX;
-        p.y=p.authY;
-      }else if(err>3){
-        // 操作中は弱く、停止中は強めに戻す。これでガクッと戻る動きを消す。
-        const rate=moving?1.8:8;
-        p.x=smoothToward(p.x,p.authX,dt,rate);
-        p.y=smoothToward(p.y,p.authY,dt,rate);
-        depen(p,myId);
-        let cell=tc(p.x,p.y);
-        p.c=cell.c;
-        p.r=cell.r;
-      }
-    }
+    // JOIN本人はHOST座標へ補正しない。
+    // 体感操作を止めないため、自機は常にこの端末の入力で60fps移動する。
+    // HOSTとの差は相手画面側で吸収し、この画面では操作不能感を絶対に出さない。
     if(p.shield>0)p.shield-=dt*1000;
   }
 
@@ -509,7 +499,7 @@ function loop(ts){
   let dt=Math.min(.035,(ts-last)/1000||.016);last=ts;
   try{
     readLocalInput();
-    if(mode==='join'&&pendingRemoteState){
+    if(mode==='join'&&pendingRemoteState&&now()-lastRemoteApply>45){
       const st=pendingRemoteState;
       pendingRemoteState=null;
       applyState(st);
