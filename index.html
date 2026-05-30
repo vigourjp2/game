@@ -107,7 +107,7 @@ function serialize(){return{grid,players,members,bombs:bombs.map(b=>({id:b.id||n
 function applyState(s){
   if(!s)return;
   let prevMe=players&&players[myId]?{...players[myId]}:null;
-  let localOwnedBombs=(mode==='join')?bombs.filter(b=>b&&b.owner===myId&&(!b.id||String(b.id).startsWith('b_'))).map(b=>({...b})):[];
+  let localOwnedBombs=(mode==='join')?bombs.filter(b=>b&&b.owner===myId).map(b=>({...b})) : [];
   grid=s.grid||grid;
   players=s.players||players;
   if(mode==='join'&&prevMe&&players&&players[myId]){
@@ -118,21 +118,20 @@ function applyState(s){
       me.lastDirX=prevMe.lastDirX;me.lastDirY=prevMe.lastDirY;
       me.lastBombSeq=prevMe.lastBombSeq;me.lastHandSeq=prevMe.lastHandSeq;
       me.carryBombId=prevMe.carryBombId||me.carryBombId||null;
+      me.placed=prevMe.placed;
     }
   }
   members=s.members||members;
-  let nextBombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
-  if(mode==='join'&&localOwnedBombs.length){
-    for(const lb of localOwnedBombs){
-      let matched=nextBombs.some(nb=>nb.owner===myId&&((lb.id&&nb.id===lb.id)||(nb.c===lb.c&&nb.r===lb.r&&Math.abs((nb.timer||0)-(lb.timer||0))<900)));
-      if(!matched)nextBombs.push(lb);
-    }
+  let incomingBombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed}));
+  if(mode==='join'){
+    bombs=[...incomingBombs.filter(b=>b.owner!==myId&&b.carriedBy!==myId&&b.thrownBy!==myId),...localOwnedBombs];
+  }else{
+    bombs=incomingBombs;
   }
-  bombs=nextBombs;
   flames=s.flames||[];enemies=s.enemies||[];items=s.items||[];falling=s.falling||[];wave=s.wave||wave;msg=s.msg||msg;shake=s.shake||0;
 }
 async function startCamera(){
-  if(camOn||camStream||mode==='offline')return;
+  if(camOn||camStream)return;
   let video=$('camVideo');
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!video)return;
   try{
@@ -170,8 +169,8 @@ function drawPlayerCamera(p){
 }
 
 async function registerMember(){if(!roomRef)return;let payload={id:myId,name:nameVal(),joined:now(),last:now()};await roomRef.child('members/'+myId).set(payload);roomRef.child('members/'+myId).onDisconnect().remove();roomRef.child('inputs/'+myId).onDisconnect().remove()}
-async function startHost(){startAudio();startCamera();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;mode='host';isHost=true;roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,members:{},inputs:{},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
-async function startJoin(){startAudio();startCamera();if(!initFirebase())return;roomId=safeRoom($('room').value);if(!roomId){setPanel('ROOM IDを入力');return}mode='join';isHost=false;roomRef=db.ref('pbomber_rooms/'+roomId);let exists=await roomRef.child('created').get();if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}roomRef.child('state').on('value',s=>{const st=s.val();if(st){applyState(st);started=true;$('panel').classList.add('hidden');updateHud()}});await registerMember();await writeInput(true);setPanel('JOIN参加中 ROOM '+roomId)}
+async function startHost(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;mode='host';isHost=true;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,members:{},inputs:{},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
+async function startJoin(){startAudio();if(!initFirebase())return;roomId=safeRoom($('room').value);if(!roomId){setPanel('ROOM IDを入力');return}mode='join';isHost=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);let exists=await roomRef.child('created').get();if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}roomRef.child('state').on('value',s=>{const st=s.val();if(st){applyState(st);started=true;$('panel').classList.add('hidden');updateHud()}});await registerMember();await writeInput(true);setPanel('JOIN参加中 ROOM '+roomId)}
 function startOffline(){startAudio();roomId='OFFLINE';mode='offline';isHost=true;bootGame();members={[myId]:{id:myId,name:nameVal(),joined:now(),last:now()}};players[myId]=makePlayer(myId,nameVal());$('panel').classList.add('hidden');updateHud()}
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
@@ -248,7 +247,40 @@ function round(x,y,w,h,r){
   ctx.fill();
 }
 function drawBoot(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#0d1a2e';ctx.fillRect(0,0,W,H);ctx.fillStyle='#14294b';ctx.fillRect(OX,OY,C*T,R*T);ctx.strokeStyle='#263d63';for(let r=0;r<R;r++)for(let c=0;c<C;c++)ctx.strokeRect(OX+c*T,OY+r*T,T,T);ctx.fillStyle='#dfeaff';ctx.font='bold 22px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('PRESS HOST / JOIN / OFFLINE',W/2,H/2)}
-function updateJoinPrediction(dt){if(mode!=='join'||!started)return;let p=players[myId];if(!p||!p.alive)return;let mdx=localInput.dx||0,mdy=localInput.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}moveEntity(p,mdx,mdy,dt,myId);if(localInput.seq&&localInput.seq!==joinSeenBombSeq){placeBomb(p);joinSeenBombSeq=localInput.seq;p.lastBombSeq=localInput.seq}updateBombPasses();bombs.forEach(b=>{if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(b.vx||b.vy){b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;b.vx*=b.slideT>0 ? .982 : .90;b.vy*=b.slideT>0 ? .982 : .90;let cell=tc(b.x,b.y);if(inside(cell.c,cell.r)){b.c=cell.c;b.r=cell.r}}})}
+function updateJoinPrediction(dt){
+  if(mode!=='join'||!started)return;
+  let p=players[myId];
+  if(!p||!p.alive)return;
+  let mdx=localInput.dx||0,mdy=localInput.dy||0;
+  if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}
+  moveEntity(p,mdx,mdy,dt,myId);
+  if(localInput.seq&&localInput.seq!==joinSeenBombSeq){
+    placeBomb(p);
+    joinSeenBombSeq=localInput.seq;
+    p.lastBombSeq=localInput.seq;
+  }
+  updateBombPasses();
+  bombs.forEach(b=>{
+    if(b.owner!==myId)return;
+    if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;
+    if(b.carriedBy)return;
+    if(updateBombHop(b,dt))return;
+    if(b.vx||b.vy){
+      b.x+=b.vx*dt;b.y+=b.vy*dt;
+      b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);
+      b.slideT=(b.slideT||0)-dt*1000;
+      b.vx*=b.slideT>0 ? .982 : .90;
+      b.vy*=b.slideT>0 ? .982 : .90;
+      if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){
+        b.vx=0;b.vy=0;
+        if(b.armed===false||b.fusePaused)armBombAfterLanding(b);
+      }
+      let cell=tc(b.x,b.y);
+      if(inside(cell.c,cell.r)){b.c=cell.c;b.r=cell.r}
+    }
+  });
+  bombs.slice().forEach(b=>{if(b.owner===myId&&b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
+}
 function loop(ts){let dt=Math.min(.035,(ts-last)/1000||.016);last=ts;try{readLocalInput();writeInput();publishCamera();if(started&&isHost){updateHost(dt);publishState()}else if(started&&mode==='join'){updateJoinPrediction(dt)}updateHud();if(!grid||grid.length!==R||!grid[0])drawBoot();else draw()}catch(e){console.error(e);drawBoot()}requestAnimationFrame(loop)}makeGrid();requestAnimationFrame(loop);
 function canvasPoint(e){return{x:e.clientX,y:e.clientY}}
 function setStickVisual(){const base=$('stickBase'),knob=$('stickKnob');if(!touch.active){base.classList.remove('on');knob.classList.remove('on');return}base.style.left=touch.sx+'px';base.style.top=touch.sy+'px';knob.style.left=(touch.sx+localInput.dx*34)+'px';knob.style.top=(touch.sy+localInput.dy*34)+'px';base.classList.add('on');knob.classList.add('on')}
