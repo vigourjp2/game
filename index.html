@@ -59,7 +59,7 @@ let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
 let pendingItemGrants={};
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
-let audioCtx=null,bgmTimer=null;
+let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[];
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
 const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=5;let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
@@ -71,14 +71,40 @@ const touch={active:false,id:null,sx:0,sy:0,x:0,y:0,started:0,moved:false,lastTa
 const keys=new Set();addEventListener('keydown',e=>{startAudio();keys.add(e.code);if(e.code==='Space'){queueBomb();e.preventDefault()}if(e.code==='KeyE'||e.code==='ShiftLeft'||e.code==='ShiftRight'){queueHand();e.preventDefault()}});addEventListener('keyup',e=>keys.delete(e.code));
 
 function startAudio(){
-  if(audioCtx)return;
-  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
-  audioCtx=new AC();
-  if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
-  if(!bgmTimer){
-    let step=0,notes=[82,98,123,98,110,147,123,98];
-    bgmTimer=setInterval(()=>{if(!audioCtx||!started)return;tone(notes[step++%notes.length],.055,.025,'triangle',.028)},170);
+  if(!audioCtx){
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC)audioCtx=new AC();
   }
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
+  if(!started)playMenuBgm();
+}
+function stopBgm(){
+  if(!bgmAudio)return;
+  try{bgmAudio.pause();bgmAudio.currentTime=0}catch(e){}
+}
+function playBgm(src){
+  if(!src||bgmCurrent===src)return;
+  stopBgm();
+  bgmCurrent=src;
+  bgmAudio=new Audio(src);
+  bgmAudio.loop=true;
+  bgmAudio.volume=.48;
+  bgmAudio.preload='auto';
+  bgmAudio.play().catch(()=>{});
+}
+function playMenuBgm(){
+  playBgm('bomb0.flac');
+}
+function resetGameBgmPool(){
+  bgmUsed=[];
+}
+function playNextGameBgm(){
+  let pool=[];
+  for(let i=1;i<=9;i++)if(!bgmUsed.includes(i))pool.push(i);
+  if(!pool.length){bgmUsed=[];for(let i=1;i<=9;i++)pool.push(i)}
+  let n=pool[Math.floor(Math.random()*pool.length)];
+  bgmUsed.push(n);
+  playBgm('bomb'+n+'.flac');
 }
 function tone(freq,dur=.08,vol=.04,type='square',slide=0){
   if(!audioCtx)return;
@@ -366,8 +392,8 @@ function startOffline(){startAudio();roomId='OFFLINE';roomSeed=hashSeed(roomId+'
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
 function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;}
-function bootGame(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};members={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();spawnWave();started=true;last=performance.now()}
-function bootJoinLocal(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
+function bootGame(){resetGameBgmPool();playNextGameBgm();resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};members={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();spawnWave();started=true;last=performance.now()}
+function bootJoinLocal(){resetGameBgmPool();playNextGameBgm();resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
 function emptyCell(center){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]!==EMPTY)continue;if(center&&(c<3||r<3||c>C-4||r>R-4))continue;if(Object.values(players).some(p=>p.alive&&Math.hypot(p.x-cc(c,r).x,p.y-cc(c,r).y)<T*.7))continue;if(enemies.some(e=>e.alive&&e.c===c&&e.r===r))continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:null}
 function grantAllPlayersEnemySpawnInvuln(){Object.values(players).forEach(p=>{if(p&&p.alive)p.invuln=Math.max(p.invuln||0,ENEMY_SPAWN_PLAYER_INVULN_MS)})}
 function spawnEnemy(type='grunt'){let p=emptyCell(true)||emptyCell(false);if(!p)return;let [c,r]=p,o=cc(c,r);let e={id:'e'+(++enemySeq),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,invuln:0,color:'#ff6767'};if(type==='fast'){e.speed+=60;e.color='#ffb247'}if(type==='tank'){e.hp=e.max=3+Math.floor(wave/3);e.rad=18;e.speed-=8;e.color='#b983ff'}if(type==='boss'){e.hp=e.max=16+wave*5;e.rad=25;e.speed=72+wave*2;e.boss=true;e.color='#ff3d90'}enemies.push(e)}
@@ -506,7 +532,7 @@ function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||
   Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r))damagePlayer(p,isHost?'local':'remote');collectItemsForPlayer(p,false);});
   enemies.forEach(e=>{if(!e.alive)return;if(e.invuln>0)e.invuln-=dt*1000;e.think-=dt*1000;if(e.think<=0){let alive=Object.values(players).filter(p=>p.alive);let target=alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0];if(target){let ax=target.x-e.x,ay=target.y-e.y;if(rand()<.7)e.dir=Math.abs(ax)>Math.abs(ay)?[Math.sign(ax),0]:[0,Math.sign(ay)];else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=rnd(250,760)}let moved=moveEntity(e,e.dir[0],e.dir[1],dt,null);if(!moved)e.think=0;damageEnemyByFlamesOnce(e);Object.values(players).forEach(p=>{if(p.alive&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p)})});enemies=enemies.filter(e=>e.alive);
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+(++dropSeq)+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
-  if(enemies.length===0){wave++;spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
+  if(enemies.length===0){wave++;playNextGameBgm();spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
 }
 async function publishState(){
   if(mode!=='host'||!roomRef)return;
