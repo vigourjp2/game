@@ -59,6 +59,7 @@ let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
 let pendingItemGrants={};
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
+let waveQueue=[],waveSpawnTimer=0,waveSpawnInterval=5000,waveIsBoss=false;
 let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[],bgmSrcKey='';
 const localInput={dx:0,dy:0,bomb:false,hand:false,seq:0,handSeq:0};
 const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=5;let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90;
@@ -193,7 +194,7 @@ function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
 function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY;if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
-function serialize(){return{roomSeed,worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
+function serialize(){return{roomSeed,worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
 
@@ -209,6 +210,10 @@ function applyState(s){
   if(Number.isFinite(s.dropSeq))dropSeq=s.dropSeq|0;
   if(Number.isFinite(s.partSeq))partSeq=s.partSeq|0;
   if(Number.isFinite(s.dropTimer))dropTimer=+s.dropTimer;
+  waveQueue=Array.isArray(s.waveQueue)?s.waveQueue.slice():waveQueue;
+  if(Number.isFinite(s.waveSpawnTimer))waveSpawnTimer=+s.waveSpawnTimer;
+  if(Number.isFinite(s.waveSpawnInterval))waveSpawnInterval=+s.waveSpawnInterval;
+  waveIsBoss=!!s.waveIsBoss;
 
   if(s.grid&&Array.isArray(s.grid)&&s.grid.length===R)grid=s.grid.map(row=>row.slice());
   if(s.members){
@@ -317,7 +322,7 @@ function compactState(includeGrid=false){
   Object.entries(members||{}).forEach(([id,m])=>{lightMembers[id]={id,name:m&&m.name||'PLAYER',last:m&&m.last||0};});
   return {
     fast:true,
-    roomSeed,worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,lockFrame,
+    roomSeed,worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,lockFrame,
     grid:includeGrid?grid:undefined,
     members:lightMembers,
     players,
@@ -436,12 +441,32 @@ function startOffline(){beginGameBgmFromUserGesture();roomId='OFFLINE';roomSeed=
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
 function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;}
-function bootGame(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};members={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();spawnWave();started=true;last=performance.now()}
-function bootJoinLocal(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
+function bootGame(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};members={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();spawnWave();started=true;last=performance.now()}
+function bootJoinLocal(){resetDeterminism();makeGrid(roomSeed||hashSeed(roomId||'OFFLINE'));players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
 function emptyCell(center){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]!==EMPTY)continue;if(center&&(c<3||r<3||c>C-4||r>R-4))continue;if(Object.values(players).some(p=>p.alive&&Math.hypot(p.x-cc(c,r).x,p.y-cc(c,r).y)<T*.7))continue;if(enemies.some(e=>e.alive&&e.c===c&&e.r===r))continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:null}
 function grantAllPlayersEnemySpawnInvuln(){Object.values(players).forEach(p=>{if(p&&p.alive)p.invuln=Math.max(p.invuln||0,ENEMY_SPAWN_PLAYER_INVULN_MS)})}
-function spawnEnemy(type='grunt'){let p=emptyCell(true)||emptyCell(false);if(!p)return;let [c,r]=p,o=cc(c,r);let e={id:'e'+(++enemySeq),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,invuln:0,color:'#ff6767'};if(type==='fast'){e.speed+=60;e.color='#ffb247'}if(type==='tank'){e.hp=e.max=3+Math.floor(wave/3);e.rad=18;e.speed-=8;e.color='#b983ff'}if(type==='boss'){e.hp=e.max=16+wave*5;e.rad=25;e.speed=72+wave*2;e.boss=true;e.color='#ff3d90'}enemies.push(e)}
-function spawnWave(){let n=3+Math.floor(wave*1.35);for(let i=0;i<n;i++)spawnEnemy(i%5===0?'tank':i%3===0?'fast':'grunt');if(wave%5===0){spawnEnemy('boss');msg='BOSS WAVE '+wave}else msg='WAVE '+wave;grantAllPlayersEnemySpawnInvuln()}
+function bossBuildForWave(w){
+  const stages=[
+    {name:'HAND THROWER',score:2.2,hand:1},
+    {name:'KICK BOSS',score:2.5,kick:1},
+    {name:'BOMB LAYER',score:2.8,bomb:1},
+    {name:'FAST HAND',score:3.4,hand:1,fast:1},
+    {name:'KICK BOMB',score:4.1,kick:1,bomb:1},
+    {name:'COWARD SHIELD',score:4.8,shield:1,flee:1},
+    {name:'BOMB SPAMMER',score:5.6,bomb:2,fast:1},
+    {name:'POWER BOMB',score:6.2,bomb:1,powerBomb:1},
+    {name:'HAND KICK',score:6.8,hand:1,kick:1,fast:1},
+    {name:'DIRTY ALLROUNDER',score:8.0,hand:1,kick:1,bomb:1,shield:1},
+    {name:'FINAL FULL POWER',score:10.0,hand:2,kick:2,bomb:2,shield:1,fast:1,flee:1,powerBomb:1}
+  ];
+  let rank=Math.min(stages.length-1,Math.floor(w/3)-1);
+  return stages[Math.max(0,rank)];
+}
+function spawnEnemy(type='grunt',opts={}){let p=emptyCell(true)||emptyCell(false);if(!p)return null;let [c,r]=p,o=cc(c,r);let e={id:'e'+(++enemySeq),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,invuln:opts.invuln===0?0:(opts.invuln||2200),color:'#ff6767',bossCooldown:0,bossHandCd:0,bossShieldCd:0};if(type==='fast'){e.speed+=60;e.color='#ffb247'}if(type==='tank'){e.hp=e.max=3+Math.floor(wave/3);e.rad=18;e.speed-=8;e.color='#b983ff'}if(type==='boss'){let build=opts.build||bossBuildForWave(wave);e.hp=e.max=18+wave*5+Math.floor((build.score||1)*4);e.rad=25+Math.min(8,Math.floor(wave/9));e.speed=74+wave*2+(build.fast?32:0);e.boss=true;e.build=build;e.kick=!!build.kick;e.kickLevel=build.kick||0;e.handLevel=build.hand||0;e.shield=build.shield?2600:0;e.invuln=3200;e.color=build.powerBomb?'#ff244d':(build.shield?'#45ff98':'#ff3d90');e.type='boss';}
+enemies.push(e);return e}
+function makeNormalWaveQueue(){let n=3+Math.floor(wave*1.35),q=[];for(let i=0;i<n;i++)q.push(i%6===5?'tank':i%3===2?'fast':'grunt');return q.sort((a,b)=>({grunt:1,fast:2,tank:3}[a]-{grunt:1,fast:2,tank:3}[b]));}
+function spawnNextQueuedEnemy(){if(!waveQueue.length||enemies.filter(e=>e.alive).length>=3)return false;let type=waveQueue.shift();let e=spawnEnemy(type,{invuln:2600});if(e){msg='ENEMY SPAWN - 点滅中は接触なし';return true}waveQueue.unshift(type);return false}
+function spawnWave(){waveQueue=[];waveSpawnTimer=0;waveSpawnInterval=5000;waveIsBoss=wave%3===0;if(waveIsBoss){let build=bossBuildForWave(wave);spawnEnemy('boss',{build,invuln:3200});msg='BOSS WAVE '+wave+' / '+build.name}else{waveQueue=makeNormalWaveQueue();spawnNextQueuedEnemy();msg='WAVE '+wave+' / 5秒ごとに弱い敵から出現'}}
 function queueBomb(){
   startAudio();
   localInput.bomb=true;
@@ -555,7 +580,7 @@ function damageSelfFromVisibleFlame(){
   if(hit)damagePlayer(p,'local');
 }
 function damageSelfFromVisibleDrop(dt){let p=players[myId];if(mode!=='join'||!p||!p.alive)return;falling.forEach(f=>{if(f.phase==='fall'&&p.c===f.c&&p.r===f.r){let landingSoon=(f.t||0)<=120||((f.y||0)>=OY+f.r*T+T*.25);if(landingSoon)damagePlayer(p,'local')}})}
-function damageEnemy(e,d=1){if(!e||e.invuln>0)return;e.hp-=d;partsBurst(e.x,e.y,e.color,8+Math.floor(d*2));if(e.hp<=0){e.alive=false;partsBurst(e.x,e.y,'#fff176',25);msg=e.boss?'BOSS DOWN':msg}}
+function damageEnemy(e,d=1){if(!e||e.invuln>0)return;if(e.boss&&e.shield>0){e.shield=Math.max(0,e.shield-520*d);partsBurst(e.x,e.y,'#8dff8d',8+Math.floor(d*2));sfx('hit',1);return}e.hp-=d;partsBurst(e.x,e.y,e.color,8+Math.floor(d*2));if(e.hp<=0){e.alive=false;partsBurst(e.x,e.y,'#fff176',25);msg=e.boss?'BOSS DOWN':msg}}
 function damageEnemyByFlamesOnce(e){let hit=false;for(const f of flames){if(f.c!==e.c||f.r!==e.r)continue;let k=(f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r))+':'+e.id;if(enemyFlameHits.has(k))continue;enemyFlameHits.add(k);damageEnemy(e,1);hit=true;if(!e.alive)break;}return hit}
 function partsBurst(x,y,col,n){for(let i=0;i<n;i++)parts.push({x,y,vx:(rand()-.5)*260,vy:(rand()-.5)*260,life:rnd(300,820),col,size:rnd(2,6),grav:(rand()-.15)*90})}
 function shockwave(x,y,rad,col){parts.push({x,y,vx:0,vy:0,life:330,col,ring:true,rad,age:0,size:2,grav:0})}
@@ -572,6 +597,30 @@ function receiveLockstepPacket(pkt){if(!pkt||!Number.isFinite(pkt.frame))return;
 function stepWorldWithInputs(frame,frameInputs){inputs=frameInputs||{};lockFrame=frame|0;updateHost(LOCK_DT);lockstepStarted=true}
 function runHostLockstep(dt){lockAcc+=dt;let steps=0;while(lockAcc>=LOCK_DT&&steps<LOCK_MAX_STEPS){lockAcc-=LOCK_DT;steps++;let next=lockFrame+1;let frameInputs=buildLockstepInputs();stepWorldWithInputs(next,frameInputs);let packet={type:'step',frame:lockFrame,inputs:frameInputs,checksum:checksumWorld(),t:now()};if(lockFrame<=2||lockFrame%lockstepSnapEvery===0)packet.state=serialize();broadcastLockstepPacket(packet)}if(steps>=LOCK_MAX_STEPS)lockAcc=0;publishState()}
 function runJoinLockstep(dt){let steps=0;while(lockstepPackets[lockFrame+1]&&steps<LOCK_MAX_STEPS){let pkt=lockstepPackets[lockFrame+1];delete lockstepPackets[lockFrame+1];stepWorldWithInputs(pkt.frame,pkt.inputs||{});steps++;if(pkt.checksum&&pkt.checksum!==checksumWorld()&&pkt.state){applyState(pkt.state);lockFrame=pkt.frame|0;msg='LOCKSTEP CHECK RESYNC F'+lockFrame}}if(steps===0&&now()-lastStepPacketAt>1200)msg=rtcConnected?'LOCKSTEP PACKET WAIT':'P2P CONNECT WAIT'}
+
+function nearestAlivePlayer(e){let alive=Object.values(players).filter(p=>p.alive);return alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0]||null}
+function bossPlaceBomb(e,target){
+  if(!e||!e.alive||!e.boss)return false;
+  let build=e.build||{},cell=tc(e.x,e.y);if(!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY)return false;
+  if(bombs.some(b=>!b.carriedBy&&b.c===cell.c&&b.r===cell.r))return false;
+  let o=cc(cell.c,cell.r),lv=build.bomb||1,pow=(build.powerBomb?4:1)+lv;
+  bombs.push({id:'bb_'+e.id+'_'+lockFrame+'_'+(++itemSeq),c:cell.c,r:cell.r,x:o.x,y:o.y,owner:e.id,bossBomb:true,passOwner:e.id,range:2+lv+Math.floor(wave/9)+(build.powerBomb?2:0),timer:Math.max(1450,2600-lv*260),rad:18,vx:0,vy:0,power:pow,slideT:0,thrownBy:e.id,spin:0,carriedBy:null,carryOff:0,armed:true,fusePaused:false,hop:null,landed:true});
+  e.bossCooldown=build.bomb>=2?850:1450;msg=(build.powerBomb?'POWER ':'')+'BOSS BOMB';sfx('bomb');return true;
+}
+function bossHandLeap(e,target){
+  if(!e||!e.alive||!e.boss||!target)return false;let build=e.build||{};if(!build.hand)return false;
+  let ax=(target.x-e.x),ay=(target.y-e.y),d=Math.hypot(ax,ay)||1,mode=build.flee&&e.hp<e.max*.48?-1:1;
+  ax=ax/d*mode;ay=ay/d*mode;let dist=72+build.hand*34,tx=e.x+ax*dist,ty=e.y+ay*dist;
+  if(canAt(e,tx,ty,null)){e.x=tx;e.y=ty;let c=tc(e.x,e.y);e.c=c.c;e.r=c.r;e.invuln=Math.max(e.invuln||0,520);e.bossHandCd=1850-build.hand*180;shake=Math.max(shake,4);partsBurst(e.x,e.y,'#ffd0a6',18+build.hand*5);msg=mode<0?'BOSS ESCAPE HAND':'BOSS HAND THROW';sfx('throw',build.hand);return true}
+  e.bossHandCd=700;return false;
+}
+function bossShieldIfPinch(e){let build=e.build||{};if(!build.shield||e.bossShieldCd>0||e.hp>e.max*.42)return false;e.shield=Math.max(e.shield||0,3600);e.invuln=Math.max(e.invuln||0,1200);e.bossShieldCd=9000;msg='BOSS SHIELD - 卑怯モード';partsBurst(e.x,e.y,'#8dff8d',24);sfx('item');return true}
+function updateBossAI(e,dt,target){
+  let build=e.build||{};e.bossCooldown=Math.max(0,(e.bossCooldown||0)-dt*1000);e.bossHandCd=Math.max(0,(e.bossHandCd||0)-dt*1000);e.bossShieldCd=Math.max(0,(e.bossShieldCd||0)-dt*1000);if(e.shield>0)e.shield-=dt*1000;bossShieldIfPinch(e);
+  if(target&&build.hand&&e.bossHandCd<=0&&(Math.hypot(target.x-e.x,target.y-e.y)>120||e.hp<e.max*.5))bossHandLeap(e,target);
+  if(build.bomb&&e.bossCooldown<=0&&target&&Math.hypot(target.x-e.x,target.y-e.y)<260)bossPlaceBomb(e,target);
+}
+
 function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&((input.deathSeq||0)!==(players[id].remoteDeathSeq||0)||players[id].alive!==false)){players[id].remoteDeathSeq=input.deathSeq||players[id].remoteDeathSeq||1;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}moveEntity(p,mdx,mdy,dt,id);
         // スマブラ寄せ: JOIN端末の自分操作感を正にするため、HOSTもJOIN本人の申告座標へ追従する。
         // これでHOST側のアイテム取得・接触判定がJOIN画面と割れにくくなる。
@@ -587,9 +636,9 @@ function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||
   bombs.forEach(b=>{if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(b.vx||b.vy){let ox=b.x,oy=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;let fr=(b.slideT>0)?.982:.90;b.vx*=fr;b.vy*=fr;if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b)}let cell=tc(b.x,b.y);let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);if(blocked){b.vx=0;b.vy=0;b.x=cc(b.c,b.r).x;b.y=cc(b.c,b.r).y;sfx('hit',b.power||1);partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2)}else{b.c=cell.c;b.r=cell.r;impactBomb(b)}}});bombs.slice().forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
   flames.forEach(f=>f.t-=dt*1000);flames=flames.filter(f=>f.t>0);
   Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r))damagePlayer(p,isHost?'local':'remote');collectItemsForPlayer(p,false);});
-  enemies.forEach(e=>{if(!e.alive)return;if(e.invuln>0)e.invuln-=dt*1000;e.think-=dt*1000;if(e.think<=0){let alive=Object.values(players).filter(p=>p.alive);let target=alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0];if(target){let ax=target.x-e.x,ay=target.y-e.y;if(rand()<.7)e.dir=Math.abs(ax)>Math.abs(ay)?[Math.sign(ax),0]:[0,Math.sign(ay)];else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=rnd(250,760)}let moved=moveEntity(e,e.dir[0],e.dir[1],dt,null);if(!moved)e.think=0;damageEnemyByFlamesOnce(e);Object.values(players).forEach(p=>{if(p.alive&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p)})});enemies=enemies.filter(e=>e.alive);
+  enemies.forEach(e=>{if(!e.alive)return;if(e.invuln>0)e.invuln-=dt*1000;let target=nearestAlivePlayer(e);if(e.boss)updateBossAI(e,dt,target);e.think-=dt*1000;if(e.think<=0){if(target){let ax=target.x-e.x,ay=target.y-e.y,build=e.build||{},flee=!!(e.boss&&build.flee&&e.hp<e.max*.55);if(rand()<.72){let sx=Math.sign(ax),sy=Math.sign(ay);if(flee){sx=-sx;sy=-sy}e.dir=Math.abs(ax)>Math.abs(ay)?[sx,0]:[0,sy]}else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=e.boss?rnd(180,520):rnd(250,760)}let moved=moveEntity(e,e.dir[0],e.dir[1],dt,e.id);if(!moved)e.think=0;damageEnemyByFlamesOnce(e);Object.values(players).forEach(p=>{if(p.alive&&e.invuln<=0&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p)})});enemies=enemies.filter(e=>e.alive);
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+(++dropSeq)+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
-  if(enemies.length===0){wave++;playNextGameBgm();spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
+  if(!waveIsBoss&&waveQueue.length>0){waveSpawnTimer-=dt*1000;if(waveSpawnTimer<=0&&enemies.filter(e=>e.alive).length<3){if(spawnNextQueuedEnemy())waveSpawnTimer=waveSpawnInterval;else waveSpawnTimer=600}}if(enemies.length===0&&waveQueue.length===0){wave++;playNextGameBgm();spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
 }
 async function publishState(){
   if(mode!=='host'||!roomRef)return;
@@ -638,7 +687,7 @@ function updateJoinEnemyContact(){
   if(!p||!p.alive)return;
   enemies.forEach(e=>{
     if(!e.alive)return;
-    if(p.alive&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p,'local');
+    if(p.alive&&e.invuln<=0&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+e.rad-2)damagePlayer(p,'local');
   });
   enemies=enemies.filter(e=>e.alive);
 }
