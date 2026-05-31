@@ -13,8 +13,8 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD BOSS-BODYSAFE-20260531-2038</div>
-    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">wave6以降のボスは本体接触ダメージなし。能力・爆弾・HP・速度を対処可能側へ調整済み。</div>
+    <div class="buildTag" id="buildTag">BUILD ALL-WAVE-GIMMICK-ENEMY-BOSS-20260531-2124</div>
+    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
     <div class="row"><button id="hostBtn">HOST</button><button id="joinBtn" class="join">JOIN</button><button id="offBtn" class="off">OFFLINE</button></div><button id="copyBtn" class="off" style="width:100%;margin-top:8px">ROOM ID COPY</button>
@@ -29,7 +29,7 @@
     <div class="pill">WAVE <b id="waveView">1</b></div>
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">BOSS-BODYSAFE-20260531-2038</b></div>
+    <div class="pill">BUILD <b id="buildView">ALL-WAVE-GIMMICK-ENEMY-BOSS-20260531-2124</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -52,7 +52,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='BOSS-BODYSAFE-20260531-2038',CART_ALLOWED_MAX_WAVE=3;
+const GAME_BUILD='ALL-WAVE-GIMMICK-ENEMY-BOSS-20260531-2124',CART_ALLOWED_MAX_WAVE=3;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -731,7 +731,9 @@ function damageSelfFromVisibleFlame(){
 }
 function damageSelfFromVisibleDrop(dt){let p=players[myId];if(mode!=='join'||!p||!p.alive)return;falling.forEach(f=>{if(f.phase==='fall'&&p.c===f.c&&p.r===f.r){let landingSoon=(f.t||0)<=120||((f.y||0)>=OY+f.r*T+T*.25);if(landingSoon)damagePlayer(p,'local')}})}
 function damageEnemy(e,d=1){if(!e||e.invuln>0)return;if(e.boss&&e.shield>0){e.shield=Math.max(0,e.shield-520*d);partsBurst(e.x,e.y,'#8dff8d',8+Math.floor(d*2));sfx('hit',1);return}e.hp-=d;partsBurst(e.x,e.y,e.color,8+Math.floor(d*2));if(e.hp<=0){e.alive=false;partsBurst(e.x,e.y,'#fff176',25);msg=e.boss?'BOSS DOWN':msg}}
-function damageEnemyByFlamesOnce(e){let hit=false;for(const f of flames){if(f.c!==e.c||f.r!==e.r)continue;let k=(f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r))+':'+e.id;if(enemyFlameHits.has(k))continue;enemyFlameHits.add(k);damageEnemy(e,1);hit=true;if(!e.alive)break;}return hit}
+function damageEnemyByFlamesOnce(e){let hit=false;for(const f of flames){if(f.c!==e.c||f.r!==e.r)continue;let k=(f.expId||((f.owner||f.localOwner||'x')+':'+f.c+','+f.r))+':'+e.id;if(enemyFlameHits.has(k))continue;enemyFlameHits.add(k);damageEnemy(e,e.boss?2:1);hit=true;if(!e.alive)break;}return hit}
+function damageEnemyByHazard(e,key,d=1,cooldown=650){if(!e||!e.alive)return false;let t=lockFrame||Math.floor(now()/16),bag=e.hazardHits||(e.hazardHits={});let last=bag[key]||-999999;if(t-last<Math.max(1,Math.floor(cooldown/16)))return false;bag[key]=t;damageEnemy(e,d);return true}
+function applyHazardToEnemy(e,g){if(!e||!e.alive||!g)return false;let bossBonus=e.boss?1:0;if(g.type==='fire')return damageEnemyByHazard(e,'fire:'+g.c+','+g.r,1+bossBonus,520);if(g.type==='oil'&&g.burn>0)return damageEnemyByHazard(e,'burnOil:'+g.c+','+g.r,1+bossBonus,520);return false}
 function partsBurst(x,y,col,n){for(let i=0;i<n;i++)parts.push({x,y,vx:(rand()-.5)*260,vy:(rand()-.5)*260,life:rnd(300,820),col,size:rnd(2,6),grav:(rand()-.15)*90})}
 function shockwave(x,y,rad,col){parts.push({x,y,vx:0,vy:0,life:330,col,ring:true,rad,age:0,size:2,grav:0})}
 function impactBomb(b){let sp=Math.hypot(b.vx||0,b.vy||0),hopHit=b.hop&&b.hop.t>0,lv=b.power||0;if(sp<150&&!hopHit)return;let kx=hopHit?(b.hop.dx||1):Math.sign(b.vx||1),ky=hopHit?(b.hop.dy||0):Math.sign(b.vy||0);for(const e of enemies){if(!e.alive)continue;if(Math.hypot(e.x-b.x,e.y-b.y)<e.rad+20){let d=1+Math.floor(lv/2);damageEnemy(e,d);e.x+=kx*(12+lv*7);e.y+=ky*(12+lv*7);rescueEntityFromSolids(e,e.id);b.vx*=.55;b.vy*=.55;shake=Math.max(shake,4+lv);sfx('hit',lv);shockwave(b.x,b.y,38+lv*8,'#ffd0a6');partsBurst(b.x,b.y,'#ffd0a6',14+lv*3);break}}for(const p of Object.values(players)){if(!p.alive||p.id===b.thrownBy||p.invuln>0)continue;if(Math.hypot(p.x-b.x,p.y-b.y)<p.rad+20){if(p.shield>0){p.shield=Math.max(0,p.shield-280-lv*130)}else if(lv>=4){damagePlayer(p)}else{p.x+=kx*(18+lv*9);p.y+=ky*(18+lv*9);depen(p,p.id)}b.vx*=.45;b.vy*=.45;shake=Math.max(shake,5+lv);sfx('hit',lv);partsBurst(b.x,b.y,p.color,12+lv*3);break}}}
@@ -777,7 +779,21 @@ function updateBossAI(e,dt,target){
 
 
 function gimmickAt(c,r,type=null){return gimmicks.find(g=>g.c===c&&g.r===r&&(!type||g.type===type))||null}
-function applyTerrain(ent,dt,isPlayer=false){if(!ent||!inside(ent.c,ent.r))return;let g=gimmickAt(ent.c,ent.r);if(!g)return;if(g.type==='ice'){ent.x+=(ent.lastDirX||0)*(isPlayer?38:22)*dt;ent.y+=(ent.lastDirY||0)*(isPlayer?38:22)*dt;msg=isPlayer?'ICE FLOOR - 滑る床':msg}else if(g.type==='conveyor'){ent.x+=(g.dx||0)*(isPlayer?86:52)*dt;ent.y+=(g.dy||0)*(isPlayer?86:52)*dt;msg=isPlayer?'CONVEYOR - 強制搬送':msg}else if(g.type==='oil'){ent.speed=Math.max(145,(ent.speed||170)-18*dt);if(g.burn>0&&isPlayer)damagePlayer(ent,'fire')}else if(g.type==='fire'&&isPlayer){damagePlayer(ent,'fire')}else if(g.type==='seesaw'){ent.x+=(g.tilt||1)*(isPlayer?52:30)*dt;g.t+=dt*1000;if(g.t>900){g.t=0;g.tilt=-(g.tilt||1)}}depen(ent,ent.id)}
+function terrainImpactEnemy(ent,g,bx,by){
+  if(!ent||!ent.alive||!g||!Array.isArray(enemies)||!enemies.includes(ent))return;
+  let moved=Math.hypot((ent.x||0)-bx,(ent.y||0)-by),cell=tc(ent.x,ent.y);ent.c=cell.c;ent.r=cell.r;
+  if(g.type==='conveyor'){
+    let dx=g.dx||0,dy=g.dy||0,nc=(g.c||cell.c)+Math.sign(dx),nr=(g.r||cell.r)+Math.sign(dy);
+    if((inside(nc,nr)&&grid[nr][nc]!==EMPTY)||moved<6)damageEnemyByHazard(ent,'conveyorCrash:'+g.id,1,760);
+  }else if(g.type==='seesaw'){
+    let dx=Math.sign(g.tilt||1),nc=(g.c||cell.c)+dx,nr=g.r||cell.r;
+    if((inside(nc,nr)&&grid[nr][nc]!==EMPTY)||moved<5)damageEnemyByHazard(ent,'seesawSlam:'+g.id,1,880);
+  }else if(g.type==='ice'){
+    let dx=Math.sign(ent.lastDirX||ent.dir?.[0]||0),dy=Math.sign(ent.lastDirY||ent.dir?.[1]||0),nc=cell.c+dx,nr=cell.r+dy;
+    if((dx||dy)&&inside(nc,nr)&&grid[nr][nc]!==EMPTY)damageEnemyByHazard(ent,'iceCrash:'+cell.c+','+cell.r,1,1050);
+  }
+}
+function applyTerrain(ent,dt,isPlayer=false){if(!ent||!inside(ent.c,ent.r))return;let g=gimmickAt(ent.c,ent.r);if(!g)return;let bx=ent.x,by=ent.y;if(g.type==='ice'){ent.x+=(ent.lastDirX||0)*(isPlayer?38:34)*dt;ent.y+=(ent.lastDirY||0)*(isPlayer?38:34)*dt;msg=isPlayer?'ICE FLOOR - 滑る床':msg}else if(g.type==='conveyor'){ent.x+=(g.dx||0)*(isPlayer?86:74)*dt;ent.y+=(g.dy||0)*(isPlayer?86:74)*dt;msg=isPlayer?'CONVEYOR - 強制搬送':msg}else if(g.type==='oil'){ent.speed=Math.max(145,(ent.speed||170)-18*dt);if(g.burn>0){if(isPlayer)damagePlayer(ent,'fire');else applyHazardToEnemy(ent,g)}}else if(g.type==='fire'){if(isPlayer)damagePlayer(ent,'fire');else applyHazardToEnemy(ent,g)}else if(g.type==='seesaw'){ent.x+=(g.tilt||1)*(isPlayer?52:48)*dt;g.t+=dt*1000;if(g.t>900){g.t=0;g.tilt=-(g.tilt||1)}}depen(ent,ent.id);if(!isPlayer)terrainImpactEnemy(ent,g,bx,by)}
 function igniteOilAt(c,r){let g=gimmickAt(c,r,'oil');if(!g||g.burn>0)return;g.burn=2600;g.type='fire';partsBurst(cc(c,r).x,cc(c,r).y,'#ff8a2a',16);for(const[dX,dY]of DIRS){let n=gimmickAt(c+dX,r+dY,'oil');if(n&&rand()<.75)igniteOilAt(c+dX,r+dY)}}
 function cartEndpointDir(cart){return (cart.index||0)<=0?1:-1}
 function cartAtEndpoint(cart){return Array.isArray(cart.path)&&cart.path.length>1&&((cart.index||0)<=0||(cart.index||0)>=cart.path.length-1)}
@@ -819,7 +835,7 @@ function updateGimmicks(dt){
       if(inside(cart.c,cart.r)&&grid[cart.r][cart.c]===SOFT){grid[cart.r][cart.c]=EMPTY;partsBurst(cart.x,cart.y,'#b9783f',14);sfx('hit',2)}
       let rider=players[cart.rider];
       if(rider&&rider.alive){rider.x=cart.x;rider.y=cart.y-6;rider.c=cart.c;rider.r=cart.r;rider.vx=0;rider.vy=0;rider.invuln=Math.max(rider.invuln||0,260)}
-      enemies.forEach(e=>{if(e.alive&&Math.hypot(e.x-cart.x,e.y-cart.y)<e.rad+24){damageEnemy(e,1);let dx=e.x-cart.x,dy=e.y-cart.y,l=Math.hypot(dx,dy)||1;e.x+=dx/l*24;e.y+=dy/l*24;rescueEntityFromSolids(e,e.id)}})
+      enemies.forEach(e=>{if(e.alive&&Math.hypot(e.x-cart.x,e.y-cart.y)<e.rad+24){damageEnemyByHazard(e,'cart:'+cart.id,e.boss?3:1,360);let dx=e.x-cart.x,dy=e.y-cart.y,l=Math.hypot(dx,dy)||1;e.x+=dx/l*24;e.y+=dy/l*24;rescueEntityFromSolids(e,e.id)}})
     }
   })
 }
@@ -840,7 +856,7 @@ function updateHost(dt){let t=now();let allIds=new Set([...Object.keys(members||
   flames.forEach(f=>f.t-=dt*1000);flames=flames.filter(f=>f.t>0);
   Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r))damagePlayer(p,isHost?'local':'remote');collectItemsForPlayer(p,false);});
   enemies.forEach(e=>{if(!e.alive)return;if(e.invuln>0)e.invuln-=dt*1000;if(e.teleportBlink>0)e.teleportBlink-=dt*1000;let target=nearestAlivePlayer(e);if(e.boss)updateBossAI(e,dt,target);e.think-=dt*1000;if(e.think<=0){if(target){let ax=target.x-e.x,ay=target.y-e.y,build=e.build||{},flee=!!(e.boss&&build.flee&&e.hp<e.max*.55);if(rand()<.72){let sx=Math.sign(ax),sy=Math.sign(ay);if(flee){sx=-sx;sy=-sy}e.dir=Math.abs(ax)>Math.abs(ay)?[sx,0]:[0,sy]}else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=e.boss?rnd(180,520):rnd(250,760)}let moved=moveEntity(e,e.dir[0],e.dir[1],dt,e.id);applyTerrain(e,dt,false);if(!moved)e.think=0;damageEnemyByFlamesOnce(e);Object.values(players).forEach(p=>{if(p.alive&&e.invuln<=0&&bossBodyContactEnabled(e)&&Math.hypot(p.x-e.x,p.y-e.y)<p.rad+bossContactRadius(e)-2)damagePlayer(p)})});enemies=enemies.filter(e=>e.alive);
-  dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+(++dropSeq)+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
+  dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+(++dropSeq)+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:2600,warn:2600,totalWarn:2600});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=900;f.y=OY-96}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){grid[f.r][f.c]=SOFT;sfx('drop');shake=Math.max(shake,6);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});enemies.forEach(e=>{if(e.alive&&e.c===f.c&&e.r===f.r)damageEnemyByHazard(e,'drop:'+f.id,e.boss?6:3,999999)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18)}}});falling=falling.filter(f=>f.phase==='warn'||f.t>0);
   updateGimmicks(dt);updateRevives(dt);if(!waveIsBoss&&waveQueue.length>0){waveSpawnTimer-=dt*1000;if(waveSpawnTimer<=0&&enemies.filter(e=>e.alive).length<3){if(spawnNextQueuedEnemy())waveSpawnTimer=waveSpawnInterval;else waveSpawnTimer=600}}if(enemies.length===0&&waveQueue.length===0){wave++;playNextGameBgm();spawnWave();sfx('wave');Object.values(players).forEach(p=>{if(p.alive)p.score+=250})}parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);if(shake>0)shake-=dt*18;
 }
 async function publishState(){
