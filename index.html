@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260602-goal-reveal-cell-sound-v6-webaudio-jingle -->
+<!-- build: pbomber-20260602-bgm-loudness-auto-normalize-v1 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -74,35 +74,66 @@ let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=
 let waveQueue=[],waveSpawnTimer=0,waveSpawnInterval=5000,waveIsBoss=false,goalGate=null,goalCelebration=0,gameEnded=false,endingTimer=0,endingCloseAttempted=false;
 let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[],bgmSrcKey='',bgmFailed={},bgmHoldUntil=0,bgmResumeAfterHold=false;
 const BGM_MASTER_VOLUME=.12;
-const BGM_VOLUME_TABLE={
-  'bomb0.flac':.11,
-  'bomb1.flac':.12,
-  'bomb2.flac':.11,
-  'bomb3.flac':.12,
-  'bomb4.flac':.10,
-  'bomb5.flac':.12,
-  'bomb6.flac':.11,
-  'bomb7.flac':.12,
-  'bomb8.flac':.11,
-  'bomb9.flac':.12,
-  'bomb10.flac':.11,
-  'bomb11.flac':.10,
-  'bomb12.flac':.12,
-  'bomb13.flac':.11,
-  'bomb14.flac':.10,
-  'bomb15.flac':.12,
-  'bomb16.flac':.10,
-  'bomb17.flac':.12,
-  'bomb18.flac':.11,
-  'bomb19.flac':.12
-};
+const BGM_TARGET_RMS=.145;
+const BGM_TARGET_PEAK=.92;
+const BGM_MIN_VOLUME=.045;
+const BGM_MAX_VOLUME=BGM_MASTER_VOLUME;
+let bgmLoudnessCache={};
+let bgmLoudnessPending={};
+try{bgmLoudnessCache=JSON.parse(localStorage.pbomberBgmLoudnessV1||'{}')||{};}catch(e){bgmLoudnessCache={};}
 function bgmKey(src){
   let s=String(src||'').split('?')[0].split('#')[0];
   return s.slice(s.lastIndexOf('/')+1);
 }
+function clampBgmVolume(v){
+  return Math.max(BGM_MIN_VOLUME,Math.min(BGM_MAX_VOLUME,Number.isFinite(v)?v:BGM_MASTER_VOLUME));
+}
 function bgmVolumeFor(src){
   const key=bgmKey(src);
-  return Math.max(.06,Math.min(.16,BGM_VOLUME_TABLE[key]??BGM_MASTER_VOLUME));
+  const measured=bgmLoudnessCache[key];
+  return clampBgmVolume(measured&&Number.isFinite(measured.volume)?measured.volume:BGM_MASTER_VOLUME);
+}
+function applyMeasuredBgmVolume(src){
+  if(!bgmAudio||bgmSrcKey!==src)return;
+  bgmAudio.volume=bgmVolumeFor(src);
+  const key=bgmKey(src),m=bgmLoudnessCache[key];
+  if(m)document.body.dataset.bgmLoudness=key+': rms='+m.rms+' peak='+m.peak+' vol='+m.volume;
+}
+async function analyzeBgmLoudness(src){
+  const key=bgmKey(src);
+  if(!key||bgmLoudnessCache[key]||bgmLoudnessPending[key]||!window.fetch)return;
+  bgmLoudnessPending[key]=true;
+  try{
+    unlockAudio();
+    if(!audioCtx)return;
+    const res=await fetch(audioPath(src),{cache:'force-cache'});
+    if(!res.ok)throw new Error('bgm fetch failed '+res.status);
+    const buf=await res.arrayBuffer();
+    const decoded=await audioCtx.decodeAudioData(buf.slice(0));
+    let sum=0,count=0,peak=0;
+    const stride=Math.max(1,Math.floor(decoded.length/220000));
+    for(let ch=0;ch<decoded.numberOfChannels;ch++){
+      const data=decoded.getChannelData(ch);
+      for(let i=0;i<data.length;i+=stride){
+        const a=Math.abs(data[i]);
+        sum+=a*a;
+        if(a>peak)peak=a;
+        count++;
+      }
+    }
+    const rms=Math.sqrt(sum/Math.max(1,count));
+    let rate=1;
+    if(rms>BGM_TARGET_RMS)rate=Math.min(rate,BGM_TARGET_RMS/rms);
+    if(peak>BGM_TARGET_PEAK)rate=Math.min(rate,BGM_TARGET_PEAK/peak);
+    const volume=clampBgmVolume(BGM_MASTER_VOLUME*rate);
+    bgmLoudnessCache[key]={rms:+rms.toFixed(5),peak:+peak.toFixed(5),volume:+volume.toFixed(4)};
+    try{localStorage.pbomberBgmLoudnessV1=JSON.stringify(bgmLoudnessCache);}catch(e){}
+    applyMeasuredBgmVolume(src);
+  }catch(e){
+    document.body.dataset.bgmLoudnessError=key;
+  }finally{
+    delete bgmLoudnessPending[key];
+  }
 }
 const GAME_BGM_EXTRA=[
   'https://github.com/vigourjp2/game/releases/download/v1.0/bomb11.flac',
@@ -217,6 +248,7 @@ function playBgm(src,force=false){
   if(bgmAudio&&bgmSrcKey===src){
     bgmCurrent=src;
     bgmAudio.volume=bgmVolumeFor(src);
+    analyzeBgmLoudness(src);
     resumeBgmOnly();
     return;
   }
@@ -227,6 +259,7 @@ function playBgm(src,force=false){
   bgmAudio.loop=true;
   bgmAudio.volume=bgmVolumeFor(src);
   bgmAudio.preload='auto';
+  analyzeBgmLoudness(src);
   bgmAudio.addEventListener('error',()=>{
     bgmFailed[src]=true;
     document.body.dataset.bgmFailed=src;
