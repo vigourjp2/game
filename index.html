@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260601-2244-player-recover-no-blink -->
+<!-- build: pbomber-20260602-goal-reveal-cell-sound-v6-webaudio-jingle -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD MONEY-SPECIAL-JUMP-DIRFIX-V3-20260601-2218</div>
+    <div class="buildTag" id="buildTag">BUILD GOAL-REVEAL-CELL-SOUND-V5-20260602</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">MONEY-SPECIAL-JUMP-DIRFIX-V3-20260601-2218</b></div>
+    <div class="pill">BUILD <b id="buildView">GOAL-REVEAL-CELL-SOUND-V5-20260602</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -59,7 +59,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='F1-WARP-GOAL-GATE-V2-20260601-2218',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='GOAL-REVEAL-CELL-SOUND-V5-20260602',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -72,7 +72,38 @@ let clientPredictedBombs={};
 let pendingItemGrants={};
 let grid=[],players={},members={},inputs={},bombs=[],flames=[],enemies=[],items=[],falling=[],parts=[],wave=1,msg='READY',shake=0,dropTimer=0,last=performance.now();
 let waveQueue=[],waveSpawnTimer=0,waveSpawnInterval=5000,waveIsBoss=false,goalGate=null,goalCelebration=0,gameEnded=false,endingTimer=0,endingCloseAttempted=false;
-let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[],bgmSrcKey='',bgmFailed={};
+let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[],bgmSrcKey='',bgmFailed={},bgmHoldUntil=0,bgmResumeAfterHold=false;
+const BGM_MASTER_VOLUME=.12;
+const BGM_VOLUME_TABLE={
+  'bomb0.flac':.11,
+  'bomb1.flac':.12,
+  'bomb2.flac':.11,
+  'bomb3.flac':.12,
+  'bomb4.flac':.10,
+  'bomb5.flac':.12,
+  'bomb6.flac':.11,
+  'bomb7.flac':.12,
+  'bomb8.flac':.11,
+  'bomb9.flac':.12,
+  'bomb10.flac':.11,
+  'bomb11.flac':.10,
+  'bomb12.flac':.12,
+  'bomb13.flac':.11,
+  'bomb14.flac':.10,
+  'bomb15.flac':.12,
+  'bomb16.flac':.10,
+  'bomb17.flac':.12,
+  'bomb18.flac':.11,
+  'bomb19.flac':.12
+};
+function bgmKey(src){
+  let s=String(src||'').split('?')[0].split('#')[0];
+  return s.slice(s.lastIndexOf('/')+1);
+}
+function bgmVolumeFor(src){
+  const key=bgmKey(src);
+  return Math.max(.06,Math.min(.16,BGM_VOLUME_TABLE[key]??BGM_MASTER_VOLUME));
+}
 const GAME_BGM_EXTRA=[
   'https://github.com/vigourjp2/game/releases/download/v1.0/bomb11.flac',
   'https://github.com/vigourjp2/game/releases/download/v1.0/bomb12.flac',
@@ -161,9 +192,21 @@ function audioPath(src){
 }
 function resumeBgmOnly(){
   if(!bgmAudio)return;
+  if(performance.now()<bgmHoldUntil)return;
+  bgmResumeAfterHold=false;
   if(!bgmAudio.paused)return;
   const p=bgmAudio.play();
   if(p&&p.catch)p.catch(()=>{document.body.dataset.bgmBlocked=bgmCurrent||bgmSrcKey||'';});
+}
+function pauseBgmForPrioritySound(ms=2200){
+  if(!bgmAudio)return;
+  bgmResumeAfterHold=!bgmAudio.paused;
+  bgmHoldUntil=Math.max(bgmHoldUntil,performance.now()+ms);
+  try{bgmAudio.pause();}catch(e){}
+}
+function releasePrioritySoundBgm(){
+  bgmHoldUntil=0;
+  if(bgmResumeAfterHold)resumeBgmOnly();
 }
 function retryBgm(){
   resumeBgmOnly();
@@ -173,6 +216,7 @@ function playBgm(src,force=false){
   // 同じ曲はAudioを作り直さない。タップ連打でも頭出しさせない。
   if(bgmAudio&&bgmSrcKey===src){
     bgmCurrent=src;
+    bgmAudio.volume=bgmVolumeFor(src);
     resumeBgmOnly();
     return;
   }
@@ -181,7 +225,7 @@ function playBgm(src,force=false){
   bgmAudio=new Audio();
   bgmSrcKey=src;
   bgmAudio.loop=true;
-  bgmAudio.volume=.48;
+  bgmAudio.volume=bgmVolumeFor(src);
   bgmAudio.preload='auto';
   bgmAudio.addEventListener('error',()=>{
     bgmFailed[src]=true;
@@ -377,11 +421,11 @@ function makePlayer(id,name){let [c,r]=spawnCell(),o=cc(c,r);return{id,name:name
 function colorFor(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return`hsl(${h},88%,66%)`}
 function blockKey(c,r){return c+','+r}
 function itemKey(it){return (it&&it.id)?it.id:((it&&it.c)+','+(it&&it.r)+','+(it&&it.type||''))}
-function markLocalBlockClear(c,r){localClearedBlocks.add(blockKey(c,r));if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY}
+function markLocalBlockClear(c,r){localClearedBlocks.add(blockKey(c,r));if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}}
 function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
-function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD)grid[r][c]=EMPTY;if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
+function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
 function serialize(){return{roomSeed,stage:{C,R,theme:currentTheme},gimmicks,carts,worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
@@ -693,12 +737,98 @@ function spawnEnemy(type='grunt',opts={}){let p=emptyCell(true)||emptyCell(false
 function makeNormalWaveQueue(){let n=3+Math.floor(wave*1.35),q=[],ch=Math.floor((wave-1)/3);for(let i=0;i<n;i++)q.push(enemyTypeForSlot(i,ch));return q.sort((a,b)=>({grunt:1,fast:2,hopper:3,flyer:3,currenter:3,spider:4,zapper:5,warper:5,mirror:5,bomber:6,shield:7,drill:8,gearling:8,tank:9,coreling:10}[a]||4)-({grunt:1,fast:2,hopper:3,flyer:3,currenter:3,spider:4,zapper:5,warper:5,mirror:5,bomber:6,shield:7,drill:8,gearling:8,tank:9,coreling:10}[b]||4));}
 function spawnNextQueuedEnemy(){if(!waveQueue.length||enemies.filter(e=>e.alive).length>=3)return false;let type=waveQueue.shift();let e=spawnEnemy(type,{invuln:2600});if(e){msg='ENEMY SPAWN - 点滅中は接触なし / 攻撃は通る';return true}waveQueue.unshift(type);return false}
 function spawnWave(){bombs=[];flames=[];items=[];falling=[];enemies=[];goalGate=null;goalCelebration=0;waveQueue=[];waveSpawnTimer=0;waveSpawnInterval=5000;waveIsBoss=wave%3===0;setupStageForWave(wave);let theme=currentTheme||themeForWave(wave);if(waveIsBoss){let build=bossBuildForWave(wave);spawnEnemy('boss',{build,invuln:3200});msg='BOSS WAVE '+wave+' / '+build.chapter+' / '+build.name+' / '+theme.boss+(wave>=6?' / BODY SAFE':'')}else{waveQueue=makeNormalWaveQueue();spawnNextQueuedEnemy();msg=theme.name+' WAVE '+wave+' / '+theme.g.join('+')}}
-function randomGoalGateCell(){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]===HARD)continue;if((c<=2&&r<=2)||(c>=C-3&&r>=R-3)||(c>=C-3&&r<=2)||(c<=2&&r>=R-3))continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:(emptyCell(false)||[Math.floor(C/2),Math.floor(R/2)])}
-function revealGoalGate(){if(goalGate||gameEnded)return;let [c,r]=randomGoalGateCell(),o=cc(c,r);goalGate={c,r,x:o.x,y:o.y,open:true,won:false,t:0,hidden:grid[r]&&grid[r][c]!==EMPTY};goalCelebration=1800;shake=Math.max(shake,8);partsBurst(o.x,o.y,'#ffdf5d',42);shockwave(o.x,o.y,90,'#ffdf5d');sfx('wave');msg=goalGate.hidden?'GOAL GATE 出現。ただしブロック下に隠れている':'GOAL GATE OPEN'}
-function playGoalWin(){startAudio();try{let a=new Audio(audioPath('bombwin.flac'));a.volume=.82;a.play().catch(()=>sfx('wave'))}catch(e){sfx('wave')}}
+function randomGoalGateCell(){
+  let hidden=[],open=[];
+  for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){
+    if(grid[r][c]===HARD)continue;
+    if((c<=2&&r<=2)||(c>=C-3&&r>=R-3)||(c>=C-3&&r<=2)||(c<=2&&r>=R-3))continue;
+    if(bombs.some(b=>b.c===c&&b.r===r))continue;
+    if(grid[r][c]===SOFT)hidden.push([c,r]);
+    else open.push([c,r]);
+  }
+  if(hidden.length)return hidden[rnd(0,hidden.length-1)];
+  if(open.length)return open[rnd(0,open.length-1)];
+  return emptyCell(false)||[Math.floor(C/2),Math.floor(R/2)];
+}
+function revealGoalGate(){if(goalGate||gameEnded)return;let [c,r]=randomGoalGateCell(),o=cc(c,r);let hidden=inside(c,r)&&grid[r][c]!==EMPTY;goalGate={c,r,x:o.x,y:o.y,open:true,won:false,t:0,hidden,visibleSoundPlayed:false};if(hidden){msg='GOAL GATE はブロック下に待機中'}else{triggerGoalGateVisibleFx()}}
+function checkGoalGateRevealFromCell(c,r){
+  if(!goalGate||goalGate.won||goalGate.visibleSoundPlayed)return;
+  if((goalGate.c|0)!==(c|0)||(goalGate.r|0)!==(r|0))return;
+  if(!inside(c,r)||grid[r][c]!==EMPTY)return;
+  triggerGoalGateVisibleFx();
+}
+function triggerGoalGateVisibleFx(){if(!goalGate||goalGate.won||goalGate.visibleSoundPlayed)return;if(inside(goalGate.c,goalGate.r)&&grid[goalGate.r][goalGate.c]!==EMPTY)return;goalGate.visibleSoundPlayed=true;goalGate.hidden=false;goalCelebration=1800;shake=Math.max(shake,8);partsBurst(goalGate.x,goalGate.y,'#ffdf5d',42);shockwave(goalGate.x,goalGate.y,90,'#ffdf5d');playGoalSpawnSound();msg='GOAL GATE OPEN'}
+function playGoalSpawnSound(){
+  unlockAudio();
+  pauseBgmForPrioritySound(2300);
+  document.body.dataset.goalRevealSound='start';
+  let released=false;
+  const release=()=>{if(released)return;released=true;document.body.dataset.goalRevealSound='done';releasePrioritySoundBgm();};
+  try{
+    playGoalRevealJingle();
+    setTimeout(release,2300);
+  }catch(e){
+    document.body.dataset.goalRevealSound='fallback';
+    try{
+      let a=new Audio(audioPath('bombwin.flac'));
+      a.volume=1.0;
+      a.preload='auto';
+      a.addEventListener('ended',release,{once:true});
+      a.addEventListener('error',()=>{playGoalRevealFallbackBeeps();setTimeout(release,1200)},{once:true});
+      const p=a.play();
+      if(p&&p.catch)p.catch(()=>{playGoalRevealFallbackBeeps();setTimeout(release,1200)});
+      setTimeout(release,2500);
+    }catch(_){playGoalRevealFallbackBeeps();setTimeout(release,1200)}
+  }
+}
+function playGoalRevealJingle(){
+  if(!audioCtx)throw new Error('audioCtx unavailable');
+  const t0=audioCtx.currentTime;
+  const master=audioCtx.createGain();
+  master.gain.setValueAtTime(.95,t0);
+  master.gain.linearRampToValueAtTime(.95,t0+1.6);
+  master.gain.exponentialRampToValueAtTime(.0001,t0+2.05);
+  master.connect(audioCtx.destination);
+  const notes=[523.25,659.25,783.99,1046.50,1318.51,1567.98];
+  notes.forEach((f,i)=>{
+    const t=t0+i*.13;
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=i<3?'triangle':'square';
+    o.frequency.setValueAtTime(f,t);
+    o.frequency.exponentialRampToValueAtTime(f*1.012,t+.12);
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.linearRampToValueAtTime(.18,t+.018);
+    g.gain.exponentialRampToValueAtTime(.0001,t+.34);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+.38);
+  });
+  [783.99,1046.50,1318.51].forEach((f,i)=>{
+    const t=t0+.85;
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(f,t);
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.linearRampToValueAtTime(.11,t+.03);
+    g.gain.exponentialRampToValueAtTime(.0001,t+1.05+i*.05);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+1.18+i*.05);
+  });
+  const dur=.42,buf=audioCtx.createBuffer(1,Math.max(1,audioCtx.sampleRate*dur),audioCtx.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.4);
+  const src=audioCtx.createBufferSource(),ng=audioCtx.createGain();
+  src.buffer=buf;
+  ng.gain.setValueAtTime(.12,t0+.08);
+  ng.gain.exponentialRampToValueAtTime(.0001,t0+dur+.08);
+  src.connect(ng);ng.connect(master);src.start(t0+.08);
+}
+function playGoalRevealFallbackBeeps(){
+  unlockAudio();
+  const seq=[523,659,784,1046,1319,1568];
+  seq.forEach((f,i)=>setTimeout(()=>tone(f,.18,.16,i<3?'triangle':'square',.08),i*120));
+  setTimeout(()=>tone(1046,.55,.14,'sine',.02),850);
+  setTimeout(()=>tone(1319,.55,.12,'sine',.02),880);
+}
 function goalConfetti(x,y,n=72){const cols=['#ffdf5d','#67e8f9','#f0abfc','#86efac','#fb7185','#ffffff'];for(let i=0;i<n;i++){let ang=rand()*Math.PI*2,sp=90+rand()*320;parts.push({x:x+(rand()-.5)*42,y:y+(rand()-.5)*34,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp-90-rand()*140,life:900+rand()*1400,col:cols[rnd(0,cols.length-1)],size:3+rand()*5,grav:230})}for(let k=0;k<5;k++)shockwave(x,y,60+k*26,cols[k%cols.length])}
-function enterGoalGate(p){if(!goalGate||goalGate.won||!p||!p.alive)return;goalGate.won=true;goalCelebration=2300;playGoalWin();goalConfetti(goalGate.x,goalGate.y,120);Object.values(players).forEach(pl=>{if(pl&&pl.alive){pl.score=(pl.score||0)+250;pl.shield=Math.max(pl.shield||0,900)}});msg='WAVE '+wave+' CLEAR - GOAL';setTimeout(()=>{},0);if(wave>=FINAL_BOSS_WAVE){triggerEnding();return}wave++;if(wave===FINAL_BOSS_WAVE)playBgm('bomb10.flac');else playNextGameBgm();spawnWave();sfx('wave')}
-function updateGoalGate(dt){if(goalCelebration>0)goalCelebration-=dt*1000;if(!goalGate||goalGate.won)return;goalGate.t=(goalGate.t||0)+dt*1000;goalGate.hidden=inside(goalGate.c,goalGate.r)&&grid[goalGate.r][goalGate.c]!==EMPTY;if(goalGate.hidden)return;Object.values(players).forEach(p=>{if(p&&p.alive&&Math.hypot(p.x-goalGate.x,p.y-goalGate.y)<(p.rad||15)+34)enterGoalGate(p)})}
+function enterGoalGate(p){if(!goalGate||goalGate.won||!p||!p.alive)return;goalGate.won=true;goalCelebration=2300;goalConfetti(goalGate.x,goalGate.y,120);Object.values(players).forEach(pl=>{if(pl&&pl.alive){pl.score=(pl.score||0)+250;pl.shield=Math.max(pl.shield||0,900)}});msg='WAVE '+wave+' CLEAR - GOAL';setTimeout(()=>{},0);if(wave>=FINAL_BOSS_WAVE){triggerEnding();return}wave++;if(wave===FINAL_BOSS_WAVE)playBgm('bomb10.flac');else playNextGameBgm();spawnWave()}
+function updateGoalGate(dt){if(goalCelebration>0)goalCelebration-=dt*1000;if(!goalGate||goalGate.won)return;goalGate.t=(goalGate.t||0)+dt*1000;let hidden=inside(goalGate.c,goalGate.r)&&grid[goalGate.r][goalGate.c]!==EMPTY;goalGate.hidden=hidden;if(hidden)return;if(!goalGate.visibleSoundPlayed)triggerGoalGateVisibleFx();Object.values(players).forEach(p=>{if(p&&p.alive&&Math.hypot(p.x-goalGate.x,p.y-goalGate.y)<(p.rad||15)+34)enterGoalGate(p)})}
 function drawGoalGate(){
   if(!goalGate||goalGate.won)return;
   if(!inside(goalGate.c,goalGate.r)||grid[goalGate.r][goalGate.c]!==EMPTY)return;
@@ -1183,7 +1313,7 @@ function updateGimmicks(dt){
       let to=cc(target.c,target.r),vx=to.x-cart.x,vy=to.y-cart.y,dist=Math.hypot(vx,vy),step=(cart.speed||205)*dt;
       if(dist<=step){cart.x=to.x;cart.y=to.y;cart.c=target.c;cart.r=target.r;cart.index=cart.targetIndex;if(cart.index<=0||cart.index>=cart.path.length-1)stopCartAtEnd(cart);else cart.targetIndex=cart.index+(cart.dir||1)}
       else{cart.x+=vx/dist*step;cart.y+=vy/dist*step;let cell=tc(cart.x,cart.y);cart.c=cell.c;cart.r=cell.r}
-      if(inside(cart.c,cart.r)&&grid[cart.r][cart.c]===SOFT){grid[cart.r][cart.c]=EMPTY;partsBurst(cart.x,cart.y,'#b9783f',14);sfx('hit',2)}
+      if(inside(cart.c,cart.r)&&grid[cart.r][cart.c]===SOFT){grid[cart.r][cart.c]=EMPTY;checkGoalGateRevealFromCell(cart.c,cart.r);partsBurst(cart.x,cart.y,'#b9783f',14);sfx('hit',2)}
       let rider=players[cart.rider];
       if(rider&&rider.alive){rider.x=cart.x;rider.y=cart.y-6;rider.c=cart.c;rider.r=cart.r;rider.vx=0;rider.vy=0;rider.invuln=Math.max(rider.invuln||0,260)}
       enemies.forEach(e=>{if(e.alive&&Math.hypot(e.x-cart.x,e.y-cart.y)<e.rad+24){damageEnemyByHazard(e,'cart:'+cart.id,e.boss?3:1,360);let dx=e.x-cart.x,dy=e.y-cart.y,l=Math.hypot(dx,dy)||1;e.x+=dx/l*24;e.y+=dy/l*24;rescueEntityFromSolids(e,e.id)}})
