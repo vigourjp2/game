@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-CART-DISMOUNT-SAFE-V6-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-HAND-ONE-TAP-ONE-ACTION-V7-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -1115,6 +1115,11 @@ function drawGoalGate(){
 
 function queueBomb(){
   startAudio();
+  const t=performance.now();
+  // 物理的な1回のダブルタップからpointer/click/同期保険で複数発火しても、ゲーム入力は1回だけにする。
+  // これが無いとJOIN側で「設置→持上げ→投げ」まで短時間seq連打として一気に進む。
+  if(localInput.lastBombQueuedAt&&t-localInput.lastBombQueuedAt<180)return;
+  localInput.lastBombQueuedAt=t;
   localInput.bomb=true;
   localInput.seq++;
   localInput.bombSeq=localInput.seq;
@@ -1286,10 +1291,24 @@ function primaryBombOrHandAction(p,seq=null){
   // ダブルタップは1入力1アクション。HAND所持時でも、設置→持上げ→投げを同一入力で連鎖させない。
   // 保持中: 投げる / 足元に爆弾: 持ち上げる / それ以外: 爆弾を置く。
   if(!p||!p.alive)return false;
-  if(handPower(p)>0&&(p.carryBombId||bombUnderPlayer(p))){
-    return handBombAction(p);
+  const t=now();
+  // JOIN入力はFirebase保険送信やlockstep再処理で短時間に複数seq化することがある。
+  // 直前アクションから短すぎる入力は同じ物理ダブルタップの残響として捨てる。
+  if(p.lastPrimaryActionAt&&t-p.lastPrimaryActionAt<180){
+    p.lastPrimarySuppressedSeq=seq||0;
+    return false;
   }
-  return placeBomb(p,seq);
+  let acted=false;
+  if(handPower(p)>0&&(p.carryBombId||bombUnderPlayer(p))){
+    acted=handBombAction(p);
+  }else{
+    acted=placeBomb(p,seq);
+  }
+  if(acted){
+    p.lastPrimaryActionAt=t;
+    p.lastPrimaryActionSeq=seq||0;
+  }
+  return acted;
 }
 function throwBomb(p){return handBombAction(p)}
 function updateBombPasses(){bombs.forEach(b=>{if(b.carriedBy){if(String(b.carriedBy).includes(':shadow:')){let parts=String(b.carriedBy).split(':shadow:'),p=players[parts[0]],idx=parseInt(parts[1],10)||0,sh=p?shadowServantStates(p).find(x=>x.idx===idx):null;if(!p||!p.alive||!sh){b.carriedBy=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=sh.x;b.y=sh.y-28-(idx*4);let cell=tc(sh.x,sh.y);b.c=cell.c;b.r=cell.r}return}let p=players[b.carriedBy];if(!p||!p.alive){b.carriedBy=null;if(p)p.carryBombId=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=p.x;b.y=p.y-(b.carryOff||32);let cell=tc(p.x,p.y);b.c=cell.c;b.r=cell.r}return}if(!b.passOwner)return;let p=players[b.passOwner];if(!p||!p.alive){b.passOwner=null;return}if(!circleRectHit(p.x,p.y,p.rad,bombRect(b)))b.passOwner=null})}
@@ -1726,7 +1745,7 @@ function updateCamera(){let me=players[myId]||Object.values(players)[0];let worl
 function hostCanUseClientPose(id,p,inp){return !!(id!==myId&&p&&inp&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0&&inp.last&&now()-inp.last<1500&&!playerCartAuthorityLocked(id,p)&&!playerJumpAuthorityLocked(id,p)&&!p.jumpState)}
 function hostAdoptClientPose(id,p,inp){if(!hostCanUseClientPose(id,p,inp))return false;const tx=clamp(+inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(+inp.clientY,OY+p.rad,OY+R*T-p.rad);const err=Math.hypot((p.x||0)-tx,(p.y||0)-ty);if(err<JOIN_HOST_ACCEPT_ERR)return true;if(canAt(p,tx,ty,id)||err>JOIN_HOST_FORCE_ERR){const oldX=p.x,oldY=p.y;p.x=tx;p.y=ty;p.vx=0;p.vy=0;const c=tc(p.x,p.y);p.c=c.c;p.r=c.r;depen(p,id);if(err>JOIN_HOST_FORCE_ERR)markTeleportBlink(p,Math.hypot(p.x-oldX,p.y-oldY),'SYNC');return true}return false}
 function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}const clientPoseDriven=hostCanUseClientPose(id,p,inp)&&!p.carryBombId;if(!updatePlayerJump(p,dt,inp)){if(clientPoseDriven){hostAdoptClientPose(id,p,inp);applyTerrain(p,dt,true)}else{moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}}
-        updateShadowTrail(p,dt);if(p.invuln>0)p.invuln-=dt*1000;if(p.teleportBlink>0)p.teleportBlink-=dt*1000;if(p.shield>0)p.shield-=dt*1000;if(p.specialCooldown>0)p.specialCooldown-=dt*1000;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}if(inp.specialSeq&&inp.specialSeq!==p.lastSpecialSeq){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}}
+        updateShadowTrail(p,dt);if(p.invuln>0)p.invuln-=dt*1000;if(p.teleportBlink>0)p.teleportBlink-=dt*1000;if(p.shield>0)p.shield-=dt*1000;if(p.specialCooldown>0)p.specialCooldown-=dt*1000;let primaryActedThisTick=false;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){primaryActedThisTick=primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(!primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}else if(primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){p.lastHandSeq=inp.handSeq}if(inp.specialSeq&&inp.specialSeq!==p.lastSpecialSeq){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}}
   updateBombPasses();
   bombs.forEach(b=>{if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(b.vx||b.vy){let ox=b.x,oy=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;let fr=(b.slideT>0)?.982:.90;b.vx*=fr;b.vy*=fr;if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b)}let cell=tc(b.x,b.y);let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);if(blocked){b.x=cc(b.c,b.r).x;b.y=cc(b.c,b.r).y;b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b);sfx('hit',b.power||1);partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2);msg='BOMB STOP'}else{b.c=cell.c;b.r=cell.r;impactBomb(b)}}});bombs.slice().forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
   flames.forEach(f=>f.t-=dt*1000);flames=flames.filter(f=>f.t>0);
