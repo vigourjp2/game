@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260604-smash-input-authority-v2 -->
+<!-- build: pbomber-20260604-smash-input-owner-v2 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -200,7 +200,8 @@ const localInput={dx:0,dy:0,bomb:false,hand:false,special:false,seq:0,handSeq:0,
 const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:{type:'launchbomb',name:'LAUNCH BOMB',icon:'🚀',price:180},summonblock:{type:'summonblock',name:'BLOCK SUMMON',icon:'🧱',price:160},shadowservant:{type:'shadowservant',name:'SHADOW SERVANT',icon:'👥',price:520}};
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
-const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=55,CART_AUTHORITY_LOCK_MS=1250,JUMP_AUTHORITY_LOCK_MS=1250;
+const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=0,CART_AUTHORITY_LOCK_MS=1250,JUMP_AUTHORITY_LOCK_MS=1250;
+const JOIN_SELF_PREDICT_MAX_DT=.035,JOIN_SELF_CORRECT_SOFT=72,JOIN_SELF_CORRECT_HARD=220;
 const JOIN_SELF_REWIND_ERR=260,JOIN_HOST_ACCEPT_ERR=6,JOIN_HOST_FORCE_ERR=150;
 const AUTH_STATE_HZ=60,AUTH_STATE_MS=1000/AUTH_STATE_HZ,AUTH_FULL_MS=1200,AUTH_FIREBASE_MS=1800;
 let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90,lastJoinPredictAt=0,lastAuthStateSent=0,lastAuthFullStateSent=0;
@@ -1142,7 +1143,7 @@ function queueHand(){
   if(started){
     let p=players[myId];
     if(p&&p.alive){
-      placeBomb(p,localInput.handSeq);
+      handBombAction(p);
       // ローカル即時反映済みのHAND入力を、次のHOST更新で二重処理しない。
       // 持ち上げと投げは別入力に分離し、任意タイミングで投げられるようにする。
       p.lastHandSeq=localInput.handSeq;
@@ -1258,8 +1259,27 @@ function shadowThrowBomb(p,sh){let b=shadowGetCarriedBomb(p,sh);if(!b)return fal
 function shadowPlaceBomb(p,sh,seq=null){if(!inside(sh.c,sh.r)||grid[sh.r][sh.c]!==EMPTY)return false;if(bombs.some(b=>!b.carriedBy&&b.c===sh.c&&b.r===sh.r))return false;let o=cc(sh.c,sh.r),id='sb_'+p.id+'_'+(seq||lockFrame)+'_'+sh.idx+'_'+(++specialSeq),madeAt=now();bombs.push({id,c:sh.c,r:sh.r,x:o.x,y:o.y,owner:p.id,passOwner:p.id,range:p.range,timer:BOMB_FUSE,rad:17,vx:0,vy:0,power:0,slideT:0,thrownBy:p.id,spin:0,carriedBy:null,carryOff:0,armed:true,fusePaused:false,hop:null,landed:true,bombStyle:'player',flameStyle:'player',shadowBomb:true,localMadeAt:madeAt});partsBurst(o.x,o.y,'#d8b4fe',8);return true;}
 function shadowBombAction(p,seq=null){let acted=false;shadowServantStates(p).forEach(sh=>{if(shadowThrowBomb(p,sh)){acted=true;return;}if(shadowLiftBomb(p,sh)){acted=true;return;}if(shadowPlaceBomb(p,sh,seq))acted=true;});return acted;}
 function consumeShadowServantRevive(p){ensureSpecialBag(p);if(!(p.specials.shadowservant>0))return false;p.specials.shadowservant=0;if(p.activeSpecial==='shadowservant')p.activeSpecial=null;p.shadowTrail=[];p.shadowTrailT=0;Object.keys(p).forEach(k=>{if(k.startsWith('shadowCarry_')){let b=bombs.find(q=>q.id===p[k]||q.carriedBy===p.id+':shadow:'+k.split('_')[1]);if(b){b.carriedBy=null;b.fusePaused=false;b.armed=true;b.landed=true}p[k]=null;}});p.alive=true;p.invuln=Math.max(p.invuln||0,REVIVE_INVULN_MS+1200);p.shield=0;p.revive=0;p.reviveBy=null;p.vx=0;p.vy=0;partsBurst(p.x,p.y,'#d8b4fe',42);shockwave(p.x,p.y,82,'#d8b4fe');sfx('item',1.8);msg=`${p.name} SHADOW SERVANT SACRIFICE - REVIVE`;return true;}
-function placeBomb(p,seq=null){if(!p||!p.alive)return false;let id=seq?('b_'+p.id+'_'+seq):('b_'+p.id+'_f'+lockFrame);if(throwCarriedBomb(p)){shadowBombAction(p,seq);return true;}if(liftBomb(p)){shadowBombAction(p,seq);return true;}let shadowActed=false;if(shadowHasCarry(p))shadowActed=shadowBombAction(p,seq);let idExists=seq&&bombs.some(b=>b.id===id);if(idExists)return shadowActed;if(p.placed>=p.bombMax){if(!shadowActed)shadowActed=shadowBombAction(p,seq);return shadowActed;}let cell=tc(p.x,p.y);if(!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY){if(!shadowActed)shadowActed=shadowBombAction(p,seq);return shadowActed;}if(bombs.some(b=>!b.carriedBy&&b.c===cell.c&&b.r===cell.r)){if(!shadowActed)shadowActed=shadowBombAction(p,seq);return shadowActed;}let o=cc(cell.c,cell.r),madeAt=now();bombs.push({id,c:cell.c,r:cell.r,x:o.x,y:o.y,owner:p.id,passOwner:p.id,range:p.range,timer:BOMB_FUSE,rad:17,vx:0,vy:0,power:0,slideT:0,thrownBy:null,spin:0,carriedBy:null,carryOff:0,armed:true,fusePaused:false,hop:null,landed:true,localMadeAt:madeAt,localDetonateAt:(mode==='join'&&p.id===myId)?madeAt+BOMB_FUSE:null});p.placed++;if(!shadowActed)shadowBombAction(p,seq);sfx('bomb');return true;}
-function throwBomb(p){return placeBomb(p)}
+function placeBomb(p,seq=null){
+  if(!p||!p.alive)return false;
+  let id=seq?('b_'+p.id+'_'+seq):('b_'+p.id+'_f'+lockFrame);
+  if(seq&&bombs.some(b=>b.id===id))return false;
+  if(p.placed>=p.bombMax)return false;
+  let cell=tc(p.x,p.y);
+  if(!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY)return false;
+  if(bombs.some(b=>!b.carriedBy&&b.c===cell.c&&b.r===cell.r))return false;
+  let o=cc(cell.c,cell.r),madeAt=now();
+  bombs.push({id,c:cell.c,r:cell.r,x:o.x,y:o.y,owner:p.id,passOwner:p.id,range:p.range,timer:BOMB_FUSE,rad:17,vx:0,vy:0,power:0,slideT:0,thrownBy:null,spin:0,carriedBy:null,carryOff:0,armed:true,fusePaused:false,hop:null,landed:true,localMadeAt:madeAt,localDetonateAt:(mode==='join'&&p.id===myId)?madeAt+BOMB_FUSE:null});
+  p.placed++;
+  sfx('bomb');
+  return true;
+}
+function handBombAction(p){
+  if(!p||!p.alive)return false;
+  if(throwCarriedBomb(p))return true;
+  if(liftBomb(p))return true;
+  return false;
+}
+function throwBomb(p){return handBombAction(p)}
 function updateBombPasses(){bombs.forEach(b=>{if(b.carriedBy){if(String(b.carriedBy).includes(':shadow:')){let parts=String(b.carriedBy).split(':shadow:'),p=players[parts[0]],idx=parseInt(parts[1],10)||0,sh=p?shadowServantStates(p).find(x=>x.idx===idx):null;if(!p||!p.alive||!sh){b.carriedBy=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=sh.x;b.y=sh.y-28-(idx*4);let cell=tc(sh.x,sh.y);b.c=cell.c;b.r=cell.r}return}let p=players[b.carriedBy];if(!p||!p.alive){b.carriedBy=null;if(p)p.carryBombId=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=p.x;b.y=p.y-(b.carryOff||32);let cell=tc(p.x,p.y);b.c=cell.c;b.r=cell.r}return}if(!b.passOwner)return;let p=players[b.passOwner];if(!p||!p.alive){b.passOwner=null;return}if(!circleRectHit(p.x,p.y,p.rad,bombRect(b)))b.passOwner=null})}
 function explode(b){if(!bombs.includes(b))return;bombs=bombs.filter(x=>x!==b);if(b.carriedBy&&players[b.carriedBy])players[b.carriedBy].carryBombId=null;let op=players[b.owner];if(op)op.placed=Math.max(0,op.placed-1);if(b.launchPad){launchPadExplode(b);return;}let boomPower=b.power||0,isJoinPrediction=false,expId=b.id||('exp_f'+lockFrame+'_'+(++itemSeq)),style=b.flameStyle||(b.bossBomb?'boss':(b.enemyBomb?'enemy':'player')),boomCol=style==='boss'?'#ff2d7d':(style==='enemy'?'#8b5cf6':'#ffdc5e');shake=Math.max(shake,9+boomPower*1.8);sfx('explode');let cells=[[b.c,b.r]];for(const[dX,dY]of DIRS){for(let i=1;i<=b.range+Math.floor(boomPower/3);i++){let c=b.c+dX*i,r=b.r+dY*i;if(!inside(c,r)||grid[r][c]===HARD)break;cells.push([c,r]);if(grid[r][c]===SOFT){damageSoftBlock(c,r,b.owner);break}}}cells.forEach(([c,r])=>{igniteOilAt(c,r);let o=cc(c,r);flames.push({c,r,x:o.x,y:o.y,t:style==='player'?430:520,owner:b.owner||null,localOwner:isJoinPrediction?myId:null,expId,flameStyle:style,enemyFlame:style!=='player'})});bombs.slice().forEach(ob=>{if(cells.some(([c,r])=>ob.c===c&&ob.r===r))explode(ob)});shockwave(b.x,b.y,70+boomPower*18,boomCol);partsBurst(b.x,b.y,boomCol,28+boomPower*8)}
 function dropItem(c,r,type=null){let types=['fire','bomb','speed','shield','kick','hand','jump','launchbomb','summonblock','shadowservant'];type=type||types[rnd(0,types.length-1)];let o=cc(c,r),special=!!SPECIALS[type],price=special?specialPrice(type):0;items.push({id:'it_'+(++itemSeq)+'_'+c+'_'+r+'_'+type,c,r,x:o.x,y:o.y,type,special,price})}
@@ -1355,13 +1375,52 @@ function runHostLockstep(dt){
   broadcastAuthoritativeState(false);
   publishState();
 }
-function runJoinLockstep(dt){
-  // JOIN自機は自分の入力で即時に進める。他者・敵・ギミックはHOST確定stateを描画する。
-  updateJoinPrediction(Math.min(dt,LOCK_DT));
-  const wait=now()-joinLastAuthoritative;
-  if(wait>1200)msg=rtcConnected?'HOST SNAPSHOT WAIT':'P2P CONNECT WAIT';
+
+function predictJoinSelf(dt){
+  if(mode!=='join'||!started)return;
+  const p=players&&players[myId];
+  if(!p||!p.alive)return;
+  const step=Math.min(JOIN_SELF_PREDICT_MAX_DT||.035,Math.max(0,dt||LOCK_DT));
+  const inp=localInput||{};
+  const mdx=inp.dx||0,mdy=inp.dy||0;
+  if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy;}
+  if(!updatePlayerJump(p,step,inp)){
+    moveEntity(p,mdx,mdy,step,myId);
+    applyTerrain(p,step,true);
+  }
+  collectItemsForPlayer(p,true);
+  updateCamera();
+  lastJoinPredictAt=now();
+}
+function softenJoinSelfToAuthoritative(st){
+  if(mode!=='join'||!st||!st.players||!st.players[myId]||!players||!players[myId])return;
+  const a=st.players[myId],p=players[myId];
+  if(playerCartAuthorityLocked&&playerCartAuthorityLocked(myId,p))return;
+  if(playerJumpAuthorityLocked&&playerJumpAuthorityLocked(myId,p))return;
+  if(!Number.isFinite(a.x)||!Number.isFinite(a.y))return;
+  const err=Math.hypot((p.x||0)-a.x,(p.y||0)-a.y);
+  if(err>(JOIN_SELF_CORRECT_HARD||220)){p.x=a.x;p.y=a.y;p.vx=0;p.vy=0;let c=tc(p.x,p.y);p.c=c.c;p.r=c.r;return;}
+  if(err>(JOIN_SELF_CORRECT_SOFT||72)){p.x=p.x+(a.x-p.x)*.18;p.y=p.y+(a.y-p.y)*.18;let c=tc(p.x,p.y);p.c=c.c;p.r=c.r;}
 }
 
+function runJoinLockstep(dt){
+  let steps=0,lastPkt=null;
+  while(lockstepPackets[lockFrame+1]&&steps<LOCK_MAX_STEPS){
+    let pkt=lockstepPackets[lockFrame+1];
+    delete lockstepPackets[lockFrame+1];
+    stepWorldWithInputs(pkt.frame,pkt.inputs||{});
+    lastPkt=pkt;
+    steps++;
+    if(pkt.checksum&&pkt.checksum!==checksumWorld()&&pkt.state){
+      applyState(pkt.state);
+      lockFrame=pkt.frame|0;
+      msg='LOCKSTEP CHECK RESYNC F'+lockFrame;
+    }
+  }
+  if(lastPkt&&lastPkt.state)softenJoinSelfToAuthoritative(lastPkt.state);
+  predictJoinSelf(dt);
+  if(steps===0&&now()-lastStepPacketAt>1200)msg=rtcConnected?'LOCKSTEP PACKET WAIT':'P2P CONNECT WAIT';
+}
 
 function nearestAlivePlayer(e){let alive=Object.values(players).filter(p=>p.alive);return alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0]||null}
 function bossBeginAction(e,a){if(!e||!e.alive||!e.boss||e.bossAction||e.actionLock>0)return false;let lx=e.x,ly=e.y,lc=tc(lx,ly);e.vx=0;e.vy=0;e.dir=[0,0];e.think=Math.max(e.think||0,a.duration||900);e.bossAction={...a,t:a.duration||900,elapsed:0,startedFrame:lockFrame,lockX:lx,lockY:ly,lockC:lc.c,lockR:lc.r};e.renderX=lx;e.renderY=ly;e.liftY=0;e.actionLock=Math.max(e.actionLock||0,a.duration||900);e.invuln=Math.max(e.invuln||0,Math.min(1100,a.duration||900));msg=a.label||'BOSS ACTION';return true}
@@ -1863,6 +1922,7 @@ document.addEventListener('pointermove',movePointer,{passive:false,capture:true}
 document.addEventListener('pointerup',endPointer,{passive:false,capture:true});
 document.addEventListener('pointercancel',endPointer,{passive:false,capture:true});
 document.addEventListener('gesturestart',e=>e.preventDefault());
+try{document.body.dataset.syncFixBuild='SMASH-INPUT-OWNER-V2-20260604'}catch(e){}
 })();
 </script>
 </body>
