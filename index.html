@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260603-battle-mode-v1 -->
+<!-- build: pbomber-20260604-authoritative-smash-sync-v1 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,14 +14,14 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD v9 LOCKSTEP-DETERMINISTIC-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD AUTHORITATIVE-SMASH-SYNC-V1-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
     <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center"><input id="seedWave" placeholder="w. 0-33 / battle 51-83" maxlength="2" inputmode="numeric" style="font-size:12px;padding:8px 10px;opacity:.58;max-width:145px;margin-left:auto;text-align:center"><select id="battleType" style="border:0;border-radius:12px;padding:8px 7px;background:#fff;color:#111;font-size:12px;font-weight:900"><option value="solo">通常バトル</option><option value="team">チームバトル</option></select></div>
     <div class="row"><button id="hostBtn">HOST</button><button id="joinBtn" class="join">JOIN</button><button id="offBtn" class="off">OFFLINE</button></div><button id="copyBtn" class="off" style="width:100%;margin-top:8px">ROOM ID COPY</button>
     <div id="panelMsg" class="small">HOSTでROOMを作成し、他端末は同じROOM IDでJOIN。JOINした端末はmembersへ登録され、HOSTが人数分のプレイヤーを自動生成。操作は画面どこでも仮想スティック移動、短いダブルタップで爆弾。ロックステップのため、JOINはHOST確定フレームを順番に再生する。</div>
-    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。完全ロックステップ構成。HOSTがframeごとの入力セットを配信し、JOINは同じ入力列を固定Δtで順番処理する。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
+    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。完全ロックステップ構成。HOSTだけが世界を進め、JOINは入力送信＋HOST確定スナップショット描画に徹する。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
   </div>
 </div>
 <div class="app">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">v9 LOCKSTEP-DETERMINISTIC-20260604</b></div>
+    <div class="pill">BUILD <b id="buildView">AUTHORITATIVE-SMASH-SYNC-V1-20260604</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,25 +87,11 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='v9 LOCKSTEP-DETERMINISTIC-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
-function syncBuildLabels(){
-  const tag=document.getElementById('buildTag');
-  const view=document.getElementById('buildView');
-  if(tag) tag.textContent='BUILD '+GAME_BUILD;
-  if(view) view.textContent=GAME_BUILD;
-}
-if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',syncBuildLabels,{once:true});
-else syncBuildLabels();
+const GAME_BUILD='AUTHORITATIVE-SMASH-SYNC-V1-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
-let worldRngState=1,bgmRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;
-function nextRng01(state){state=(state+0x6D2B79F5)>>>0;let t=state;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return [state,((t^(t>>>14))>>>0)/4294967296]}
-const rand=()=>{let r=nextRng01(worldRngState);worldRngState=r[0];return r[1]},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
-const bgmRand=()=>{let r=nextRng01(bgmRngState);bgmRngState=r[0];return r[1]},bgmRnd=(a,b)=>Math.floor(bgmRand()*(b-a+1))+a;
-function entropyRandom01(){try{let a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]/4294967296}catch(e){let x=(Date.now()^((performance.now()*1000)|0))>>>0;let r=nextRng01(x);return r[1]}}
-function entropyToken(n=8){let out='';while(out.length<n)out+=Math.floor(entropyRandom01()*36).toString(36);return out.slice(0,n)}
-function visualNoise01(salt=0){let x=((performance.now()*1000)|0)^(lockFrame*1103515245)^(salt*2654435761);let r=nextRng01(x>>>0);return r[1]}
+let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
-let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,roomSeed=0,myId=localStorage.pbomberId||('p_'+entropyToken(8));localStorage.pbomberId=myId;
+let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,roomSeed=0,myId=localStorage.pbomberId||('p_'+Math.random().toString(36).slice(2,10));localStorage.pbomberId=myId;
 let lastNet=0,lastStateWrite=0,lastFullStateWrite=0,lastInputWrite=0,lastMemberHeartbeat=0,lastHudUpdate=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
 let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
 let moneyTexts=[],specialSeq=0,summonedBlockHp={};
@@ -214,7 +200,9 @@ const localInput={dx:0,dy:0,bomb:false,hand:false,special:false,seq:0,handSeq:0,
 const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:{type:'launchbomb',name:'LAUNCH BOMB',icon:'🚀',price:180},summonblock:{type:'summonblock',name:'BLOCK SUMMON',icon:'🧱',price:160},shadowservant:{type:'shadowservant',name:'SHADOW SERVANT',icon:'👥',price:520}};
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
-const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=55;let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90,lastJoinPredictAt=0,deterministicStepInputs=null;
+const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=55;
+const AUTH_STATE_HZ=30,AUTH_STATE_MS=1000/AUTH_STATE_HZ,AUTH_FULL_MS=900,AUTH_FIREBASE_MS=1500;
+let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90,lastJoinPredictAt=0,lastAuthStateSent=0,lastAuthFullStateSent=0;
 const REVIVE_RADIUS=92,REVIVE_GAIN_PER_SEC=.34,REVIVE_DECAY_PER_SEC=.08,REVIVE_INVULN_MS=2600;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
@@ -353,7 +341,6 @@ function playMenuBgm(){
 }
 function resetGameBgmPool(){
   bgmUsed=[];
-  bgmRngState=(hashSeed((roomSeed||hashSeed(roomId||'OFFLINE'))+':BGM')>>>0)||1;
 }
 function pickNextGameBgm(){
   let pool=[];
@@ -371,7 +358,7 @@ function pickNextGameBgm(){
     for(const src of GAME_BGM_EXTRA)if(!bgmFailed[src])pool.push(src);
   }
   if(!pool.length)return 'bomb1.flac';
-  let src=pool[bgmRnd(0,pool.length-1)];
+  let src=pool[Math.floor(Math.random()*pool.length)];
   bgmUsed.push(src);
   return src;
 }
@@ -394,7 +381,7 @@ function tone(freq,dur=.08,vol=.04,type='square',slide=0){
 function noise(dur=.12,vol=.06){
   if(!audioCtx)return;
   const t=audioCtx.currentTime,buf=audioCtx.createBuffer(1,Math.max(1,audioCtx.sampleRate*dur),audioCtx.sampleRate),d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++)d[i]=(entropyRandom01()*2-1)*(1-i/d.length);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);
   const src=audioCtx.createBufferSource(),g=audioCtx.createGain();src.buffer=buf;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);src.connect(g);g.connect(audioCtx.destination);src.start(t);
 }
 function sfx(n,p=1){
@@ -411,7 +398,7 @@ function sfx(n,p=1){
 }
 
 function initFirebase(){if(db)return true;if(!window.firebase||!firebase.database){setPanel('Firebase読込不可。https配置で再読込。');return false}if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);db=firebase.database();return true}
-function safeRoom(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20)}function randRoom(){return entropyToken(6).toUpperCase()}function nameVal(){return String($('name').value||'PLAYER').slice(0,16)}function setPanel(t){$('panelMsg').textContent=t}
+function safeRoom(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,20)}function randRoom(){return Math.random().toString(36).slice(2,8).toUpperCase()}function nameVal(){return String($('name').value||'PLAYER').slice(0,16)}function setPanel(t){$('panelMsg').textContent=t}
 function cc(c,r){return{x:OX+c*T+T/2,y:OY+r*T+T/2}}function tc(x,y){return{c:Math.floor((x-OX)/T),r:Math.floor((y-OY)/T)}}function inside(c,r){return c>=0&&r>=0&&c<C&&r<R}
 function hashSeed(s){let h=2166136261>>>0;String(s||'OFFLINE').split('').forEach(ch=>{h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0});return h||123456789}
 function seededRandom(seed){let x=seed>>>0;return function(){x=(x+0x6D2B79F5)>>>0;let t=x;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296}}
@@ -538,7 +525,7 @@ function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
 function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
-function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},worldRngState,bgmRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
+function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
 
@@ -553,7 +540,6 @@ function applyState(s){
   carts=Array.isArray(s.carts)?s.carts.map(c=>({...c})):carts;
   summonedBlockHp=s.summonedBlockHp&&typeof s.summonedBlockHp==='object'?{...s.summonedBlockHp}:summonedBlockHp;
   if(Number.isFinite(s.worldRngState))worldRngState=s.worldRngState>>>0;
-  if(Number.isFinite(s.bgmRngState))bgmRngState=s.bgmRngState>>>0;
   if(Number.isFinite(s.enemySeq))enemySeq=s.enemySeq|0;
   if(Number.isFinite(s.itemSeq))itemSeq=s.itemSeq|0;
   if(Number.isFinite(s.dropSeq))dropSeq=s.dropSeq|0;
@@ -672,7 +658,7 @@ function compactState(includeGrid=false){
   Object.entries(members||{}).forEach(([id,m])=>{lightMembers[id]={id,name:m&&m.name||'PLAYER',last:m&&m.last||0};});
   return {
     fast:true,
-    roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,worldRngState,bgmRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,
+    roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,
     grid:includeGrid?grid:undefined,
     members:lightMembers,
     players,
@@ -690,9 +676,9 @@ function compactState(includeGrid=false){
 function rtcSend(ch,obj){
   if(!ch||ch.readyState!=='open')return false;
   try{
-    // bufferedAmountが溜まった古い同期情報は送らない。JOIN側に古いフレームを食わせるとリアルタイム感が死ぬ。
-    if(obj&&obj.type==='state'&&ch.bufferedAmount>32768)return false;
-    if(obj&&obj.type==='step'&&ch.bufferedAmount>131072)return false;
+    // HOST authoritative方式。古いstateを詰めるくらいなら捨てる。JOINは常に最新HOST世界だけを見る。
+    if(obj&&obj.type==='state'&&ch.bufferedAmount>65536)return false;
+    if(obj&&obj.type==='step'&&ch.bufferedAmount>32768)return false;
     ch.send(JSON.stringify(obj));
     return true;
   }catch(e){return false;}
@@ -706,11 +692,9 @@ function handleRtcMessage(fromId,data){
   }else if(isHost&&m.type==='restartRequest'){
     restartFromWave1();
   }else if(mode==='join'&&m.type==='step'){
-    receiveLockstepPacket(m);
+    if(m.state)receiveAuthoritativeState(m.state,m.restart);
   }else if(mode==='join'&&m.type==='state'){
-    // ロックステップではstateは初期同期・再同期用。リスタートstateだけは進行中でも即時適用する。
-    if(m.restart&&m.state){applyState(m.state);lockFrame=m.state.lockFrame||0;lockstepPackets={};lockstepStarted=true;resetLocalDeathInput();msg='RESTART / WAVE 1'}
-    else if(!lockstepStarted)pendingRemoteState=m.state||null;
+    receiveAuthoritativeState(m.state,m.restart);
   }else if(m.type==='ping'){
     rtcSend(isHost?rtcChannels[fromId]:rtcInputChannel,{type:'pong',t:m.t,ts:now()});
   }
@@ -723,7 +707,7 @@ async function createRtcPeerForJoiner(joinId,offer){
   pc.ondatachannel=e=>{
     const ch=e.channel;
     ch.binaryType='arraybuffer';
-    ch.onopen=()=>{rtcChannels[joinId]=ch;rtcConnected=true;msg='LOCKSTEP LINK';rtcSend(ch,{type:'state',state:serialize(),t:now(),frame:lockFrame});};
+    ch.onopen=()=>{rtcChannels[joinId]=ch;rtcConnected=true;msg='LOCKSTEP LINK';rtcSend(ch,{type:'state',state:serialize(),t:now(),frame:lockFrame});broadcastAuthoritativeState(true);};
     ch.onclose=()=>{delete rtcChannels[joinId];};
     ch.onmessage=ev=>handleRtcMessage(joinId,ev.data);
   };
@@ -743,7 +727,7 @@ async function setupRtcJoin(){
   if(!window.RTCPeerConnection||!roomRef)return;
   const pc=new RTCPeerConnection(RTC_CONFIG);
   rtcPeers.host=pc;
-  const ch=pc.createDataChannel('game',{ordered:true});
+  const ch=pc.createDataChannel('game',{ordered:false,maxRetransmits:0});
   rtcInputChannel=ch;
   ch.binaryType='arraybuffer';
   ch.onopen=()=>{rtcConnected=true;msg='LOCKSTEP WORLD SYNC';writeInput(true);};
@@ -807,7 +791,7 @@ async function startJoin(){
 function startOffline(){beginGameBgmFromUserGesture();roomId='OFFLINE';roomSeed=hashSeed(roomId+'_'+Date.now());mode='offline';isHost=true;bootGame();members={[myId]:{id:myId,name:nameVal(),joined:now(),last:now()}};players[myId]=makePlayer(myId,nameVal());$('panel').classList.add('hidden');updateHud()}
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
-function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;bgmRngState=(hashSeed((roomSeed||hashSeed(roomId||'OFFLINE'))+':BGM')>>>0)||1;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;}
+function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;lastAuthStateSent=0;lastAuthFullStateSent=0;}
 function bootGame(preserveMembers=false){let prevMembers=preserveMembers?{...(members||{})}:{};let prevInputs=preserveMembers?{...(inputs||{})}:{};if(preserveMembers){Object.keys(prevInputs).forEach(id=>{prevInputs[id]=normalizeRestartInput(prevInputs[id])})}resetDeterminism();players={};members=preserveMembers?prevMembers:{};inputs=preserveMembers?prevInputs:{};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();resetLocalDeathInput();setupStageForWave(wave);if(preserveMembers){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);ids.forEach(id=>{let m=(members&&members[id])||{},inp=(inputs&&inputs[id])||{};players[id]=makePlayer(id,inp.name||m.name||(id===myId?nameVal():'PLAYER'))})}applyStartWave();if(wave===1)spawnWave();started=true;last=performance.now();updateRestartButton()}
 function bootJoinLocal(){resetDeterminism();players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();setupStageForWave(wave);members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
 
@@ -938,7 +922,7 @@ function playGoalRevealJingle(){
     o.connect(g);g.connect(master);o.start(t);o.stop(t+1.18+i*.05);
   });
   const dur=.42,buf=audioCtx.createBuffer(1,Math.max(1,audioCtx.sampleRate*dur),audioCtx.sampleRate),d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++)d[i]=(entropyRandom01()*2-1)*Math.pow(1-i/d.length,2.4);
+  for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.4);
   const src=audioCtx.createBufferSource(),ng=audioCtx.createGain();
   src.buffer=buf;
   ng.gain.setValueAtTime(.12,t0+.08);
@@ -1247,31 +1231,51 @@ function buildLocalPayloadForLockstep(){let me=players[myId];return cloneInputPa
 function buildLockstepInputs(){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),...Object.keys(players||{}),myId]);let out={};ids.forEach(id=>{out[id]=id===myId?buildLocalPayloadForLockstep():cloneInputPayload(inputs[id]||{name:(members[id]&&members[id].name)||'PLAYER',last:(members[id]&&members[id].last)||0})});return out}
 function checksumWorld(){let h=2166136261>>>0;const add=v=>{let s=String(v);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}};add(lockFrame);add(wave);Object.keys(players).sort().forEach(id=>{let p=players[id];add(id);add(Math.round(p.x));add(Math.round(p.y));add(p.alive?1:0);add(Math.round((p.revive||0)*1000));add(p.score||0);add(p.placed||0)});bombs.forEach(b=>{add(b.id);add(b.c);add(b.r);add(Math.round(b.timer||0))});enemies.forEach(e=>{add(e.id);add(Math.round(e.x));add(Math.round(e.y));add(e.hp||0);add(Math.round(e.invuln||0))});falling.forEach(f=>{add(f.id);add(f.c);add(f.r);add(f.phase);add(Math.round(f.t||0))});add(worldRngState>>>0);add(dropSeq);add(enemySeq);return h>>>0}
 function broadcastLockstepPacket(packet){let open=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');open.forEach(ch=>rtcSend(ch,packet));lastLockBroadcast=now()}
-function receiveLockstepPacket(pkt){if(!pkt||!Number.isFinite(pkt.frame))return;lastStepPacketAt=now();let f=pkt.frame|0;let restartState=pkt.state&&f<=2&&lockFrame>2;if(pkt.state&&(!lockstepStarted||f>lockFrame+45||restartState)){applyState(pkt.state);lockFrame=f;lockstepPackets={};lockstepStarted=true;if(restartState)resetLocalDeathInput();msg=restartState?'RESTART / WAVE 1':'LOCKSTEP RESYNC F'+lockFrame;return}if(!lockstepStarted&&!pkt.state)return;if(f<=lockFrame)return;lockstepPackets[f]=pkt}
-function stepWorldWithInputs(frame,frameInputs){inputs=frameInputs||{};lockFrame=frame|0;deterministicStepInputs=inputs;try{updateHost(LOCK_DT)}finally{deterministicStepInputs=null}lockstepStarted=true}
-function runHostLockstep(dt){lockAcc+=dt;let steps=0;while(lockAcc>=LOCK_DT&&steps<LOCK_MAX_STEPS){lockAcc-=LOCK_DT;steps++;let next=lockFrame+1;let frameInputs=buildLockstepInputs();stepWorldWithInputs(next,frameInputs);let packet={type:'step',frame:lockFrame,inputs:frameInputs,checksum:checksumWorld(),t:now()};if(lockFrame<=2||lockFrame%lockstepSnapEvery===0)packet.state=serialize();broadcastLockstepPacket(packet)}if(steps>=LOCK_MAX_STEPS)lockAcc=0;publishState()}
-function runJoinLockstep(dt){
-  let steps=0;
-  while(lockstepPackets[lockFrame+1]&&steps<LOCK_MAX_STEPS){
-    let pkt=lockstepPackets[lockFrame+1];
-    delete lockstepPackets[lockFrame+1];
-    stepWorldWithInputs(pkt.frame,pkt.inputs||{});
-    steps++;
-    if(pkt.checksum&&pkt.checksum!==checksumWorld()&&pkt.state){applyState(pkt.state);lockFrame=pkt.frame|0;msg='LOCKSTEP CHECK RESYNC F'+lockFrame}
-  }
-
-  // パケットが数十ms途切れただけでJOIN本人が止まるのがカクカクの体感原因。
-  // 正解フレーム待ちの間だけ、自分の入力を画面へ先行反映し、次のHOST frameで自然に吸収する。
-  const wait=now()-lastStepPacketAt;
-  if(steps===0&&wait>JOIN_PREDICT_GRACE_MS){
-    updateJoinPrediction(Math.min(dt,LOCK_DT));
-    lastJoinPredictAt=now();
-  }else if(steps>1){
-    // まとめ受信時の早送りを描画上だけ少し丸める。敵・相手プレイヤーの瞬間移動感を減らす。
-    updateJoinPrediction(Math.min(dt*.35,LOCK_DT*.5));
-  }
-  if(steps===0&&wait>1200)msg=rtcConnected?'LOCKSTEP PACKET WAIT':'P2P CONNECT WAIT';
+function receiveAuthoritativeState(st,restart=false){
+  if(!st)return;
+  const f=Number.isFinite(st.lockFrame)?(st.lockFrame|0):0;
+  if(!restart&&lockstepStarted&&f&&f<lockFrame)return;
+  pendingRemoteState=st;
+  lastStepPacketAt=now();
 }
+function receiveLockstepPacket(pkt){if(!pkt||!Number.isFinite(pkt.frame))return;lastStepPacketAt=now();let f=pkt.frame|0;let restartState=pkt.state&&f<=2&&lockFrame>2;if(pkt.state&&(!lockstepStarted||f>lockFrame+45||restartState)){applyState(pkt.state);lockFrame=f;lockstepPackets={};lockstepStarted=true;if(restartState)resetLocalDeathInput();msg=restartState?'RESTART / WAVE 1':'LOCKSTEP RESYNC F'+lockFrame;return}if(!lockstepStarted&&!pkt.state)return;if(f<=lockFrame)return;lockstepPackets[f]=pkt}
+function stepWorldWithInputs(frame,frameInputs){inputs=frameInputs||{};lockFrame=frame|0;updateHost(LOCK_DT);lockstepStarted=true}
+function broadcastAuthoritativeState(force=false){
+  const t=now();
+  const open=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');
+  if(!open.length)return false;
+  if(!force&&t-lastAuthStateSent<AUTH_STATE_MS)return false;
+  const includeGrid=force||t-lastAuthFullStateSent>AUTH_FULL_MS;
+  if(includeGrid)lastAuthFullStateSent=t;
+  lastAuthStateSent=t;
+  const packet={type:'state',state:compactState(includeGrid),t,frame:lockFrame};
+  open.forEach(ch=>rtcSend(ch,packet));
+  lastLockBroadcast=t;
+  return true;
+}
+function runHostLockstep(dt){
+  // 根本変更: JOIN側で世界を進めない。HOSTだけが固定Δtで物理・敵・落下ブロック・死亡判定を進める。
+  // JOINは入力を高頻度送信し、HOST確定snapshotだけを描画する。スマブラ寄せの単一正解世界。
+  lockAcc+=dt;
+  let steps=0;
+  while(lockAcc>=LOCK_DT&&steps<LOCK_MAX_STEPS){
+    lockAcc-=LOCK_DT;
+    steps++;
+    lockFrame=(lockFrame+1)|0;
+    updateHost(LOCK_DT);
+    lockstepStarted=true;
+  }
+  if(steps>=LOCK_MAX_STEPS)lockAcc=0;
+  broadcastAuthoritativeState(false);
+  publishState();
+}
+function runJoinLockstep(dt){
+  // JOINはゲームロジックを進めない。描画補間と自分の入力見た目だけを軽く先行表示する。
+  updateJoinPrediction(Math.min(dt,LOCK_DT));
+  const wait=now()-joinLastAuthoritative;
+  if(wait>1200)msg=rtcConnected?'HOST SNAPSHOT WAIT':'P2P CONNECT WAIT';
+}
+
 
 function nearestAlivePlayer(e){let alive=Object.values(players).filter(p=>p.alive);return alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0]||null}
 function bossBeginAction(e,a){if(!e||!e.alive||!e.boss||e.bossAction||e.actionLock>0)return false;let lx=e.x,ly=e.y,lc=tc(lx,ly);e.vx=0;e.vy=0;e.dir=[0,0];e.think=Math.max(e.think||0,a.duration||900);e.bossAction={...a,t:a.duration||900,elapsed:0,startedFrame:lockFrame,lockX:lx,lockY:ly,lockC:lc.c,lockR:lc.r};e.renderX=lx;e.renderY=ly;e.liftY=0;e.actionLock=Math.max(e.actionLock||0,a.duration||900);e.invuln=Math.max(e.invuln||0,Math.min(1100,a.duration||900));msg=a.label||'BOSS ACTION';return true}
@@ -1480,10 +1484,10 @@ function updateGimmicks(dt){
   })
 }
 function updateCamera(){let me=players[myId]||Object.values(players)[0];let worldW=OX+C*T,worldH=OY+R*T;if(me){camX=clamp(me.x-W/2,0,Math.max(0,worldW-W));camY=clamp(me.y-H/2,0,Math.max(0,worldH-H));}else{camX=clamp(camX,0,Math.max(0,worldW-W));camY=clamp(camY,0,Math.max(0,worldH-H));}}
-function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=deterministicStepInputs?(inputs[id]||{}):(id===myId?localInput:(inputs[id]||{}));if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}if(!updatePlayerJump(p,dt,inp)){moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}
+function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}if(!updatePlayerJump(p,dt,inp)){moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}
         // スマブラ寄せ: JOIN端末の自分操作感を正にするため、HOSTもJOIN本人の申告座標へ追従する。
         // これでHOST側のアイテム取得・接触判定がJOIN画面と割れにくくなる。
-        if(!deterministicStepInputs&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0){
+        if(Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0){
           let err=Math.hypot((p.x||0)-inp.clientX,(p.y||0)-inp.clientY);
           if(err>10){
             let tx=clamp(inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(inp.clientY,OY+p.rad,OY+R*T-p.rad);
@@ -1508,12 +1512,10 @@ async function publishState(){
   // ロックステップ中はstep packetが主同期。stateを毎描画フレームで重ねるとJOIN側DataChannelが詰まり、古い座標をまとめて処理してカクカクになる。
   // P2P接続中のstateは初期同期・復旧用に絞り、通常のリアルタイム体験はstep packetへ寄せる。
   if(hasRtc&&lockstepStarted){
-    if(t-lastStateWrite>520){
+    // P2P中のJOIN向け同期はbroadcastAuthoritativeStateに一本化。Firebaseは復旧用に低頻度だけ残す。
+    if(t-lastStateWrite>AUTH_FIREBASE_MS){
       lastStateWrite=t;
-      const includeGrid=t-lastFullStateWrite>1800;
-      if(includeGrid)lastFullStateWrite=t;
-      let packet={type:'state',state:compactState(includeGrid),t};
-      openChannels.forEach(ch=>rtcSend(ch,packet));
+      try{await roomRef.child('state').set(compactState(true))}catch(e){}
     }
     return;
   }
@@ -1584,7 +1586,7 @@ function drawBoss(e){
 function battleScoreText(){if(!battle.on)return'';let bag=battle.team?battle.teamWins:battle.wins;return Object.entries(bag||{}).map(([k,v])=>k+':'+v).join('  ')||'0-0'}
 function drawBattleWinnerShowcase(champion=false){let ids=champion?(battle.championIds||[]):((battle.winnerIds||[]));let title=champion?'CHAMPION':'ROUND WIN';ctx.textAlign='center';ctx.fillStyle='#ffdf5d';ctx.font='900 38px system-ui';ctx.fillText(title,W/2,112);ctx.fillStyle='#fff';ctx.font='900 22px system-ui';ctx.fillText(battleWinnerLabel(),W/2,148);let n=Math.max(1,ids.length),size=champion?118:92,gap=18,total=n*size+(n-1)*gap,x0=W/2-total/2+size/2,y=champion?318:300;ids.forEach((id,i)=>{let p=players[id]||{},im=camImageFor(id),x=x0+i*(size+gap);ctx.save();ctx.beginPath();ctx.arc(x,y,size/2,0,Math.PI*2);ctx.clip();if(im)ctx.drawImage(im,x-size/2,y-size/2,size,size);else{ctx.fillStyle=p.color||'#60a5fa';ctx.fillRect(x-size/2,y-size/2,size,size)}ctx.restore();ctx.strokeStyle=p.teamColor||p.color||'#fff';ctx.lineWidth=6;ctx.beginPath();ctx.arc(x,y,size/2+4,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff';ctx.font='900 14px system-ui';ctx.fillText(p.name||id,x,y+size/2+26);});ctx.fillStyle='#dfeaff';ctx.font='bold 16px system-ui';if(champion&&battle.timer<=0)ctx.fillText('BATTLE AGAIN ボタンで再戦',W/2,H-92);else ctx.fillText('NEXT ROUND まで '+Math.max(0,Math.ceil((battle.timer||0)/1000))+' 秒',W/2,H-92);}
 
-function draw(){purgeMinecartChapterLeak(wave);updateCamera();let th=currentTheme||themeForWave(wave);ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=th.bg||'#0d1a2e';ctx.fillRect(0,0,W,H);if(shake>0)ctx.translate((visualNoise01(1)-.5)*shake,(visualNoise01(2)-.5)*shake);ctx.translate(-camX,-camY);ctx.fillStyle=th.floor||'#14294b';ctx.fillRect(OX,OY,C*T,R*T);for(let r=0;r<R;r++)for(let c=0;c<C;c++){let x=OX+c*T,y=OY+r*T;ctx.strokeStyle=th.grid||'#263d63';ctx.strokeRect(x,y,T,T);if(grid[r][c]===HARD){ctx.fillStyle=th.hard||'#5c6f91';round(x+3,y+3,T-6,T-6,7);ctx.fillStyle='rgba(255,255,255,.22)';ctx.fillRect(x+8,y+8,T-16,6)}else if(grid[r][c]===SOFT){ctx.fillStyle=th.soft||'#965c30';round(x+5,y+5,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(x+9,y+10,T-18,7);let hp=blockHpAt(c,r);if(hp>0){ctx.fillStyle='rgba(8,16,27,.82)';round(x+14,y+17,T-28,T-28,8);ctx.fillStyle='#fff';ctx.font='900 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(hp),x+T/2,y+T/2+2)}}}
+function draw(){purgeMinecartChapterLeak(wave);updateCamera();let th=currentTheme||themeForWave(wave);ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=th.bg||'#0d1a2e';ctx.fillRect(0,0,W,H);if(shake>0)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);ctx.translate(-camX,-camY);ctx.fillStyle=th.floor||'#14294b';ctx.fillRect(OX,OY,C*T,R*T);for(let r=0;r<R;r++)for(let c=0;c<C;c++){let x=OX+c*T,y=OY+r*T;ctx.strokeStyle=th.grid||'#263d63';ctx.strokeRect(x,y,T,T);if(grid[r][c]===HARD){ctx.fillStyle=th.hard||'#5c6f91';round(x+3,y+3,T-6,T-6,7);ctx.fillStyle='rgba(255,255,255,.22)';ctx.fillRect(x+8,y+8,T-16,6)}else if(grid[r][c]===SOFT){ctx.fillStyle=th.soft||'#965c30';round(x+5,y+5,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(x+9,y+10,T-18,7);let hp=blockHpAt(c,r);if(hp>0){ctx.fillStyle='rgba(8,16,27,.82)';round(x+14,y+17,T-28,T-28,8);ctx.fillStyle='#fff';ctx.font='900 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(hp),x+T/2,y+T/2+2)}}}
 gimmicks.forEach(g=>{let x=OX+g.c*T,y=OY+g.r*T;if(g.type==='ice'){ctx.fillStyle='rgba(125,230,255,.42)';round(x+4,y+4,T-8,T-8,8);ctx.strokeStyle='rgba(255,255,255,.6)';ctx.strokeRect(x+10,y+12,T-20,T-24)}else if(g.type==='conveyor'){ctx.fillStyle='rgba(90,120,170,.72)';round(x+4,y+10,T-8,T-20,6);ctx.fillStyle='#dfeaff';ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((g.dx||0)>0?'▶':'◀',x+T/2,y+T/2)}else if(g.type==='oil'){ctx.fillStyle='rgba(20,16,10,.72)';ctx.beginPath();ctx.ellipse(x+T/2,y+T/2,T*.34,T*.22,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,220,90,.35)';ctx.beginPath();ctx.ellipse(x+T*.42,y+T*.42,T*.10,T*.05,-.4,0,Math.PI*2);ctx.fill()}else if(g.type==='fire'){ctx.fillStyle='rgba(255,98,35,.65)';round(x+7,y+7,T-14,T-14,8);ctx.fillStyle='rgba(255,230,70,.72)';ctx.beginPath();ctx.arc(x+T/2,y+T/2,10+Math.sin(performance.now()/70)*3,0,Math.PI*2);ctx.fill()}else if(g.type==='rail'){let cx=x+T/2,cy=y+T/2;ctx.strokeStyle='#5f4731';ctx.lineWidth=13;ctx.lineCap='round';ctx.beginPath();for(const[dX,dY]of DIRS){if(gimmickAt(g.c+dX,g.r+dY,'rail')){ctx.moveTo(cx,cy);ctx.lineTo(cx+dX*T*.50,cy+dY*T*.50)}}ctx.stroke();ctx.strokeStyle='#d2b074';ctx.lineWidth=5;ctx.beginPath();for(const[dX,dY]of DIRS){if(gimmickAt(g.c+dX,g.r+dY,'rail')){ctx.moveTo(cx,cy);ctx.lineTo(cx+dX*T*.50,cy+dY*T*.50)}}ctx.stroke();ctx.fillStyle='#6b4a2f';for(let k=-1;k<=1;k+=2){if(gimmickAt(g.c+k,g.r,'rail'))ctx.fillRect(cx-3,cy-15,6,30);if(gimmickAt(g.c,g.r+k,'rail'))ctx.fillRect(cx-15,cy-3,30,6)}ctx.fillStyle='#ffe1a3';ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);ctx.fill()}else if(g.type==='bridge'){ctx.fillStyle='rgba(150,98,52,.9)';round(x+2,y+15,T-4,T-30,5);ctx.strokeStyle='rgba(255,230,180,.45)';ctx.strokeRect(x+7,y+20,T-14,T-40)}else if(g.type==='seesaw'){ctx.save();ctx.translate(x+T/2,y+T/2);ctx.rotate((g.tilt||1)*.25);ctx.fillStyle='#d8a75f';round(-T*.36,-5,T*.72,10,5);ctx.restore();ctx.fillStyle='#72543b';ctx.beginPath();ctx.arc(x+T/2,y+T/2+8,7,0,Math.PI*2);ctx.fill()}else if(g.type==='water'||g.type==='current'){ctx.fillStyle='rgba(56,189,248,.34)';round(x+4,y+4,T-8,T-8,8);ctx.strokeStyle='rgba(125,230,255,.7)';ctx.beginPath();ctx.moveTo(x+9,y+T/2);ctx.quadraticCurveTo(x+T/2,y+T/2-8,x+T-9,y+T/2);ctx.stroke();if(g.type==='current'){ctx.fillStyle='#cffafe';ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.fillText((g.dx||0)>0?'⇒':'⇐',x+T/2,y+T/2+7)}}else if(g.type==='electric'){ctx.fillStyle=g.on?'rgba(250,255,80,.55)':'rgba(90,90,70,.28)';round(x+6,y+6,T-12,T-12,8);ctx.strokeStyle='#fef08a';ctx.beginPath();ctx.moveTo(x+15,y+10);ctx.lineTo(x+T-16,y+T/2);ctx.lineTo(x+18,y+T-10);ctx.stroke()}else if(g.type==='switch'){ctx.fillStyle=g.on?'#86efac':'#64748b';round(x+10,y+16,T-20,T-32,7);ctx.fillStyle='#111827';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText('SW',x+T/2,y+T/2+4)}else if(g.type==='zapper'){ctx.fillStyle='#1f2937';round(x+12,y+6,T-24,T-12,7);ctx.strokeStyle=g.on?'#fef08a':'#64748b';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x+T/2,y+T/2,18+(g.on?Math.sin(performance.now()/70)*4:0),0,Math.PI*2);ctx.stroke()}else if(g.type==='press'){ctx.fillStyle=g.down?'#ef4444':'#64748b';round(x+8,y+(g.down?8:2),T-16,14,4);ctx.fillStyle='rgba(0,0,0,.38)';round(x+10,y+T-14,T-20,8,4)}else if(g.type==='gear'){ctx.save();ctx.translate(x+T/2,y+T/2);ctx.rotate(g.spin||0);ctx.fillStyle='#cbd5e1';for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);ctx.fillRect(12,-3,8,6)}ctx.beginPath();ctx.arc(0,0,15,0,Math.PI*2);ctx.fill();ctx.fillStyle='#475569';ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);ctx.fill();ctx.restore()}else if(g.type==='lowgrav'){ctx.fillStyle='rgba(196,181,253,.30)';round(x+5,y+5,T-10,T-10,10);ctx.fillStyle='#ede9fe';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText('0G',x+T/2,y+T/2+6)}else if(g.type==='warp'){ctx.strokeStyle='#d8b4fe';ctx.lineWidth=4;ctx.beginPath();ctx.arc(x+T/2,y+T/2,16+Math.sin(performance.now()/120)*4,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(240,171,252,.55)';ctx.beginPath();ctx.arc(x+T/2,y+T/2,8,0,Math.PI*2);ctx.stroke()}else if(g.type==='mirror'){ctx.fillStyle='rgba(240,171,252,.28)';round(x+8,y+5,T-16,T-10,7);ctx.strokeStyle='rgba(255,255,255,.75)';ctx.beginPath();ctx.moveTo(x+14,y+T-12);ctx.lineTo(x+T-12,y+14);ctx.stroke()}});
 carts.forEach(cart=>{ctx.save();ctx.shadowColor='rgba(255,225,120,.9)';ctx.shadowBlur=cart.state==='run'?18:10;ctx.fillStyle=cart.state==='run'?'#d96a24':'#9b5528';round(cart.x-24,cart.y-18,48,32,8);ctx.shadowBlur=0;ctx.strokeStyle='#fff1a8';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#ffd166';ctx.fillRect(cart.x-16,cart.y-12,32,10);ctx.fillStyle='#111';ctx.beginPath();ctx.arc(cart.x-14,cart.y+16,6,0,Math.PI*2);ctx.arc(cart.x+14,cart.y+16,6,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('CART',cart.x,cart.y+1);if(cart.state!=='run'){ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.fillText('乗ると発車',cart.x,cart.y-27)}ctx.restore();});
 falling.forEach(f=>{let bx=OX+f.c*T,by=OY+f.r*T;if(f.phase==='warn'){let a=.38+.30*Math.sin(performance.now()/80);ctx.fillStyle=`rgba(255,30,30,${a})`;round(bx+3,by+3,T-6,T-6,9);ctx.strokeStyle='rgba(255,245,120,.98)';ctx.lineWidth=4;ctx.strokeRect(bx+6,by+6,T-12,T-12);ctx.fillStyle='rgba(0,0,0,.38)';ctx.beginPath();ctx.ellipse(bx+T/2,by+T/2+10,T*.34,T*.14,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 19px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.max(1,Math.ceil(f.t/1000)),bx+T/2,by+T/2-2);ctx.font='bold 9px system-ui';ctx.fillText('DROP',bx+T/2,by+T/2+15)}else{ctx.fillStyle='rgba(255,220,80,.35)';round(bx+5,by+5,T-10,T-10,8);ctx.fillStyle='#7d4b2c';round(OX+f.c*T+5,f.y-22,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(OX+f.c*T+10,f.y-16,T-20,7)}});items.forEach(it=>{ctx.fillStyle={fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6',jump:'#b7f7ff',launchbomb:'#ffcf70',summonblock:'#c4b5fd',shadowservant:'#d8b4fe'}[it.type]||'#fff';ctx.beginPath();ctx.arc(it.x,it.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#08101b';ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({fire:'F',bomb:'B',speed:'S',shield:'🛡',kick:'K',hand:'H',jump:'🪽',launchbomb:'🚀',summonblock:'🧱',shadowservant:'👥'}[it.type]||'?',it.x,it.y+1);if(it.special){ctx.font='bold 10px system-ui';ctx.fillStyle='#ffe66d';ctx.fillText('$'+Math.floor(it.price||specialPrice(it.type)),it.x,it.y+25)}});
@@ -1665,7 +1667,7 @@ function updateJoinPrediction(dt){
       }
     }
     let cell=tc(p.x,p.y);p.c=cell.c;p.r=cell.r;
-    if(p.id===myId)collectItemsForPlayer(p,true);
+    // item取得・死亡・敵判定はHOST確定に統一。JOIN画面では先行表示だけ。
     if(p.shield>0)p.shield-=dt*1000;
   }
 
@@ -1688,15 +1690,13 @@ function loop(ts){
   let dt=Math.min(.035,(ts-last)/1000||.016);last=ts;
   try{
     readLocalInput();
-    if(mode==='join'&&pendingRemoteState&&now()-lastRemoteApply>16){
+    if(mode==='join'&&pendingRemoteState){
       const st=pendingRemoteState;
       pendingRemoteState=null;
-      if(!lockstepStarted||now()-lastStepPacketAt>900){
-        applyState(st);
-        started=true;
-        $('panel').classList.add('hidden');
-        lastRemoteApply=now();
-      }
+      applyState(st);
+      started=true;
+      $('panel').classList.add('hidden');
+      lastRemoteApply=now();
     }
     writeInput();
     publishCamera();
