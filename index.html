@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD AUTHORITATIVE-SMASH-INPUT-FIRST-V2-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD AUTHORITATIVE-SMASH-REALTIME-JOIN-V3-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">AUTHORITATIVE-SMASH-INPUT-FIRST-V2-20260604</b></div>
+    <div class="pill">BUILD <b id="buildView">AUTHORITATIVE-SMASH-REALTIME-JOIN-V3-20260604</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='AUTHORITATIVE-SMASH-INPUT-FIRST-V2-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='AUTHORITATIVE-SMASH-REALTIME-JOIN-V3-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -201,12 +201,12 @@ const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
 const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=55;
-const AUTH_STATE_HZ=30,AUTH_STATE_MS=1000/AUTH_STATE_HZ,AUTH_FULL_MS=900,AUTH_FIREBASE_MS=1500;
+const AUTH_STATE_HZ=60,AUTH_STATE_MS=1000/AUTH_STATE_HZ,AUTH_FULL_MS=1200,AUTH_FIREBASE_MS=1800;
 let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90,lastJoinPredictAt=0,lastAuthStateSent=0,lastAuthFullStateSent=0;
 const REVIVE_RADIUS=92,REVIVE_GAIN_PER_SEC=.34,REVIVE_DECAY_PER_SEC=.08,REVIVE_INVULN_MS=2600;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
-let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0,lastSentInputSig='';
+let rtcPeers={},rtcChannels={},rtcStateChannels={},rtcInputChannel=null,rtcStateChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0,lastSentInputSig='';
 let joinBooted=false,joinLastAuthoritative=0,joinStateCount=0,joinRemoteClock=0,joinSendFastAt=0,lastRestartAt=0;
 const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
 const touch={active:false,id:null,sx:0,sy:0,x:0,y:0,started:0,moved:false,lastTap:0,lastX:-999,lastY:-999};
@@ -652,17 +652,16 @@ function drawPlayerCamera(p){
 
 
 function compactState(includeGrid=false){
-  // DataChannel用の軽量state。JOINカクカクの主因だった cam入りmembers/grid丸ごと送信を通常フレームから外す。
-  // 位置系は高頻度、地形gridだけ低頻度で同期する。
+  // JOINリアルタイム体験の根本: 通常フレームは「動く物だけ」を60Hzで送る。
+  // grid / gimmicks / carts / members / 長い静的情報は初期・復旧用だけに限定し、DataChannelの詰まりを潰す。
+  const full=!!includeGrid;
   const lightMembers={};
-  Object.entries(members||{}).forEach(([id,m])=>{lightMembers[id]={id,name:m&&m.name||'PLAYER',last:m&&m.last||0};});
-  return {
+  if(full)Object.entries(members||{}).forEach(([id,m])=>{lightMembers[id]={id,name:m&&m.name||'PLAYER',last:m&&m.last||0};});
+  const out={
     fast:true,
-    roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,
-    grid:includeGrid?grid:undefined,
-    members:lightMembers,
+    lockFrame,
     players,
-    bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,launchPad:!!b.launchPad,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||''})),
+    bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,launchPad:!!b.launchPad,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||''})),
     flames,
     enemies,
     items:normalizeItems(items),
@@ -670,8 +669,34 @@ function compactState(includeGrid=false){
     wave,
     msg,
     shake,
+    battle,
+    dropTimer,
+    waveQueue,
+    waveSpawnTimer,
+    waveSpawnInterval,
+    waveIsBoss,
+    goalGate,
+    goalCelebration,
+    gameEnded,
+    endingTimer,
+    endingCloseAttempted,
     ts:now()
   };
+  if(full){
+    out.roomSeed=roomSeed;
+    out.stage={C,R,theme:currentTheme};
+    out.gimmicks=gimmicks;
+    out.carts=carts;
+    out.summonedBlockHp={...summonedBlockHp};
+    out.worldRngState=worldRngState;
+    out.enemySeq=enemySeq;
+    out.itemSeq=itemSeq;
+    out.dropSeq=dropSeq;
+    out.partSeq=partSeq;
+    out.grid=grid;
+    out.members=lightMembers;
+  }
+  return out;
 }
 function rtcSend(ch,obj){
   if(!ch||ch.readyState!=='open')return false;
@@ -710,10 +735,15 @@ async function createRtcPeerForJoiner(joinId,offer){
   const pc=new RTCPeerConnection(RTC_CONFIG);
   rtcPeers[joinId]=pc;
   pc.onicecandidate=e=>{if(e.candidate)roomRef.child('rtc/hostCandidates/'+joinId).push(e.candidate.toJSON()).catch(()=>{})};
+  const stateCh=pc.createDataChannel('state',{ordered:false,maxRetransmits:0});
+  stateCh.binaryType='arraybuffer';
+  stateCh.onopen=()=>{rtcStateChannels[joinId]=stateCh;rtcConnected=true;msg='REALTIME STATE LINK';rtcSend(stateCh,{type:'state',state:compactState(true),t:now(),frame:lockFrame});};
+  stateCh.onclose=()=>{delete rtcStateChannels[joinId];};
+  stateCh.onmessage=ev=>handleRtcMessage(joinId,ev.data);
   pc.ondatachannel=e=>{
     const ch=e.channel;
     ch.binaryType='arraybuffer';
-    ch.onopen=()=>{rtcChannels[joinId]=ch;rtcConnected=true;msg='LOCKSTEP LINK';rtcSend(ch,{type:'state',state:serialize(),t:now(),frame:lockFrame});broadcastAuthoritativeState(true);};
+    ch.onopen=()=>{rtcChannels[joinId]=ch;rtcConnected=true;msg='INPUT LINK';rtcSend(ch,{type:'state',state:compactState(true),t:now(),frame:lockFrame});broadcastAuthoritativeState(true);};
     ch.onclose=()=>{delete rtcChannels[joinId];};
     ch.onmessage=ev=>handleRtcMessage(joinId,ev.data);
   };
@@ -733,13 +763,23 @@ async function setupRtcJoin(){
   if(!window.RTCPeerConnection||!roomRef)return;
   const pc=new RTCPeerConnection(RTC_CONFIG);
   rtcPeers.host=pc;
-  const ch=pc.createDataChannel('game',{ordered:false,maxRetransmits:0});
+  const ch=pc.createDataChannel('input',{ordered:false,maxRetransmits:0});
   rtcInputChannel=ch;
   ch.binaryType='arraybuffer';
-  ch.onopen=()=>{rtcConnected=true;msg='LOCKSTEP WORLD SYNC';writeInput(true);};
+  ch.onopen=()=>{rtcConnected=true;msg='INPUT SYNC';writeInput(true);};
   ch.onclose=()=>{rtcConnected=false;msg='FIREBASE SYNC';};
   ch.onerror=()=>{rtcConnected=false;};
   ch.onmessage=e=>handleRtcMessage('host',e.data);
+  pc.ondatachannel=e=>{
+    const sc=e.channel;
+    sc.binaryType='arraybuffer';
+    if(sc.label==='state'){
+      rtcStateChannel=sc;
+      sc.onopen=()=>{rtcConnected=true;msg='REALTIME WORLD SYNC';};
+      sc.onclose=()=>{rtcStateChannel=null;};
+      sc.onmessage=ev=>handleRtcMessage('host',ev.data);
+    }
+  };
   pc.onconnectionstatechange=()=>{rtcConnected=(pc.connectionState==='connected'||pc.connectionState==='completed')&&ch.readyState==='open'};
   pc.onicecandidate=e=>{if(e.candidate)roomRef.child('rtc/joinCandidates/'+myId).push(e.candidate.toJSON()).catch(()=>{})};
   const offer=await pc.createOffer({offerToReceiveAudio:false,offerToReceiveVideo:false});
@@ -764,7 +804,7 @@ function setupDebugStage(){
   wanted.forEach((type,i)=>{let pos=cells[(i*5)%cells.length]||[2+i,2],o=cc(pos[0],pos[1]),price=specialPrice(type);items.push({id:'debug_'+(++itemSeq)+'_'+type+'_'+i,c:pos[0],r:pos[1],x:o.x,y:o.y,type,special:true,price});});
 }
 function applyStartWave(){let w=chosenStartWave();if(w>=51&&w<=83){initBattle(w,chosenBattleTeam());setupBattleRound(w);return;}resetBattleState();if(w===0){setupDebugStage();return;}if(w<=1)return;wave=w;msg='WAVE '+wave+' DEBUG START';setupStageForWave(wave);spawnWave();if(wave===FINAL_BOSS_WAVE)playBgm('bomb10.flac');}
-async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
+async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcStateChannels={};rtcInputChannel=null;rtcStateChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
 async function startJoin(){
   beginGameBgmFromUserGesture();
   if(!initFirebase())return;
@@ -772,7 +812,7 @@ async function startJoin(){
   if(!roomId){setPanel('ROOM IDを入力');return}
   roomSeed=hashSeed(roomId);
   mode='join';isHost=false;started=false;joinBooted=false;joinLastAuthoritative=0;joinStateCount=0;
-  rtcPeers={};rtcChannels={};rtcInputChannel=null;rtcConnected=false;pendingRemoteState=null;
+  rtcPeers={};rtcChannels={};rtcStateChannels={};rtcInputChannel=null;rtcStateChannel=null;rtcConnected=false;pendingRemoteState=null;
   players={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];members={};inputs={};clientPredictedBombs={};
   startCamera();
   roomRef=db.ref('pbomber_rooms/'+roomId);
@@ -1252,7 +1292,8 @@ function receiveLockstepPacket(pkt){if(!pkt||!Number.isFinite(pkt.frame))return;
 function stepWorldWithInputs(frame,frameInputs){inputs=frameInputs||{};lockFrame=frame|0;updateHost(LOCK_DT);lockstepStarted=true}
 function broadcastAuthoritativeState(force=false){
   const t=now();
-  const open=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');
+  let open=Object.values(rtcStateChannels||{}).filter(ch=>ch&&ch.readyState==='open');
+  if(!open.length)open=Object.values(rtcChannels||{}).filter(ch=>ch&&ch.readyState==='open');
   if(!open.length)return false;
   if(!force&&t-lastAuthStateSent<AUTH_STATE_MS)return false;
   const includeGrid=force||t-lastAuthFullStateSent>AUTH_FULL_MS;
@@ -1516,7 +1557,8 @@ function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(ending
 async function publishState(){
   if(mode!=='host'||!roomRef)return;
   let t=now();
-  let openChannels=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');
+  let openChannels=Object.values(rtcStateChannels||{}).filter(ch=>ch&&ch.readyState==='open');
+  if(!openChannels.length)openChannels=Object.values(rtcChannels||{}).filter(ch=>ch&&ch.readyState==='open');
   let hasRtc=openChannels.length>0;
 
   // ロックステップ中はstep packetが主同期。stateを毎描画フレームで重ねるとJOIN側DataChannelが詰まり、古い座標をまとめて処理してカクカクになる。
