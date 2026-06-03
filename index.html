@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260604-authoritative-smash-sync-v1 -->
+<!-- build: pbomber-20260604-smash-join-cart-realtime-v4 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD AUTHORITATIVE-SMASH-REALTIME-JOIN-V3-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD SMASH-JOIN-CART-REALTIME-V4-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">AUTHORITATIVE-SMASH-REALTIME-JOIN-V3-20260604</b></div>
+    <div class="pill">BUILD <b id="buildView">SMASH-JOIN-CART-REALTIME-V4-20260604</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='AUTHORITATIVE-SMASH-REALTIME-JOIN-V3-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-JOIN-CART-REALTIME-V4-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -529,6 +529,13 @@ function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmi
 function applyState(s){
   if(!s)return;
 
+  if(mode==='join'&&Number.isFinite(s.lockFrame)){
+    const incomingFrame=s.lockFrame|0;
+    if(lockstepStarted&&incomingFrame<lockFrame)return;
+    lockFrame=incomingFrame;
+    lockstepStarted=true;
+  }
+
   const recvAt=now();
   lastStateRecv=recvAt;
   lastStateTs=s.ts||recvAt;
@@ -537,7 +544,22 @@ function applyState(s){
   roomSeed=s.roomSeed||roomSeed;if(s.battle&&typeof s.battle==='object')battle={...battle,...s.battle};
   if(s.stage){C=s.stage.C||C;R=s.stage.R||R;currentTheme=s.stage.theme||currentTheme;OX=0;OY=0;}
   gimmicks=Array.isArray(s.gimmicks)?s.gimmicks.map(g=>({...g})):gimmicks;
-  carts=Array.isArray(s.carts)?s.carts.map(c=>({...c})):carts;
+  if(Array.isArray(s.carts)){
+    const prevCartsById={};
+    (carts||[]).forEach(c=>{if(c&&c.id)prevCartsById[c.id]=c;});
+    carts=s.carts.map(src=>{
+      const tx=Number(src.x)||0,ty=Number(src.y)||0,prev=prevCartsById[src.id];
+      const q={...src,tx,ty,authX:tx,authY:ty,netRecvAt:recvAt};
+      if(mode==='join'&&prev){
+        const err=Math.hypot((prev.x||tx)-tx,(prev.y||ty)-ty);
+        q.x=err>180?tx:(Number(prev.x)||tx);
+        q.y=err>180?ty:(Number(prev.y)||ty);
+      }else{
+        q.x=tx;q.y=ty;
+      }
+      return q;
+    });
+  }
   summonedBlockHp=s.summonedBlockHp&&typeof s.summonedBlockHp==='object'?{...s.summonedBlockHp}:summonedBlockHp;
   if(Number.isFinite(s.worldRngState))worldRngState=s.worldRngState>>>0;
   if(Number.isFinite(s.enemySeq))enemySeq=s.enemySeq|0;
@@ -653,7 +675,8 @@ function drawPlayerCamera(p){
 
 function compactState(includeGrid=false){
   // JOINリアルタイム体験の根本: 通常フレームは「動く物だけ」を60Hzで送る。
-  // grid / gimmicks / carts / members / 長い静的情報は初期・復旧用だけに限定し、DataChannelの詰まりを潰す。
+  // トロッコはプレイヤーを強制移動させる動的ギミックなので、復旧用ではなく毎フレーム同期対象にする。
+  // grid / gimmicks / members / 長い静的情報は初期・復旧用だけに限定し、DataChannelの詰まりを潰す。
   const full=!!includeGrid;
   const lightMembers={};
   if(full)Object.entries(members||{}).forEach(([id,m])=>{lightMembers[id]={id,name:m&&m.name||'PLAYER',last:m&&m.last||0};});
@@ -664,6 +687,7 @@ function compactState(includeGrid=false){
     bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,launchPad:!!b.launchPad,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||''})),
     flames,
     enemies,
+    carts:carts.map(c=>({id:c.id,mode:c.mode,c:c.c,r:c.r,x:c.x,y:c.y,speed:c.speed||205,cool:c.cool||0,path:Array.isArray(c.path)?c.path:[],index:c.index||0,targetIndex:c.targetIndex||0,state:c.state||'idle',rider:c.rider||null,dir:c.dir||1,trip:c.trip||0})),
     items:normalizeItems(items),
     falling,
     wave,
@@ -686,7 +710,6 @@ function compactState(includeGrid=false){
     out.roomSeed=roomSeed;
     out.stage={C,R,theme:currentTheme};
     out.gimmicks=gimmicks;
-    out.carts=carts;
     out.summonedBlockHp={...summonedBlockHp};
     out.worldRngState=worldRngState;
     out.enemySeq=enemySeq;
@@ -1699,15 +1722,22 @@ function updateJoinPrediction(dt){
     if(p.ty===undefined)p.ty=p.authY!==undefined?p.authY:p.y;
     const targetX=p.tx,targetY=p.ty;
     if(p.id===myId&&p.alive){
-      let mdx=localInput.dx||0,mdy=localInput.dy||0;
-      if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}
-      if(!updatePlayerJump(p,dt,localInput))moveEntity(p,mdx,mdy,dt,myId);
-      const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
-      if(err>96||!Number.isFinite(err)){
-        p.x=targetX;p.y=targetY;
-      }else if(err>18){
-        p.x=smoothToward(p.x,targetX,dt,4.5);
-        p.y=smoothToward(p.y,targetY,dt,4.5);
+      const ridingCart=(carts||[]).find(c=>c&&c.rider===myId&&c.state==='run');
+      if(ridingCart){
+        p.x=smoothToward(p.x,targetX,dt,26);
+        p.y=smoothToward(p.y,targetY,dt,26);
+        p.vx=0;p.vy=0;
+      }else{
+        let mdx=localInput.dx||0,mdy=localInput.dy||0;
+        if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}
+        if(!updatePlayerJump(p,dt,localInput))moveEntity(p,mdx,mdy,dt,myId);
+        const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
+        if(err>96||!Number.isFinite(err)){
+          p.x=targetX;p.y=targetY;
+        }else if(err>18){
+          p.x=smoothToward(p.x,targetX,dt,4.5);
+          p.y=smoothToward(p.y,targetY,dt,4.5);
+        }
       }
     }else{
       const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
@@ -1728,6 +1758,14 @@ function updateJoinPrediction(dt){
     e.x=smoothToward(e.x,e.tx,dt,18);
     e.y=smoothToward(e.y,e.ty,dt,18);
     let cell=tc(e.x,e.y);e.c=cell.c;e.r=cell.r;
+  });
+
+  carts.forEach(c=>{
+    if(c.tx===undefined)c.tx=c.x;if(c.ty===undefined)c.ty=c.y;
+    const err=Math.hypot((c.x||c.tx)-c.tx,(c.y||c.ty)-c.ty);
+    if(err>190||!Number.isFinite(err)){c.x=c.tx;c.y=c.ty;}
+    else{c.x=smoothToward(c.x,c.tx,dt,24);c.y=smoothToward(c.y,c.ty,dt,24);}
+    let cell=tc(c.x,c.y);c.c=cell.c;c.r=cell.r;
   });
 
   flames.forEach(f=>{f.t-=dt*1000});
