@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD SMASH-CART-DISMOUNT-UNLOCK-V5-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD SMASH-CART-DISMOUNT-SAFE-V6-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN自機は自分の入力で即時に動き、HOSTはJOIN入力と申告座標を採用して共通世界を確定する入力主導版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">SMASH-CART-DISMOUNT-UNLOCK-V5-20260604</b></div>
+    <div class="pill">BUILD <b id="buildView">SMASH-CART-DISMOUNT-SAFE-V6-20260604</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-CART-DISMOUNT-UNLOCK-V5-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-CART-DISMOUNT-SAFE-V6-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -598,7 +598,7 @@ function applyState(s){
     const q={...src,id,tx,ty,authX:tx,authY:ty,netRecvAt:recvAt,netSeq:joinStateCount};
     if(mode==='join'){
       const srcRiding=(s.carts||[]).some(c=>c&&c.rider===id);
-      const cartLocked=srcRiding||playerCartAuthorityLocked(id,src)||(srcRiding&&playerCartAuthorityLocked(id,prev));
+      const cartLocked=srcRiding;
       const jumpLocked=playerJumpAuthorityLocked(id,src)||playerJumpAuthorityLocked(id,prev)||!!(prev&&prev.jumpState&&!src.jumpState);
       if(id===myId&&!srcRiding&&prev&&prev.localPredictBlockedUntil&&prev.localPredictBlockedUntil>now()+3000){prev.localPredictBlockedUntil=0;}
       if(id===myId&&(cartLocked||jumpLocked)){
@@ -703,7 +703,7 @@ function compactState(includeGrid=false){
     bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,launchPad:!!b.launchPad,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||''})),
     flames,
     enemies,
-    carts:carts.map(c=>({id:c.id,mode:c.mode,c:c.c,r:c.r,x:c.x,y:c.y,speed:c.speed||205,cool:c.cool||0,path:Array.isArray(c.path)?c.path:[],index:c.index||0,targetIndex:c.targetIndex||0,state:c.state||'idle',rider:c.rider||null,dir:c.dir||1,trip:c.trip||0})),
+    carts:carts.map(c=>({id:c.id,mode:c.mode,c:c.c,r:c.r,x:c.x,y:c.y,speed:c.speed||205,cool:c.cool||0,path:Array.isArray(c.path)?c.path:[],index:c.index||0,targetIndex:c.targetIndex||0,state:c.state||'idle',rider:c.rider||null,dir:c.dir||1,trip:c.trip||0,noBoardUntil:c.noBoardUntil||0,lastRiderId:c.lastRiderId||null,riderCooldownUntil:c.riderCooldownUntil||0})),
     items:normalizeItems(items),
     falling,
     wave,
@@ -1600,15 +1600,9 @@ function cartEndpointDir(cart){return (cart.index||0)<=0?1:-1}
 
 function isPlayerRidingCart(id){return (carts||[]).some(c=>c&&c.rider===id)}
 function playerCartAuthorityLocked(id,p=null){
-  const t=now();
-  if(isPlayerRidingCart(id))return true;
-  if(p&&Number.isFinite(p.cartAuthUntil)&&p.cartAuthUntil>t){
-    // 旧版で乗車時に長時間ロックを入れた値が残ると、降車後もJOINだけHOST補正待ちになってもっさりする。
-    // トロッコに乗っていないのに3秒以上残るロックは破棄し、降車後は即時予測へ戻す。
-    if(p.cartAuthUntil-t>3000){p.cartAuthUntil=0;p.cartAuthority=false;p.localPredictBlockedUntil=0;return false;}
-    return true;
-  }
-  return false;
+  // トロッコの正解は「今、実際にcart.riderになっている間」だけHOST座標。
+  // 降車後のcartAuthUntil残りをロック理由にすると、JOINだけもっさりへ戻る。
+  return isPlayerRidingCart(id);
 }
 function playerJumpAuthorityLocked(id,p=null){
   const t=now();
@@ -1620,8 +1614,8 @@ function playerJumpAuthorityLocked(id,p=null){
 function markPlayerCartAuthority(id,ms=CART_AUTHORITY_LOCK_MS){
   const p=players&&players[id];
   if(!p)return;
-  // Math.maxは禁止。乗車開始時の長いロックが降車後まで残り、JOIN自機がもっさりに戻る。
-  p.cartAuthUntil=now()+ms;
+  // 表示上の目印だけ。降車後のJOIN操作ロックには使わない。
+  p.cartAuthUntil=now()+Math.min(ms,260);
   p.cartAuthority=true;
 }
 function clearPlayerCartAuthority(id){
@@ -1638,20 +1632,56 @@ function markPlayerJumpAuthority(id,ms=JUMP_AUTHORITY_LOCK_MS){
   p.jumpAuthority=true;
 }
 function cartAtEndpoint(cart){return Array.isArray(cart.path)&&cart.path.length>1&&((cart.index||0)<=0||(cart.index||0)>=cart.path.length-1)}
-function findCartDismountSpot(cart){
-  const base={c:cart.c,r:cart.r};
-  const pref=[...DIRS,[1,1],[-1,1],[1,-1],[-1,-1]];
-  for(const[dX,dY]of pref){
-    const c=base.c+dX,r=base.r+dY;
-    if(inside(c,r)&&grid[r][c]!==HARD&&!gimmickAt(c,r,'rail'))return cc(c,r);
+function cartPathCellSet(cart){
+  const set=new Set();
+  if(Array.isArray(cart&&cart.path))cart.path.forEach(pt=>set.add((pt.c|0)+','+(pt.r|0)));
+  return set;
+}
+function findCartDismountSpot(cart,rider=null){
+  const base={c:cart.c|0,r:cart.r|0};
+  const pathSet=cartPathCellSet(cart);
+  const idx=cart.index|0;
+  const prev=Array.isArray(cart.path)?cart.path[clamp(idx-(cart.dir||cartEndpointDir(cart)||1),0,cart.path.length-1)]:null;
+  const awayX=prev?Math.sign(base.c-(prev.c|0)):0;
+  const awayY=prev?Math.sign(base.r-(prev.r|0)):0;
+  const ordered=[];
+  const push=(c,r)=>{const k=c+','+r;if(!ordered.some(v=>v.k===k))ordered.push({c,r,k});};
+  // 終点から進行方向の外側を最優先。ここに置くと降車直後の再乗車判定に吸われにくい。
+  if(awayX||awayY){push(base.c+awayX*2,base.r+awayY*2);push(base.c+awayX,base.r+awayY);}
+  // 次に2マス圏、最後に1マス圏。隣接1マスは近すぎるので優先度を下げる。
+  for(const rad of [2,3,1]){
+    for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++){
+      if(Math.max(Math.abs(dx),Math.abs(dy))!==rad)continue;
+      push(base.c+dx,base.r+dy);
+    }
+  }
+  for(const cand of ordered){
+    const c=cand.c,r=cand.r;
+    if(!inside(c,r))continue;
+    if(grid[r][c]!==EMPTY)continue;
+    if(pathSet.has(c+','+r))continue;
+    if(gimmickAt(c,r,'rail'))continue;
+    const o=cc(c,r);
+    if(Math.hypot(o.x-cart.x,o.y-cart.y)<58)continue;
+    if(rider&&canAt(rider,o.x,o.y,rider.id)===false)continue;
+    return o;
+  }
+  // 安全マスがない場合でも線路上には戻さない。近場の空きマスを最後に探す。
+  for(let rad=1;rad<=3;rad++)for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++){
+    const c=base.c+dx,r=base.r+dy;
+    if(inside(c,r)&&grid[r][c]===EMPTY&&!pathSet.has(c+','+r))return cc(c,r);
   }
   return cc(base.c,base.r);
 }
 function startCartIfBoarded(cart){
-  if(cart.state!=='idle'||cart.cool>0||!Array.isArray(cart.path)||cart.path.length<2||!cartAtEndpoint(cart))return;
+  const t=now();
+  if(cart.state!=='idle'||cart.cool>0||cart.noBoardUntil>t||!Array.isArray(cart.path)||cart.path.length<2||!cartAtEndpoint(cart))return;
   for(const p of Object.values(players)){
-    if(p.alive&&Math.hypot(p.x-cart.x,p.y-cart.y)<p.rad+26){
-      cart.rider=p.id;markPlayerCartAuthority(p.id,900);cart.state='run';cart.dir=cartEndpointDir(cart);cart.targetIndex=(cart.index||0)+cart.dir;cart.cool=250;cart.trip=(cart.trip||0)+1;msg='MINECART - 乗車式トロッコ発車';sfx('kick',2);break;
+    if(!p.alive)continue;
+    if((p.cartNoBoardUntil||0)>t)continue;
+    if(cart.lastRiderId===p.id&&(cart.riderCooldownUntil||0)>t)continue;
+    if(Math.hypot(p.x-cart.x,p.y-cart.y)<p.rad+26){
+      cart.rider=p.id;markPlayerCartAuthority(p.id,260);cart.state='run';cart.dir=cartEndpointDir(cart);cart.targetIndex=(cart.index||0)+cart.dir;cart.cool=250;cart.trip=(cart.trip||0)+1;msg='MINECART - 乗車式トロッコ発車';sfx('kick',2);break;
     }
   }
 }
@@ -1659,11 +1689,16 @@ function stopCartAtEnd(cart){
   const riderId=cart.rider;
   const rider=players[riderId];
   if(rider&&rider.alive){
-    const off=findCartDismountSpot(cart);
-    rider.x=off.x;rider.y=off.y;rider.c=tc(off.x,off.y).c;rider.r=tc(off.x,off.y).r;rider.vx=0;rider.vy=0;
+    const off=findCartDismountSpot(cart,rider);
+    rider.x=off.x;rider.y=off.y;const cell=tc(off.x,off.y);rider.c=cell.c;rider.r=cell.r;rider.vx=0;rider.vy=0;
     rider.invuln=Math.max(rider.invuln||0,360);
+    rider.cartNoBoardUntil=now()+1250;
+    rider.localPredictBlockedUntil=0;
   }
-  cart.state='idle';cart.rider=null;cart.targetIndex=cart.index;cart.dir=cartEndpointDir(cart);cart.cool=420;
+  cart.state='idle';cart.rider=null;cart.targetIndex=cart.index;cart.dir=cartEndpointDir(cart);cart.cool=900;
+  cart.noBoardUntil=now()+900;
+  cart.lastRiderId=riderId||cart.lastRiderId||null;
+  cart.riderCooldownUntil=now()+1250;
   if(riderId)clearPlayerCartAuthority(riderId);
   msg='MINECART - 終点で自動降車';sfx('item',2);
 }
@@ -1682,7 +1717,7 @@ function updateGimmicks(dt){
       else{cart.x+=vx/dist*step;cart.y+=vy/dist*step;let cell=tc(cart.x,cart.y);cart.c=cell.c;cart.r=cell.r}
       if(inside(cart.c,cart.r)&&grid[cart.r][cart.c]===SOFT){grid[cart.r][cart.c]=EMPTY;checkGoalGateRevealFromCell(cart.c,cart.r);partsBurst(cart.x,cart.y,'#b9783f',14);sfx('hit',2)}
       let rider=players[cart.rider];
-      if(rider&&rider.alive){rider.x=cart.x;rider.y=cart.y-6;rider.c=cart.c;rider.r=cart.r;rider.vx=0;rider.vy=0;rider.invuln=Math.max(rider.invuln||0,260);markPlayerCartAuthority(rider.id,700)}
+      if(rider&&rider.alive){rider.x=cart.x;rider.y=cart.y-6;rider.c=cart.c;rider.r=cart.r;rider.vx=0;rider.vy=0;rider.invuln=Math.max(rider.invuln||0,260);markPlayerCartAuthority(rider.id,260)}
       enemies.forEach(e=>{if(e.alive&&Math.hypot(e.x-cart.x,e.y-cart.y)<e.rad+24){damageEnemyByHazard(e,'cart:'+cart.id,e.boss?3:1,360);let dx=e.x-cart.x,dy=e.y-cart.y,l=Math.hypot(dx,dy)||1;e.x+=dx/l*24;e.y+=dy/l*24;rescueEntityFromSolids(e,e.id)}})
     }
   })
@@ -1848,7 +1883,7 @@ function updateJoinPrediction(dt){
       const ridingCart=(carts||[]).find(c=>c&&c.rider===myId);
       if(!ridingCart&&Number.isFinite(p.cartAuthUntil)&&p.cartAuthUntil-t>3000)clearPlayerCartAuthority(myId);
       if(!ridingCart&&p.localPredictBlockedUntil&&p.localPredictBlockedUntil-t>3000)p.localPredictBlockedUntil=0;
-      const cartLocked=!!ridingCart||playerCartAuthorityLocked(myId,p);
+      const cartLocked=!!ridingCart;
       const jumpLocked=playerJumpAuthorityLocked(myId,p);
       const forceLocked=cartLocked||jumpLocked||(p.localPredictBlockedUntil&&p.localPredictBlockedUntil>t);
       if(forceLocked){
@@ -1963,7 +1998,7 @@ document.addEventListener('pointermove',movePointer,{passive:false,capture:true}
 document.addEventListener('pointerup',endPointer,{passive:false,capture:true});
 document.addEventListener('pointercancel',endPointer,{passive:false,capture:true});
 document.addEventListener('gesturestart',e=>e.preventDefault());
-try{document.body.dataset.syncFixBuild='SMASH-CART-DISMOUNT-UNLOCK-V5-20260604'}catch(e){}
+try{document.body.dataset.syncFixBuild='SMASH-CART-DISMOUNT-SAFE-V6-20260604'}catch(e){}
 })();
 </script>
 </body>
