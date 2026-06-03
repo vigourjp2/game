@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260604-jump-cart-authority-v7 -->
+<!-- build: pbomber-20260604-smash-input-authority-v1 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,14 +14,14 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD SMASH-JOIN-INPUT-PREDICTION-V5-20260604</div>
-    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
+    <div class="buildTag" id="buildTag">BUILD SMASH-INPUT-AUTHORITY-V1-20260604</div>
+    <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN自機は自分の入力で即時に動き、HOSTはJOIN入力と申告座標を採用して共通世界を確定する入力主導版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
     <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center"><input id="seedWave" placeholder="w. 0-33 / battle 51-83" maxlength="2" inputmode="numeric" style="font-size:12px;padding:8px 10px;opacity:.58;max-width:145px;margin-left:auto;text-align:center"><select id="battleType" style="border:0;border-radius:12px;padding:8px 7px;background:#fff;color:#111;font-size:12px;font-weight:900"><option value="solo">通常バトル</option><option value="team">チームバトル</option></select></div>
     <div class="row"><button id="hostBtn">HOST</button><button id="joinBtn" class="join">JOIN</button><button id="offBtn" class="off">OFFLINE</button></div><button id="copyBtn" class="off" style="width:100%;margin-top:8px">ROOM ID COPY</button>
-    <div id="panelMsg" class="small">HOSTでROOMを作成し、他端末は同じROOM IDでJOIN。JOINした端末はmembersへ登録され、HOSTが人数分のプレイヤーを自動生成。操作は画面どこでも仮想スティック移動、短いダブルタップで爆弾。ロックステップのため、JOINはHOST確定フレームを順番に再生する。</div>
-    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。完全ロックステップ構成。HOSTだけが世界を進め、JOINは入力送信＋HOST確定スナップショット描画に徹する。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
+    <div id="panelMsg" class="small">HOSTでROOMを作成し、他端末は同じROOM IDでJOIN。JOINした端末はmembersへ登録され、HOSTが人数分のプレイヤーを自動生成。操作は画面どこでも仮想スティック移動、短いダブルタップで爆弾。JOINは自機を即時操作し、HOSTはJOIN入力と申告座標を元に共通世界を確定する。</div>
+    <div class="warn">プロジェクトファイルのHOST/JOIN導線を踏襲。2P固定なし。members登録＋inputs送信＋WebRTC DataChannel軽量同期。入力主導構成。JOIN自機は即時移動し、HOST補正は破綻時のみ行う。インカメは低解像度JPEGでプレイヤーに投影。GitHub Pages等のhttps配置で動作。</div>
   </div>
 </div>
 <div class="app">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">SMASH-JOIN-INPUT-PREDICTION-V5-20260604</b></div>
+    <div class="pill">BUILD <b id="buildView">SMASH-INPUT-AUTHORITY-V1-20260604</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-JOIN-INPUT-PREDICTION-V5-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-INPUT-AUTHORITY-V1-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -201,6 +201,7 @@ const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
 const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=55,CART_AUTHORITY_LOCK_MS=1250,JUMP_AUTHORITY_LOCK_MS=1250;
+const JOIN_SELF_REWIND_ERR=190,JOIN_HOST_ACCEPT_ERR=18,JOIN_HOST_FORCE_ERR=150;
 const AUTH_STATE_HZ=60,AUTH_STATE_MS=1000/AUTH_STATE_HZ,AUTH_FULL_MS=1200,AUTH_FIREBASE_MS=1800;
 let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90,lastJoinPredictAt=0,lastAuthStateSent=0,lastAuthFullStateSent=0;
 const REVIVE_RADIUS=92,REVIVE_GAIN_PER_SEC=.34,REVIVE_DECAY_PER_SEC=.08,REVIVE_INVULN_MS=2600;
@@ -685,8 +686,8 @@ function drawPlayerCamera(p){
 
 
 function compactState(includeGrid=false){
-  // JOINリアルタイム体験の根本: 通常フレームは「動く物だけ」を60Hzで送る。
-  // トロッコはプレイヤーを強制移動させる動的ギミックなので、復旧用ではなく毎フレーム同期対象にする。
+  // 入力主導同期: 通常フレームは「共通世界の結果確認」だけを60Hzで送る。
+  // JOIN自機はこのstateを待たずに自入力で先に動く。stateは大ズレ復旧と他者・敵・ギミック描画用。
   // grid / gimmicks / members / 長い静的情報は初期・復旧用だけに限定し、DataChannelの詰まりを潰す。
   const full=!!includeGrid;
   const lightMembers={};
@@ -1339,8 +1340,8 @@ function broadcastAuthoritativeState(force=false){
   return true;
 }
 function runHostLockstep(dt){
-  // 根本変更: JOIN側で世界を進めない。HOSTだけが固定Δtで物理・敵・落下ブロック・死亡判定を進める。
-  // JOINは入力を高頻度送信し、HOST確定snapshotだけを描画する。スマブラ寄せの単一正解世界。
+  // 入力主導: HOSTはJOINの入力と申告座標を受け取り、共通世界を固定Δtで確定する。
+  // JOIN自機の操作感をHOST state待ちにしないため、HOSTはJOIN申告座標を大ズレ復旧ではなく通常追従にも使う。
   lockAcc+=dt;
   let steps=0;
   while(lockAcc>=LOCK_DT&&steps<LOCK_MAX_STEPS){
@@ -1355,7 +1356,7 @@ function runHostLockstep(dt){
   publishState();
 }
 function runJoinLockstep(dt){
-  // JOINはゲームロジックを進めない。描画補間と自分の入力見た目だけを軽く先行表示する。
+  // JOIN自機は自分の入力で即時に進める。他者・敵・ギミックはHOST確定stateを描画する。
   updateJoinPrediction(Math.min(dt,LOCK_DT));
   const wait=now()-joinLastAuthoritative;
   if(wait>1200)msg=rtcConnected?'HOST SNAPSHOT WAIT':'P2P CONNECT WAIT';
@@ -1598,14 +1599,19 @@ function updateCamera(){let me=players[myId]||Object.values(players)[0];let worl
 function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}if(!updatePlayerJump(p,dt,inp)){moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}
         // スマブラ寄せ: JOIN端末の自分操作感を正にするため、HOSTもJOIN本人の申告座標へ追従する。
         // これでHOST側のアイテム取得・接触判定がJOIN画面と割れにくくなる。
-        if(id!==myId&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0&&!playerCartAuthorityLocked(id,p)){
-          let err=Math.hypot((p.x||0)-inp.clientX,(p.y||0)-inp.clientY);
-          // HOST側もJOIN申告座標へ常時吸着しない。
-          // HOSTは受け取った入力で正規シミュレーションし、申告座標は大ズレ復旧専用にする。
-          // ただしトロッコ・降車直後はHOST強制移動が正解なので、JOIN申告座標では絶対に上書きしない。
-          if(err>86){
-            let tx=clamp(inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(inp.clientY,OY+p.rad,OY+R*T-p.rad);
-            if(canAt(p,tx,ty,id)||err>150){let oldX=p.x,oldY=p.y;p.x=tx;p.y=ty;let cc2=tc(p.x,p.y);p.c=cc2.c;p.r=cc2.r;markTeleportBlink(p,Math.hypot(p.x-oldX,p.y-oldY),'SYNC');}
+        if(id!==myId&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0&&!playerCartAuthorityLocked(id,p)&&!playerJumpAuthorityLocked(id,p)){
+          const tx=clamp(inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(inp.clientY,OY+p.rad,OY+R*T-p.rad);
+          const err=Math.hypot((p.x||0)-tx,(p.y||0)-ty);
+          // 根本変更: JOIN本人の画面を正に寄せる。
+          // HOSTは入力だけで遅れて追うのではなく、JOINが毎フレーム送る申告座標を通常の正解候補として採用する。
+          // これでJOIN側がHOST補正で引き戻され続ける構造を切る。
+          if(err>JOIN_HOST_ACCEPT_ERR){
+            if(canAt(p,tx,ty,id)||err>JOIN_HOST_FORCE_ERR){
+              const oldX=p.x,oldY=p.y;
+              p.x=tx;p.y=ty;p.vx=0;p.vy=0;
+              const cc2=tc(p.x,p.y);p.c=cc2.c;p.r=cc2.r;
+              if(err>JOIN_HOST_FORCE_ERR)markTeleportBlink(p,Math.hypot(p.x-oldX,p.y-oldY),'SYNC');
+            }
           }
         }
         updateShadowTrail(p,dt);if(p.invuln>0)p.invuln-=dt*1000;if(p.teleportBlink>0)p.teleportBlink-=dt*1000;if(p.shield>0)p.shield-=dt*1000;if(p.specialCooldown>0)p.specialCooldown-=dt*1000;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){placeBomb(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}if(inp.specialSeq&&inp.specialSeq!==p.lastSpecialSeq){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}}
@@ -1774,13 +1780,13 @@ function updateJoinPrediction(dt){
       }else{
         let mdx=localInput.dx||0,mdy=localInput.dy||0;
         if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}
-        if(!updatePlayerJump(p,dt,localInput))moveEntity(p,mdx,mdy,dt,myId);
+        if(!updatePlayerJump(p,dt,localInput)){moveEntity(p,mdx,mdy,dt,myId);applyTerrain(p,dt,true);}
         const err=Math.hypot((p.x||targetX)-targetX,(p.y||targetY)-targetY);
         // JOIN本人はHOST確定座標へ毎フレーム戻さない。
         // ここで18px超から補正すると、入力先行で進んだ分をHOST座標へ引き戻し続け、
         // 結果的にJOINだけ移動速度が半分のように見える。
         // 通常はローカル入力をそのまま描画し、明確に破綻した時だけ正解座標へ巻き戻す。
-        if(err>150||!Number.isFinite(err)){
+        if(err>JOIN_SELF_REWIND_ERR||!Number.isFinite(err)){
           p.x=targetX;p.y=targetY;
         }
       }
