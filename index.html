@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD AUTHORITATIVE-SMASH-SYNC-V1-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD AUTHORITATIVE-SMASH-INPUT-FIRST-V2-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">AUTHORITATIVE-SMASH-SYNC-V1-20260604</b></div>
+    <div class="pill">BUILD <b id="buildView">AUTHORITATIVE-SMASH-INPUT-FIRST-V2-20260604</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='AUTHORITATIVE-SMASH-SYNC-V1-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='AUTHORITATIVE-SMASH-INPUT-FIRST-V2-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -196,7 +196,7 @@ const GAME_BGM_EXTRA=[
   'https://github.com/vigourjp2/game/releases/download/v1.0/bomb18.flac',
   'https://github.com/vigourjp2/game/releases/download/v1.0/bomb19.flac'
 ];
-const localInput={dx:0,dy:0,bomb:false,hand:false,special:false,seq:0,handSeq:0,specialSeq:0};
+const localInput={dx:0,dy:0,bomb:false,hand:false,special:false,seq:0,handSeq:0,specialSeq:0,inputSeq:0};
 const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:{type:'launchbomb',name:'LAUNCH BOMB',icon:'🚀',price:180},summonblock:{type:'summonblock',name:'BLOCK SUMMON',icon:'🧱',price:160},shadowservant:{type:'shadowservant',name:'SHADOW SERVANT',icon:'👥',price:520}};
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
@@ -206,7 +206,7 @@ let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacke
 const REVIVE_RADIUS=92,REVIVE_GAIN_PER_SEC=.34,REVIVE_DECAY_PER_SEC=.08,REVIVE_INVULN_MS=2600;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
-let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0;
+let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0,lastSentInputSig='';
 let joinBooted=false,joinLastAuthoritative=0,joinStateCount=0,joinRemoteClock=0,joinSendFastAt=0,lastRestartAt=0;
 const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
 const touch={active:false,id:null,sx:0,sy:0,x:0,y:0,started:0,moved:false,lastTap:0,lastX:-999,lastY:-999};
@@ -687,8 +687,14 @@ function handleRtcMessage(fromId,data){
   let m=null;try{m=JSON.parse(data)}catch(e){return;}
   if(!m||!m.type)return;
   if(isHost&&m.type==='input'){
-    inputs[fromId]=m.input||{};
-    if(inputs[fromId])inputs[fromId].last=now();
+    const next=cloneInputPayload(m.input||{});
+    const prev=inputs[fromId]||{};
+    // 対戦操作の根本: DataChannelはunordered/unreliableなので、古い入力で新しい入力を上書きしない。
+    // これを入れないとJOINだけ止まり・戻り・もっさりに見える。
+    if((next.inputSeq||0)>=(prev.inputSeq||0)){
+      inputs[fromId]=next;
+      inputs[fromId].last=now();
+    }
   }else if(isHost&&m.type==='restartRequest'){
     restartFromWave1();
   }else if(mode==='join'&&m.type==='step'){
@@ -1115,10 +1121,14 @@ async function writeInput(force=false){
   if(mode==='offline')return;
   let t=now();
   if(!force&&t-lastInputWrite<8)return;
-  lastInputWrite=t;
   if(!roomRef)return;
   let me=players[myId];
-  let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};
+  let sig=[Math.round((localInput.dx||0)*100),Math.round((localInput.dy||0)*100),localInput.seq||0,localInput.handSeq||0,localInput.specialSeq||0,me?Math.round(me.x):0,me?Math.round(me.y):0,me?me.alive!==false:1,localDeathSeq||0].join('|');
+  if(!force&&sig===lastSentInputSig&&t-lastInputWrite<24)return;
+  lastInputWrite=t;
+  lastSentInputSig=sig;
+  localInput.inputSeq=(localInput.inputSeq||0)+1;
+  let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,inputSeq:localInput.inputSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};
 
   if(mode==='join'&&rtcInputChannel&&rtcInputChannel.readyState==='open'){
     rtcConnected=true;
@@ -1226,8 +1236,8 @@ function emptyDropCell(){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){i
 
 function resetLocalDeathInput(){localDeathSeq=0;lastReportedDeathSeq=0;localInput.dead=false;localInput.alive=true;localInput.deathSeq=0;localInput.deathReason=''}
 function normalizeRestartInput(inp){let o=cloneInputPayload(inp||{});o.dx=0;o.dy=0;o.alive=true;o.dead=false;o.deathSeq=0;o.deathReason='';return o}
-function cloneInputPayload(inp){return {name:inp&&inp.name||'PLAYER',dx:+(inp&&inp.dx||0),dy:+(inp&&inp.dy||0),bombSeq:+(inp&&inp.bombSeq||0),handSeq:+(inp&&inp.handSeq||0),specialSeq:+(inp&&inp.specialSeq||0),clientX:+(inp&&inp.clientX||0),clientY:+(inp&&inp.clientY||0),alive:inp&&inp.alive!==false,dead:!!(inp&&inp.dead),deathSeq:+(inp&&inp.deathSeq||0),deathReason:inp&&inp.deathReason||'',last:+(inp&&inp.last||0)}}
-function buildLocalPayloadForLockstep(){let me=players[myId];return cloneInputPayload({name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:now()})}
+function cloneInputPayload(inp){return {name:inp&&inp.name||'PLAYER',dx:+(inp&&inp.dx||0),dy:+(inp&&inp.dy||0),bombSeq:+(inp&&inp.bombSeq||0),handSeq:+(inp&&inp.handSeq||0),specialSeq:+(inp&&inp.specialSeq||0),inputSeq:+(inp&&inp.inputSeq||0),clientX:+(inp&&inp.clientX||0),clientY:+(inp&&inp.clientY||0),alive:inp&&inp.alive!==false,dead:!!(inp&&inp.dead),deathSeq:+(inp&&inp.deathSeq||0),deathReason:inp&&inp.deathReason||'',last:+(inp&&inp.last||0)}}
+function buildLocalPayloadForLockstep(){let me=players[myId];return cloneInputPayload({name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,inputSeq:localInput.inputSeq||0,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:now()})}
 function buildLockstepInputs(){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),...Object.keys(players||{}),myId]);let out={};ids.forEach(id=>{out[id]=id===myId?buildLocalPayloadForLockstep():cloneInputPayload(inputs[id]||{name:(members[id]&&members[id].name)||'PLAYER',last:(members[id]&&members[id].last)||0})});return out}
 function checksumWorld(){let h=2166136261>>>0;const add=v=>{let s=String(v);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}};add(lockFrame);add(wave);Object.keys(players).sort().forEach(id=>{let p=players[id];add(id);add(Math.round(p.x));add(Math.round(p.y));add(p.alive?1:0);add(Math.round((p.revive||0)*1000));add(p.score||0);add(p.placed||0)});bombs.forEach(b=>{add(b.id);add(b.c);add(b.r);add(Math.round(b.timer||0))});enemies.forEach(e=>{add(e.id);add(Math.round(e.x));add(Math.round(e.y));add(e.hp||0);add(Math.round(e.invuln||0))});falling.forEach(f=>{add(f.id);add(f.c);add(f.r);add(f.phase);add(Math.round(f.t||0))});add(worldRngState>>>0);add(dropSeq);add(enemySeq);return h>>>0}
 function broadcastLockstepPacket(packet){let open=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');open.forEach(ch=>rtcSend(ch,packet));lastLockBroadcast=now()}
@@ -1698,10 +1708,12 @@ function loop(ts){
       $('panel').classList.add('hidden');
       lastRemoteApply=now();
     }
+    // JOIN操作感の根本: 先にローカル先行移動して、その最新座標と入力をHOSTへ送る。
+    // 以前は送信後に先行移動していたため、HOSTには常に1フレーム以上古い座標が届いていた。
+    if(started&&mode==='join')runJoinLockstep(dt);
     writeInput();
     publishCamera();
     if(started&&isHost&&mode!=='offline')runHostLockstep(dt)
-    else if(started&&mode==='join')runJoinLockstep(dt)
     else if(started&&isHost){updateHost(dt);publishState()}
     if(now()-lastHudUpdate>120){lastHudUpdate=now();updateHud();}
     updateRestartButton();if(!grid||grid.length!==R||!grid[0])drawBoot();else draw()
