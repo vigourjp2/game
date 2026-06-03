@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603 -->
+<!-- build: SMASH-INPUT-ONLY-V9-AUTH-LOCKSTEP-20260603 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603</div>
+    <div class="buildTag" id="buildTag">BUILD SMASH-INPUT-ONLY-V9-AUTH-LOCKSTEP-20260603</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603</b></div>
+    <div class="pill">BUILD <b id="buildView">SMASH-INPUT-ONLY-V9-AUTH-LOCKSTEP-20260603</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-INPUT-ONLY-V9-AUTH-LOCKSTEP-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -203,10 +203,11 @@ const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
 const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_MAX_CATCHUP_STEPS=2,JOIN_PACKET_WAIT_MS=1200;
 // JOIN安定化: snapshotで座標上書きせず、ordered/reliable stepだけで同じ世界を進める。
 // 予測は短い通信揺れでは使わず、長めの欠損時だけ低速でつなぐ。
-let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=999999,lastJoinPredictAt=0,lastJoinGapAt=0;
+let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=30,lastJoinPredictAt=0,lastJoinGapAt=0,lastJoinChecksum=0,lastJoinDesyncAt=0;
 const REVIVE_RADIUS=92,REVIVE_GAIN_PER_SEC=.34,REVIVE_DECAY_PER_SEC=.08,REVIVE_INVULN_MS=2600;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
+function lockstepAuthoritativeActive(){return mode==='join'&&rtcConnected&&lockstepStarted&&now()-lastStepPacketAt<1600}
 let rtcPeers={},rtcChannels={},rtcInputChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0;
 let joinBooted=false,joinLastAuthoritative=0,joinStateCount=0,joinRemoteClock=0,joinSendFastAt=0,lastRestartAt=0;
 const RTC_CONFIG={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]};
@@ -524,7 +525,7 @@ function blockHpAt(c,r){let v=summonedBlockHp[blockKey(c,r)];return Number.isFin
 function damageSoftBlock(c,r,owner=null){if(!inside(c,r)||grid[r][c]!==SOFT)return false;let k=blockKey(c,r),hp=blockHpAt(c,r);if(hp>1){summonedBlockHp[k]=hp-1;partsBurst(cc(c,r).x,cc(c,r).y,'#c4b5fd',12);msg='BLOCK HP '+(hp-1);return false;}markLocalBlockClear(c,r);maybeBlockMoney(c,r,owner);if(rand()<.34)dropItem(c,r);return true}
 function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
-async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
+async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;if(lockstepAuthoritativeActive()&&type!=='restartRequest')return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
 function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
 function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
@@ -696,8 +697,9 @@ function handleRtcMessage(fromId,data){
   }else if(mode==='join'&&m.type==='step'){
     receiveLockstepPacket(m);
   }else if(mode==='join'&&m.type==='state'){
-    // 初期同期・再同期用state。RTCから来たstateはJOIN再生の基準として扱い、Firebase保険stateで上書きされないよう時刻を残す。
-    if(m.state&&(m.restart||!lockstepStarted)){
+    // 初期同期・再同期用state。RTCから来たstateはJOIN再生の基準として扱う。
+    // V9: 通常モードの死亡・敵・炎の差異を潰すため、HOSTのkeyframe/resyncは常に権威状態として受ける。
+    if(m.state&&(m.restart||m.force||m.keyframe||!lockstepStarted)){
       applyState(m.state);
       if(Number.isFinite(m.state.lockFrame))lockFrame=m.state.lockFrame|0;
       lockstepPackets={};
@@ -705,7 +707,7 @@ function handleRtcMessage(fromId,data){
       lastStepPacketAt=now();
       joinLastAuthoritative=now();
       if(m.restart){resetLocalDeathInput();msg='RESTART / WAVE 1'}
-      else msg='SMASH INPUT ONLY SYNC F'+lockFrame;
+      else msg=(m.force||m.keyframe)?'HOST RESYNC F'+lockFrame:'SMASH INPUT ONLY SYNC F'+lockFrame;
     }
   }else if(m.type==='ping'){
     rtcSend(isHost?rtcChannels[fromId]:rtcInputChannel,{type:'pong',t:m.t,ts:now()});
@@ -1200,7 +1202,7 @@ function flameHit(c,r,ownerFilter=null){return flames.some(f=>f.c===c&&f.r===r&&
 function nearestReviverFor(p){if(battle.on&&!battle.team)return null;let best=null,bd=Infinity;for(const q of Object.values(players)){if(!q||!q.alive||q.id===p.id)continue;if(battle.on&&battle.team&&battleTeamKey(q)!==battleTeamKey(p))continue;let d=Math.hypot((q.x||0)-(p.x||0),(q.y||0)-(p.y||0));if(d<REVIVE_RADIUS&&d<bd){best=q;bd=d}}return best}
 function revivePlayer(p,by=null){if(!p)return;p.alive=true;p.revive=0;p.reviveBy=null;p.invuln=Math.max(p.invuln||0,REVIVE_INVULN_MS);p.shield=Math.max(p.shield||0,900);p.vx=0;p.vy=0;partsBurst(p.x,p.y,p.color,34);shockwave(p.x,p.y,58,p.color);sfx('item');msg=`${p.name} REVIVED${by?' BY '+by.name:''}`}
 function updateRevives(dt){for(const p of Object.values(players)){if(!p||p.alive)continue;let by=nearestReviverFor(p);if(by){p.reviveBy=by.id;p.revive=Math.min(1,(p.revive||0)+REVIVE_GAIN_PER_SEC*dt);if(p.revive>=1)revivePlayer(p,by)}else{p.reviveBy=null;p.revive=Math.max(0,(p.revive||0)-REVIVE_DECAY_PER_SEC*dt)}}}
-function damagePlayer(p,src='local'){if(!p||!p.alive||p.shield>0||p.invuln>0)return;if(mode==='join'&&p.id===myId&&src==='remote')return;if(consumeShadowServantRevive(p))return;halveMoneyOnDeath(p);releasePlayerItems(p);p.alive=false;p.revive=0;p.reviveBy=null;p.vx=0;p.vy=0;if(p.carryBombId){let b=bombs.find(q=>q.id===p.carryBombId);if(b){b.carriedBy=null;b.fusePaused=false;b.armed=true;b.landed=true}p.carryBombId=null}sfx('down');partsBurst(p.x,p.y,p.color,30);msg=`${p.name} DOWN${battle.on&&!battle.team?'': ' - 近くで復活可能'}`;if(mode==='join'&&p.id===myId&&src==='local')reportLocalDeath(p,'local')}
+function damagePlayer(p,src='local'){if(!p||!p.alive||p.shield>0||p.invuln>0)return;if(mode==='join'&&p.id===myId&&src==='remote')return;if(consumeShadowServantRevive(p))return;halveMoneyOnDeath(p);releasePlayerItems(p);p.alive=false;p.revive=0;p.reviveBy=null;p.vx=0;p.vy=0;if(p.carryBombId){let b=bombs.find(q=>q.id===p.carryBombId);if(b){b.carriedBy=null;b.fusePaused=false;b.armed=true;b.landed=true}p.carryBombId=null}sfx('down');partsBurst(p.x,p.y,p.color,30);msg=`${p.name} DOWN${battle.on&&!battle.team?'': ' - 近くで復活可能'}`;if(mode==='join'&&p.id===myId&&src==='local'&&!lockstepAuthoritativeActive())reportLocalDeath(p,'local')}
 function damageSelfFromVisibleFlame(){
   let p=players[myId];
   if(mode!=='join'||!p||!p.alive)return;
@@ -1239,7 +1241,7 @@ function emptyDropCell(){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){i
 function resetLocalDeathInput(){localDeathSeq=0;lastReportedDeathSeq=0;localInput.dead=false;localInput.alive=true;localInput.deathSeq=0;localInput.deathReason=''}
 function normalizeRestartInput(inp){let o=cloneInputPayload(inp||{});o.dx=0;o.dy=0;o.alive=true;o.dead=false;o.deathSeq=0;o.deathReason='';return o}
 function cloneInputPayload(inp){return {name:inp&&inp.name||'PLAYER',dx:+(inp&&inp.dx||0),dy:+(inp&&inp.dy||0),bombSeq:+(inp&&inp.bombSeq||0),handSeq:+(inp&&inp.handSeq||0),specialSeq:+(inp&&inp.specialSeq||0),alive:inp&&inp.alive!==false,dead:!!(inp&&inp.dead),deathSeq:+(inp&&inp.deathSeq||0),deathReason:inp&&inp.deathReason||'',last:+(inp&&inp.last||0)}}
-function buildLocalPayloadForLockstep(){let me=players[myId];return cloneInputPayload({name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:now()})}
+function buildLocalPayloadForLockstep(){let me=players[myId];let auth=lockstepAuthoritativeActive();return cloneInputPayload({name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,alive:auth?true:(me?!!me.alive:true),dead:auth?false:(me?me.alive===false:false),deathSeq:auth?0:localDeathSeq,deathReason:auth?'':(localInput.deathReason||''),last:now()})}
 function buildLockstepInputs(){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),...Object.keys(players||{}),myId]);let out={};ids.forEach(id=>{out[id]=id===myId?buildLocalPayloadForLockstep():cloneInputPayload(inputs[id]||{name:(members[id]&&members[id].name)||'PLAYER',last:(members[id]&&members[id].last)||0})});return out}
 function checksumWorld(){let h=2166136261>>>0;const add=v=>{let s=String(v);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}};add(lockFrame);add(wave);Object.keys(players).sort().forEach(id=>{let p=players[id];add(id);add(Math.round(p.x));add(Math.round(p.y));add(p.alive?1:0);add(Math.round((p.revive||0)*1000));add(p.score||0);add(p.placed||0)});bombs.forEach(b=>{add(b.id);add(b.c);add(b.r);add(Math.round(b.timer||0))});enemies.forEach(e=>{add(e.id);add(Math.round(e.x));add(Math.round(e.y));add(e.hp||0);add(Math.round(e.invuln||0))});falling.forEach(f=>{add(f.id);add(f.c);add(f.r);add(f.phase);add(Math.round(f.t||0))});add(worldRngState>>>0);add(dropSeq);add(enemySeq);return h>>>0}
 function broadcastLockstepPacket(packet){let open=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');open.forEach(ch=>rtcSend(ch,packet));lastLockBroadcast=now()}
@@ -1250,13 +1252,13 @@ function receiveLockstepPacket(pkt){
   joinLastAuthoritative=t;
   let f=pkt.frame|0;
   let restartState=pkt.state&&f<=2&&lockFrame>2;
-  if(pkt.state&&(!lockstepStarted||restartState)){
+  if(pkt.state&&(!lockstepStarted||restartState||pkt.keyframe||pkt.force)){
     applyState(pkt.state);
-    lockFrame=f;
+    lockFrame=Number.isFinite(pkt.state.lockFrame)?(pkt.state.lockFrame|0):f;
     lockstepPackets={};
     lockstepStarted=true;
-    if(restartState)resetLocalDeathInput();
-    msg=restartState?'RESTART / WAVE 1':'SMASH INPUT ONLY START F'+lockFrame;
+    if(restartState||pkt.force)resetLocalDeathInput();
+    msg=restartState?'RESTART / WAVE 1':((pkt.keyframe||pkt.force)?'HOST KEYFRAME F'+lockFrame:'SMASH INPUT ONLY START F'+lockFrame);
     return;
   }
   // JOIN端末が初期stateを取り逃した場合でも、HOSTからの確定frameを受けた時点で再生を開始する。
@@ -1270,7 +1272,7 @@ function receiveLockstepPacket(pkt){
   lockstepPackets[f]=pkt;
 }
 function stepWorldWithInputs(frame,frameInputs){inputs=frameInputs||{};lockFrame=frame|0;updateHost(LOCK_DT);lockstepStarted=true}
-function runHostLockstep(dt){lockAcc+=dt;let steps=0;while(lockAcc>=LOCK_DT&&steps<LOCK_MAX_STEPS){lockAcc-=LOCK_DT;steps++;let next=lockFrame+1;let frameInputs=buildLockstepInputs();stepWorldWithInputs(next,frameInputs);let packet={type:'step',frame:lockFrame,inputs:frameInputs,checksum:checksumWorld(),t:now()};if(lockFrame<=2||lockFrame%lockstepSnapEvery===0)packet.state=serialize();broadcastLockstepPacket(packet)}if(steps>=LOCK_MAX_STEPS)lockAcc=0;publishState()}
+function runHostLockstep(dt){lockAcc+=dt;let steps=0;while(lockAcc>=LOCK_DT&&steps<LOCK_MAX_STEPS){lockAcc-=LOCK_DT;steps++;let next=lockFrame+1;let frameInputs=buildLockstepInputs();stepWorldWithInputs(next,frameInputs);let packet={type:'step',frame:lockFrame,inputs:frameInputs,checksum:checksumWorld(),t:now()};if(lockFrame<=2||lockFrame%lockstepSnapEvery===0){packet.state=serialize();packet.keyframe=true;}broadcastLockstepPacket(packet)}if(steps>=LOCK_MAX_STEPS)lockAcc=0;publishState()}
 function runJoinLockstep(dt){
   // SMASH INPUT ONLY: JOINはHOSTから届いたframe入力列だけを順番に実行する。
   // 座標snapshot補正・未来stateジャンプ・client座標追従は行わない。
@@ -1292,6 +1294,20 @@ function runJoinLockstep(dt){
     let pkt=lockstepPackets[lockFrame+1];
     delete lockstepPackets[lockFrame+1];
     stepWorldWithInputs(pkt.frame,pkt.inputs||{});
+    const localSum=checksumWorld();
+    lastJoinChecksum=localSum;
+    if(Number.isFinite(pkt.checksum)&&pkt.checksum!==localSum){
+      lastJoinDesyncAt=now();
+      if(pkt.state){
+        applyState(pkt.state);
+        lockstepPackets={};
+        lockstepStarted=true;
+        msg='HOST RESYNC CHECKSUM F'+lockFrame;
+        break;
+      }else{
+        msg='CHECKSUM WAIT KEYFRAME';
+      }
+    }
     steps++;
   }
   const wait=now()-lastStepPacketAt;
