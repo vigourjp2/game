@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: SMASH-INPUT-ONLY-V6-20260603 -->
+<!-- build: SMASH-INPUT-ONLY-V7-TICKFIX-20260603 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD SMASH-INPUT-ONLY-V6-20260603</div>
+    <div class="buildTag" id="buildTag">BUILD SMASH-INPUT-ONLY-V7-TICKFIX-20260603</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">SMASH-INPUT-ONLY-V6-20260603</b></div>
+    <div class="pill">BUILD <b id="buildView">SMASH-INPUT-ONLY-V7-TICKFIX-20260603</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-INPUT-ONLY-V6-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-INPUT-ONLY-V7-TICKFIX-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -550,6 +550,7 @@ function applyState(s){
   if(Number.isFinite(s.waveSpawnTimer))waveSpawnTimer=+s.waveSpawnTimer;
   if(Number.isFinite(s.waveSpawnInterval))waveSpawnInterval=+s.waveSpawnInterval;
   waveIsBoss=!!s.waveIsBoss;goalGate=s.goalGate?{...s.goalGate}:null;if(Number.isFinite(s.goalCelebration))goalCelebration=+s.goalCelebration;gameEnded=!!s.gameEnded;if(Number.isFinite(s.endingTimer))endingTimer=+s.endingTimer;endingCloseAttempted=!!s.endingCloseAttempted;
+  if(Number.isFinite(s.lockFrame))lockFrame=s.lockFrame|0;
 
   if(s.grid&&Array.isArray(s.grid)&&s.grid.length===R)grid=s.grid.map(row=>row.slice());
   if(s.members){
@@ -695,9 +696,16 @@ function handleRtcMessage(fromId,data){
   }else if(mode==='join'&&m.type==='step'){
     receiveLockstepPacket(m);
   }else if(mode==='join'&&m.type==='state'){
-    // ロックステップではstateは初期同期・再同期用。リスタートstateだけは進行中でも即時適用する。
-    if(m.restart&&m.state){applyState(m.state);lockFrame=m.state.lockFrame||0;lockstepPackets={};lockstepStarted=true;resetLocalDeathInput();msg='RESTART / WAVE 1'}
-    else if(!lockstepStarted)pendingRemoteState=m.state||null;
+    // ロックステップではstateは初期同期・再同期用。初回stateは即時適用し、そこから次frameのstepを再生する。
+    if(m.state&&(m.restart||!lockstepStarted)){
+      applyState(m.state);
+      if(Number.isFinite(m.state.lockFrame))lockFrame=m.state.lockFrame|0;
+      lockstepPackets={};
+      lockstepStarted=true;
+      lastStepPacketAt=now();
+      if(m.restart){resetLocalDeathInput();msg='RESTART / WAVE 1'}
+      else msg='SMASH INPUT ONLY SYNC F'+lockFrame;
+    }
   }else if(m.type==='ping'){
     rtcSend(isHost?rtcChannels[fromId]:rtcInputChannel,{type:'pong',t:m.t,ts:now()});
   }
@@ -1679,6 +1687,7 @@ function loop(ts){
       const st=pendingRemoteState;
       pendingRemoteState=null;
       applyState(st);
+      if(Number.isFinite(st.lockFrame)){lockFrame=st.lockFrame|0;lockstepStarted=true;lastStepPacketAt=now();}
       started=true;
       $('panel').classList.add('hidden');
       lastRemoteApply=now();
