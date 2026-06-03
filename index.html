@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SHADOW-HAND-FIX-V1-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='JOIN-SMOOTH-V1-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -200,7 +200,7 @@ const localInput={dx:0,dy:0,bomb:false,hand:false,special:false,seq:0,handSeq:0,
 const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:{type:'launchbomb',name:'LAUNCH BOMB',icon:'🚀',price:180},summonblock:{type:'summonblock',name:'BLOCK SUMMON',icon:'🧱',price:160},shadowservant:{type:'shadowservant',name:'SHADOW SERVANT',icon:'👥',price:520}};
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
-const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=5;let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90;
+const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=55;let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90,lastJoinPredictAt=0;
 const REVIVE_RADIUS=92,REVIVE_GAIN_PER_SEC=.34,REVIVE_DECAY_PER_SEC=.08,REVIVE_INVULN_MS=2600;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
@@ -674,8 +674,9 @@ function compactState(includeGrid=false){
 function rtcSend(ch,obj){
   if(!ch||ch.readyState!=='open')return false;
   try{
-    // bufferedAmountが溜まった古いstateは送らない。これがカクつき対策の核心。
-    if(obj&&obj.type==='state'&&ch.bufferedAmount>65536)return false;
+    // bufferedAmountが溜まった古い同期情報は送らない。JOIN側に古いフレームを食わせるとリアルタイム感が死ぬ。
+    if(obj&&obj.type==='state'&&ch.bufferedAmount>32768)return false;
+    if(obj&&obj.type==='step'&&ch.bufferedAmount>131072)return false;
     ch.send(JSON.stringify(obj));
     return true;
   }catch(e){return false;}
@@ -1233,7 +1234,28 @@ function broadcastLockstepPacket(packet){let open=Object.values(rtcChannels).fil
 function receiveLockstepPacket(pkt){if(!pkt||!Number.isFinite(pkt.frame))return;lastStepPacketAt=now();let f=pkt.frame|0;let restartState=pkt.state&&f<=2&&lockFrame>2;if(pkt.state&&(!lockstepStarted||f>lockFrame+45||restartState)){applyState(pkt.state);lockFrame=f;lockstepPackets={};lockstepStarted=true;if(restartState)resetLocalDeathInput();msg=restartState?'RESTART / WAVE 1':'LOCKSTEP RESYNC F'+lockFrame;return}if(!lockstepStarted&&!pkt.state)return;if(f<=lockFrame)return;lockstepPackets[f]=pkt}
 function stepWorldWithInputs(frame,frameInputs){inputs=frameInputs||{};lockFrame=frame|0;updateHost(LOCK_DT);lockstepStarted=true}
 function runHostLockstep(dt){lockAcc+=dt;let steps=0;while(lockAcc>=LOCK_DT&&steps<LOCK_MAX_STEPS){lockAcc-=LOCK_DT;steps++;let next=lockFrame+1;let frameInputs=buildLockstepInputs();stepWorldWithInputs(next,frameInputs);let packet={type:'step',frame:lockFrame,inputs:frameInputs,checksum:checksumWorld(),t:now()};if(lockFrame<=2||lockFrame%lockstepSnapEvery===0)packet.state=serialize();broadcastLockstepPacket(packet)}if(steps>=LOCK_MAX_STEPS)lockAcc=0;publishState()}
-function runJoinLockstep(dt){let steps=0;while(lockstepPackets[lockFrame+1]&&steps<LOCK_MAX_STEPS){let pkt=lockstepPackets[lockFrame+1];delete lockstepPackets[lockFrame+1];stepWorldWithInputs(pkt.frame,pkt.inputs||{});steps++;if(pkt.checksum&&pkt.checksum!==checksumWorld()&&pkt.state){applyState(pkt.state);lockFrame=pkt.frame|0;msg='LOCKSTEP CHECK RESYNC F'+lockFrame}}if(steps===0&&now()-lastStepPacketAt>1200)msg=rtcConnected?'LOCKSTEP PACKET WAIT':'P2P CONNECT WAIT'}
+function runJoinLockstep(dt){
+  let steps=0;
+  while(lockstepPackets[lockFrame+1]&&steps<LOCK_MAX_STEPS){
+    let pkt=lockstepPackets[lockFrame+1];
+    delete lockstepPackets[lockFrame+1];
+    stepWorldWithInputs(pkt.frame,pkt.inputs||{});
+    steps++;
+    if(pkt.checksum&&pkt.checksum!==checksumWorld()&&pkt.state){applyState(pkt.state);lockFrame=pkt.frame|0;msg='LOCKSTEP CHECK RESYNC F'+lockFrame}
+  }
+
+  // パケットが数十ms途切れただけでJOIN本人が止まるのがカクカクの体感原因。
+  // 正解フレーム待ちの間だけ、自分の入力を画面へ先行反映し、次のHOST frameで自然に吸収する。
+  const wait=now()-lastStepPacketAt;
+  if(steps===0&&wait>JOIN_PREDICT_GRACE_MS){
+    updateJoinPrediction(Math.min(dt,LOCK_DT));
+    lastJoinPredictAt=now();
+  }else if(steps>1){
+    // まとめ受信時の早送りを描画上だけ少し丸める。敵・相手プレイヤーの瞬間移動感を減らす。
+    updateJoinPrediction(Math.min(dt*.35,LOCK_DT*.5));
+  }
+  if(steps===0&&wait>1200)msg=rtcConnected?'LOCKSTEP PACKET WAIT':'P2P CONNECT WAIT';
+}
 
 function nearestAlivePlayer(e){let alive=Object.values(players).filter(p=>p.alive);return alive.sort((a,b)=>Math.hypot(a.x-e.x,a.y-e.y)-Math.hypot(b.x-e.x,b.y-e.y))[0]||null}
 function bossBeginAction(e,a){if(!e||!e.alive||!e.boss||e.bossAction||e.actionLock>0)return false;let lx=e.x,ly=e.y,lc=tc(lx,ly);e.vx=0;e.vy=0;e.dir=[0,0];e.think=Math.max(e.think||0,a.duration||900);e.bossAction={...a,t:a.duration||900,elapsed:0,startedFrame:lockFrame,lockX:lx,lockY:ly,lockC:lc.c,lockR:lc.r};e.renderX=lx;e.renderY=ly;e.liftY=0;e.actionLock=Math.max(e.actionLock||0,a.duration||900);e.invuln=Math.max(e.invuln||0,Math.min(1100,a.duration||900));msg=a.label||'BOSS ACTION';return true}
@@ -1466,7 +1488,21 @@ async function publishState(){
   let t=now();
   let openChannels=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');
   let hasRtc=openChannels.length>0;
-  if(hasRtc&&t-lastStateWrite>16){
+
+  // ロックステップ中はstep packetが主同期。stateを毎描画フレームで重ねるとJOIN側DataChannelが詰まり、古い座標をまとめて処理してカクカクになる。
+  // P2P接続中のstateは初期同期・復旧用に絞り、通常のリアルタイム体験はstep packetへ寄せる。
+  if(hasRtc&&lockstepStarted){
+    if(t-lastStateWrite>520){
+      lastStateWrite=t;
+      const includeGrid=t-lastFullStateWrite>1800;
+      if(includeGrid)lastFullStateWrite=t;
+      let packet={type:'state',state:compactState(includeGrid),t};
+      openChannels.forEach(ch=>rtcSend(ch,packet));
+    }
+    return;
+  }
+
+  if(hasRtc&&t-lastStateWrite>33){
     lastStateWrite=t;
     const includeGrid=t-lastFullStateWrite>1200;
     if(includeGrid)lastFullStateWrite=t;
