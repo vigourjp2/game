@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: SMASH-INPUT-ONLY-V7-TICKFIX-20260603 -->
+<!-- build: SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD SMASH-INPUT-ONLY-V7-TICKFIX-20260603</div>
+    <div class="buildTag" id="buildTag">BUILD SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。HOSTが各フレームの入力セットを確定し、HOST/JOIN全員が同じ入力で同じ世界を固定フレーム計算する完全ロックステップ版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">SMASH-INPUT-ONLY-V7-TICKFIX-20260603</b></div>
+    <div class="pill">BUILD <b id="buildView">SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-INPUT-ONLY-V7-TICKFIX-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-INPUT-ONLY-V8-JOIN-PLAYBACK-20260603',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -696,13 +696,14 @@ function handleRtcMessage(fromId,data){
   }else if(mode==='join'&&m.type==='step'){
     receiveLockstepPacket(m);
   }else if(mode==='join'&&m.type==='state'){
-    // ロックステップではstateは初期同期・再同期用。初回stateは即時適用し、そこから次frameのstepを再生する。
+    // 初期同期・再同期用state。RTCから来たstateはJOIN再生の基準として扱い、Firebase保険stateで上書きされないよう時刻を残す。
     if(m.state&&(m.restart||!lockstepStarted)){
       applyState(m.state);
       if(Number.isFinite(m.state.lockFrame))lockFrame=m.state.lockFrame|0;
       lockstepPackets={};
       lockstepStarted=true;
       lastStepPacketAt=now();
+      joinLastAuthoritative=now();
       if(m.restart){resetLocalDeathInput();msg='RESTART / WAVE 1'}
       else msg='SMASH INPUT ONLY SYNC F'+lockFrame;
     }
@@ -1244,7 +1245,9 @@ function checksumWorld(){let h=2166136261>>>0;const add=v=>{let s=String(v);for(
 function broadcastLockstepPacket(packet){let open=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');open.forEach(ch=>rtcSend(ch,packet));lastLockBroadcast=now()}
 function receiveLockstepPacket(pkt){
   if(!pkt||!Number.isFinite(pkt.frame))return;
-  lastStepPacketAt=now();
+  const t=now();
+  lastStepPacketAt=t;
+  joinLastAuthoritative=t;
   let f=pkt.frame|0;
   let restartState=pkt.state&&f<=2&&lockFrame>2;
   if(pkt.state&&(!lockstepStarted||restartState)){
@@ -1256,7 +1259,13 @@ function receiveLockstepPacket(pkt){
     msg=restartState?'RESTART / WAVE 1':'SMASH INPUT ONLY START F'+lockFrame;
     return;
   }
-  if(!lockstepStarted&&!pkt.state)return;
+  // JOIN端末が初期stateを取り逃した場合でも、HOSTからの確定frameを受けた時点で再生を開始する。
+  // ここで捨てると「HOST画面だけJOINが動き、JOIN画面は時が止まる」状態になる。
+  if(!lockstepStarted&&!pkt.state){
+    lockFrame=f-1;
+    lockstepStarted=true;
+    msg='JOIN PLAYBACK START F'+lockFrame;
+  }
   if(f<=lockFrame)return;
   lockstepPackets[f]=pkt;
 }
@@ -1267,6 +1276,16 @@ function runJoinLockstep(dt){
   // 座標snapshot補正・未来stateジャンプ・client座標追従は行わない。
   let backlog=0;
   for(let f=lockFrame+1;lockstepPackets[f];f++)backlog++;
+  // 欠番で止まり続ける場合は、最も古い到着済みframeの直前へ再基準化する。
+  // reliableでも初期stateや古いframeを取り逃すとJOINだけ停止するため、再生継続を優先する。
+  if(!lockstepPackets[lockFrame+1]){
+    const future=Object.keys(lockstepPackets).map(Number).filter(f=>Number.isFinite(f)&&f>lockFrame).sort((a,b)=>a-b);
+    if(future.length&&future[0]>lockFrame+1){
+      lockFrame=future[0]-1;
+      backlog=future.length;
+      msg='JOIN FRAME CATCHUP F'+lockFrame;
+    }
+  }
   let limit=backlog>5?JOIN_MAX_CATCHUP_STEPS:1;
   let steps=0;
   while(lockstepPackets[lockFrame+1]&&steps<limit){
@@ -1684,13 +1703,19 @@ function loop(ts){
   try{
     readLocalInput();
     if(mode==='join'&&pendingRemoteState&&now()-lastRemoteApply>16){
-      const st=pendingRemoteState;
-      pendingRemoteState=null;
-      applyState(st);
-      if(Number.isFinite(st.lockFrame)){lockFrame=st.lockFrame|0;lockstepStarted=true;lastStepPacketAt=now();}
-      started=true;
-      $('panel').classList.add('hidden');
-      lastRemoteApply=now();
+      // RTCロックステップが動いている間は、Firebase保険stateでlockFrameを上書きしない。
+      // これをやるとJOIN端末だけ未再生frameを飛ばし、画面停止・巻き戻りの原因になる。
+      if(rtcConnected&&lockstepStarted&&now()-lastStepPacketAt<1200){
+        pendingRemoteState=null;
+      }else{
+        const st=pendingRemoteState;
+        pendingRemoteState=null;
+        applyState(st);
+        if(Number.isFinite(st.lockFrame)){lockFrame=st.lockFrame|0;lockstepStarted=true;lastStepPacketAt=now();joinLastAuthoritative=now();}
+        started=true;
+        $('panel').classList.add('hidden');
+        lastRemoteApply=now();
+      }
     }
     writeInput();
     publishCamera();
