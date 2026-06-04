@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260604-smash-carry-bomb-tether-v8 -->
+<!-- build: pbomber-20260604-host-block-event-authority-v13 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD SMASH-CART-DISMOUNT-SAFE-V6-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD HOST-BLOCK-EVENT-AUTHORITY-V13-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN自機は自分の入力で即時に動き、HOSTはJOIN入力と申告座標を採用して共通世界を確定する入力主導版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-BLOCK-DROP-LAND-FIX-V11-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='HOST-BLOCK-EVENT-AUTHORITY-V13-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -520,14 +520,26 @@ function makePlayer(id,name){let [c,r]=spawnCell(),o=cc(c,r);let teamKey=normTea
 function colorFor(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return`hsl(${h},88%,66%)`}
 function blockKey(c,r){return c+','+r}
 function itemKey(it){return (it&&it.id)?it.id:((it&&it.c)+','+(it&&it.r)+','+(it&&it.type||''))}
-function markLocalBlockClear(c,r,emit=true){let k=blockKey(c,r);localClearedBlocks.add(k);localBlockClears.push({seq:++localBlockClearSeq,c:c|0,r:r|0,frame:lockFrame|0});if(localBlockClears.length>128)localBlockClears=localBlockClears.slice(-128);delete summonedBlockHp[k];if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}if(emit&&mode==='join')sendGameEvent('blockBreak',{c:c|0,r:r|0,frame:lockFrame|0})}
-function markLocalBlockSet(c,r,hp=0,source='block'){if(!inside(c,r)||grid[r][c]===HARD)return false;let k=blockKey(c,r);grid[r][c]=SOFT;if(hp>0)summonedBlockHp[k]=hp|0;else delete summonedBlockHp[k];localClearedBlocks.delete(k);falling=falling.filter(f=>!(f&&f.c===(c|0)&&f.r===(r|0)&&(source==='drop'||source==='bossdrop'||source==='dropLand')));localBlockSets.push({seq:++localBlockSetSeq,c:c|0,r:r|0,hp:hp|0,source,frame:lockFrame|0});if(localBlockSets.length>128)localBlockSets=localBlockSets.slice(-128);return true}
+function broadcastHostGameEvent(type,payload={}){
+  if(!isHost||mode==='offline')return false;
+  const ev={id:myId+'_host_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};
+  seenGameEvents[ev.id]=true;
+  const packet={type:'gameEvent',event:ev,t:now(),frame:lockFrame};
+  const sent=new Set();
+  [...Object.values(rtcStateChannels||{}),...Object.values(rtcChannels||{})].forEach(ch=>{
+    if(ch&&ch.readyState==='open'&&!sent.has(ch)){sent.add(ch);rtcSend(ch,packet)}
+  });
+  if(roomRef){try{roomRef.child('events').push(ev).catch(()=>{})}catch(e){}}
+  return true;
+}
+function markLocalBlockClear(c,r,emit=true){let k=blockKey(c,r);localClearedBlocks.add(k);localBlockClears.push({seq:++localBlockClearSeq,c:c|0,r:r|0,frame:lockFrame|0});if(localBlockClears.length>128)localBlockClears=localBlockClears.slice(-128);delete summonedBlockHp[k];if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}if(emit&&mode==='join')sendGameEvent('blockBreak',{c:c|0,r:r|0,frame:lockFrame|0});else if(emit&&isHost&&mode!=='offline')broadcastHostGameEvent('blockBreak',{c:c|0,r:r|0,frame:lockFrame|0})}
+function markLocalBlockSet(c,r,hp=0,source='block',emit=true){if(!inside(c,r)||grid[r][c]===HARD)return false;let k=blockKey(c,r);grid[r][c]=SOFT;if(hp>0)summonedBlockHp[k]=hp|0;else delete summonedBlockHp[k];localClearedBlocks.delete(k);falling=falling.filter(f=>!(f&&f.c===(c|0)&&f.r===(r|0)&&(source==='drop'||source==='bossdrop'||source==='dropLand')));localBlockSets.push({seq:++localBlockSetSeq,c:c|0,r:r|0,hp:hp|0,source,frame:lockFrame|0});if(localBlockSets.length>128)localBlockSets=localBlockSets.slice(-128);if(emit&&isHost&&mode!=='offline')broadcastHostGameEvent('blockSet',{c:c|0,r:r|0,hp:hp|0,source,frame:lockFrame|0});return true}
 function blockHpAt(c,r){let v=summonedBlockHp[blockKey(c,r)];return Number.isFinite(v)?Math.max(0,v|0):0}
 function damageSoftBlock(c,r,owner=null){if(!inside(c,r)||grid[r][c]!==SOFT)return false;let k=blockKey(c,r),hp=blockHpAt(c,r);if(hp>1){summonedBlockHp[k]=hp-1;partsBurst(cc(c,r).x,cc(c,r).y,'#c4b5fd',12);msg='BLOCK HP '+(hp-1);return false;}markLocalBlockClear(c,r);maybeBlockMoney(c,r,owner);if(rand()<.34)dropItem(c,r);return true}
 function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join')return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};if(rtcInputChannel&&rtcInputChannel.readyState==='open')rtcSend(rtcInputChannel,{type:'gameEvent',event:ev,t:now()});if(!roomRef)return;try{await roomRef.child('events').push(ev)}catch(e){}}
-function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;markLocalBlockClear(c,r,false);if(isHost)broadcastAuthoritativeState(true);if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='blockSet'){let c=ev.c|0,r=ev.r|0;markLocalBlockSet(c,r,ev.hp||0,ev.source||'event');if(isHost)broadcastAuthoritativeState(true)}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
+function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;markLocalBlockClear(c,r,false);if(isHost)broadcastAuthoritativeState(true);if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='blockSet'){let c=ev.c|0,r=ev.r|0;markLocalBlockSet(c,r,ev.hp||0,ev.source||'event',false);if(isHost)broadcastAuthoritativeState(true)}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
 function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},blockClears:localBlockClears.slice(-128),blockSets:localBlockSets.slice(-128),worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
@@ -813,6 +825,8 @@ function handleRtcMessage(fromId,data){
     applyGameEvent(m.event);
   }else if(isHost&&m.type==='restartRequest'){
     restartFromWave1();
+  }else if(mode==='join'&&m.type==='gameEvent'){
+    applyGameEvent(m.event);
   }else if(mode==='join'&&m.type==='step'){
     if(m.state)receiveAuthoritativeState(m.state,m.restart);
   }else if(mode==='join'&&m.type==='state'){
@@ -910,6 +924,7 @@ async function startJoin(){
   let exists=await roomRef.child('created').get();
   if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}
   roomRef.child('members').on('value',s=>{members=s.val()||members||{}});
+  roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});
   roomRef.child('state').on('value',s=>{
     const st=s.val();
     if(!st)return;
@@ -1787,7 +1802,14 @@ function updateGimmicks(dt){
       let to=cc(target.c,target.r),vx=to.x-cart.x,vy=to.y-cart.y,dist=Math.hypot(vx,vy),step=(cart.speed||205)*dt;
       if(dist<=step){cart.x=to.x;cart.y=to.y;cart.c=target.c;cart.r=target.r;cart.index=cart.targetIndex;if(cart.index<=0||cart.index>=cart.path.length-1)stopCartAtEnd(cart);else cart.targetIndex=cart.index+(cart.dir||1)}
       else{cart.x+=vx/dist*step;cart.y+=vy/dist*step;let cell=tc(cart.x,cart.y);cart.c=cell.c;cart.r=cell.r}
-      if(inside(cart.c,cart.r)&&grid[cart.r][cart.c]===SOFT){grid[cart.r][cart.c]=EMPTY;checkGoalGateRevealFromCell(cart.c,cart.r);partsBurst(cart.x,cart.y,'#b9783f',14);sfx('hit',2)}
+      if(inside(cart.c,cart.r)&&grid[cart.r][cart.c]===SOFT){
+        // トロッコ破壊も爆風破壊と同じ履歴に乗せる。
+        // ここでgridだけEMPTYにすると、HOST画面では壊れてもJOIN側では古いblockSet/落下ブロック履歴に負けて復活・破壊不能になる。
+        markLocalBlockClear(cart.c,cart.r,true);
+        partsBurst(cart.x,cart.y,'#b9783f',14);
+        sfx('hit',2);
+        if(isHost&&mode!=='offline')broadcastAuthoritativeState(true);
+      }
       let rider=players[cart.rider];
       if(rider&&rider.alive){rider.x=cart.x;rider.y=cart.y-6;rider.c=cart.c;rider.r=cart.r;rider.vx=0;rider.vy=0;rider.invuln=Math.max(rider.invuln||0,260);markPlayerCartAuthority(rider.id,260)}
       enemies.forEach(e=>{if(e.alive&&Math.hypot(e.x-cart.x,e.y-cart.y)<e.rad+24){damageEnemyByHazard(e,'cart:'+cart.id,e.boss?3:1,360);let dx=e.x-cart.x,dy=e.y-cart.y,l=Math.hypot(dx,dy)||1;e.x+=dx/l*24;e.y+=dy/l*24;rescueEntityFromSolids(e,e.id)}})
@@ -2071,7 +2093,7 @@ document.addEventListener('pointermove',movePointer,{passive:false,capture:true}
 document.addEventListener('pointerup',endPointer,{passive:false,capture:true});
 document.addEventListener('pointercancel',endPointer,{passive:false,capture:true});
 document.addEventListener('gesturestart',e=>e.preventDefault());
-try{document.body.dataset.syncFixBuild='SMASH-BLOCK-DROP-SYNC-V10-20260604'}catch(e){}
+try{document.body.dataset.syncFixBuild='SMASH-CART-BLOCK-CLEAR-SYNC-V12-20260604'}catch(e){}
 })();
 </script>
 </body>
