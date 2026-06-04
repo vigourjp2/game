@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260604-host-block-event-authority-v13 -->
+<!-- build: pbomber-20260604-join-jump-unlock-v14 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD HOST-BLOCK-EVENT-AUTHORITY-V13-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD JOIN-JUMP-UNLOCK-V14-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN自機は自分の入力で即時に動き、HOSTはJOIN入力と申告座標を採用して共通世界を確定する入力主導版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='HOST-BLOCK-EVENT-AUTHORITY-V13-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='JOIN-JUMP-UNLOCK-V14-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -656,14 +656,14 @@ function applyState(s){
     if(mode==='join'){
       const srcRiding=(s.carts||[]).some(c=>c&&c.rider===id);
       const cartLocked=srcRiding;
-      const jumpLocked=playerJumpAuthorityLocked(id,src)||playerJumpAuthorityLocked(id,prev)||!!(prev&&prev.jumpState&&!src.jumpState);
-      if(id===myId&&!srcRiding&&prev&&prev.localPredictBlockedUntil&&prev.localPredictBlockedUntil>now()+3000){prev.localPredictBlockedUntil=0;}
+      const jumpLocked=playerJumpAuthorityLocked(id,src);
+      if(id===myId&&!srcRiding&&!jumpLocked&&prev&&prev.localPredictBlockedUntil){prev.localPredictBlockedUntil=0;}
       if(id===myId&&(cartLocked||jumpLocked)){
-        // トロッコ・ジャンプはHOSTが強制移動の正解を持つ。
-        // JOIN先行移動を混ぜると、降車地点・ジャンプ失敗着地地点だけJOIN画面が嘘になるため、ここは完全にHOST座標へ合わせる。
+        // トロッコ・ジャンプ中だけHOST確定座標へ合わせる。
+        // 着地後までロックを延長すると、JOIN側だけ通常移動へ戻れずジャンプしか移動手段がなくなる。
         const lockMs=cartLocked?CART_AUTHORITY_LOCK_MS:JUMP_AUTHORITY_LOCK_MS;
-        q.x=tx;q.y=ty;q.vx=0;q.vy=0;q.localPredictBlockedUntil=Math.max((prev&&prev.localPredictBlockedUntil)||0,now()+lockMs);
-        q.jumpAuthUntil=jumpLocked?Math.max((prev&&prev.jumpAuthUntil)||0,now()+JUMP_AUTHORITY_LOCK_MS):((prev&&prev.jumpAuthUntil)||0);
+        q.x=tx;q.y=ty;q.vx=0;q.vy=0;q.localPredictBlockedUntil=now()+lockMs;
+        q.jumpAuthUntil=jumpLocked?now()+Math.min(JUMP_AUTHORITY_LOCK_MS,260):0;
         q.lastDirX=src.lastDirX||(prev&&prev.lastDirX)||1;
         q.lastDirY=src.lastDirY||(prev&&prev.lastDirY)||0;
       }else if(prev){
@@ -1263,7 +1263,7 @@ function createLaunchPadBomb(p){ensureSpecialBag(p);if(!p.alive||!(p.specials.la
 function summonFrontBlock(p,inp={}){ensureSpecialBag(p);if(!p.alive||!(p.specials.summonblock>0))return false;if(p.specialCooldown>0){msg='SPECIAL COOLING';return false;}let cost=BLOCK_SUMMON_USE_COST;if(Math.floor(p.gold||0)<cost){msg='BLOCK SUMMON NEED $'+cost;addMoneyText(p.x,p.y,-cost,p.id,'NO MONEY');sfx('hit',.8);return false;}let d=currentPlayerArrowDir(p,inp),cell=tc(p.x,p.y),c=cell.c+d.x,r=cell.r+d.y;if(!inside(c,r)||c<=0||r<=0||c>=C-1||r>=R-1){msg='BLOCK SUMMON OUT';return false;}if(grid[r][c]!==EMPTY){msg='BLOCK SUMMON BLOCKED';return false;}if(bombs.some(b=>!b.carriedBy&&b.c===c&&b.r===r)||items.some(it=>it.c===c&&it.r===r)||Object.values(players).some(q=>q&&q.alive&&q.c===c&&q.r===r)||enemies.some(e=>e.alive&&e.c===c&&e.r===r)){msg='BLOCK SUMMON BLOCKED';return false;}let lv=Math.max(1,p.specials.summonblock|0),o=cc(c,r);p.gold=Math.max(0,Math.floor(p.gold||0)-cost);addMoneyText(p.x,p.y-18,-cost,p.id,'BLOCK SUMMON');markLocalBlockSet(c,r,lv,'summon');p.lastDirX=d.x;p.lastDirY=d.y;p.specialCooldown=650;partsBurst(o.x,o.y,'#c4b5fd',22);shockwave(o.x,o.y,44,'#c4b5fd');sfx('drop');msg=`${p.name} BLOCK SUMMON Lv${lv} -$${cost}`;return true;}
 function launchPadExplode(b){let lv=Math.max(1,b.power||1),origin=cc(b.c,b.r),owner=b.owner||myId;shake=Math.max(shake,7+lv);sfx('throw',1+lv*.25);partsBurst(origin.x,origin.y,'#ffcf70',34+lv*6);shockwave(origin.x,origin.y,70,'#ffcf70');DIRS.forEach(([dx,dy],i)=>{let id='lbb_'+owner+'_'+lockFrame+'_'+(++itemSeq)+'_'+i,nb={id,c:b.c,r:b.r,x:origin.x+dx*10,y:origin.y+dy*10,owner,passOwner:null,range:Math.min(8,2+Math.floor(lv/2)),timer:BOMB_FUSE,rad:17,vx:0,vy:0,power:Math.max(1,lv),slideT:0,thrownBy:owner,spin:10+i*3,carriedBy:null,carryOff:0,armed:false,fusePaused:true,hop:null,landed:false,bombStyle:'player',flameStyle:'player'};startBombHop(nb,dx,dy,Math.max(1,lv));bombs.push(nb)});msg='4 WAY BOMB LAUNCH';}
 function useSpecialAction(p,inp={}){let it=specialItemUnderPlayer(p);if(it)return buySpecial(p,it);ensureSpecialBag(p);let active=p.activeSpecial||((p.specials.shadowservant||0)>0?'shadowservant':((p.specials.summonblock||0)>0?'summonblock':((p.specials.launchbomb||0)>0?'launchbomb':'jump')));if(active==='shadowservant'&&p.specials.shadowservant>0){msg=`${p.name} SHADOW SERVANT Lv${p.specials.shadowservant} READY`;return true;}if(active==='summonblock'&&p.specials.summonblock>0)return summonFrontBlock(p,inp);if(active==='launchbomb'&&p.specials.launchbomb>0)return createLaunchPadBomb(p);if(active==='jump'&&p.specials.jump>0)return startPlayerJump(p,inp);if(p.specials.shadowservant>0){p.activeSpecial='shadowservant';msg=`${p.name} SHADOW SERVANT Lv${p.specials.shadowservant} READY`;return true}if(p.specials.summonblock>0){p.activeSpecial='summonblock';return summonFrontBlock(p,inp)}if(p.specials.launchbomb>0){p.activeSpecial='launchbomb';return createLaunchPadBomb(p)}return startPlayerJump(p,inp);}
-function updatePlayerJump(p,dt,inp={}){let j=p&&p.jumpState;if(!j)return false;j.t+=dt*1000;let a=clamp(j.t/j.dur,0,1),fo=cc(j.fromC,j.fromR),to=cc(j.toC,j.toR),arc=Math.sin(a*Math.PI)*(j.arc||38);p.x=fo.x+(to.x-fo.x)*a;p.y=fo.y+(to.y-fo.y)*a-arc;p.vx=0;p.vy=0;if(a<1)return true;p.c=j.toC;p.r=j.toR;p.x=to.x;p.y=to.y;j.left=Math.max(0,(j.left||1)-1);partsBurst(p.x,p.y,'#b7f7ff',8);if(j.left<=0){if(jumpLandingFree(p.c,p.r,p.id)){p.jumpState=null;markPlayerJumpAuthority(p.id,JUMP_AUTHORITY_LOCK_MS);partsBurst(p.x,p.y,'#b7f7ff',16);shockwave(p.x,p.y,42,'#b7f7ff');sfx('kick',1);msg=`${p.name} JUMP LAND`;return true}p.jumpState=null;depen(p,p.id);markPlayerJumpAuthority(p.id,JUMP_AUTHORITY_LOCK_MS);msg='JUMP STOP';return true;}let d=currentPlayerArrowDir(p,inp);let turned=(d.x!==j.dx||d.y!==j.dy);if(turned&&j.turnsLeft>0){j.turnsLeft--;j.dx=d.x;j.dy=d.y;p.lastDirX=d.x;p.lastDirY=d.y;msg=`JUMP TURN ${j.turnsLeft}`;}else if(!turned){p.lastDirX=j.dx;p.lastDirY=j.dy;}let n=jumpNextCell(p.c,p.r,j.dx,j.dy);if(n.c!==p.c+j.dx*2||n.r!==p.r+j.dy*2)msg='JUMP WRAP - 反対側から再突入';j.fromC=p.c;j.fromR=p.r;j.toC=n.c;j.toR=n.r;j.t=0;j.nextDx=undefined;j.nextDy=undefined;return true;}
+function updatePlayerJump(p,dt,inp={}){let j=p&&p.jumpState;if(!j)return false;j.t+=dt*1000;let a=clamp(j.t/j.dur,0,1),fo=cc(j.fromC,j.fromR),to=cc(j.toC,j.toR),arc=Math.sin(a*Math.PI)*(j.arc||38);p.x=fo.x+(to.x-fo.x)*a;p.y=fo.y+(to.y-fo.y)*a-arc;p.vx=0;p.vy=0;if(a<1)return true;p.c=j.toC;p.r=j.toR;p.x=to.x;p.y=to.y;j.left=Math.max(0,(j.left||1)-1);partsBurst(p.x,p.y,'#b7f7ff',8);if(j.left<=0){if(jumpLandingFree(p.c,p.r,p.id)){p.jumpState=null;clearPlayerJumpAuthority(p.id);partsBurst(p.x,p.y,'#b7f7ff',16);shockwave(p.x,p.y,42,'#b7f7ff');sfx('kick',1);msg=`${p.name} JUMP LAND`;return true}p.jumpState=null;depen(p,p.id);clearPlayerJumpAuthority(p.id);msg='JUMP STOP';return true;}let d=currentPlayerArrowDir(p,inp);let turned=(d.x!==j.dx||d.y!==j.dy);if(turned&&j.turnsLeft>0){j.turnsLeft--;j.dx=d.x;j.dy=d.y;p.lastDirX=d.x;p.lastDirY=d.y;msg=`JUMP TURN ${j.turnsLeft}`;}else if(!turned){p.lastDirX=j.dx;p.lastDirY=j.dy;}let n=jumpNextCell(p.c,p.r,j.dx,j.dy);if(n.c!==p.c+j.dx*2||n.r!==p.r+j.dy*2)msg='JUMP WRAP - 反対側から再突入';j.fromC=p.c;j.fromR=p.r;j.toC=n.c;j.toR=n.r;j.t=0;j.nextDx=undefined;j.nextDy=undefined;return true;}
 function updateMoneyTexts(dt){moneyTexts.forEach(m=>{m.y+=(m.vy||-42)*dt;m.life-=dt*1000});moneyTexts=moneyTexts.filter(m=>m.life>0)}
 function drawMoneyTexts(){moneyTexts.forEach(m=>{let neg=m.amount<0,maxLife=neg?1180:1050,a=Math.max(0,Math.min(1,m.life/maxLife));ctx.save();ctx.globalAlpha=a;let scale=neg?(1.18-.18*a):1;ctx.translate(m.x,m.y);ctx.scale(scale,scale);ctx.font=neg?'900 19px system-ui':'bold 16px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineWidth=neg?5:4;let txt=(m.amount>=0?'+$':'-$')+Math.abs(Math.floor(m.amount||0));ctx.strokeStyle='rgba(0,0,0,.82)';ctx.strokeText(txt,0,0);ctx.fillStyle=neg?(m.col||'#ff5a5a'):(m.col||'#ffe66d');ctx.fillText(txt,0,0);ctx.restore();});}
 function updateSpecialButton(){let b=$('specialBtn');if(!b)return;let p=players[myId];if(!p||!p.alive){b.className='disabled';b.querySelector('.ico').textContent='🪽';b.querySelector('.txt').textContent='DOWN';b.querySelector('.price').textContent='---';return;}ensureSpecialBag(p);let it=specialItemUnderPlayer(p);let ico=b.querySelector('.ico'),txt=b.querySelector('.txt'),price=b.querySelector('.price');if(it){ico.textContent=specialIcon(it.type);txt.textContent=canBuySpecial(p,it)?'BUY':'NO MONEY';price.textContent='$'+Math.floor(it.price||specialPrice(it.type));b.className=canBuySpecial(p,it)?'buy':'disabled';return;}let active=p.activeSpecial||((p.specials.shadowservant||0)>0?'shadowservant':((p.specials.summonblock||0)>0?'summonblock':((p.specials.launchbomb||0)>0?'launchbomb':'jump'))),lv=p.specials[active]||0;ico.textContent=specialIcon(active);txt.textContent=p.specialCooldown>0?'WAIT':(active==='shadowservant'?(lv>0?'SHADOW':'NO ITEM'):(active==='summonblock'?(lv>0?'BLOCK':'NO ITEM'):(active==='launchbomb'?(lv>0?'LAUNCH':'NO ITEM'):(p.jumpState?'JUMPING':(lv>0?'JUMP':'NO ITEM')))));price.textContent=active==='summonblock'?('Lv'+lv+' Cost:$'+BLOCK_SUMMON_USE_COST):('Lv'+lv+' / $'+Math.floor(p.gold||0));b.className=p.specialCooldown>0||p.jumpState?'active':(lv>0?'ready':'disabled');}
@@ -1692,11 +1692,17 @@ function playerCartAuthorityLocked(id,p=null){
   return isPlayerRidingCart(id);
 }
 function playerJumpAuthorityLocked(id,p=null){
-  const t=now();
+  // JOINの通常移動ロックは、実際にジャンプ中の間だけに限定する。
+  // jumpAuthUntilをロック理由にすると、着地後もHOST座標固定が残り、JOINだけ移動不能になる。
   if(!p)return false;
-  if(p.jumpState)return true;
-  if(Number.isFinite(p.jumpAuthUntil)&&p.jumpAuthUntil>t)return true;
-  return false;
+  return !!p.jumpState;
+}
+function clearPlayerJumpAuthority(id){
+  const p=players&&players[id];
+  if(!p)return;
+  p.jumpAuthUntil=0;
+  p.jumpAuthority=false;
+  p.localPredictBlockedUntil=0;
 }
 function markPlayerCartAuthority(id,ms=CART_AUTHORITY_LOCK_MS){
   const p=players&&players[id];
@@ -1976,9 +1982,9 @@ function updateJoinPrediction(dt){
     if(p.id===myId&&p.alive){
       const ridingCart=(carts||[]).find(c=>c&&c.rider===myId);
       if(!ridingCart&&Number.isFinite(p.cartAuthUntil)&&p.cartAuthUntil-t>3000)clearPlayerCartAuthority(myId);
-      if(!ridingCart&&p.localPredictBlockedUntil&&p.localPredictBlockedUntil-t>3000)p.localPredictBlockedUntil=0;
       const cartLocked=!!ridingCart;
       const jumpLocked=playerJumpAuthorityLocked(myId,p);
+      if(!cartLocked&&!jumpLocked&&p.localPredictBlockedUntil)p.localPredictBlockedUntil=0;
       const forceLocked=cartLocked||jumpLocked||(p.localPredictBlockedUntil&&p.localPredictBlockedUntil>t);
       if(forceLocked){
         // トロッコ・ジャンプ中・着地直後はHOST確定座標をそのまま表示する。
