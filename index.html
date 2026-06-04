@@ -87,13 +87,13 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-CARRY-BOMB-TETHER-V8-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-JOIN-BLOCK-CLEAR-FAST-V9-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
 let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,roomSeed=0,myId=localStorage.pbomberId||('p_'+Math.random().toString(36).slice(2,10));localStorage.pbomberId=myId;
 let lastNet=0,lastStateWrite=0,lastFullStateWrite=0,lastInputWrite=0,lastMemberHeartbeat=0,lastHudUpdate=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
-let localClearedBlocks=new Set(),localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
+let localClearedBlocks=new Set(),localBlockClears=[],localBlockClearSeq=0,localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
 let moneyTexts=[],specialSeq=0,summonedBlockHp={};
 let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
@@ -520,14 +520,14 @@ function makePlayer(id,name){let [c,r]=spawnCell(),o=cc(c,r);let teamKey=normTea
 function colorFor(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return`hsl(${h},88%,66%)`}
 function blockKey(c,r){return c+','+r}
 function itemKey(it){return (it&&it.id)?it.id:((it&&it.c)+','+(it&&it.r)+','+(it&&it.type||''))}
-function markLocalBlockClear(c,r){localClearedBlocks.add(blockKey(c,r));delete summonedBlockHp[blockKey(c,r)];if(inside(c,r)&&grid[r][c]!==HARD){delete summonedBlockHp[blockKey(c,r)];grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}}
+function markLocalBlockClear(c,r){let k=blockKey(c,r);localClearedBlocks.add(k);localBlockClears.push({seq:++localBlockClearSeq,c:c|0,r:r|0,frame:lockFrame|0});if(localBlockClears.length>96)localBlockClears=localBlockClears.slice(-96);delete summonedBlockHp[k];if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}}
 function blockHpAt(c,r){let v=summonedBlockHp[blockKey(c,r)];return Number.isFinite(v)?Math.max(0,v|0):0}
 function damageSoftBlock(c,r,owner=null){if(!inside(c,r)||grid[r][c]!==SOFT)return false;let k=blockKey(c,r),hp=blockHpAt(c,r);if(hp>1){summonedBlockHp[k]=hp-1;partsBurst(cc(c,r).x,cc(c,r).y,'#c4b5fd',12);msg='BLOCK HP '+(hp-1);return false;}markLocalBlockClear(c,r);maybeBlockMoney(c,r,owner);if(rand()<.34)dropItem(c,r);return true}
 function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join'||!roomRef)return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};try{await roomRef.child('events').push(ev)}catch(e){}}
 function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
-function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
+function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},blockClears:localBlockClears.slice(-96),worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
 
@@ -576,6 +576,21 @@ function applyState(s){
   waveIsBoss=!!s.waveIsBoss;goalGate=s.goalGate?{...s.goalGate}:null;if(Number.isFinite(s.goalCelebration))goalCelebration=+s.goalCelebration;gameEnded=!!s.gameEnded;if(Number.isFinite(s.endingTimer))endingTimer=+s.endingTimer;endingCloseAttempted=!!s.endingCloseAttempted;
 
   if(s.grid&&Array.isArray(s.grid)&&s.grid.length===R)grid=s.grid.map(row=>row.slice());
+  if(Array.isArray(s.blockClears)){
+    s.blockClears.forEach(b=>{
+      if(!b)return;
+      let c=b.c|0,r=b.r|0,k=blockKey(c,r);
+      localClearedBlocks.add(k);
+      delete summonedBlockHp[k];
+      if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}
+    });
+  }
+  if(localClearedBlocks&&localClearedBlocks.size){
+    localClearedBlocks.forEach(k=>{
+      let a=String(k).split(','),c=+a[0],r=+a[1];
+      if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;delete summonedBlockHp[k];}
+    });
+  }
   if(s.members){
     const prevMembers=members||{};
     const merged={...prevMembers};
@@ -709,6 +724,7 @@ function compactState(includeGrid=false){
     carts:carts.map(c=>({id:c.id,mode:c.mode,c:c.c,r:c.r,x:c.x,y:c.y,speed:c.speed||205,cool:c.cool||0,path:Array.isArray(c.path)?c.path:[],index:c.index||0,targetIndex:c.targetIndex||0,state:c.state||'idle',rider:c.rider||null,dir:c.dir||1,trip:c.trip||0,noBoardUntil:c.noBoardUntil||0,lastRiderId:c.lastRiderId||null,riderCooldownUntil:c.riderCooldownUntil||0})),
     items:normalizeItems(items),
     falling,
+    blockClears:localBlockClears.slice(-96),
     wave,
     msg,
     shake,
@@ -880,8 +896,8 @@ function startOffline(){beginGameBgmFromUserGesture();roomId='OFFLINE';roomSeed=
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
 function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;lastAuthStateSent=0;lastAuthFullStateSent=0;}
-function bootGame(preserveMembers=false){let prevMembers=preserveMembers?{...(members||{})}:{};let prevInputs=preserveMembers?{...(inputs||{})}:{};if(preserveMembers){Object.keys(prevInputs).forEach(id=>{prevInputs[id]=normalizeRestartInput(prevInputs[id])})}resetDeterminism();players={};members=preserveMembers?prevMembers:{};inputs=preserveMembers?prevInputs:{};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();resetLocalDeathInput();setupStageForWave(wave);if(preserveMembers){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);ids.forEach(id=>{let m=(members&&members[id])||{},inp=(inputs&&inputs[id])||{};players[id]=makePlayer(id,inp.name||m.name||(id===myId?nameVal():'PLAYER'))})}applyStartWave();if(wave===1)spawnWave();started=true;last=performance.now();updateRestartButton()}
-function bootJoinLocal(){resetDeterminism();players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();setupStageForWave(wave);members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
+function bootGame(preserveMembers=false){let prevMembers=preserveMembers?{...(members||{})}:{};let prevInputs=preserveMembers?{...(inputs||{})}:{};if(preserveMembers){Object.keys(prevInputs).forEach(id=>{prevInputs[id]=normalizeRestartInput(prevInputs[id])})}resetDeterminism();players={};members=preserveMembers?prevMembers:{};inputs=preserveMembers?prevInputs:{};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();resetLocalDeathInput();setupStageForWave(wave);if(preserveMembers){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);ids.forEach(id=>{let m=(members&&members[id])||{},inp=(inputs&&inputs[id])||{};players[id]=makePlayer(id,inp.name||m.name||(id===myId?nameVal():'PLAYER'))})}applyStartWave();if(wave===1)spawnWave();started=true;last=performance.now();updateRestartButton()}
+function bootJoinLocal(){resetDeterminism();players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();setupStageForWave(wave);members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
 
 function allPlayersDead(){let list=Object.values(players||{});return started&&list.length>0&&list.every(p=>p&&p.alive===false)}
 function updateRestartButton(){let b=$('restartBtn');if(!b)return;if(battle.on&&battle.phase==='champion'&&battle.timer<=0){b.textContent='BATTLE AGAIN';b.classList.add('show');return;}b.textContent='RESTART WAVE 1';b.classList.toggle('show',!battle.on&&allPlayersDead())}
@@ -2022,7 +2038,7 @@ document.addEventListener('pointermove',movePointer,{passive:false,capture:true}
 document.addEventListener('pointerup',endPointer,{passive:false,capture:true});
 document.addEventListener('pointercancel',endPointer,{passive:false,capture:true});
 document.addEventListener('gesturestart',e=>e.preventDefault());
-try{document.body.dataset.syncFixBuild='SMASH-CART-DISMOUNT-SAFE-V6-20260604'}catch(e){}
+try{document.body.dataset.syncFixBuild='SMASH-JOIN-BLOCK-CLEAR-FAST-V9-20260604'}catch(e){}
 })();
 </script>
 </body>
