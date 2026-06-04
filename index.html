@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD JOIN-JUMP-CART-BREAK-V15-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD JOIN-CART-BREAK-AUTH-V16-20260604</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN自機は自分の入力で即時に動き、HOSTはJOIN入力と申告座標を採用して共通世界を確定する入力主導版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -87,13 +87,14 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='JOIN-JUMP-CART-BREAK-V15-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='JOIN-CART-BREAK-AUTH-V16-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
 let db=null,roomRef=null,roomId='',mode='offline',isHost=false,started=false,roomSeed=0,myId=localStorage.pbomberId||('p_'+Math.random().toString(36).slice(2,10));localStorage.pbomberId=myId;
 let lastNet=0,lastStateWrite=0,lastFullStateWrite=0,lastInputWrite=0,lastMemberHeartbeat=0,lastHudUpdate=0,lastStateRecv=0,lastStateTs=0,joinSeenBombSeq=0,gameEventSeq=0,localDeathSeq=0,lastReportedDeathSeq=0;
 let localClearedBlocks=new Set(),localBlockClears=[],localBlockClearSeq=0,localBlockSets=[],localBlockSetSeq=0,localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
+let pendingCartBreakClaims=[],cartBreakClaimSeq=0,appliedCartBreakClaims={};
 let moneyTexts=[],specialSeq=0,summonedBlockHp={};
 let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
@@ -543,12 +544,62 @@ function broadcastHostGameEvent(type,payload={}){
 }
 function markLocalBlockClear(c,r,emit=true){let k=blockKey(c,r);localClearedBlocks.add(k);localBlockClears.push({seq:++localBlockClearSeq,c:c|0,r:r|0,frame:lockFrame|0});if(localBlockClears.length>128)localBlockClears=localBlockClears.slice(-128);delete summonedBlockHp[k];if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}if(emit&&mode==='join')sendGameEvent('blockBreak',{c:c|0,r:r|0,frame:lockFrame|0});else if(emit&&isHost&&mode!=='offline')broadcastHostGameEvent('blockBreak',{c:c|0,r:r|0,frame:lockFrame|0})}
 function markLocalBlockSet(c,r,hp=0,source='block',emit=true){if(!inside(c,r)||grid[r][c]===HARD)return false;let k=blockKey(c,r);grid[r][c]=SOFT;if(hp>0)summonedBlockHp[k]=hp|0;else delete summonedBlockHp[k];localClearedBlocks.delete(k);falling=falling.filter(f=>!(f&&f.c===(c|0)&&f.r===(r|0)&&(source==='drop'||source==='bossdrop'||source==='dropLand')));localBlockSets.push({seq:++localBlockSetSeq,c:c|0,r:r|0,hp:hp|0,source,frame:lockFrame|0});if(localBlockSets.length>128)localBlockSets=localBlockSets.slice(-128);if(emit&&isHost&&mode!=='offline')broadcastHostGameEvent('blockSet',{c:c|0,r:r|0,hp:hp|0,source,frame:lockFrame|0});return true}
+
+function normalizeCartBreakCells(cells){
+  const out=[],seen={};
+  (Array.isArray(cells)?cells:[]).forEach(v=>{
+    const c=(v&&Number.isFinite(v.c))?(v.c|0):NaN;
+    const r=(v&&Number.isFinite(v.r))?(v.r|0):NaN;
+    if(!Number.isFinite(c)||!Number.isFinite(r)||!inside(c,r))return;
+    const k=blockKey(c,r);
+    if(seen[k])return;
+    seen[k]=true;
+    out.push({c,r});
+  });
+  return out.slice(0,18);
+}
+function claimCartBreakFromJoin(cart,cells){
+  if(mode!=='join')return;
+  const claimCells=normalizeCartBreakCells(cells);
+  if(!claimCells.length)return;
+  const claim={seq:++cartBreakClaimSeq,cartId:cart&&cart.id||'',rider:myId,frame:lockFrame|0,cells:claimCells};
+  pendingCartBreakClaims.push(claim);
+  if(pendingCartBreakClaims.length>24)pendingCartBreakClaims=pendingCartBreakClaims.slice(-24);
+  localInput.cartBreakSeq=cartBreakClaimSeq;
+  sendGameEvent('cartBlockBreak',claim);
+}
+function applyCartBreakClaim(ownerId,claim,fromEvent=false){
+  if(!claim)return false;
+  const seq=claim.seq|0;
+  const key=(ownerId||claim.rider||claim.owner||'unknown')+':'+seq;
+  if(seq&&appliedCartBreakClaims[key])return false;
+  const cells=normalizeCartBreakCells(claim.cells);
+  if(!cells.length)return false;
+  if(seq)appliedCartBreakClaims[key]=now();
+  const ks=Object.keys(appliedCartBreakClaims);
+  if(ks.length>240)ks.slice(0,ks.length-180).forEach(k=>delete appliedCartBreakClaims[k]);
+  let broke=false;
+  cells.forEach(({c,r})=>{
+    if(inside(c,r)&&grid[r][c]===SOFT){
+      markLocalBlockClear(c,r,false);
+      partsBurst(cc(c,r).x,cc(c,r).y,'#b9783f',12);
+      broke=true;
+    }
+  });
+  if(broke){
+    sfx('hit',1.6);
+    shake=Math.max(shake,5);
+    msg='MINECART - JOIN破壊をHOST確定';
+    if(isHost&&mode!=='offline')broadcastAuthoritativeState(true);
+  }
+  return broke;
+}
 function blockHpAt(c,r){let v=summonedBlockHp[blockKey(c,r)];return Number.isFinite(v)?Math.max(0,v|0):0}
 function damageSoftBlock(c,r,owner=null){if(!inside(c,r)||grid[r][c]!==SOFT)return false;let k=blockKey(c,r),hp=blockHpAt(c,r);if(hp>1){summonedBlockHp[k]=hp-1;partsBurst(cc(c,r).x,cc(c,r).y,'#c4b5fd',12);msg='BLOCK HP '+(hp-1);return false;}markLocalBlockClear(c,r);maybeBlockMoney(c,r,owner);if(rand()<.34)dropItem(c,r);return true}
 function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join')return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};if(rtcInputChannel&&rtcInputChannel.readyState==='open')rtcSend(rtcInputChannel,{type:'gameEvent',event:ev,t:now()});if(!roomRef)return;try{await roomRef.child('events').push(ev)}catch(e){}}
-function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;markLocalBlockClear(c,r,false);if(isHost)broadcastAuthoritativeState(true);if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='blockSet'){let c=ev.c|0,r=ev.r|0;markLocalBlockSet(c,r,ev.hp||0,ev.source||'event',false);if(isHost)broadcastAuthoritativeState(true)}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
+function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){let c=ev.c|0,r=ev.r|0;markLocalBlockClear(c,r,false);if(isHost)broadcastAuthoritativeState(true);if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='cartBlockBreak'){applyCartBreakClaim(ev.owner||ev.rider,ev,true)}else if(ev.type==='blockSet'){let c=ev.c|0,r=ev.r|0;markLocalBlockSet(c,r,ev.hp||0,ev.source||'event',false);if(isHost)broadcastAuthoritativeState(true)}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
 function serialize(){return{roomSeed,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},blockClears:localBlockClears.slice(-128),blockSets:localBlockSets.slice(-128),worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
@@ -953,8 +1004,8 @@ function startOffline(){beginGameBgmFromUserGesture();roomId='OFFLINE';roomSeed=
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
 function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;lastAuthStateSent=0;lastAuthFullStateSent=0;}
-function bootGame(preserveMembers=false){let prevMembers=preserveMembers?{...(members||{})}:{};let prevInputs=preserveMembers?{...(inputs||{})}:{};if(preserveMembers){Object.keys(prevInputs).forEach(id=>{prevInputs[id]=normalizeRestartInput(prevInputs[id])})}resetDeterminism();players={};members=preserveMembers?prevMembers:{};inputs=preserveMembers?prevInputs:{};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localBlockSets=[];localBlockSetSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();resetLocalDeathInput();setupStageForWave(wave);if(preserveMembers){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);ids.forEach(id=>{let m=(members&&members[id])||{},inp=(inputs&&inputs[id])||{};players[id]=makePlayer(id,inp.name||m.name||(id===myId?nameVal():'PLAYER'))})}applyStartWave();if(wave===1)spawnWave();started=true;last=performance.now();updateRestartButton()}
-function bootJoinLocal(){resetDeterminism();players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localBlockSets=[];localBlockSetSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();resetBattleState();setupStageForWave(wave);members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
+function bootGame(preserveMembers=false){let prevMembers=preserveMembers?{...(members||{})}:{};let prevInputs=preserveMembers?{...(inputs||{})}:{};if(preserveMembers){Object.keys(prevInputs).forEach(id=>{prevInputs[id]=normalizeRestartInput(prevInputs[id])})}resetDeterminism();players={};members=preserveMembers?prevMembers:{};inputs=preserveMembers?prevInputs:{};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localBlockSets=[];localBlockSetSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();pendingCartBreakClaims=[];cartBreakClaimSeq=0;appliedCartBreakClaims={};resetBattleState();resetLocalDeathInput();setupStageForWave(wave);if(preserveMembers){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);ids.forEach(id=>{let m=(members&&members[id])||{},inp=(inputs&&inputs[id])||{};players[id]=makePlayer(id,inp.name||m.name||(id===myId?nameVal():'PLAYER'))})}applyStartWave();if(wave===1)spawnWave();started=true;last=performance.now();updateRestartButton()}
+function bootJoinLocal(){resetDeterminism();players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];moneyTexts=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localBlockSets=[];localBlockSetSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();pendingCartBreakClaims=[];cartBreakClaimSeq=0;appliedCartBreakClaims={};resetBattleState();setupStageForWave(wave);members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
 
 function allPlayersDead(){let list=Object.values(players||{});return started&&list.length>0&&list.every(p=>p&&p.alive===false)}
 function updateRestartButton(){let b=$('restartBtn');if(!b)return;if(battle.on&&battle.phase==='champion'&&battle.timer<=0){b.textContent='BATTLE AGAIN';b.classList.add('show');return;}b.textContent='RESTART WAVE 1';b.classList.toggle('show',!battle.on&&allPlayersDead())}
@@ -1283,12 +1334,12 @@ async function writeInput(force=false){
   if(!force&&t-lastInputWrite<8)return;
   if(!roomRef)return;
   let me=players[myId];
-  let sig=[Math.round((localInput.dx||0)*100),Math.round((localInput.dy||0)*100),localInput.seq||0,localInput.handSeq||0,localInput.specialSeq||0,me?Math.round(me.x):0,me?Math.round(me.y):0,me?me.alive!==false:1,localDeathSeq||0].join('|');
+  let sig=[Math.round((localInput.dx||0)*100),Math.round((localInput.dy||0)*100),localInput.seq||0,localInput.handSeq||0,localInput.specialSeq||0,localInput.cartBreakSeq||0,me?Math.round(me.x):0,me?Math.round(me.y):0,me?me.alive!==false:1,localDeathSeq||0].join('|');
   if(!force&&sig===lastSentInputSig&&t-lastInputWrite<24)return;
   lastInputWrite=t;
   lastSentInputSig=sig;
   localInput.inputSeq=(localInput.inputSeq||0)+1;
-  let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,inputSeq:localInput.inputSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};
+  let payload={name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,cartBreakSeq:localInput.cartBreakSeq||0,cartBreaks:pendingCartBreakClaims.slice(-8),inputSeq:localInput.inputSeq,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:t};
 
   if(mode==='join'&&rtcInputChannel&&rtcInputChannel.readyState==='open'){
     rtcConnected=true;
@@ -1439,7 +1490,7 @@ function emptyDropCell(){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){i
 function resetLocalDeathInput(){localDeathSeq=0;lastReportedDeathSeq=0;localInput.dead=false;localInput.alive=true;localInput.deathSeq=0;localInput.deathReason=''}
 function normalizeRestartInput(inp){let o=cloneInputPayload(inp||{});o.dx=0;o.dy=0;o.alive=true;o.dead=false;o.deathSeq=0;o.deathReason='';return o}
 function cloneInputPayload(inp){return {name:inp&&inp.name||'PLAYER',dx:+(inp&&inp.dx||0),dy:+(inp&&inp.dy||0),bombSeq:+(inp&&inp.bombSeq||0),handSeq:+(inp&&inp.handSeq||0),specialSeq:+(inp&&inp.specialSeq||0),inputSeq:+(inp&&inp.inputSeq||0),clientX:+(inp&&inp.clientX||0),clientY:+(inp&&inp.clientY||0),alive:inp&&inp.alive!==false,dead:!!(inp&&inp.dead),deathSeq:+(inp&&inp.deathSeq||0),deathReason:inp&&inp.deathReason||'',last:+(inp&&inp.last||0)}}
-function buildLocalPayloadForLockstep(){let me=players[myId];return cloneInputPayload({name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,inputSeq:localInput.inputSeq||0,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:now()})}
+function buildLocalPayloadForLockstep(){let me=players[myId];return cloneInputPayload({name:nameVal(),dx:localInput.dx,dy:localInput.dy,bombSeq:localInput.seq,handSeq:localInput.handSeq,specialSeq:localInput.specialSeq,cartBreakSeq:localInput.cartBreakSeq||0,cartBreaks:pendingCartBreakClaims.slice(-8),inputSeq:localInput.inputSeq||0,clientX:me?Math.round(me.x):0,clientY:me?Math.round(me.y):0,alive:me?!!me.alive:true,dead:me?me.alive===false:false,deathSeq:localDeathSeq,deathReason:localInput.deathReason||'',last:now()})}
 function buildLockstepInputs(){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),...Object.keys(players||{}),myId]);let out={};ids.forEach(id=>{out[id]=id===myId?buildLocalPayloadForLockstep():cloneInputPayload(inputs[id]||{name:(members[id]&&members[id].name)||'PLAYER',last:(members[id]&&members[id].last)||0})});return out}
 function checksumWorld(){let h=2166136261>>>0;const add=v=>{let s=String(v);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}};add(lockFrame);add(wave);Object.keys(players).sort().forEach(id=>{let p=players[id];add(id);add(Math.round(p.x));add(Math.round(p.y));add(p.alive?1:0);add(Math.round((p.revive||0)*1000));add(p.score||0);add(p.placed||0)});bombs.forEach(b=>{add(b.id);add(b.c);add(b.r);add(Math.round(b.timer||0))});enemies.forEach(e=>{add(e.id);add(Math.round(e.x));add(Math.round(e.y));add(e.hp||0);add(Math.round(e.invuln||0))});falling.forEach(f=>{add(f.id);add(f.c);add(f.r);add(f.phase);add(Math.round(f.t||0))});add(worldRngState>>>0);add(dropSeq);add(enemySeq);return h>>>0}
 function broadcastLockstepPacket(packet){let open=Object.values(rtcChannels).filter(ch=>ch&&ch.readyState==='open');open.forEach(ch=>rtcSend(ch,packet));lastLockBroadcast=now()}
@@ -1828,15 +1879,19 @@ function cartBreakSoftBlocks(cart){
   // 車体幅ぶんも見る。中心セルだけだと、JOIN同期・Wave切替後・落下ブロックで見た目と判定セルがズレて破壊不能に見える。
   const samples=[[-20,-16],[0,-18],[20,-16],[-22,0],[0,0],[22,0],[-18,18],[0,18],[18,18]];
   samples.forEach(([dx,dy])=>{const c=tc((cart.x||0)+dx,(cart.y||0)+dy);add(c.c,c.r);});
-  let broke=false;
+  let broke=false,brokeCells=[];
   cells.forEach(({c,r})=>{
     if(inside(c,r)&&grid[r][c]===SOFT){
       markLocalBlockClear(c,r,true);
+      brokeCells.push({c,r});
       partsBurst(cc(c,r).x,cc(c,r).y,'#b9783f',14);
       broke=true;
     }
   });
-  if(broke){sfx('hit',2);shake=Math.max(shake,5);msg='MINECART - ブロック破砕';if(isHost&&mode!=='offline')broadcastAuthoritativeState(true);}
+  if(broke){
+    if(mode==='join')claimCartBreakFromJoin(cart,brokeCells);
+    sfx('hit',2);shake=Math.max(shake,5);msg='MINECART - ブロック破砕';if(isHost&&mode!=='offline')broadcastAuthoritativeState(true);
+  }
   return broke;
 }
 function updateGimmicks(dt){
@@ -1862,7 +1917,9 @@ function updateGimmicks(dt){
 function updateCamera(){let me=players[myId]||Object.values(players)[0];let worldW=OX+C*T,worldH=OY+R*T;if(me){camX=clamp(me.x-W/2,0,Math.max(0,worldW-W));camY=clamp(me.y-H/2,0,Math.max(0,worldH-H));}else{camX=clamp(camX,0,Math.max(0,worldW-W));camY=clamp(camY,0,Math.max(0,worldH-H));}}
 function hostCanUseClientPose(id,p,inp){return !!(id!==myId&&p&&inp&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0&&inp.last&&now()-inp.last<1500&&!playerCartAuthorityLocked(id,p)&&!playerJumpAuthorityLocked(id,p)&&!p.jumpState)}
 function hostAdoptClientPose(id,p,inp){if(!hostCanUseClientPose(id,p,inp))return false;const tx=clamp(+inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(+inp.clientY,OY+p.rad,OY+R*T-p.rad);const err=Math.hypot((p.x||0)-tx,(p.y||0)-ty);if(err<JOIN_HOST_ACCEPT_ERR)return true;if(canAt(p,tx,ty,id)||err>JOIN_HOST_FORCE_ERR){const oldX=p.x,oldY=p.y;p.x=tx;p.y=ty;p.vx=0;p.vy=0;const c=tc(p.x,p.y);p.c=c.c;p.r=c.r;depen(p,id);if(err>JOIN_HOST_FORCE_ERR)markTeleportBlink(p,Math.hypot(p.x-oldX,p.y-oldY),'SYNC');return true}return false}
-function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}const clientPoseDriven=hostCanUseClientPose(id,p,inp);if(!updatePlayerJump(p,dt,inp)){if(clientPoseDriven){hostAdoptClientPose(id,p,inp);applyTerrain(p,dt,true)}else{moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}}
+function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}
+  if(isHost){Object.entries(inputs||{}).forEach(([id,inp])=>{(Array.isArray(inp&&inp.cartBreaks)?inp.cartBreaks:[]).forEach(cl=>applyCartBreakClaim(id,cl,false));});}
+  for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}const clientPoseDriven=hostCanUseClientPose(id,p,inp);if(!updatePlayerJump(p,dt,inp)){if(clientPoseDriven){hostAdoptClientPose(id,p,inp);applyTerrain(p,dt,true)}else{moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}}
         updateShadowTrail(p,dt);if(p.invuln>0)p.invuln-=dt*1000;if(p.teleportBlink>0)p.teleportBlink-=dt*1000;if(p.shield>0)p.shield-=dt*1000;if(p.specialCooldown>0)p.specialCooldown-=dt*1000;let primaryActedThisTick=false;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){primaryActedThisTick=primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(!primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}else if(primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){p.lastHandSeq=inp.handSeq}if(inp.specialSeq&&inp.specialSeq!==p.lastSpecialSeq){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}}
   updateBombPasses();
   bombs.forEach(b=>{if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(b.vx||b.vy){let ox=b.x,oy=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;let fr=(b.slideT>0)?.982:.90;b.vx*=fr;b.vy*=fr;if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b)}let cell=tc(b.x,b.y);let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);if(blocked){b.x=cc(b.c,b.r).x;b.y=cc(b.c,b.r).y;b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b);sfx('hit',b.power||1);partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2);msg='BOMB STOP'}else{b.c=cell.c;b.r=cell.r;impactBomb(b)}}});bombs.slice().forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
