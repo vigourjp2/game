@@ -577,31 +577,48 @@ function applyState(s){
   waveIsBoss=!!s.waveIsBoss;goalGate=s.goalGate?{...s.goalGate}:null;if(Number.isFinite(s.goalCelebration))goalCelebration=+s.goalCelebration;gameEnded=!!s.gameEnded;if(Number.isFinite(s.endingTimer))endingTimer=+s.endingTimer;endingCloseAttempted=!!s.endingCloseAttempted;
 
   if(s.grid&&Array.isArray(s.grid)&&s.grid.length===R)grid=s.grid.map(row=>row.slice());
-  if(Array.isArray(s.blockClears)){
-    s.blockClears.forEach(b=>{
-      if(!b)return;
-      let c=b.c|0,r=b.r|0,k=blockKey(c,r);
-      localClearedBlocks.add(k);
-      delete summonedBlockHp[k];
-      if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}
-    });
-  }
+  const incomingBlockClears=Array.isArray(s.blockClears)?s.blockClears.filter(Boolean):[];
+  const incomingBlockSets=Array.isArray(s.blockSets)?s.blockSets.filter(Boolean):[];
+  const blockClearStampByKey={};
+  const blockSetStampByKey={};
+  const blockStamp=b=>((Number.isFinite(b.frame)?(b.frame|0):0)*1000000)+(Number.isFinite(b.seq)?(b.seq|0):0);
+
+  incomingBlockClears.forEach(b=>{
+    let c=b.c|0,r=b.r|0,k=blockKey(c,r);
+    blockClearStampByKey[k]=Math.max(blockClearStampByKey[k]||0,blockStamp(b));
+  });
+  incomingBlockSets.forEach(b=>{
+    let c=b.c|0,r=b.r|0,k=blockKey(c,r);
+    blockSetStampByKey[k]=Math.max(blockSetStampByKey[k]||0,blockStamp(b));
+  });
+
+  // HOSTから届いた履歴は「後勝ち」にする。
+  // 落下ブロックの着地生成が古く、破壊が新しい場合に、JOIN側で古い生成履歴が勝ってブロック復活するのを防ぐ。
+  incomingBlockSets.forEach(b=>{
+    let c=b.c|0,r=b.r|0,k=blockKey(c,r),src=String(b.source||'');
+    const isDropLand=(src==='drop'||src==='bossdrop'||src==='dropLand');
+    const setStamp=blockStamp(b),clearStamp=blockClearStampByKey[k]||0;
+    if(clearStamp>setStamp)return;
+    if(isDropLand)localClearedBlocks.delete(k);
+    if(localClearedBlocks.has(k))return;
+    if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=SOFT;if((b.hp|0)>0)summonedBlockHp[k]=b.hp|0;else delete summonedBlockHp[k];}
+  });
+
+  incomingBlockClears.forEach(b=>{
+    let c=b.c|0,r=b.r|0,k=blockKey(c,r);
+    const clearStamp=blockStamp(b),setStamp=blockSetStampByKey[k]||0;
+    if(setStamp>clearStamp)return;
+    localClearedBlocks.add(k);
+    delete summonedBlockHp[k];
+    if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;checkGoalGateRevealFromCell(c,r)}
+  });
+
   if(localClearedBlocks&&localClearedBlocks.size){
     localClearedBlocks.forEach(k=>{
       let a=String(k).split(','),c=+a[0],r=+a[1];
+      const setStamp=blockSetStampByKey[k]||0,clearStamp=blockClearStampByKey[k]||0;
+      if(setStamp>clearStamp)return;
       if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=EMPTY;delete summonedBlockHp[k];}
-    });
-  }
-  if(Array.isArray(s.blockSets)){
-    s.blockSets.forEach(b=>{
-      if(!b)return;
-      let c=b.c|0,r=b.r|0,k=blockKey(c,r),src=String(b.source||'');
-      const isDropLand=(src==='drop'||src==='bossdrop'||src==='dropLand');
-      // 落下ブロックは「カウントダウン→落下演出→着地で新規ブロック化」が正解。
-      // 以前のローカル破壊済みセル扱いが残っていると、HOSTでは生成済みなのにJOINだけ生成を無視するため、落下着地だけは破壊済み印を上書きする。
-      if(isDropLand)localClearedBlocks.delete(k);
-      if(localClearedBlocks.has(k))return;
-      if(inside(c,r)&&grid[r][c]!==HARD){grid[r][c]=SOFT;if((b.hp|0)>0)summonedBlockHp[k]=b.hp|0;else delete summonedBlockHp[k];}
     });
   }
   if(s.members){
