@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SHADOW-FIXED-BEHIND-V21-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='BGM-HOST-JOIN-SYNC-V22-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -123,7 +123,7 @@ function battleWinnerLabel(){if(battle.team){return battle.winnerTeam||battle.ch
 function updateBattleWin(dt){if(!battle.on)return;if(battle.phase==='play'){let alive=aliveBattlePlayers();if(Object.keys(players||{}).length<2)return;if(battle.team){let teams=aliveBattleTeams();if(teams.length<=1){let team=teams[0]||'';let ids=team?alive.filter(p=>battleTeamKey(p)===team).map(p=>p.id):[];finishBattleRound(ids,team);}}else{if(alive.length<=1)finishBattleRound(alive.map(p=>p.id),'');}}else if(battle.phase==='roundWin'){battle.timer-=dt*1000;if(battle.timer<=0){battle.round++;setupBattleRound(randomBattleRaw());}}else if(battle.phase==='champion'){battle.timer-=dt*1000;if(battle.timer<=0){msg='BATTLE AGAIN を押すと同じメンバーで再戦';}}}
 function battleAgain(){battle.round=1;battle.wins={};battle.teamWins={};battle.champion=false;battle.championIds=[];battle.championTeam='';setupBattleRound(randomBattleRaw());}
 
-let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[],bgmSrcKey='',bgmFailed={},bgmHoldUntil=0,bgmResumeAfterHold=false;
+let audioCtx=null,bgmTimer=null,bgmAudio=null,bgmCurrent='',bgmUsed=[],bgmSrcKey='',bgmFailed={},bgmHoldUntil=0,bgmResumeAfterHold=false,bgmSync={src:'',startedAt:0,epoch:0},lastAppliedBgmEpoch=0,lastAppliedBgmSrc='',lastBgmDriftFixAt=0;
 const BGM_MASTER_VOLUME=.12;
 const BGM_TARGET_RMS=.145;
 const BGM_TARGET_PEAK=.92;
@@ -288,6 +288,59 @@ function stopBgm(reset=true){
 function audioPath(src){
   return new URL(src,location.href).href;
 }
+
+function currentBgmSyncPayload(){
+  return {src:bgmSync.src||bgmCurrent||'',startedAt:bgmSync.startedAt||now(),epoch:bgmSync.epoch|0};
+}
+function markHostBgmSync(src){
+  if(!src)return;
+  const nextEpoch=((bgmSync&&bgmSync.epoch)||0)+1;
+  bgmSync={src,startedAt:now(),epoch:nextEpoch};
+}
+function syncedBgmPosition(sync,at=now()){
+  if(!sync||!sync.src||!Number.isFinite(+sync.startedAt))return 0;
+  let pos=Math.max(0,(at-(+sync.startedAt))/1000);
+  const dur=bgmAudio&&Number.isFinite(bgmAudio.duration)&&bgmAudio.duration>0?bgmAudio.duration:0;
+  if(dur>0)pos=pos%dur;
+  return pos;
+}
+function seekBgmToSync(sync,force=false){
+  if(!bgmAudio||!sync||!sync.src||bgmSrcKey!==sync.src)return;
+  const target=syncedBgmPosition(sync);
+  try{
+    const cur=Number.isFinite(bgmAudio.currentTime)?bgmAudio.currentTime:0;
+    if(force||Math.abs(cur-target)>.28){
+      bgmAudio.currentTime=target;
+      lastBgmDriftFixAt=now();
+    }
+  }catch(e){}
+}
+function applyBgmSync(sync){
+  if(!sync||!sync.src)return;
+  const epoch=Number.isFinite(+sync.epoch)?(+sync.epoch|0):0;
+  const remote={src:String(sync.src),startedAt:Number(sync.startedAt)||now(),epoch};
+  bgmSync=remote;
+  const changed=remote.src!==lastAppliedBgmSrc||epoch!==lastAppliedBgmEpoch||bgmSrcKey!==remote.src;
+  if(changed){
+    lastAppliedBgmSrc=remote.src;
+    lastAppliedBgmEpoch=epoch;
+    playBgm(remote.src,false,{fromSync:true});
+    seekBgmToSync(remote,true);
+    if(bgmAudio){
+      bgmAudio.addEventListener('loadedmetadata',()=>seekBgmToSync(remote,true),{once:true});
+      bgmAudio.addEventListener('canplay',()=>seekBgmToSync(remote,true),{once:true});
+    }
+  }else if(now()-lastBgmDriftFixAt>1200){
+    seekBgmToSync(remote,false);
+  }
+}
+function broadcastBgmSync(){
+  if(!isHost||mode==='offline')return;
+  const packet={type:'bgmSync',bgm:currentBgmSyncPayload(),t:now(),frame:lockFrame};
+  Object.values(rtcStateChannels||{}).forEach(ch=>rtcSend(ch,packet));
+  Object.values(rtcChannels||{}).forEach(ch=>rtcSend(ch,packet));
+  if(roomRef)roomRef.child('bgm').set(currentBgmSyncPayload()).catch(()=>{});
+}
 function resumeBgmOnly(){
   if(!bgmAudio)return;
   if(performance.now()<bgmHoldUntil)return;
@@ -309,8 +362,9 @@ function releasePrioritySoundBgm(){
 function retryBgm(){
   resumeBgmOnly();
 }
-function playBgm(src,force=false){
+function playBgm(src,force=false,syncOpt=null){
   if(!src)return;
+  if(!syncOpt&&(isHost||mode==='offline'))markHostBgmSync(src);
   // 同じ曲はAudioを作り直さない。タップ連打でも頭出しさせない。
   if(bgmAudio&&bgmSrcKey===src){
     bgmCurrent=src;
@@ -338,6 +392,7 @@ function playBgm(src,force=false){
   if(p&&p.catch)p.catch(()=>{
     document.body.dataset.bgmBlocked=src;
   });
+  if(!syncOpt)broadcastBgmSync();
 }
 function playMenuBgm(){
   playBgm('bomb0.flac');
@@ -367,6 +422,7 @@ function pickNextGameBgm(){
 }
 function playNextGameBgm(){
   playBgm(pickNextGameBgm());
+  broadcastBgmSync();
 }
 function beginGameBgmFromUserGesture(){
   unlockAudio();
@@ -607,7 +663,7 @@ function markLocalItemCollected(it){if(it)localCollectedItems.add(itemKey(it))}
 function normalizeItems(arr){return (arr||[]).map(it=>({...it,id:it.id||('it_'+(it.c||0)+'_'+(it.r||0)+'_'+(it.type||'x'))}))}
 async function sendGameEvent(type,payload){if(mode!=='join')return;let ev={id:myId+'_'+(++gameEventSeq),owner:myId,type,ts:now(),...payload};if(rtcInputChannel&&rtcInputChannel.readyState==='open')rtcSend(rtcInputChannel,{type:'gameEvent',event:ev,t:now()});if(!roomRef)return;try{await roomRef.child('events').push(ev)}catch(e){}}
 function applyGameEvent(ev){if(!ev||seenGameEvents[ev.id])return;seenGameEvents[ev.id]=true;if(ev.type==='restartRequest'){restartFromWave1();return}else if(ev.type==='blockBreak'){if(Number.isFinite(+ev.wave)&&(+ev.wave|0)!==(wave|0))return;let c=ev.c|0,r=ev.r|0;markLocalBlockClear(c,r,false);if(isHost)broadcastAuthoritativeState(true);if(ev.item&&!items.some(it=>itemKey(it)===itemKey(ev.item))&&!localCollectedItems.has(itemKey(ev.item)))items.push({...ev.item})}else if(ev.type==='cartBlockBreak'){applyCartBreakClaim(ev.owner||ev.rider,ev,true)}else if(ev.type==='blockSet'){let c=ev.c|0,r=ev.r|0;markLocalBlockSet(c,r,ev.hp||0,ev.source||'event',false);if(isHost)broadcastAuthoritativeState(true)}else if(ev.type==='itemCollect'){let k=ev.itemId||itemKey(ev),had=items.some(it=>itemKey(it)===k);items=items.filter(it=>itemKey(it)!==k);let p=players[ev.playerId];if(p&&ev.item){let grantKey=k+'@'+ev.playerId;if(!p.itemGrants)p.itemGrants={};if(!p.itemGrants[grantKey]){p.itemGrants[grantKey]=true;applyItemStats(p,ev.item);sfx('item');msg=`${p.name} GET ${String(ev.item.type||ev.type||'ITEM').toUpperCase()}`}}}else if(ev.type==='enemyHit'){let e=enemies.find(x=>x.id===ev.enemyId);if(e&&e.alive)damageEnemy(e,ev.damage||1)}else if(ev.type==='playerDown'){if(mode==='join'&&ev.playerId===myId)return;let p=players[ev.playerId];if(p)damagePlayer(p,'reported')}}
-function serialize(){return{roomSeed,restartEpoch,battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},blockClears:localBlockClears.slice(-128),blockSets:localBlockSets.slice(-128),worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
+function serialize(){return{roomSeed,restartEpoch,bgm:currentBgmSyncPayload(),battle,stage:{C,R,theme:currentTheme},gimmicks,carts,summonedBlockHp:{...summonedBlockHp},blockClears:localBlockClears.slice(-128),blockSets:localBlockSets.slice(-128),worldRngState,enemySeq,itemSeq,dropSeq,partSeq,dropTimer,waveQueue,waveSpawnTimer,waveSpawnInterval,waveIsBoss,goalGate,goalCelebration,gameEnded,endingTimer,endingCloseAttempted,lockFrame,grid,players,members,bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||'',localMadeAt:b.localMadeAt||0,localDetonateAt:b.localDetonateAt||0,launchPad:!!b.launchPad})),flames,enemies,items:normalizeItems(items),falling,wave,msg,shake,ts:now()}}
 function applyState(s){
   if(!s)return;
 
@@ -657,6 +713,7 @@ function applyState(s){
   lastStateTs=s.ts||recvAt;
   joinLastAuthoritative=recvAt;
   joinStateCount++;
+  if(mode==='join'&&s.bgm)applyBgmSync(s.bgm);
   roomSeed=s.roomSeed||roomSeed;if(Number.isFinite(+s.restartEpoch))restartEpoch=+s.restartEpoch|0;if(s.battle&&typeof s.battle==='object')battle={...battle,...s.battle};
   if(s.stage){C=s.stage.C||C;R=s.stage.R||R;currentTheme=s.stage.theme||currentTheme;OX=0;OY=0;}
   gimmicks=Array.isArray(s.gimmicks)?s.gimmicks.map(g=>({...g})):gimmicks;
@@ -867,6 +924,7 @@ function compactState(includeGrid=false){
   const out={
     fast:true,
     restartEpoch,
+    bgm:currentBgmSyncPayload(),
     lockFrame,
     players,
     bombs:bombs.map(b=>({id:b.id||null,c:b.c,r:b.r,x:b.x,y:b.y,owner:b.owner,passOwner:b.passOwner||null,range:b.range,timer:b.timer,vx:b.vx||0,vy:b.vy||0,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,launchPad:!!b.launchPad,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||''})),
@@ -940,6 +998,8 @@ function handleRtcMessage(fromId,data){
     if(m.state)receiveAuthoritativeState(m.state,m.restart);
   }else if(mode==='join'&&m.type==='state'){
     receiveAuthoritativeState(m.state,m.restart);
+  }else if(mode==='join'&&m.type==='bgmSync'){
+    applyBgmSync(m.bgm);
   }else if(m.type==='ping'){
     rtcSend(isHost?rtcChannels[fromId]:rtcInputChannel,{type:'pong',t:m.t,ts:now()});
   }
@@ -951,13 +1011,13 @@ async function createRtcPeerForJoiner(joinId,offer){
   pc.onicecandidate=e=>{if(e.candidate)roomRef.child('rtc/hostCandidates/'+joinId).push(e.candidate.toJSON()).catch(()=>{})};
   const stateCh=pc.createDataChannel('state',{ordered:false,maxRetransmits:0});
   stateCh.binaryType='arraybuffer';
-  stateCh.onopen=()=>{rtcStateChannels[joinId]=stateCh;rtcConnected=true;msg='REALTIME STATE LINK';rtcSend(stateCh,{type:'state',state:compactState(true),t:now(),frame:lockFrame});};
+  stateCh.onopen=()=>{rtcStateChannels[joinId]=stateCh;rtcConnected=true;msg='REALTIME STATE LINK';rtcSend(stateCh,{type:'bgmSync',bgm:currentBgmSyncPayload(),t:now(),frame:lockFrame});rtcSend(stateCh,{type:'state',state:compactState(true),t:now(),frame:lockFrame});};
   stateCh.onclose=()=>{delete rtcStateChannels[joinId];};
   stateCh.onmessage=ev=>handleRtcMessage(joinId,ev.data);
   pc.ondatachannel=e=>{
     const ch=e.channel;
     ch.binaryType='arraybuffer';
-    ch.onopen=()=>{rtcChannels[joinId]=ch;rtcConnected=true;msg='INPUT LINK';rtcSend(ch,{type:'state',state:compactState(true),t:now(),frame:lockFrame});broadcastAuthoritativeState(true);};
+    ch.onopen=()=>{rtcChannels[joinId]=ch;rtcConnected=true;msg='INPUT LINK';rtcSend(ch,{type:'bgmSync',bgm:currentBgmSyncPayload(),t:now(),frame:lockFrame});rtcSend(ch,{type:'state',state:compactState(true),t:now(),frame:lockFrame});broadcastAuthoritativeState(true);};
     ch.onclose=()=>{delete rtcChannels[joinId];};
     ch.onmessage=ev=>handleRtcMessage(joinId,ev.data);
   };
@@ -1018,7 +1078,7 @@ function setupDebugStage(){
   wanted.forEach((type,i)=>{let pos=cells[(i*5)%cells.length]||[2+i,2],o=cc(pos[0],pos[1]),price=specialPrice(type);items.push({id:'debug_'+(++itemSeq)+'_'+type+'_'+i,c:pos[0],r:pos[1],x:o.x,y:o.y,type,special:true,price});});
 }
 function applyStartWave(){let w=chosenStartWave();if(w>=51&&w<=83){initBattle(w,chosenBattleTeam());setupBattleRound(w);return;}resetBattleState();if(w===0){setupDebugStage();return;}if(w<=1)return;wave=w;msg='WAVE '+wave+' DEBUG START';setupStageForWave(wave);spawnWave();if(wave===FINAL_BOSS_WAVE)playBgm('bomb10.flac');}
-async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcStateChannels={};rtcInputChannel=null;rtcStateChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
+async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcStateChannels={};rtcInputChannel=null;rtcStateChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,bgm:currentBgmSyncPayload(),members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
 async function startJoin(){
   beginGameBgmFromUserGesture();
   if(!initFirebase())return;
@@ -1034,6 +1094,7 @@ async function startJoin(){
   if(!exists.exists()){setPanel('ROOMが見つからない。HOST側のROOM IDを入力。');return}
   roomRef.child('members').on('value',s=>{members=s.val()||members||{}});
   roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});
+  roomRef.child('bgm').on('value',s=>{if(mode==='join')applyBgmSync(s.val())});
   roomRef.child('state').on('value',s=>{
     const st=s.val();
     if(!st)return;
@@ -1058,7 +1119,7 @@ function bootJoinLocal(){resetDeterminism();players={};inputs={};clientPredicted
 
 function allPlayersDead(){let list=Object.values(players||{});return started&&list.length>0&&list.every(p=>p&&p.alive===false)}
 function updateRestartButton(){let b=$('restartBtn');if(!b)return;if(battle.on&&battle.phase==='champion'&&battle.timer<=0){b.textContent='BATTLE AGAIN';b.classList.add('show');return;}b.textContent='RESTART WAVE 1';b.classList.toggle('show',!battle.on&&allPlayersDead())}
-async function restartFromWave1(){let t=now();if(t-lastRestartAt<700)return;lastRestartAt=t;if(battle.on&&battle.phase==='champion'&&battle.timer<=0){if(mode==='join'&&!isHost){resetLocalDeathInput();touch.active=false;touch.id=null;localInput.dx=0;localInput.dy=0;setStickVisual();if(rtcInputChannel&&rtcInputChannel.readyState==='open')rtcSend(rtcInputChannel,{type:'restartRequest',id:myId,t});else sendGameEvent('restartRequest',{playerId:myId});writeInput(true);return;}restartEpoch=(restartEpoch+1)|0;battleAgain();updateHud();const st=serialize();st.__restart=true;if(roomRef){try{await roomRef.child('state').set(st)}catch(e){}}let packet={type:'state',restart:true,state:st,t:now(),frame:lockFrame};Object.values(rtcChannels||{}).forEach(ch=>rtcSend(ch,packet));return;}if(mode==='join'&&!isHost){resetLocalDeathInput();touch.active=false;touch.id=null;localInput.dx=0;localInput.dy=0;setStickVisual();if(rtcInputChannel&&rtcInputChannel.readyState==='open')rtcSend(rtcInputChannel,{type:'restartRequest',id:myId,t});else sendGameEvent('restartRequest',{playerId:myId});writeInput(true);msg='RESTART REQUEST';return}restartEpoch=(restartEpoch+1)|0;bootGame(true);msg='RESTART / WAVE 1';updateHud();updateRestartButton();const st=serialize();st.__restart=true;if(roomRef){try{await roomRef.child('state').set(st)}catch(e){}}let packet={type:'state',restart:true,state:st,t:now(),frame:lockFrame};Object.values(rtcChannels||{}).forEach(ch=>rtcSend(ch,packet));}
+async function restartFromWave1(){let t=now();if(t-lastRestartAt<700)return;lastRestartAt=t;if(battle.on&&battle.phase==='champion'&&battle.timer<=0){if(mode==='join'&&!isHost){resetLocalDeathInput();touch.active=false;touch.id=null;localInput.dx=0;localInput.dy=0;setStickVisual();if(rtcInputChannel&&rtcInputChannel.readyState==='open')rtcSend(rtcInputChannel,{type:'restartRequest',id:myId,t});else sendGameEvent('restartRequest',{playerId:myId});writeInput(true);return;}restartEpoch=(restartEpoch+1)|0;battleAgain();updateHud();const st=serialize();st.__restart=true;if(roomRef){try{await roomRef.child('state').set(st)}catch(e){}}let packet={type:'state',restart:true,state:st,t:now(),frame:lockFrame};Object.values(rtcStateChannels||{}).forEach(ch=>rtcSend(ch,packet));Object.values(rtcChannels||{}).forEach(ch=>rtcSend(ch,packet));return;}if(mode==='join'&&!isHost){resetLocalDeathInput();touch.active=false;touch.id=null;localInput.dx=0;localInput.dy=0;setStickVisual();if(rtcInputChannel&&rtcInputChannel.readyState==='open')rtcSend(rtcInputChannel,{type:'restartRequest',id:myId,t});else sendGameEvent('restartRequest',{playerId:myId});writeInput(true);msg='RESTART REQUEST';return}restartEpoch=(restartEpoch+1)|0;bootGame(true);msg='RESTART / WAVE 1';updateHud();updateRestartButton();const st=serialize();st.__restart=true;if(roomRef){try{await roomRef.child('state').set(st)}catch(e){}}let packet={type:'state',restart:true,state:st,t:now(),frame:lockFrame};Object.values(rtcStateChannels||{}).forEach(ch=>rtcSend(ch,packet));Object.values(rtcChannels||{}).forEach(ch=>rtcSend(ch,packet));}
 $('restartBtn').onclick=restartFromWave1;$('specialBtn').onclick=e=>{e.preventDefault();queueSpecial()};
 function emptyCell(center){let a=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(grid[r][c]!==EMPTY)continue;if(center&&(c<3||r<3||c>C-4||r>R-4))continue;if(Object.values(players).some(p=>p.alive&&Math.hypot(p.x-cc(c,r).x,p.y-cc(c,r).y)<T*.7))continue;if(enemies.some(e=>e.alive&&e.c===c&&e.r===r))continue;if(bombs.some(b=>b.c===c&&b.r===r))continue;a.push([c,r])}return a.length?a[rnd(0,a.length-1)]:null}
 function grantAllPlayersEnemySpawnInvuln(){Object.values(players).forEach(p=>{if(p&&p.alive)p.invuln=Math.max(p.invuln||0,ENEMY_SPAWN_PLAYER_INVULN_MS)})}
@@ -2244,7 +2305,7 @@ document.addEventListener('pointermove',movePointer,{passive:false,capture:true}
 document.addEventListener('pointerup',endPointer,{passive:false,capture:true});
 document.addEventListener('pointercancel',endPointer,{passive:false,capture:true});
 document.addEventListener('gesturestart',e=>e.preventDefault());
-try{document.body.dataset.syncFixBuild='RESTART-WAVE1-JOIN-RESET-V19-20260604'}catch(e){}
+try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e){}
 })();
 </script>
 </body>
