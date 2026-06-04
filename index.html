@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260604-smash-input-owner-v2 -->
+<!-- build: pbomber-20260604-smash-carry-bomb-tether-v8 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -87,7 +87,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='SMASH-HAND-ONE-TAP-ONE-ACTION-V7-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='SMASH-CARRY-BOMB-TETHER-V8-20260604',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -633,8 +633,11 @@ function applyState(s){
 
   const incomingBombs=(s.bombs||[]).map(b=>({...b,id:b.id||null,passOwner:b.passOwner||null,rad:b.bossBomb?18:17,power:b.power||0,slideT:b.slideT||0,thrownBy:b.thrownBy||null,spin:b.spin||0,carriedBy:b.carriedBy||null,carryOff:b.carryOff||0,armed:b.armed!==false,fusePaused:!!b.fusePaused,hop:b.hop||null,landed:!!b.landed,enemyBomb:!!b.enemyBomb,bossBomb:!!b.bossBomb,launchPad:!!b.launchPad,bombStyle:b.bombStyle||'',flameStyle:b.flameStyle||''}));
   // スマブラ式: JOIN側の未承認ローカル生成物は保持しない。HOST確定の爆弾列だけを世界に置く。
+  // ただし carriedBy の爆弾は、受信直後からローカル予測プレイヤーへ即時追従させる。
+  // これをしないと、持上げ中だけ爆弾がHOSTの古い座標に残り、JOIN自機が遅れた爆弾位置へ巻き戻る。
   clientPredictedBombs={};
   bombs=incomingBombs;
+  updateBombPasses();
   flames=(s.flames||[]).map(f=>({...f,owner:f.owner||null,localOwner:null,seenAt:recvAt}));
   enemies=(s.enemies||[]).map(e=>({...e,tx:Number(e.x)||0,ty:Number(e.y)||0}));
   items=normalizeItems(s.items||[]).filter(it=>!localCollectedItems.has(itemKey(it)));
@@ -1311,7 +1314,7 @@ function primaryBombOrHandAction(p,seq=null){
   return acted;
 }
 function throwBomb(p){return handBombAction(p)}
-function updateBombPasses(){bombs.forEach(b=>{if(b.carriedBy){if(String(b.carriedBy).includes(':shadow:')){let parts=String(b.carriedBy).split(':shadow:'),p=players[parts[0]],idx=parseInt(parts[1],10)||0,sh=p?shadowServantStates(p).find(x=>x.idx===idx):null;if(!p||!p.alive||!sh){b.carriedBy=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=sh.x;b.y=sh.y-28-(idx*4);let cell=tc(sh.x,sh.y);b.c=cell.c;b.r=cell.r}return}let p=players[b.carriedBy];if(!p||!p.alive){b.carriedBy=null;if(p)p.carryBombId=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=p.x;b.y=p.y-(b.carryOff||32);let cell=tc(p.x,p.y);b.c=cell.c;b.r=cell.r}return}if(!b.passOwner)return;let p=players[b.passOwner];if(!p||!p.alive){b.passOwner=null;return}if(!circleRectHit(p.x,p.y,p.rad,bombRect(b)))b.passOwner=null})}
+function updateBombPasses(){bombs.forEach(b=>{if(b.carriedBy){if(String(b.carriedBy).includes(':shadow:')){let parts=String(b.carriedBy).split(':shadow:'),p=players[parts[0]],idx=parseInt(parts[1],10)||0,sh=p?shadowServantStates(p).find(x=>x.idx===idx):null;if(!p||!p.alive||!sh){b.carriedBy=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{b.x=sh.x;b.y=sh.y-28-(idx*4);let cell=tc(sh.x,sh.y);b.c=cell.c;b.r=cell.r}return}let p=players[b.carriedBy];if(!p||!p.alive){b.carriedBy=null;if(p)p.carryBombId=null;if(bombLandable(b.c,b.r,b))armBombAfterLanding(b)}else{if(!b.id)b.id='b_carry_'+p.id+'_'+(++itemSeq);p.carryBombId=b.id;b.x=p.x;b.y=p.y-(b.carryOff||32);let cell=tc(p.x,p.y);b.c=cell.c;b.r=cell.r}return}if(!b.passOwner)return;let p=players[b.passOwner];if(!p||!p.alive){b.passOwner=null;return}if(!circleRectHit(p.x,p.y,p.rad,bombRect(b)))b.passOwner=null})}
 function explode(b){if(!bombs.includes(b))return;bombs=bombs.filter(x=>x!==b);if(b.carriedBy&&players[b.carriedBy])players[b.carriedBy].carryBombId=null;let op=players[b.owner];if(op)op.placed=Math.max(0,op.placed-1);if(b.launchPad){launchPadExplode(b);return;}let boomPower=b.power||0,isJoinPrediction=false,expId=b.id||('exp_f'+lockFrame+'_'+(++itemSeq)),style=b.flameStyle||(b.bossBomb?'boss':(b.enemyBomb?'enemy':'player')),boomCol=style==='boss'?'#ff2d7d':(style==='enemy'?'#8b5cf6':'#ffdc5e');shake=Math.max(shake,9+boomPower*1.8);sfx('explode');let cells=[[b.c,b.r]];for(const[dX,dY]of DIRS){for(let i=1;i<=b.range+Math.floor(boomPower/3);i++){let c=b.c+dX*i,r=b.r+dY*i;if(!inside(c,r)||grid[r][c]===HARD)break;cells.push([c,r]);if(grid[r][c]===SOFT){damageSoftBlock(c,r,b.owner);break}}}cells.forEach(([c,r])=>{igniteOilAt(c,r);let o=cc(c,r);flames.push({c,r,x:o.x,y:o.y,t:style==='player'?430:520,owner:b.owner||null,localOwner:isJoinPrediction?myId:null,expId,flameStyle:style,enemyFlame:style!=='player'})});bombs.slice().forEach(ob=>{if(cells.some(([c,r])=>ob.c===c&&ob.r===r))explode(ob)});shockwave(b.x,b.y,70+boomPower*18,boomCol);partsBurst(b.x,b.y,boomCol,28+boomPower*8)}
 function dropItem(c,r,type=null){let types=['fire','bomb','speed','shield','kick','hand','jump','launchbomb','summonblock','shadowservant'];type=type||types[rnd(0,types.length-1)];let o=cc(c,r),special=!!SPECIALS[type],price=special?specialPrice(type):0;items.push({id:'it_'+(++itemSeq)+'_'+c+'_'+r+'_'+type,c,r,x:o.x,y:o.y,type,special,price})}
 function ensureItemBag(p){if(!p.items)p.items={fire:0,bomb:0,speed:0,shield:0,kick:0,hand:0};return p.items}
@@ -1420,6 +1423,7 @@ function predictJoinSelf(dt){
     applyTerrain(p,step,true);
   }
   collectItemsForPlayer(p,true);
+  updateBombPasses();
   updateCamera();
   lastJoinPredictAt=now();
 }
@@ -1744,7 +1748,7 @@ function updateGimmicks(dt){
 function updateCamera(){let me=players[myId]||Object.values(players)[0];let worldW=OX+C*T,worldH=OY+R*T;if(me){camX=clamp(me.x-W/2,0,Math.max(0,worldW-W));camY=clamp(me.y-H/2,0,Math.max(0,worldH-H));}else{camX=clamp(camX,0,Math.max(0,worldW-W));camY=clamp(camY,0,Math.max(0,worldH-H));}}
 function hostCanUseClientPose(id,p,inp){return !!(id!==myId&&p&&inp&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0&&inp.last&&now()-inp.last<1500&&!playerCartAuthorityLocked(id,p)&&!playerJumpAuthorityLocked(id,p)&&!p.jumpState)}
 function hostAdoptClientPose(id,p,inp){if(!hostCanUseClientPose(id,p,inp))return false;const tx=clamp(+inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(+inp.clientY,OY+p.rad,OY+R*T-p.rad);const err=Math.hypot((p.x||0)-tx,(p.y||0)-ty);if(err<JOIN_HOST_ACCEPT_ERR)return true;if(canAt(p,tx,ty,id)||err>JOIN_HOST_FORCE_ERR){const oldX=p.x,oldY=p.y;p.x=tx;p.y=ty;p.vx=0;p.vy=0;const c=tc(p.x,p.y);p.c=c.c;p.r=c.r;depen(p,id);if(err>JOIN_HOST_FORCE_ERR)markTeleportBlink(p,Math.hypot(p.x-oldX,p.y-oldY),'SYNC');return true}return false}
-function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}const clientPoseDriven=hostCanUseClientPose(id,p,inp)&&!p.carryBombId;if(!updatePlayerJump(p,dt,inp)){if(clientPoseDriven){hostAdoptClientPose(id,p,inp);applyTerrain(p,dt,true)}else{moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}}
+function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}const clientPoseDriven=hostCanUseClientPose(id,p,inp);if(!updatePlayerJump(p,dt,inp)){if(clientPoseDriven){hostAdoptClientPose(id,p,inp);applyTerrain(p,dt,true)}else{moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}}
         updateShadowTrail(p,dt);if(p.invuln>0)p.invuln-=dt*1000;if(p.teleportBlink>0)p.teleportBlink-=dt*1000;if(p.shield>0)p.shield-=dt*1000;if(p.specialCooldown>0)p.specialCooldown-=dt*1000;let primaryActedThisTick=false;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){primaryActedThisTick=primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(!primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}else if(primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){p.lastHandSeq=inp.handSeq}if(inp.specialSeq&&inp.specialSeq!==p.lastSpecialSeq){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}}
   updateBombPasses();
   bombs.forEach(b=>{if(b.carriedBy||b.fusePaused||b.armed===false){}else b.timer-=dt*1000;if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(b.vx||b.vy){let ox=b.x,oy=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;let fr=(b.slideT>0)?.982:.90;b.vx*=fr;b.vy*=fr;if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b)}let cell=tc(b.x,b.y);let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r);if(blocked){b.x=cc(b.c,b.r).x;b.y=cc(b.c,b.r).y;b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b);sfx('hit',b.power||1);partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2);msg='BOMB STOP'}else{b.c=cell.c;b.r=cell.r;impactBomb(b)}}});bombs.slice().forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
@@ -1955,9 +1959,10 @@ function updateJoinPrediction(dt){
     let cell=tc(c.x,c.y);c.c=cell.c;c.r=cell.r;
   });
 
+  updateBombPasses();
   flames.forEach(f=>{f.t-=dt*1000});
   flames=flames.filter(f=>f.t>0);
-  bombs.forEach(b=>{if(b.armed!==false&&!b.fusePaused&&b.timer>0)b.timer-=dt*1000});
+  bombs.forEach(b=>{if(b.carriedBy)return;if(b.armed!==false&&!b.fusePaused&&b.timer>0)b.timer-=dt*1000});
   parts.forEach(x=>{if(!x.ring){x.x+=x.vx*dt;x.y+=x.vy*dt;x.vy+=(x.grav||0)*dt;x.vx*=.96;x.vy*=.96}x.life-=dt*1000});
   parts=parts.filter(x=>x.life>0);
   if(goalCelebration>0)goalCelebration-=dt*1000;if(shake>0)shake-=dt*18;
