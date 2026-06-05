@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260605-omega-no-gimmick-v20 -->
+<!-- build: pbomber-20260605-procon-v21 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -199,6 +199,7 @@ const GAME_BGM_EXTRA=[
   'https://github.com/vigourjp2/game/releases/download/v1.0/bomb19.flac'
 ];
 const localInput={dx:0,dy:0,bomb:false,hand:false,special:false,seq:0,handSeq:0,specialSeq:0,inputSeq:0,cartBreakSeq:0,cartBreaks:[]};
+const proconInput={dx:0,dy:0,prevB:false,prevA:false,connected:false,lastId:'',lastPadIndex:-1};
 const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:{type:'launchbomb',name:'LAUNCH BOMB',icon:'🚀',price:180},summonblock:{type:'summonblock',name:'BLOCK SUMMON',icon:'🧱',price:160},shadowservant:{type:'shadowservant',name:'SHADOW SERVANT',icon:'👥',price:520},overdrive:{type:'overdrive',name:'OVERDRIVE',icon:'⏳',price:720}};
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
@@ -262,6 +263,14 @@ addEventListener('keydown',e=>{
   }
 });
 addEventListener('keyup',e=>keys.delete(e.code));document.addEventListener('pointerdown',()=>startAudio(),{passive:true,capture:true});document.addEventListener('click',()=>startAudio(),{passive:true,capture:true});
+addEventListener('gamepadconnected',e=>{
+  const gp=e&&e.gamepad;
+  if(gp){proconInput.connected=true;proconInput.lastId=gp.id||'GAMEPAD';proconInput.lastPadIndex=gp.index;msg='PROCON READY: D-PAD / B / A';}
+});
+addEventListener('gamepaddisconnected',e=>{
+  if(e&&e.gamepad&&e.gamepad.index===proconInput.lastPadIndex){proconInput.dx=0;proconInput.dy=0;proconInput.prevB=false;proconInput.prevA=false;proconInput.connected=false;msg='PROCON DISCONNECTED';}
+});
+
 
 function startAudio(){
   unlockAudio();
@@ -1630,7 +1639,47 @@ async function writeInput(force=false){
   lastMemberHeartbeat=t;
   roomRef.update({['inputs/'+myId]:payload,['members/'+myId+'/name']:nameVal(),['members/'+myId+'/last']:t}).catch(()=>{});
 }
-function readLocalInput(){let dx=0,dy=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))dx--;if(keys.has('KeyD')||keys.has('ArrowRight'))dx++;if(keys.has('KeyW')||keys.has('ArrowUp'))dy--;if(keys.has('KeyS')||keys.has('ArrowDown'))dy++;if(touch.active){dx+=localInput.dx;dy+=localInput.dy}let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}localInput.dx=dx;localInput.dy=dy;let me=players[myId];if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy}}
+function proconButtonDown(gp,index){return !!(gp&&gp.buttons&&gp.buttons[index]&&gp.buttons[index].pressed)}
+function pollProconInput(){
+  let gp=null;
+  try{
+    const pads=(navigator.getGamepads&&navigator.getGamepads())||[];
+    for(const pad of pads){
+      if(!pad||!pad.connected)continue;
+      const id=String(pad.id||'').toLowerCase();
+      const likelySwitch=id.includes('switch')||id.includes('pro controller')||id.includes('joy-con')||id.includes('nintendo');
+      if(likelySwitch||!gp)gp=pad;
+      if(likelySwitch)break;
+    }
+  }catch(e){gp=null;}
+  if(!gp){proconInput.dx=0;proconInput.dy=0;proconInput.prevB=false;proconInput.prevA=false;proconInput.connected=false;return;}
+  proconInput.connected=true;
+  proconInput.lastId=gp.id||'GAMEPAD';
+  proconInput.lastPadIndex=gp.index;
+  let dx=0,dy=0;
+  // Switch Pro Controller: D-Pad is normally buttons 12/13/14/15. Some browsers expose it as axes, so axes are fallback only.
+  if(proconButtonDown(gp,14))dx--;
+  if(proconButtonDown(gp,15))dx++;
+  if(proconButtonDown(gp,12))dy--;
+  if(proconButtonDown(gp,13))dy++;
+  if(dx===0&&dy===0&&gp.axes&&gp.axes.length>=2){
+    const ax=Number(gp.axes[0])||0,ay=Number(gp.axes[1])||0;
+    if(Math.abs(ax)>.65)dx+=Math.sign(ax);
+    if(Math.abs(ay)>.65)dy+=Math.sign(ay);
+  }
+  let len=Math.hypot(dx,dy);
+  if(len>1){dx/=len;dy/=len;}
+  proconInput.dx=dx;
+  proconInput.dy=dy;
+  // Nintendo layout: B is the bottom face button, A is the right face button in standard mapping.
+  const bDown=proconButtonDown(gp,0);
+  const aDown=proconButtonDown(gp,1);
+  if(bDown&&!proconInput.prevB)queueBomb();
+  if(aDown&&!proconInput.prevA)queueSpecial();
+  proconInput.prevB=bDown;
+  proconInput.prevA=aDown;
+}
+function readLocalInput(){pollProconInput();let dx=0,dy=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))dx--;if(keys.has('KeyD')||keys.has('ArrowRight'))dx++;if(keys.has('KeyW')||keys.has('ArrowUp'))dy--;if(keys.has('KeyS')||keys.has('ArrowDown'))dy++;dx+=proconInput.dx||0;dy+=proconInput.dy||0;if(touch.active){dx+=localInput.dx;dy+=localInput.dy}let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}localInput.dx=dx;localInput.dy=dy;let me=players[myId];if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy}}
 function bombRect(b){return{x:(b.x||cc(b.c,b.r).x)-T/2+8,y:(b.y||cc(b.c,b.r).y)-T/2+8,w:T-16,h:T-16,type:'bomb',bomb:b}}
 function solidRects(ownerId){let a=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(grid[r][c]!==EMPTY)a.push({x:OX+c*T,y:OY+r*T,w:T,h:T,type:'block'});bombs.forEach(b=>{if(b.carriedBy)return;if(b.passOwner&&b.passOwner===ownerId)return;a.push(bombRect(b))});return a}
 function circleRectHit(x,y,rad,rect){let nx=clamp(x,rect.x,rect.x+rect.w),ny=clamp(y,rect.y,rect.y+rect.h);return Math.hypot(x-nx,y-ny)<rad}
