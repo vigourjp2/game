@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260604-restart-wave1-join-reset-v19 -->
+<!-- build: pbomber-20260605-omega-no-gimmick-v20 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -2032,7 +2032,7 @@ function bossSpecialNow(e,target){
   }
   if(kind==='omegaReactor'){
     let ratio=e.hp/e.max,phase=ratio>.66?1:(ratio>.33?2:3);if(phase!==e.phase){e.phase=phase;msg=phase===1?'オメガ シールド破壊戦':phase===2?'オメガ アーム破壊戦':'オメガ 炉心露出';partsBurst(e.x,e.y,b.accent||'#ffdf5d',35);}
-    bossPlaceBombNow(e,target);bossDropAt(tc0.c,tc0.r,'オメガ・リアクター ギミック召喚');bossAddGimmick(phase>=2?'electric':'fire',tc0.c+1,tc0.r);bossAddGimmick(phase>=3?'warp':'gear',tc0.c-1,tc0.r);return true;
+    bossPlaceBombNow(e,target);msg='オメガ・リアクター 反応炉爆弾';return true;
   }
   return false;
 }
