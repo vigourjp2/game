@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260605-local-pad-multihud-v9 -->
+<!-- build: pbomber-20260605-debug-room-normal-items-v1 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -88,7 +88,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d'),$=id=>document.getElementById(id);
-const GAME_BUILD='CUTE-ENEMY-72-FAIR-WARNING-V28-20260605',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='DEBUG-ROOM-NORMAL-ITEMS-V1-20260605',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,currentTheme=null,gimmicks=[],carts=[];
 let worldRngState=1,enemySeq=0,itemSeq=0,dropSeq=0,partSeq=0;const rand=()=>{worldRngState=(worldRngState+0x6D2B79F5)>>>0;let t=worldRngState;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296},rnd=(a,b)=>Math.floor(rand()*(b-a+1))+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),now=()=>Date.now();
 const PLAYER_SPAWN_INVULN_MS=7000,ENEMY_SPAWN_PLAYER_INVULN_MS=3200;
@@ -1082,13 +1082,16 @@ function chosenStartWave(){let el=$('seedWave'),n=el?parseInt(el.value,10):1;ret
 function chosenBattleTeam(){let el=$('battleType');return !!(el&&el.value==='team')}
 
 function setupDebugStage(){
-  wave=0;msg='DEBUG STAGE / MONEY x10 / ALL SPECIALS x2';setupStageForWave(1);
+  wave=0;msg='DEBUG STAGE / MONEY x10 / ALL ITEMS';setupStageForWave(1);
   enemies=[];bombs=[];flames=[];falling=[];items=[];goalGate=null;waveQueue=[];waveIsBoss=false;dropTimer=999999;
   for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++)if(!(c%2===0&&r%2===0))grid[r][c]=EMPTY;
   Object.values(players||{}).forEach(p=>{if(!p)return;let sc=tc(p.x,p.y);if(inside(sc.c,sc.r))clearSpawn(sc.c,sc.r);p.gold=Math.max(p.gold||0,5000);});
-  const wanted=[];Object.keys(SPECIALS).forEach(t=>{wanted.push(t,t)});
+  const normalItems=['fire','bomb','speed','shield','kick','hand'];
+  const wanted=[];
+  Object.keys(SPECIALS).forEach(t=>{wanted.push(t,t)});
+  normalItems.forEach(t=>{wanted.push(t,t,t)});
   let cells=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if((c<=2&&r<=2)||(c>=C-3&&r>=R-3)||(c>=C-3&&r<=2)||(c<=2&&r>=R-3))continue;if(grid[r][c]===EMPTY)cells.push([c,r]);}
-  wanted.forEach((type,i)=>{let pos=cells[(i*5)%cells.length]||[2+i,2],o=cc(pos[0],pos[1]),price=specialPrice(type);items.push({id:'debug_'+(++itemSeq)+'_'+type+'_'+i,c:pos[0],r:pos[1],x:o.x,y:o.y,type,special:true,price});});
+  wanted.forEach((type,i)=>{let pos=cells[(i*5)%cells.length]||[2+i,2],o=cc(pos[0],pos[1]),special=!normalItems.includes(type),price=special?specialPrice(type):0;items.push({id:'debug_'+(++itemSeq)+'_'+type+'_'+i,c:pos[0],r:pos[1],x:o.x,y:o.y,type,special,price});});
 }
 function applyStartWave(){let w=chosenStartWave();if(w>=51&&w<=83){initBattle(w,chosenBattleTeam());setupBattleRound(w);return;}resetBattleState();if(w===0){setupDebugStage();return;}if(w<=1)return;wave=w;msg='WAVE '+wave+' DEBUG START';setupStageForWave(wave);spawnWave();if(wave===FINAL_BOSS_WAVE)playBgm('bomb10.flac');}
 async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcStateChannels={};rtcInputChannel=null;rtcStateChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,bgm:currentBgmSyncPayload(),members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
@@ -2732,7 +2735,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 (function installLocalPadTeamFix(){
   if(window.__pbomberLocalPadTeamFix)return;
   window.__pbomberLocalPadTeamFix=true;
-  const LOCAL_BUILD='LOCAL-PAD-HANDDIR-V13-20260605';
+  const LOCAL_BUILD='DEBUG-ROOM-NORMAL-ITEMS-V1-20260605';
   const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD};
   try{document.body.dataset.localPadTeamFixBuild=LOCAL_BUILD}catch(e){}
   function pads(){let a=[];try{a=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){a=[]}return a}
