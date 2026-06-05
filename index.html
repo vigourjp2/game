@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260605-shoretsuha-special-v1 -->
+<!-- build: pbomber-20260606-remote-clear-on-special-buy-v1 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -1614,7 +1614,8 @@ function specialIcon(type){return (SPECIALS[type]&&SPECIALS[type].icon)||(type==
 function specialName(type){return (SPECIALS[type]&&SPECIALS[type].name)||(type==='jump'?'JUMP':type==='launchbomb'?'LAUNCH BOMB':type==='overdrive'?'OVERDRIVE':type==='packunga'?'LINE BOMB':type==='remote'?'REMOTE':type==='shoretsuha'?'衝裂破':'SPECIAL')}
 function specialItemUnderPlayer(p){if(!p||!p.alive)return null;return items.find(it=>it&&it.special&&Math.hypot(p.x-it.x,p.y-it.y)<34)||null}
 function canBuySpecial(p,it){return !!(p&&it&&it.special&&Math.floor(p.gold||0)>=Math.floor(it.price||specialPrice(it.type)))}
-function buySpecial(p,it){if(!canBuySpecial(p,it))return false;ensureSpecialBag(p);let price=Math.floor(it.price||specialPrice(it.type));p.gold=Math.max(0,Math.floor(p.gold||0)-price);p.specials[it.type]=(p.specials[it.type]||0)+1;p.activeSpecial=it.type;if(it.type==='shadowservant'){p.shadowTrail=[];p.shadowTrailT=0;}markLocalItemCollected(it);items=items.filter(x=>itemKey(x)!==itemKey(it));addMoneyText(it.x,it.y,-price,p.id,'BUY');partsBurst(it.x,it.y,'#b7f7ff',28);shockwave(it.x,it.y,54,'#b7f7ff');sfx('item',1.5);msg=`${p.name} BUY ${specialName(it.type)} Lv${p.specials[it.type]}`;return true;}
+function convertRemoteBombsToNormal(owner){let converted=0;bombs.forEach(b=>{if(!b||b.owner!==owner||!b.remoteBomb||b.enemyBomb||b.bossBomb)return;b.remoteBomb=false;b.fusePaused=false;b.armed=true;b.bombStyle='player';b.flameStyle=b.flameStyle||'player';b.remoteIndex=0;b.remotePlaceSeq=0;b.localDetonateAt=(mode==='join'&&owner===myId)?now()+BOMB_FUSE:null;converted++;partsBurst(b.x,b.y,'#ffd0a6',8);});return converted;}
+function buySpecial(p,it){if(!canBuySpecial(p,it))return false;ensureSpecialBag(p);let switchingFromRemote=it.type!=='remote'&&((p.specials.remote||0)>0||currentRemoteBombCount(p.id)>0);let converted=switchingFromRemote?convertRemoteBombsToNormal(p.id):0;let price=Math.floor(it.price||specialPrice(it.type));p.gold=Math.max(0,Math.floor(p.gold||0)-price);p.specials[it.type]=(p.specials[it.type]||0)+1;p.activeSpecial=it.type;if(it.type==='shadowservant'){p.shadowTrail=[];p.shadowTrailT=0;}markLocalItemCollected(it);items=items.filter(x=>itemKey(x)!==itemKey(it));addMoneyText(it.x,it.y,-price,p.id,'BUY');partsBurst(it.x,it.y,'#b7f7ff',28);shockwave(it.x,it.y,54,'#b7f7ff');sfx('item',1.5);msg=`${p.name} BUY ${specialName(it.type)} Lv${p.specials[it.type]}${converted?' / REMOTE -> NORMAL x'+converted:''}`;return true;}
 function jumpLandingFree(c,r,selfId){return inside(c,r)&&c>0&&r>0&&c<C-1&&r<R-1&&grid[r][c]===EMPTY&&!bombs.some(b=>!b.carriedBy&&b.c===c&&b.r===r)&&!enemies.some(e=>e.alive&&e.c===c&&e.r===r)}
 function currentPlayerArrowDir(p,inp={}){let dx=0,dy=0;if(inp&&(Math.abs(inp.dx||0)>.2||Math.abs(inp.dy||0)>.2)){dx=Number(inp.dx)||0;dy=Number(inp.dy)||0}else{dx=Number.isFinite(p&&p.lastDirX)?p.lastDirX:1;dy=Number.isFinite(p&&p.lastDirY)?p.lastDirY:0}let d=snapThrowDir(dx,dy);if(!d.x&&!d.y)d={x:1,y:0};return d}
 function jumpNextCell(c,r,dx,dy){let step=2,nc=c+dx*step,nr=r+dy*step;if(!inside(nc,nr)||nc<1||nr<1||nc>C-2||nr>R-2){let w=wrapPlayCell(nc,nr);nc=w.c;nr=w.r}return{c:nc,r:nr}}
@@ -1767,7 +1768,7 @@ function shadowHandAction(p){let acted=false;shadowServantStates(p).forEach(sh=>
 function consumeShadowServantRevive(p){ensureSpecialBag(p);if(!(p.specials.shadowservant>0))return false;p.specials.shadowservant=0;if(p.activeSpecial==='shadowservant')p.activeSpecial=null;p.shadowTrail=[];p.shadowTrailT=0;Object.keys(p).forEach(k=>{if(k.startsWith('shadowCarry_')){let b=bombs.find(q=>q.id===p[k]||q.carriedBy===p.id+':shadow:'+k.split('_')[1]);if(b){b.carriedBy=null;b.fusePaused=false;b.armed=true;b.landed=true}p[k]=null;}});p.alive=true;p.invuln=Math.max(p.invuln||0,REVIVE_INVULN_MS+1200);p.shield=0;p.revive=0;p.reviveBy=null;p.vx=0;p.vy=0;partsBurst(p.x,p.y,'#d8b4fe',42);shockwave(p.x,p.y,82,'#d8b4fe');sfx('item',1.8);msg=`${p.name} SHADOW SERVANT SACRIFICE - REVIVE`;return true;}
 function remoteBombLimit(p){ensureSpecialBag(p);return Math.max(0,Math.min(p.bombMax|0,p.specials.remote|0))}
 function currentRemoteBombCount(owner){return bombs.filter(b=>b&&b.owner===owner&&b.remoteBomb&&!b.enemyBomb&&!b.bossBomb).length}
-function shouldMakeRemoteBomb(p){let limit=remoteBombLimit(p);return limit>0&&currentRemoteBombCount(p.id)<limit}
+function shouldMakeRemoteBomb(p){ensureSpecialBag(p);if(p.activeSpecial!=='remote')return false;let limit=remoteBombLimit(p);return limit>0&&currentRemoteBombCount(p.id)<limit}
 function placeBomb(p,seq=null){
   if(!p||!p.alive)return false;
   ensureSpecialBag(p);
