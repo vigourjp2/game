@@ -1085,16 +1085,39 @@ function chosenStartWave(){let el=$('seedWave'),n=el?parseInt(el.value,10):1;ret
 function chosenBattleTeam(){let el=$('battleType');return !!(el&&el.value==='team')}
 
 function setupDebugStage(){
-  wave=0;msg='DEBUG STAGE / MONEY x10 / ALL ITEMS';setupStageForWave(1);
+  wave=0;
+  const normalTypes=['fire','bomb','speed','shield','kick','hand'];
+  const specialTypes=Object.keys(SPECIALS||{});
+  const allTypes=[...normalTypes,...specialTypes];
+  msg='DEBUG STAGE / MONEY x10 / ALL ITEMS x2';
+  setupStageForWave(1);
   enemies=[];bombs=[];flames=[];falling=[];items=[];goalGate=null;waveQueue=[];waveIsBoss=false;dropTimer=999999;
   for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++)if(!(c%2===0&&r%2===0))grid[r][c]=EMPTY;
-  Object.values(players||{}).forEach(p=>{if(!p)return;let sc=tc(p.x,p.y);if(inside(sc.c,sc.r))clearSpawn(sc.c,sc.r);p.gold=Math.max(p.gold||0,5000);});
-  const normalItems=['fire','bomb','speed','shield','kick','hand'];
+  Object.values(players||{}).forEach(p=>{
+    if(!p)return;
+    let sc=tc(p.x,p.y);
+    if(inside(sc.c,sc.r))clearSpawn(sc.c,sc.r);
+    p.gold=Math.max(p.gold||0,5000);
+  });
   const wanted=[];
-  Object.keys(SPECIALS).forEach(t=>{wanted.push(t,t)});
-  normalItems.forEach(t=>{wanted.push(t,t,t)});
-  let cells=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if((c<=2&&r<=2)||(c>=C-3&&r>=R-3)||(c>=C-3&&r<=2)||(c<=2&&r>=R-3))continue;if(grid[r][c]===EMPTY)cells.push([c,r]);}
-  wanted.forEach((type,i)=>{let pos=cells[(i*5)%cells.length]||[2+i,2],o=cc(pos[0],pos[1]),special=!normalItems.includes(type),price=special?specialPrice(type):0;items.push({id:'debug_'+(++itemSeq)+'_'+type+'_'+i,c:pos[0],r:pos[1],x:o.x,y:o.y,type,special,price});});
+  allTypes.forEach(t=>{wanted.push(t,t)});
+  let cells=[];
+  for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){
+    if((c<=2&&r<=2)||(c>=C-3&&r>=R-3)||(c>=C-3&&r<=2)||(c<=2&&r>=R-3))continue;
+    if(grid[r][c]===EMPTY)cells.push([c,r]);
+  }
+  wanted.forEach((type,i)=>{
+    let pos=cells[i%cells.length]||[2+(i%(C-4)),2+Math.floor(i/Math.max(1,C-4))];
+    if(!inside(pos[0],pos[1]))return;
+    let o=cc(pos[0],pos[1]);
+    let special=!!(SPECIALS&&SPECIALS[type]);
+    let price=special?specialPrice(type):0;
+    items.push({
+      id:'debug_'+(++itemSeq)+'_'+type+'_'+i,
+      c:pos[0],r:pos[1],x:o.x,y:o.y,type,
+      special,price
+    });
+  });
 }
 function applyStartWave(){let w=chosenStartWave();if(w>=51&&w<=83){initBattle(w,chosenBattleTeam());setupBattleRound(w);return;}resetBattleState();if(w===0){setupDebugStage();return;}if(w<=1)return;wave=w;msg='WAVE '+wave+' DEBUG START';setupStageForWave(wave);spawnWave();if(wave===FINAL_BOSS_WAVE)playBgm('bomb10.flac');}
 async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcStateChannels={};rtcInputChannel=null;rtcStateChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,bgm:currentBgmSyncPayload(),members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
