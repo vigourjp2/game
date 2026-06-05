@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260605-procon-v21 -->
+<!-- build: pbomber-20260605-local-pad-nophoto-v4 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -14,7 +14,7 @@
 <div id="panel">
   <div id="box">
     <h1>PHYSICS BOMBER ROGUELIKE</h1>
-    <div class="buildTag" id="buildTag">BUILD WAVE-GRID-AUTHORITY-V18-20260604</div>
+    <div class="buildTag" id="buildTag">BUILD LOCAL-PAD-NOPHOTO-V4-20260605</div>
     <div class="sub">HOSTで部屋作成、JOINで同じROOMへ参加。2P固定ではなく、同じROOM IDでJOINした端末がそのままプレイヤーとして追加される。HOSTが敵・共通進行を担当。JOIN自機は自分の入力で即時に動き、HOSTはJOIN入力と申告座標を採用して共通世界を確定する入力主導版。</div><div class="warn">ギミックは敵・ボスにも有効。火・燃える油・落下ブロック・トロッコなどの環境要素を攻略に利用可能。</div>
     <input id="name" placeholder="PLAYER NAME" maxlength="16">
     <input id="room" placeholder="ROOM ID" maxlength="20">
@@ -32,7 +32,7 @@
     <div class="pill">PLAYERS <b id="playersView">1</b></div>
     <div class="pill">敵 <b id="enemyView">0</b></div>
     <div class="pill">💰 <b id="goldView">0</b></div>
-    <div class="pill">BUILD <b id="buildView">SMASH-CART-DISMOUNT-SAFE-V6-20260604</b></div>
+    <div class="pill">BUILD <b id="buildView">LOCAL-PAD-NOPHOTO-V4-20260605</b></div>
   </div>
   <div class="main"><canvas id="game" width="832" height="704"></canvas></div>
   <div class="items" id="itemsPanel">
@@ -2320,7 +2320,7 @@ function updateGimmicks(dt){
 function updateCamera(){let me=players[myId]||Object.values(players)[0];let worldW=OX+C*T,worldH=OY+R*T;if(me){camX=clamp(me.x-W/2,0,Math.max(0,worldW-W));camY=clamp(me.y-H/2,0,Math.max(0,worldH-H));}else{camX=clamp(camX,0,Math.max(0,worldW-W));camY=clamp(camY,0,Math.max(0,worldH-H));}}
 function hostCanUseClientPose(id,p,inp){return !!(id!==myId&&p&&inp&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0&&inp.last&&now()-inp.last<1500&&!playerCartAuthorityLocked(id,p)&&!playerJumpAuthorityLocked(id,p)&&!p.jumpState)}
 function hostAdoptClientPose(id,p,inp){if(!hostCanUseClientPose(id,p,inp))return false;const tx=clamp(+inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(+inp.clientY,OY+p.rad,OY+R*T-p.rad);const err=Math.hypot((p.x||0)-tx,(p.y||0)-ty);if(err<JOIN_HOST_ACCEPT_ERR)return true;if(canAt(p,tx,ty,id)||err>JOIN_HOST_FORCE_ERR){const oldX=p.x,oldY=p.y;p.x=tx;p.y=ty;p.vx=0;p.vy=0;const c=tc(p.x,p.y);p.c=c.c;p.r=c.r;depen(p,id);if(err>JOIN_HOST_FORCE_ERR)markTeleportBlink(p,Math.hypot(p.x-oldX,p.y-oldY),'SYNC');return true}return false}
-function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}if(isTimeStopped()){timeStop.timer=Math.max(0,(timeStop.timer||0)-dt*1000);if(timeStop.timer<=0){let ownerName=timeStop.ownerName||'OVERDRIVE';timeStop={active:false,owner:null,ownerName:'',timer:0,total:0,level:0,seq:(timeStop.seq||0)};msg=ownerName+' TIME STOP END';}}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}
+function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);return}if(isTimeStopped()){timeStop.timer=Math.max(0,(timeStop.timer||0)-dt*1000);if(timeStop.timer<=0){let ownerName=timeStop.ownerName||'OVERDRIVE';timeStop={active:false,owner:null,ownerName:'',timer:0,total:0,level:0,seq:(timeStop.seq||0)};msg=ownerName+' TIME STOP END';}}let allIds=new Set([...Object.keys(members||{}),...Object.keys(inputs||{})]);if(!(window.__pbomberLocalPad&&window.__pbomberLocalPad.enabled))allIds.add(myId);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}
   if(isHost){Object.entries(inputs||{}).forEach(([id,inp])=>{(Array.isArray(inp&&inp.cartBreaks)?inp.cartBreaks:[]).forEach(cl=>applyCartBreakClaim(id,cl,false));});}
   for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){const timeStoppedForPlayer=isTimeStopped()&&!isTimeStopOwner(id);if(timeStoppedForPlayer){p.vx=0;p.vy=0;continue;}let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}const clientPoseDriven=hostCanUseClientPose(id,p,inp);if(!updatePlayerJump(p,dt,inp)){if(clientPoseDriven){hostAdoptClientPose(id,p,inp);applyTerrain(p,dt,true)}else{moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}}
         updateShadowTrail(p,dt);if(p.invuln>0)p.invuln-=dt*1000;if(p.teleportBlink>0)p.teleportBlink-=dt*1000;if(p.shield>0)p.shield-=dt*1000;if(p.specialCooldown>0)p.specialCooldown-=dt*1000;let primaryActedThisTick=false;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){primaryActedThisTick=primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(!primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}else if(primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){p.lastHandSeq=inp.handSeq}if(inp.specialSeq&&inp.specialSeq!==p.lastSpecialSeq){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}}
@@ -2728,6 +2728,160 @@ document.addEventListener('pointerup',endPointer,{passive:false,capture:true});
 document.addEventListener('pointercancel',endPointer,{passive:false,capture:true});
 document.addEventListener('gesturestart',e=>e.preventDefault());
 try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e){}
+
+
+/* LOCAL PAD NO PHOTO V4: image mode removed, pad count visible, one pad = one player only */
+(function installLocalPadNoPhotoV4(){
+  if(window.__pbomberLocalPadV4)return;
+  window.__pbomberLocalPadV4=true;
+  const LOCAL_BUILD='LOCAL-PAD-NOPHOTO-V4-20260605';
+  const localPad=window.__pbomberLocalPad={enabled:false,ids:[],prev:Object.create(null),statusEl:null,statusTimer:null,build:LOCAL_BUILD};
+  try{document.body.dataset.localPadNoPhotoBuild=LOCAL_BUILD}catch(e){}
+
+  function pads(){
+    let raw=[];
+    try{raw=Array.from((navigator.getGamepads&&navigator.getGamepads())||[])}catch(e){raw=[]}
+    const seen=new Set();
+    return raw.filter(gp=>{
+      if(!gp||!gp.connected||seen.has(gp.index))return false;
+      seen.add(gp.index);
+      return true;
+    });
+  }
+  function btn(gp,i){const b=gp&&gp.buttons&&gp.buttons[i];return !!(b&&(b.pressed||b.value>.5))}
+  function axis(gp,i){const v=(gp&&gp.axes&&typeof gp.axes[i]==='number')?gp.axes[i]:0;return Math.abs(v)<.18?0:v}
+  function edge(gp,i){const k=gp.index+':'+i,cur=btn(gp,i),pre=!!localPad.prev[k];localPad.prev[k]=cur;return cur&&!pre}
+  function pid(gp,i){return 'local_pad_'+String(gp.index)+'_'+String(i)}
+  function dir(gp){
+    let dx=axis(gp,0),dy=axis(gp,1);
+    if(btn(gp,14))dx-=1;
+    if(btn(gp,15))dx+=1;
+    if(btn(gp,12))dy-=1;
+    if(btn(gp,13))dy+=1;
+    const l=Math.hypot(dx,dy);
+    if(l>1){dx/=l;dy/=l}
+    return {dx,dy};
+  }
+  function padName(gp,i){return 'P'+(i+1)+' : '+String(gp.id||'Controller').replace(/\s+/g,' ').trim()+' / index '+gp.index}
+  function statusText(){
+    const ps=pads();
+    if(!ps.length)return '認識中のProコン: 0台\nSwitch Pro Controllerを接続後、いずれかのボタンを押すとブラウザに認識されます。';
+    return '認識中のProコン: '+ps.length+'台\n'+ps.map(padName).join('\n');
+  }
+  function setPanelText(t){try{if(typeof setPanel==='function')setPanel(t);else if($('panelMsg'))$('panelMsg').textContent=t}catch(e){}}
+  function updateStatus(){
+    try{
+      if(localPad.statusEl)localPad.statusEl.textContent=statusText();
+      const mv=$('modeView');
+      if(mv&&!started)mv.textContent='PAD '+pads().length;
+    }catch(e){}
+  }
+  function ensureUi(){
+    // Remove any old image/local-photo UI if it exists from a cached or previous build.
+    try{document.querySelectorAll('#localPhotoBtn,#localPhotoOverlay,.localPhotoRow').forEach(e=>e.remove())}catch(e){}
+    if($('localNoPhotoBtn')){updateStatus();return;}
+    const box=$('box');
+    const copy=$('copyBtn');
+    const row=document.createElement('div');
+    row.className='row localMultiRow';
+    row.style.gridTemplateColumns='1fr';
+    row.style.marginTop='8px';
+    row.innerHTML='<button id="localNoPhotoBtn" type="button" style="background:linear-gradient(160deg,#0ea5e9,#22c55e)">画像無しローカル複数コントローラー<br>プレイ</button>';
+    if(copy&&copy.parentNode)copy.parentNode.insertBefore(row,copy.nextSibling);else if(box)box.appendChild(row);
+    const st=document.createElement('div');
+    st.id='localPadStatus';
+    st.style.cssText='white-space:pre-line;margin-top:8px;padding:10px 12px;border:1px solid #67e8f955;border-radius:14px;background:#06101bcc;color:#d8f7ff;font-size:13px;line-height:1.6;font-weight:900';
+    row.parentNode.insertBefore(st,row.nextSibling);
+    localPad.statusEl=st;
+    $('localNoPhotoBtn').onclick=startLocalNoPhoto;
+    setPanelText('下の認識台数を見てから、画像無しローカル複数コントローラーで開始してください。方向キー移動、B=爆弾/HAND、A=SPECIALです。');
+    updateStatus();
+    if(!localPad.statusTimer)localPad.statusTimer=setInterval(updateStatus,350);
+  }
+
+  function selectedRaw(){let n=parseInt(($('seedWave')&&$('seedWave').value)||'1',10);return Number.isFinite(n)?n:1}
+  function battleRaw(){const n=selectedRaw();return n>=51&&n<=83?n:0}
+  function clearToLocalOnly(){
+    const ok=new Set(localPad.ids);
+    Object.keys(players||{}).forEach(id=>{if(!ok.has(id))delete players[id]});
+    Object.keys(inputs||{}).forEach(id=>{if(!ok.has(id))delete inputs[id]});
+    Object.keys(members||{}).forEach(id=>{if(!ok.has(id))delete members[id]});
+  }
+  function makeLocalMembers(ps){
+    localPad.ids=[];members={};inputs={};
+    ps.forEach((gp,i)=>{
+      const id=pid(gp,i);localPad.ids.push(id);
+      members[id]={id,name:'P'+(i+1),joined:now(),last:now(),local:true,gpIndex:gp.index};
+      inputs[id]={id,name:'P'+(i+1),dx:0,dy:0,bombSeq:0,handSeq:0,specialSeq:0,inputSeq:0,local:true,last:now()};
+    });
+  }
+  function startLocalNoPhoto(){
+    startAudio&&startAudio();
+    const ps=pads();
+    updateStatus();
+    if(!ps.length){setPanelText('認識中のProコン: 0台です。接続後、いずれかのボタンを押してから開始してください。');return;}
+    localPad.enabled=true;
+    localPad.prev=Object.create(null);
+    makeLocalMembers(ps);
+    roomId='LOCAL-CONTROLLER';
+    roomSeed=hashSeed(roomId+'_'+Date.now());
+    mode='offline';isHost=true;
+    // Critical: use controller 1 as myId so existing self-only HUD/camera/special code does not create an extra smartphone player.
+    myId=localPad.ids[0];
+    bootGame(true);
+    clearToLocalOnly();
+    const br=battleRaw();
+    if(br){initBattle(br,false);setupBattleRound(br);clearToLocalOnly();}
+    try{$('panel').classList.add('hidden')}catch(e){}
+    msg='LOCAL PAD READY / '+localPad.ids.length+' CONTROLLER';
+    updateHud&&updateHud();
+  }
+
+  function readPads(){
+    if(!localPad.enabled)return false;
+    localInput.dx=0;localInput.dy=0;
+    const ps=pads();
+    const alive=[];
+    ps.forEach((gp,i)=>{
+      const id=pid(gp,i);alive.push(id);
+      if(!members[id])members[id]={id,name:'P'+(i+1),joined:now(),last:now(),local:true,gpIndex:gp.index};
+      if(!inputs[id])inputs[id]={id,name:'P'+(i+1),dx:0,dy:0,bombSeq:0,handSeq:0,specialSeq:0,inputSeq:0,local:true,last:now()};
+      if(!players[id])players[id]=makePlayer(id,members[id].name);
+      const d=dir(gp),inp=inputs[id];
+      inp.dx=d.dx;inp.dy=d.dy;inp.name=members[id].name;inp.last=now();inp.local=true;inp.inputSeq=(inp.inputSeq||0)+1;
+      if(edge(gp,0)){inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;const p=players[id];if(p&&p.alive){primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq;}}
+      if(edge(gp,1)){inp.specialSeq=(inp.specialSeq||0)+1;const p=players[id];if(p&&p.alive){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq;}}
+      const p=players[id];
+      if(p&&Math.hypot(d.dx,d.dy)>.2){p.lastDirX=d.dx;p.lastDirY=d.dy;}
+      if(id===myId){localInput.dx=d.dx;localInput.dy=d.dy;localInput.seq=inp.bombSeq||0;localInput.bombSeq=inp.bombSeq||0;localInput.specialSeq=inp.specialSeq||0;}
+    });
+    localPad.ids=alive;
+    clearToLocalOnly();
+    return true;
+  }
+
+  const oldRead=readLocalInput;
+  readLocalInput=function(){
+    if(readPads())return;
+    oldRead&&oldRead();
+    updateStatus();
+  };
+  const oldHud=updateHud;
+  updateHud=function(){
+    oldHud&&oldHud();
+    try{
+      if($('buildView'))$('buildView').textContent=LOCAL_BUILD;
+      if($('buildTag'))$('buildTag').textContent='BUILD '+LOCAL_BUILD;
+      if($('modeView')&&localPad.enabled)$('modeView').textContent='LOCAL PAD x'+localPad.ids.length;
+      if($('playersView')&&localPad.enabled)$('playersView').textContent=Object.values(players).filter(p=>p.alive).length+'/'+localPad.ids.length;
+    }catch(e){}
+  };
+  window.addEventListener('gamepadconnected',()=>{ensureUi();updateStatus();});
+  window.addEventListener('gamepaddisconnected',()=>{ensureUi();updateStatus();});
+  ensureUi();
+  try{if($('buildTag'))$('buildTag').textContent='BUILD '+LOCAL_BUILD;if($('buildView'))$('buildView').textContent=LOCAL_BUILD}catch(e){}
+})();
+
 })();
 </script>
 </body>
