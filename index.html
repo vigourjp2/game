@@ -1702,7 +1702,7 @@ function updateBombHop(b,dt){let h=b.hop;if(!h)return false;h.t+=dt*1000;let a=c
 function tryKick(ent,dx,dy,ownerId){let lv=kickPower(ent);if(!lv)return;let cell=tc(ent.x+dx*(ent.rad+22),ent.y+dy*(ent.rad+22));let b=bombs.find(q=>!q.carriedBy&&q.c===cell.c&&q.r===cell.r&&!(q.passOwner&&q.passOwner===ownerId));if(b){b.passOwner=null;b.power=Math.max(b.power||0,lv);b.thrownBy=ownerId;b.spin=(b.spin||0)+dx*7+dy*7;b.hop=null;b.landed=true;b.armed=true;b.fusePaused=false;let sp=250+lv*80;b.vx=dx*sp;b.vy=dy*sp;b.slideT=520+lv*90;shake=Math.max(shake,2+lv*.55);sfx('kick',lv);partsBurst(b.x,b.y,'#ff87e6',8+lv*3);msg='KICK'}}
 function bombUnderPlayer(p){let best=null,bd=9999;for(const b of bombs){if(b.carriedBy)continue;let d=Math.hypot((b.x||cc(b.c,b.r).x)-p.x,(b.y||cc(b.c,b.r).y)-p.y);if(d<26&&d<bd){best=b;bd=d}}return best}
 function liftBomb(p){let lv=handPower(p);if(!p||!p.alive||!lv||p.carryBombId)return false;let b=bombUnderPlayer(p);if(!b)return false;b.carriedBy=p.id;b.passOwner=null;b.vx=0;b.vy=0;b.slideT=0;b.hop=null;b.thrownBy=p.id;b.power=Math.max(b.power||0,lv);b.carryOff=30+Math.min(18,lv*2);b.timer=BOMB_FUSE;b.armed=false;b.fusePaused=true;b.landed=false;p.carryBombId=b.id||(b.id='b_lift_'+(++itemSeq));shake=Math.max(shake,1.5+lv*.35);sfx('throw',lv*.6);partsBurst(b.x,b.y,'#ffd0a6',12+lv*3);msg=`${p.name} LIFT Lv${lv} / FUSE RESET` ;return true}
-function throwCarriedBomb(p){let lv=handPower(p);if(!p||!p.alive||!p.carryBombId)return false;let b=bombs.find(q=>q.id===p.carryBombId&&q.carriedBy===p.id);if(!b){p.carryBombId=null;return false}let rawDx=p.lastDirX||1,rawDy=p.lastDirY||0,d=snapThrowDir(rawDx,rawDy),dx=d.x,dy=d.y,len=Math.hypot(dx,dy)||1;dx/=len;dy/=len;b.carriedBy=null;b.passOwner=null;b.x=p.x+dx*(p.rad+20);b.y=p.y+dy*(p.rad+20);let cell=tc(b.x,b.y);b.c=cell.c;b.r=cell.r;b.vx=0;b.vy=0;b.power=Math.max(b.power||0,lv+1);b.thrownBy=p.id;b.timer=BOMB_FUSE;b.armed=false;b.fusePaused=true;b.landed=false;b.spin=(b.spin||0)+14+lv*4;startBombHop(b,dx,dy,lv);p.carryBombId=null;shake=Math.max(shake,3+lv*.9);sfx('throw',lv);partsBurst(b.x,b.y,'#ffd0a6',16+lv*6);msg=`${p.name} THROW Lv${lv} / LAND THEN COUNT`;return true}
+function throwCarriedBomb(p){let lv=handPower(p);if(!p||!p.alive||!p.carryBombId)return false;let b=bombs.find(q=>q.id===p.carryBombId&&q.carriedBy===p.id);if(!b){p.carryBombId=null;return false}let fd=(p.forceThrowDir&&now()-(p.forceThrowDir.t||0)<900)?p.forceThrowDir:null,rawDx=fd?fd.x:(Number.isFinite(p.lastDirX)?p.lastDirX:1),rawDy=fd?fd.y:(Number.isFinite(p.lastDirY)?p.lastDirY:0),d=snapThrowDir(rawDx,rawDy),dx=d.x,dy=d.y,len=Math.hypot(dx,dy)||1;p.forceThrowDir=null;dx/=len;dy/=len;b.carriedBy=null;b.passOwner=null;b.x=p.x+dx*(p.rad+20);b.y=p.y+dy*(p.rad+20);let cell=tc(b.x,b.y);b.c=cell.c;b.r=cell.r;b.vx=0;b.vy=0;b.power=Math.max(b.power||0,lv+1);b.thrownBy=p.id;b.timer=BOMB_FUSE;b.armed=false;b.fusePaused=true;b.landed=false;b.spin=(b.spin||0)+14+lv*4;startBombHop(b,dx,dy,lv);p.carryBombId=null;shake=Math.max(shake,3+lv*.9);sfx('throw',lv);partsBurst(b.x,b.y,'#ffd0a6',16+lv*6);msg=`${p.name} THROW Lv${lv} / LAND THEN COUNT`;return true}
 
 function shadowCount(p){ensureSpecialBag(p);return Math.max(0,Math.min(8,p.specials.shadowservant|0));}
 function updateShadowTrail(p,dt){if(!p)return;ensureSpecialBag(p);p.shadowTrail=[];p.shadowTrailT=0;}
@@ -2732,7 +2732,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 (function installLocalPadTeamFix(){
   if(window.__pbomberLocalPadTeamFix)return;
   window.__pbomberLocalPadTeamFix=true;
-  const LOCAL_BUILD='LOCAL-PAD-MINIHINT-V11-20260605';
+  const LOCAL_BUILD='LOCAL-PAD-HANDDIR-V13-20260605';
   const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD};
   try{document.body.dataset.localPadTeamFixBuild=LOCAL_BUILD}catch(e){}
   function pads(){let a=[];try{a=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){a=[]}return a}
@@ -2741,7 +2741,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function btn(gp,i){const b=gp&&gp.buttons&&gp.buttons[i];return !!(b&&(b.pressed||b.value>.5))}
   function edge(gp,i){const k=gp.index+':'+i,cur=btn(gp,i),pre=!!localPad.prev[k];localPad.prev[k]=cur;return cur&&!pre}
   function ax(gp,i){const v=(gp&&gp.axes&&typeof gp.axes[i]==='number')?gp.axes[i]:0;return Math.abs(v)<.18?0:v}
-  function gpDir(gp){let dx=ax(gp,0),dy=ax(gp,1);if(btn(gp,14))dx-=1;if(btn(gp,15))dx+=1;if(btn(gp,12))dy-=1;if(btn(gp,13))dy+=1;const l=Math.hypot(dx,dy);if(l>1){dx/=l;dy/=l}return{dx,dy}}
+  function gpDir(gp){let dx=ax(gp,0),dy=ax(gp,1);if(btn(gp,14))dx-=1;if(btn(gp,15))dx+=1;if(btn(gp,12))dy-=1;if(btn(gp,13))dy+=1;const hat=(gp&&gp.axes&&typeof gp.axes[9]==='number')?gp.axes[9]:999;if(hat!==999&&Math.abs(hat)<2){const h=Math.round(hat*100)/100;if(h===-1||h===1)dy-=1;if(h===-0.71||h===-0.43)dx+=1;if(h===-0.14||h===0.14)dy+=1;if(h===0.43||h===0.71)dx-=1;if(h===-0.43)dy-=1;if(h===0.14)dx+=1;if(h===0.43)dy+=1;if(h===-0.71)dy-=1;if(h===0.71)dy+=1}const l=Math.hypot(dx,dy);if(l>1){dx/=l;dy/=l}return{dx,dy}}
+  function rememberLocalPadDir(p,inp,d,force){if(!p||!inp)return;let dx=Number(d&&d.dx)||0,dy=Number(d&&d.dy)||0;if(Math.hypot(dx,dy)>.18){let sd=snapThrowDir(dx,dy);p.lastDirX=sd.x;p.lastDirY=sd.y;inp.lastDirX=sd.x;inp.lastDirY=sd.y;inp.lastDirAt=now()}else if(Number.isFinite(inp.lastDirX)&&Number.isFinite(inp.lastDirY)){p.lastDirX=inp.lastDirX;p.lastDirY=inp.lastDirY}else if(!Number.isFinite(p.lastDirX)||!Number.isFinite(p.lastDirY)){p.lastDirX=1;p.lastDirY=0}if(force){let sd=snapThrowDir(p.lastDirX,p.lastDirY);p.forceThrowDir={x:sd.x,y:sd.y,t:now()}}}
   function choice(id){return localPad.teamDraft[id]||'I'}
   function badge(t){return t==='A'?'A':(t==='B'?'B':'個人')}
   function tkey(id){const t=choice(id);return t==='A'?'LOCAL TEAM A':(t==='B'?'LOCAL TEAM B':'LOCAL SOLO '+id)}
@@ -2772,7 +2773,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function renderTeams(ps){
     if(!localPad.teamEl)return;
     const A=[],B=[],I=[];ps.forEach((gp,i)=>{const id=pid(gp,i),t=choice(id),h=chip(gp,i);if(t==='A')A.push(h);else if(t==='B')B.push(h);else I.push(h)});
-    localPad.teamEl.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="color:#ffe66d;font-size:13px">ローカルチームエントリー V10</b><span style="font-size:11px;color:#cfe5ff">A=TEAM A / B=TEAM B / 未表明=個人</span></div><div style="position:relative;min-height:156px;border-radius:18px;background:radial-gradient(circle at 38% 50%,rgba(59,130,246,.32),transparent 37%),radial-gradient(circle at 62% 50%,rgba(239,68,68,.32),transparent 37%),#020617;border:1px solid #ffffff22;overflow:hidden;padding:8px"><div style="position:absolute;left:7%;top:14px;width:48%;height:126px;border:2px solid rgba(96,165,250,.9);border-radius:50%;background:rgba(37,99,235,.12)"></div><div style="position:absolute;right:7%;top:14px;width:48%;height:126px;border:2px solid rgba(248,113,113,.9);border-radius:50%;background:rgba(220,38,38,.12)"></div><div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;min-height:140px;align-items:start"><div><div style="text-align:center;color:#93c5fd;font-weight:1000;font-size:12px;margin-bottom:4px">Aチーム</div>'+(A.join('')||'<div style="text-align:center;color:#93c5fd99;font-size:11px">A待ち</div>')+'</div><div><div style="text-align:center;color:#fde68a;font-weight:1000;font-size:12px;margin-bottom:4px">個人</div>'+(I.join('')||'<div style="text-align:center;color:#fde68a99;font-size:11px">未表明なし</div>')+'</div><div><div style="text-align:center;color:#fca5a5;font-weight:1000;font-size:12px;margin-bottom:4px">Bチーム</div>'+(B.join('')||'<div style="text-align:center;color:#fca5a599;font-size:11px">B待ち</div>')+'</div></div></div><div style="font-size:11px;color:#cfe5ff;margin-top:7px;line-height:1.45">開始ボタンを押した時点でFIX。A/B両方がいる場合だけ A VS B、片側だけなら個人戦として開始します。</div>';
+    localPad.teamEl.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="color:#ffe66d;font-size:13px">ローカルチームエントリー V13</b><span style="font-size:11px;color:#cfe5ff">A=TEAM A / B=TEAM B / 未表明=個人</span></div><div style="position:relative;min-height:156px;border-radius:18px;background:radial-gradient(circle at 38% 50%,rgba(59,130,246,.32),transparent 37%),radial-gradient(circle at 62% 50%,rgba(239,68,68,.32),transparent 37%),#020617;border:1px solid #ffffff22;overflow:hidden;padding:8px"><div style="position:absolute;left:7%;top:14px;width:48%;height:126px;border:2px solid rgba(96,165,250,.9);border-radius:50%;background:rgba(37,99,235,.12)"></div><div style="position:absolute;right:7%;top:14px;width:48%;height:126px;border:2px solid rgba(248,113,113,.9);border-radius:50%;background:rgba(220,38,38,.12)"></div><div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;min-height:140px;align-items:start"><div><div style="text-align:center;color:#93c5fd;font-weight:1000;font-size:12px;margin-bottom:4px">Aチーム</div>'+(A.join('')||'<div style="text-align:center;color:#93c5fd99;font-size:11px">A待ち</div>')+'</div><div><div style="text-align:center;color:#fde68a;font-weight:1000;font-size:12px;margin-bottom:4px">個人</div>'+(I.join('')||'<div style="text-align:center;color:#fde68a99;font-size:11px">未表明なし</div>')+'</div><div><div style="text-align:center;color:#fca5a5;font-weight:1000;font-size:12px;margin-bottom:4px">Bチーム</div>'+(B.join('')||'<div style="text-align:center;color:#fca5a599;font-size:11px">B待ち</div>')+'</div></div></div><div style="font-size:11px;color:#cfe5ff;margin-top:7px;line-height:1.45">開始ボタンを押した時点でFIX。A/B両方がいる場合だけ A VS B、片側だけなら個人戦として開始します。</div>';
   }
   function draft(ps){ps.forEach((gp,i)=>{const id=pid(gp,i);if(edge(gp,1)){localPad.teamDraft[id]='A';localPad.flash[id]=performance.now()+650;try{sfx('item',1.35)}catch(e){}}if(edge(gp,0)){localPad.teamDraft[id]='B';localPad.flash[id]=performance.now()+650;try{sfx('item',1.05)}catch(e){}}})}
   function updateLobby(){const ps=pads();localPad.pads=ps;renderStatus(ps);draft(ps);renderTeams(ps)}
@@ -2791,7 +2792,27 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function readPadsIntoInputs(){
     if(!localPad.enabled)return false;const ps=pads(),alive=[];
-    ps.forEach((gp,i)=>{const id=pid(gp,i);if(!members[id]||!players[id])return;alive.push(id);const inp=inputs[id]||(inputs[id]={id,name:members[id].name,local:true});const d=gpDir(gp);inp.dx=d.dx;inp.dy=d.dy;inp.name=members[id].name;inp.local=true;inp.last=now();inp.teamChoice=members[id].teamChoice;const p=players[id];if(edge(gp,0)){inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;if(p&&p.alive){primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}}if(edge(gp,1)){inp.specialSeq=(inp.specialSeq||0)+1;if(p&&p.alive){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}if(p&&Math.hypot(d.dx,d.dy)>.2){p.lastDirX=d.dx;p.lastDirY=d.dy}});
+    ps.forEach((gp,i)=>{
+      const id=pid(gp,i);
+      if(!members[id]||!players[id])return;
+      alive.push(id);
+      const inp=inputs[id]||(inputs[id]={id,name:members[id].name,local:true});
+      const d=gpDir(gp);
+      inp.dx=d.dx;inp.dy=d.dy;inp.name=members[id].name;inp.local=true;inp.last=now();inp.teamChoice=members[id].teamChoice;
+      const p=players[id];
+      // LOCAL-PAD-HANDDIR-V12: ボタン入力を処理する前に、そのコントローラーの最新方向を必ずプレイヤーへ反映する。
+      // ここが後ろにあると、Bで持上げ/投げした瞬間だけ lastDir が初期値(右)のまま使われ、全員が右投げになる。
+      rememberLocalPadDir(p,inp,d,false)
+      if(edge(gp,0)){
+        rememberLocalPadDir(p,inp,d,true);
+        inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;
+        if(p&&p.alive){primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}
+      }
+      if(edge(gp,1)){
+        inp.specialSeq=(inp.specialSeq||0)+1;
+        if(p&&p.alive){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}
+      }
+    });
     localPad.ids=alive;return true;
   }
   try{const oldBattleTeamKey=battleTeamKey;battleTeamKey=function(p){return battle&&battle.team?(p&&p.teamKey)||oldBattleTeamKey(p):oldBattleTeamKey(p)}}catch(e){}
