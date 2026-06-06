@@ -3074,8 +3074,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 (function installLocalPadTeamFix(){
   if(window.__pbomberLocalPadTeamFix)return;
   window.__pbomberLocalPadTeamFix=true;
-  const LOCAL_BUILD='LOCAL-FIELD-FIT-NOSCROLL-V1-20260606';
-  const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD,hudState:Object.create(null)};
+  const LOCAL_BUILD='LOCAL-PAD-CAMERA-AB-COMBO-V1-20260606';
+  const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD,hudState:Object.create(null),photoData:Object.create(null),comboPrev:Object.create(null),photoCapture:null,photoTimer:null};
   try{document.body.dataset.localPadTeamFixBuild=LOCAL_BUILD}catch(e){}
   function pads(){let a=[];try{a=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){a=[]}return a}
   function pid(gp,i){return 'local_gp_'+String(gp.index)+'_'+String(i||0)}
@@ -3098,7 +3098,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     const photo=$('localPhotoBtn');if(photo)photo.remove();
     let row=document.querySelector('.localMultiRow');
     if(!row){row=document.createElement('div');row.className='row localMultiRow';row.style.gridTemplateColumns='1fr';row.style.marginTop='8px';const copy=$('copyBtn');if(copy&&copy.parentNode)copy.parentNode.insertBefore(row,copy.nextSibling)}
-    row.innerHTML='<button id="localNoPhotoBtn" type="button" style="background:linear-gradient(160deg,#0ea5e9,#22c55e);width:100%">画像無しローカル複数コントローラー<br>A/BチームFIXプレイ</button>';
+    row.innerHTML='<button id="localNoPhotoBtn" type="button" style="background:linear-gradient(160deg,#0ea5e9,#22c55e);width:100%">ローカル複数コントローラー<br>A/BチームFIXプレイ</button>';
     if($('localNoPhotoBtn'))$('localNoPhotoBtn').onclick=startLocalNoPhoto;
     let st=$('localPadStatus');
     if(!st){st=document.createElement('div');st.id='localPadStatus';st.style.cssText='margin-top:8px;padding:9px 10px;border:1px solid #ffffff44;border-radius:14px;background:#0006;color:#dff7ff;font-size:12px;font-weight:900;line-height:1.45';row.parentNode.insertBefore(st,row.nextSibling)}
@@ -3110,18 +3110,75 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     updateLobby();
     if(!localPad.timer)localPad.timer=setInterval(updateLobby,160);
   }
-  function renderStatus(ps){const lines=ps.map((gp,i)=>'認識 '+(i+1)+': '+pname(gp,i)).join('<br>');if(localPad.statusEl)localPad.statusEl.innerHTML='認識Proコン数: <b style="color:#ffe66d">'+ps.length+'</b><br>'+(lines||'<span style="color:#fecaca">まだ認識していません。接続後、コントローラーのボタンを1回押してください。</span>')}
+  function photoThumb(id){
+    const src=localPad.photoData&&localPad.photoData[id];
+    return src?'<img src="'+src+'" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:2px solid #fde047;vertical-align:middle;margin-right:8px;background:#000">':'<span style="display:inline-block;width:38px;height:38px;border-radius:50%;border:2px dashed #94a3b8;vertical-align:middle;margin-right:8px;background:#0f172a;text-align:center;line-height:34px;color:#94a3b8;font-size:10px">顔</span>';
+  }
+  function renderStatus(ps){const lines=ps.map((gp,i)=>{const id=pid(gp,i);return '<div style="display:flex;align-items:center;gap:0;margin:5px 0">'+photoThumb(id)+'<span>認識 '+(i+1)+': '+pname(gp,i)+'<br><span style="color:#bae6fd;font-size:11px">A+B同時押しで撮影、撮影画面では任意ボタンでシャッター</span></span></div>'}).join('');if(localPad.statusEl)localPad.statusEl.innerHTML='認識Proコン数: <b style="color:#ffe66d">'+ps.length+'</b><br>'+(lines||'<span style="color:#fecaca">まだ認識していません。接続後、コントローラーのボタンを1回押してください。</span>')}
   function chip(gp,i){const id=pid(gp,i),t=choice(id),flash=(localPad.flash[id]||0)>performance.now(),bg=t==='A'?'#1d4ed8':(t==='B'?'#b91c1c':'#334155'),glow=flash?'box-shadow:0 0 18px #fff,0 0 28px '+tcolor(t,id)+';transform:scale(1.04);':'';return '<div style="margin:4px;padding:6px 8px;border-radius:999px;border:1px solid #ffffff66;background:'+bg+';color:#fff;font-size:11px;font-weight:1000;white-space:nowrap;'+glow+'">'+pname(gp,i)+' <span style="color:#ffe66d">'+badge(t)+'</span></div>'}
   function renderTeams(ps){
     if(!localPad.teamEl)return;
     const A=[],B=[],I=[];ps.forEach((gp,i)=>{const id=pid(gp,i),t=choice(id),h=chip(gp,i);if(t==='A')A.push(h);else if(t==='B')B.push(h);else I.push(h)});
     localPad.teamEl.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="color:#ffe66d;font-size:13px">ローカルチームエントリー V13</b><span style="font-size:11px;color:#cfe5ff">A=TEAM A / B=TEAM B / 未表明=個人</span></div><div style="position:relative;min-height:156px;border-radius:18px;background:radial-gradient(circle at 38% 50%,rgba(59,130,246,.32),transparent 37%),radial-gradient(circle at 62% 50%,rgba(239,68,68,.32),transparent 37%),#020617;border:1px solid #ffffff22;overflow:hidden;padding:8px"><div style="position:absolute;left:7%;top:14px;width:48%;height:126px;border:2px solid rgba(96,165,250,.9);border-radius:50%;background:rgba(37,99,235,.12)"></div><div style="position:absolute;right:7%;top:14px;width:48%;height:126px;border:2px solid rgba(248,113,113,.9);border-radius:50%;background:rgba(220,38,38,.12)"></div><div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;min-height:140px;align-items:start"><div><div style="text-align:center;color:#93c5fd;font-weight:1000;font-size:12px;margin-bottom:4px">Aチーム</div>'+(A.join('')||'<div style="text-align:center;color:#93c5fd99;font-size:11px">A待ち</div>')+'</div><div><div style="text-align:center;color:#fde68a;font-weight:1000;font-size:12px;margin-bottom:4px">個人</div>'+(I.join('')||'<div style="text-align:center;color:#fde68a99;font-size:11px">未表明なし</div>')+'</div><div><div style="text-align:center;color:#fca5a5;font-weight:1000;font-size:12px;margin-bottom:4px">Bチーム</div>'+(B.join('')||'<div style="text-align:center;color:#fca5a599;font-size:11px">B待ち</div>')+'</div></div></div><div style="font-size:11px;color:#cfe5ff;margin-top:7px;line-height:1.45">開始ボタンを押した時点でFIX。A/B両方がいる場合だけ A VS B、片側だけなら個人戦として開始します。</div>';
   }
-  function draft(ps){ps.forEach((gp,i)=>{const id=pid(gp,i);if(edge(gp,1)){localPad.teamDraft[id]='A';localPad.flash[id]=performance.now()+650;try{sfx('item',1.35)}catch(e){}}if(edge(gp,0)){localPad.teamDraft[id]='B';localPad.flash[id]=performance.now()+650;try{sfx('item',1.05)}catch(e){}}})}
+  function anyBtnPressed(gp){try{return Array.from((gp&&gp.buttons)||[]).some(b=>b&&(b.pressed||b.value>.5))}catch(e){return false}}
+  function openLocalPadPhoto(gp,i){
+    const id=pid(gp,i);localPad.photoCapture={id,gpIndex:gp.index,name:pname(gp,i),armed:false,openedAt:performance.now(),seenRelease:false};
+    startLocalPhotoOverlay();
+  }
+  function draft(ps){ps.forEach((gp,i)=>{const id=pid(gp,i),combo=btn(gp,0)&&btn(gp,1),pre=!!localPad.comboPrev[id];localPad.comboPrev[id]=combo;if(combo&&!pre){openLocalPadPhoto(gp,i);localPad.prev[gp.index+':0']=true;localPad.prev[gp.index+':1']=true;return}if(combo)return;if(edge(gp,1)){localPad.teamDraft[id]='A';localPad.flash[id]=performance.now()+650;try{sfx('item',1.35)}catch(e){}}if(edge(gp,0)){localPad.teamDraft[id]='B';localPad.flash[id]=performance.now()+650;try{sfx('item',1.05)}catch(e){}}})} 
+  function ensureLocalPhotoOverlay(){
+    let ov=$('localPadPhotoOverlay');
+    if(ov)return ov;
+    ov=document.createElement('div');
+    ov.id='localPadPhotoOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,.86);backdrop-filter:blur(6px);padding:18px;box-sizing:border-box';
+    ov.innerHTML='<div style="width:min(92vw,460px);border:1px solid #ffffff55;border-radius:26px;background:linear-gradient(180deg,#0f172a,#020617);box-shadow:0 22px 80px #000;color:#fff;padding:16px;text-align:center;font-family:system-ui,sans-serif"><div id="localPadPhotoTitle" style="font-weight:1000;color:#fde047;font-size:17px;margin-bottom:10px">PLAYER PHOTO</div><div style="position:relative;width:min(78vw,320px);aspect-ratio:1/1;margin:0 auto;border-radius:24px;overflow:hidden;background:#000;border:2px solid #38bdf8"><video id="localPadPhotoVideo" playsinline autoplay muted style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block"></video><div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 0 40%,rgba(0,0,0,.52) 41% 100%)"></div><div style="position:absolute;left:50%;top:50%;width:72%;height:72%;transform:translate(-50%,-50%);border:4px solid #fde047;border-radius:50%;box-shadow:0 0 0 999px rgba(0,0,0,.10),0 0 22px #fde047"></div><div style="position:absolute;left:50%;top:12%;width:1px;height:76%;background:rgba(255,255,255,.25)"></div><div style="position:absolute;top:50%;left:12%;height:1px;width:76%;background:rgba(255,255,255,.25)"></div></div><div id="localPadPhotoMsg" style="font-size:13px;font-weight:900;color:#dbeafe;line-height:1.55;margin-top:12px">顔を黄色い円の中に入れて、任意ボタンで撮影</div><button id="localPadPhotoCancel" type="button" style="margin-top:12px;border:1px solid #ffffff55;background:#334155;color:#fff;border-radius:999px;padding:9px 18px;font-weight:1000">キャンセル</button><canvas id="localPadPhotoCanvas" width="160" height="160" style="display:none"></canvas></div>';
+    document.body.appendChild(ov);
+    const cancel=$('localPadPhotoCancel');if(cancel)cancel.onclick=()=>closeLocalPhotoOverlay(false);
+    return ov;
+  }
+  async function startLocalPhotoOverlay(){
+    const cap=localPad.photoCapture;if(!cap)return;
+    const ov=ensureLocalPhotoOverlay(),v=$('localPadPhotoVideo'),title=$('localPadPhotoTitle'),msgEl=$('localPadPhotoMsg');
+    if(title)title.textContent=cap.name+' PHOTO';
+    if(msgEl)msgEl.textContent='顔を黄色い円の中に入れて、ボタンを一度離してから任意ボタンでシャッター';
+    ov.style.display='flex';
+    try{await startCamera();if(v&&camStream){v.srcObject=camStream;await v.play().catch(()=>{})}}catch(e){}
+    if(localPad.photoTimer)clearInterval(localPad.photoTimer);
+    localPad.photoTimer=setInterval(pollLocalPhotoCapture,80);
+  }
+  function closeLocalPhotoOverlay(done){
+    if(localPad.photoTimer){clearInterval(localPad.photoTimer);localPad.photoTimer=null}
+    const ov=$('localPadPhotoOverlay');if(ov)ov.style.display='none';
+    localPad.photoCapture=null;
+    if(done)try{sfx('item',1.45)}catch(e){}
+  }
+  function captureLocalPadPhoto(){
+    const cap=localPad.photoCapture,v=$('localPadPhotoVideo'),cv=$('localPadPhotoCanvas');
+    if(!cap||!v||!cv||v.readyState<2)return;
+    const g=cv.getContext('2d'),w=cv.width,h=cv.height,vw=v.videoWidth||w,vh=v.videoHeight||h,side=Math.min(vw,vh),sx=(vw-side)/2,sy=(vh-side)/2;
+    g.save();g.clearRect(0,0,w,h);g.translate(w,0);g.scale(-1,1);g.drawImage(v,sx,sy,side,side,0,0,w,h);g.restore();
+    const data=cv.toDataURL('image/jpeg',.82);
+    localPad.photoData[cap.id]=data;
+    if(members&&members[cap.id]){members[cap.id].cam=data;members[cap.id].camAt=now()}
+    if(players&&players[cap.id])players[cap.id].cam=data;
+    renderStatus(localPad.pads||pads());renderTeams(localPad.pads||pads());
+    closeLocalPhotoOverlay(true);
+  }
+  function pollLocalPhotoCapture(){
+    const cap=localPad.photoCapture;if(!cap)return;
+    const ps=pads(),gp=ps.find(g=>g&&g.index===cap.gpIndex),pressed=gp&&anyBtnPressed(gp),msgEl=$('localPadPhotoMsg');
+    if(!gp){if(msgEl)msgEl.textContent='コントローラーが見つかりません。キャンセルしてください';return}
+    if(!pressed)cap.seenRelease=true;
+    cap.armed=cap.seenRelease||performance.now()-cap.openedAt>520;
+    if(msgEl)msgEl.textContent=cap.armed?'任意ボタンでシャッター':'一度ボタンを離すとシャッター受付';
+    if(cap.armed&&pressed)captureLocalPadPhoto();
+  }
   function updateLobby(){const ps=pads();localPad.pads=ps;renderStatus(ps);draft(ps);renderTeams(ps)}
-  function localMember(gp,i){const id=pid(gp,i),t=choice(id),name=pname(gp,i);return{id,name,joined:now(),last:now(),local:true,gpIndex:gp.index,teamChoice:t,teamBadge:badge(t),teamKey:tkey(id),teamColor:tcolor(t,id)}}
+  function localMember(gp,i){const id=pid(gp,i),t=choice(id),name=pname(gp,i);return{id,name,joined:now(),last:now(),local:true,gpIndex:gp.index,teamChoice:t,teamBadge:badge(t),teamKey:tkey(id),teamColor:tcolor(t,id),cam:localPad.photoData[id]||null,camAt:localPad.photoData[id]?now():0}}
   function prepRoster(ps){localPad.ids=[];members={};inputs={};ps.forEach((gp,i)=>{const m=localMember(gp,i),id=m.id;localPad.ids.push(id);members[id]=m;inputs[id]={id,name:m.name,dx:0,dy:0,bombSeq:0,handSeq:0,specialSeq:0,inputSeq:0,local:true,last:now(),teamChoice:m.teamChoice}})}
-  function applyTeams(){Object.entries(players||{}).forEach(([id,p])=>{const m=members&&members[id];if(!p||!m)return;p.name=m.name;p.teamChoice=m.teamChoice||'I';p.teamBadge=m.teamBadge||badge(p.teamChoice);p.teamKey=m.teamKey||tkey(id);p.teamColor=m.teamColor||tcolor(p.teamChoice,id);p.color=p.teamColor||p.color})}
+  function applyTeams(){Object.entries(players||{}).forEach(([id,p])=>{const m=members&&members[id];if(!p||!m)return;p.name=m.name;p.teamChoice=m.teamChoice||'I';p.teamBadge=m.teamBadge||badge(p.teamChoice);p.teamKey=m.teamKey||tkey(id);p.teamColor=m.teamColor||tcolor(p.teamChoice,id);p.color=p.teamColor||p.color;if(m.cam){p.cam=m.cam}})}
   function startLocalNoPhoto(){
     startAudio&&startAudio();updateLobby();const ps=pads();
     if(!ps.length){panel('接続済みProコンが0台です。スマホにSwitch Pro Controllerを接続して、任意のボタンを1回押してから開始してください。');return}
@@ -3278,6 +3335,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     });
     ctx.restore();
   }
+  const oldCamImageFor=camImageFor;
+  camImageFor=function(id){
+    const src=localPad.photoData&&localPad.photoData[id];
+    if(src){let im=camImgs[id]||(camImgs[id]=new Image());if(im.src!==src)im.src=src;return (im.complete&&im.naturalWidth>0)?im:null}
+    return oldCamImageFor(id);
+  };
   const oldRead=readLocalInput;
   readLocalInput=function(){if(localPad.enabled){readPadsIntoInputs();const mi=inputs&&inputs[myId];if(mi){localInput.dx=mi.dx||0;localInput.dy=mi.dy||0;localInput.seq=mi.bombSeq||localInput.seq||0;localInput.handSeq=mi.handSeq||localInput.handSeq||0;localInput.specialSeq=mi.specialSeq||localInput.specialSeq||0;localInput.inputSeq=mi.inputSeq||localInput.inputSeq||0}else{localInput.dx=0;localInput.dy=0}return}oldRead()};
   const oldHud=updateHud;
