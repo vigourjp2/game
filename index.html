@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260606-remote-clear-on-special-buy-v1 -->
+<!-- build: pbomber-20260606-local-pad-money-hud-v2-compact -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -2892,8 +2892,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 (function installLocalPadTeamFix(){
   if(window.__pbomberLocalPadTeamFix)return;
   window.__pbomberLocalPadTeamFix=true;
-  const LOCAL_BUILD='DEBUG-ROOM-NORMAL-ITEMS-V1-20260605';
-  const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD};
+  const LOCAL_BUILD='LOCAL-PAD-MONEY-HUD-V2-COMPACT-20260606';
+  const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD,hudState:Object.create(null)};
   try{document.body.dataset.localPadTeamFixBuild=LOCAL_BUILD}catch(e){}
   function pads(){let a=[];try{a=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){a=[]}return a}
   function pid(gp,i){return 'local_gp_'+String(gp.index)+'_'+String(i||0)}
@@ -2989,42 +2989,109 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     const price=Math.floor(it.price||specialPrice(it.type)),gold=Math.floor(p.gold||0),ok=canBuySpecial(p,it),need=Math.max(0,price-gold);
     return {text:ok?('購入OK '+specialIcon(it.type)+' $'+price):('購入NG あと$'+need),ok,icon:specialIcon(it.type)};
   }
+  function drawRoundRect(x,y,w,h,r,fill,stroke,lw){
+    const rr=Math.min(r,w/2,h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.lineTo(x+w-rr,y);
+    ctx.quadraticCurveTo(x+w,y,x+w,y+rr);
+    ctx.lineTo(x+w,y+h-rr);
+    ctx.quadraticCurveTo(x+w,y+h,x+w-rr,y+h);
+    ctx.lineTo(x+rr,y+h);
+    ctx.quadraticCurveTo(x,y+h,x,y+h-rr);
+    ctx.lineTo(x,y+rr);
+    ctx.quadraticCurveTo(x,y,x+rr,y);
+    ctx.closePath();
+    if(fill){ctx.fillStyle=fill;ctx.fill()}
+    if(stroke){ctx.lineWidth=lw||2;ctx.strokeStyle=stroke;ctx.stroke()}
+  }
   function drawLocalPadHudOverlay(){
     if(!localPad.enabled)return;
     const ids=(localPad.ids&&localPad.ids.length)?localPad.ids:Object.keys(players||{});
+    const t=performance.now();
     ctx.save();
-    ids.forEach((id)=>{
+    ids.forEach((id,idx)=>{
       const p=players&&players[id];
       if(!p||p.alive===false)return;
       const sx=(p.x||0)-camX,sy=(p.y||0)-camY;
-      if(sx<-30||sy<-30||sx>W+30||sy>H+30)return;
+      if(sx<-50||sy<-50||sx>W+50||sy>H+50)return;
       try{ensureSpecialBag(p)}catch(e){}
-      const bag=p.specials||{};
-      let active=fallbackActiveSpecial(p);
-      const team=p.teamBadge||'個人';
+      const st=localPad.hudState[id]||(localPad.hudState[id]={gold:Math.floor(p.gold||0),goldFlashUntil:0,goldDelta:0,buyOk:null,buyFlashUntil:0,showUntil:0});
       const gold=Math.floor(p.gold||0);
-      const sp=active?((specialIcon(active)||'✦')+(bag[active]||0)):'--';
-      const it=specialItemUnderPlayer(p);
-      let buy='';
-      if(it){
-        const price=Math.floor(it.price||specialPrice(it.type));
-        buy=canBuySpecial(p,it)?' 買OK':' 買NG';
+      if(st.gold!==gold){
+        st.goldDelta=gold-st.gold;
+        st.gold=gold;
+        st.goldFlashUntil=t+900;
+        st.showUntil=t+1300;
       }
-      const text='['+team+'] $'+gold+' '+sp+buy;
-      ctx.font='900 8px system-ui';
+      const it=specialItemUnderPlayer(p);
+      const buyOk=it?!!canBuySpecial(p,it):null;
+      if(st.buyOk!==buyOk){
+        st.buyOk=buyOk;
+        st.buyFlashUntil=t+750;
+        if(it)st.showUntil=t+1200;
+      }
+      if(it)st.showUntil=Math.max(st.showUntil||0,t+260);
+      const goldFlash=Math.max(0,(st.goldFlashUntil-t)/900);
+      const buyFlash=Math.max(0,(st.buyFlashUntil-t)/750);
+      const visible=it||goldFlash>0||t<(st.showUntil||0);
+      if(!visible)return;
+
+      // 画面を塞がない足元ミニバッジ方式。常時大型パネルは出さない。
+      const price=it?Math.floor(it.price||specialPrice(it.type)):0;
+      const need=it?Math.max(0,price-gold):0;
+      const label=it?(buyOk?'OK $'+price:'NG +$'+need):'$'+gold;
+      const money='$'+gold;
+      const alpha=it?0.94:Math.max(.15,Math.min(.9,goldFlash+.35));
+      ctx.globalAlpha=alpha;
+
+      // 購入可否はプレイヤー足元の細いリングで示す。文字箱でゲームを隠さない。
+      if(it){
+        ctx.save();
+        ctx.globalAlpha=.58+buyFlash*.32;
+        ctx.lineWidth=buyOk?3.2:2.4;
+        ctx.strokeStyle=buyOk?'#86efac':'#fca5a5';
+        ctx.beginPath();
+        ctx.arc(sx,sy,Math.max(17,(p.rad||14)+5)+buyFlash*2,0,Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      const bw=it?92:58;
+      const bh=it?28:20;
+      let x=clamp(sx-bw/2,5,W-bw-5);
+      let y=sy+(p.rad||15)+7;
+      if(y+bh>H-5)y=sy-(p.rad||15)-bh-7;
+      y=clamp(y,35,H-bh-5);
+      const r=10;
+      const fill=it?(buyOk?'rgba(20,83,45,.72)':'rgba(127,29,29,.74)'):'rgba(2,6,23,.58)';
+      const stroke=it?(buyOk?'rgba(134,239,172,.95)':'rgba(252,165,165,.95)'):'rgba(253,224,71,.85)';
+      drawRoundRect(x,y,bw,bh,r,fill,stroke,1.5+buyFlash*.8);
       ctx.textAlign='center';
       ctx.textBaseline='middle';
-      const tw=ctx.measureText(text).width;
-      let x=clamp(sx,tw/2+3,W-tw/2-3);
-      let y=sy+(p.rad||15)+12;
-      if(y>H-12)y=sy-(p.rad||15)-11;
-      y=clamp(y,58,H-10);
-      ctx.globalAlpha=.92;
-      ctx.lineWidth=2.4;
+      ctx.lineWidth=3;
       ctx.strokeStyle='rgba(0,0,0,.78)';
-      ctx.strokeText(text,x,y);
-      ctx.fillStyle=it?(canBuySpecial(p,it)?'#86efac':'#fca5a5'):'#ffe66d';
-      ctx.fillText(text,x,y);
+      ctx.font='1000 '+(goldFlash>0?Math.round(12+goldFlash*4):12)+'px system-ui';
+      ctx.strokeText(money,x+bw/2,it?y+9:y+bh/2);
+      ctx.fillStyle=st.goldDelta<0?'#fecaca':'#fde047';
+      ctx.fillText(money,x+bw/2,it?y+9:y+bh/2);
+      if(it){
+        ctx.font='1000 10px system-ui';
+        ctx.strokeText(label,x+bw/2,y+21);
+        ctx.fillStyle=buyOk?'#bbf7d0':'#fecaca';
+        ctx.fillText(label,x+bw/2,y+21);
+      }
+      if(goldFlash>0&&st.goldDelta){
+        const delta=(st.goldDelta>0?'+':'')+st.goldDelta;
+        const yy=y-5-(1-goldFlash)*18;
+        ctx.globalAlpha=Math.min(1,goldFlash*1.1);
+        ctx.font='1000 14px system-ui';
+        ctx.lineWidth=3;
+        ctx.strokeStyle='rgba(0,0,0,.82)';
+        ctx.strokeText(delta,x+bw/2,yy);
+        ctx.fillStyle=st.goldDelta>0?'#fef08a':'#fecaca';
+        ctx.fillText(delta,x+bw/2,yy);
+      }
       ctx.globalAlpha=1;
     });
     ctx.restore();
