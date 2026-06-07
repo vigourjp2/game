@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-MASTER-SWORD-SPIN-V8-20260607',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-DIAGONAL-FREE-MOVE-V1-20260607',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -2026,7 +2026,20 @@ function pollProconInput(){
   proconInput.prevA=aDown;
 }
 function update3DLook(dt){if(!viewMode3D)return;init3DViewFromPlayer(false);let lx=lookTouch.active?(lookTouch.dx||0):0,ly=lookTouch.active?(lookTouch.dy||0):0;if(Math.abs(lx)>.03||Math.abs(ly)>.03){view3D.yaw=normAng((view3D.yaw||0)+lx*dt*3.35);view3D.pitch=clamp((view3D.pitch||0)-ly*dt*2.15,-.92,.92);}}
-function readLocalInput(){pollProconInput();let rawX=0,rawY=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))rawX--;if(keys.has('KeyD')||keys.has('ArrowRight'))rawX++;if(keys.has('KeyW')||keys.has('ArrowUp'))rawY--;if(keys.has('KeyS')||keys.has('ArrowDown'))rawY++;rawX+=proconInput.dx||0;rawY+=proconInput.dy||0;if(touch.active){rawX+=movePad.dx||0;rawY+=movePad.dy||0}let rawLen=Math.hypot(rawX,rawY);if(rawLen>1){rawX/=rawLen;rawY/=rawLen}let dx=rawX,dy=rawY,me=players[myId];if(viewMode3D){init3DViewFromPlayer(false);let yaw=view3D.yaw||0,fx=Math.cos(yaw),fy=Math.sin(yaw),rx=-Math.sin(yaw),ry=Math.cos(yaw);dx=fx*(-rawY)+rx*rawX;dy=fy*(-rawY)+ry*rawX;let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}if(me){me.lastDirX=fx;me.lastDirY=fy;}}else{if(lookTouch.active)clear3DLookTouch();if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy;}}localInput.dx=dx;localInput.dy=dy;}
+function transform3DMoveVector(rawX,rawY){
+  init3DViewFromPlayer(false);
+  const yaw=view3D.yaw||0;
+  const fx=Math.cos(yaw),fy=Math.sin(yaw);
+  const rx=-Math.sin(yaw),ry=Math.cos(yaw);
+  // 3Dはマイクラ方式: 上下=視点前後、左右=視点基準ストレイフ。
+  // rawX/rawYをどちらか一方に潰さず合成するため、前進+右で斜め移動できる。
+  let dx=fx*(-rawY)+rx*rawX;
+  let dy=fy*(-rawY)+ry*rawX;
+  const len=Math.hypot(dx,dy);
+  if(len>1){dx/=len;dy/=len;}
+  return{dx,dy,fx,fy};
+}
+function readLocalInput(){pollProconInput();let rawX=0,rawY=0;if(keys.has('KeyA')||keys.has('ArrowLeft'))rawX--;if(keys.has('KeyD')||keys.has('ArrowRight'))rawX++;if(keys.has('KeyW')||keys.has('ArrowUp'))rawY--;if(keys.has('KeyS')||keys.has('ArrowDown'))rawY++;rawX+=proconInput.dx||0;rawY+=proconInput.dy||0;if(touch.active){rawX+=movePad.dx||0;rawY+=movePad.dy||0}let rawLen=Math.hypot(rawX,rawY);if(rawLen>1){rawX/=rawLen;rawY/=rawLen}let dx=rawX,dy=rawY,me=players[myId];if(viewMode3D){let v=transform3DMoveVector(rawX,rawY);dx=v.dx;dy=v.dy;if(me){me.lastDirX=v.fx;me.lastDirY=v.fy;me.free3DMove=true;}}else{if(lookTouch.active)clear3DLookTouch();if(me&&Math.hypot(dx,dy)>.2){me.lastDirX=dx;me.lastDirY=dy;}if(me)me.free3DMove=false;}localInput.dx=dx;localInput.dy=dy;localInput.free3D=!!viewMode3D;}
 function bombRect(b){return{x:(b.x||cc(b.c,b.r).x)-T/2+8,y:(b.y||cc(b.c,b.r).y)-T/2+8,w:T-16,h:T-16,type:'bomb',bomb:b}}
 function solidRects(ownerId){let a=[];for(let r=0;r<R;r++)for(let c=0;c<C;c++)if(grid[r][c]!==EMPTY)a.push({x:OX+c*T,y:OY+r*T,w:T,h:T,type:'block'});bombs.forEach(b=>{if(b.carriedBy)return;if(b.passOwner&&b.passOwner===ownerId)return;a.push(bombRect(b))});return a}
 function circleRectHit(x,y,rad,rect){let nx=clamp(x,rect.x,rect.x+rect.w),ny=clamp(y,rect.y,rect.y+rect.h);return Math.hypot(x-nx,y-ny)<rad}
@@ -2035,7 +2048,7 @@ function markTeleportBlink(ent,dist=0,reason='RECOVER'){if(!ent)return;let isEne
 function markEnemyTeleportBlink(ent,dist=0){markTeleportBlink(ent,dist,'RECOVER')}
 function rescueEntityFromSolids(ent,ownerId){if(!ent||canAt(ent,ent.x,ent.y,ownerId))return false;let base=tc(ent.x,ent.y),best=null,bd=Infinity;for(let ring=0;ring<7;ring++){for(let rr=base.r-ring;rr<=base.r+ring;rr++)for(let cc2=base.c-ring;cc2<=base.c+ring;cc2++){if(Math.max(Math.abs(cc2-base.c),Math.abs(rr-base.r))!==ring)continue;if(!inside(cc2,rr)||grid[rr][cc2]!==EMPTY)continue;let o=cc(cc2,rr);if(!canAt(ent,o.x,o.y,ownerId))continue;let d=Math.hypot(o.x-ent.x,o.y-ent.y);if(d<bd){bd=d;best=o}}if(best)break}if(best){let oldX=ent.x,oldY=ent.y;ent.x=best.x;ent.y=best.y;let c=tc(ent.x,ent.y);ent.c=c.c;ent.r=c.r;ent.vx=0;ent.vy=0;let movedDist=Math.hypot(ent.x-oldX,ent.y-oldY);markTeleportBlink(ent,movedDist,'RECOVER');partsBurst(ent.x,ent.y,ent.color||'#dfeaff',8);return true}return false}
 function depen(ent,ownerId){for(let k=0;k<5;k++){let changed=false;for(const r of solidRects(ownerId)){let nx=clamp(ent.x,r.x,r.x+r.w),ny=clamp(ent.y,r.y,r.y+r.h),vx=ent.x-nx,vy=ent.y-ny,d=Math.hypot(vx,vy);if(d>0&&d<ent.rad){let push=ent.rad-d+.6;ent.x+=vx/d*push;ent.y+=vy/d*push;changed=true}else if(d===0){ent.x+=1;changed=true}}ent.x=clamp(ent.x,OX+ent.rad,OX+C*T-ent.rad);ent.y=clamp(ent.y,OY+ent.rad,OY+R*T-ent.rad);if(!changed)break}rescueEntityFromSolids(ent,ownerId)}
-function moveEntity(ent,dx,dy,dt,ownerId){let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}let sp=ent.speed||150,step=sp*dt;let moved=false;if(dx){let nx=ent.x+dx*step;if(canAt(ent,nx,ent.y,ownerId)){ent.x=nx;moved=true}else{tryKick(ent,dx,0,ownerId)}}if(dy){let ny=ent.y+dy*step;if(canAt(ent,ent.x,ny,ownerId)){ent.y=ny;moved=true}else{tryKick(ent,0,dy,ownerId)}}lane(ent,dx,dy,dt,ownerId);depen(ent,ownerId);let cell=tc(ent.x,ent.y);ent.c=cell.c;ent.r=cell.r;return moved}
+function moveEntity(ent,dx,dy,dt,ownerId){let len=Math.hypot(dx,dy);if(len>1){dx/=len;dy/=len}let sp=ent.speed||150,step=sp*dt;let moved=false;if(dx){let nx=ent.x+dx*step;if(canAt(ent,nx,ent.y,ownerId)){ent.x=nx;moved=true}else{tryKick(ent,dx,0,ownerId)}}if(dy){let ny=ent.y+dy*step;if(canAt(ent,ent.x,ny,ownerId)){ent.y=ny;moved=true}else{tryKick(ent,0,dy,ownerId)}}if(!(viewMode3D&&ownerId===myId&&ent&&ent.free3DMove))lane(ent,dx,dy,dt,ownerId);depen(ent,ownerId);let cell=tc(ent.x,ent.y);ent.c=cell.c;ent.r=cell.r;return moved}
 function lane(ent,dx,dy,dt,ownerId){let c=tc(ent.x,ent.y);if(!inside(c.c,c.r))return;let o=cc(c.c,c.r),a=(ent.speed||150)*dt*.8;if(Math.abs(dx)>Math.abs(dy)){let off=o.y-ent.y;if(Math.abs(off)>1){let ny=ent.y+Math.sign(off)*Math.min(Math.abs(off),a);if(canAt(ent,ent.x,ny,ownerId))ent.y=ny}}else if(Math.abs(dy)>Math.abs(dx)){let off=o.x-ent.x;if(Math.abs(off)>1){let nx=ent.x+Math.sign(off)*Math.min(Math.abs(off),a);if(canAt(ent,nx,ent.y,ownerId))ent.x=nx}}}
 function kickPower(ent){return Math.max(ent.kickLevel||0,ent.kick?1:0)}
 function handPower(ent){return ent.handLevel||0}
@@ -3973,7 +3986,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return oldCamImageFor(id);
   };
   const oldRead=readLocalInput;
-  readLocalInput=function(){if(localPad.enabled){readPadsIntoInputs();const mi=inputs&&inputs[myId];if(mi){localInput.dx=mi.dx||0;localInput.dy=mi.dy||0;localInput.seq=mi.bombSeq||localInput.seq||0;localInput.handSeq=mi.handSeq||localInput.handSeq||0;localInput.specialSeq=mi.specialSeq||localInput.specialSeq||0;localInput.inputSeq=mi.inputSeq||localInput.inputSeq||0}else{localInput.dx=0;localInput.dy=0}return}oldRead()};
+  readLocalInput=function(){if(localPad.enabled){readPadsIntoInputs();const mi=inputs&&inputs[myId];if(mi){let dx=mi.dx||0,dy=mi.dy||0;if(viewMode3D){let v=transform3DMoveVector(dx,dy);dx=v.dx;dy=v.dy;let me=players&&players[myId];if(me){me.lastDirX=v.fx;me.lastDirY=v.fy;me.free3DMove=true;}}else{let me=players&&players[myId];if(me)me.free3DMove=false;}localInput.dx=dx;localInput.dy=dy;localInput.free3D=!!viewMode3D;localInput.seq=mi.bombSeq||localInput.seq||0;localInput.handSeq=mi.handSeq||localInput.handSeq||0;localInput.specialSeq=mi.specialSeq||localInput.specialSeq||0;localInput.inputSeq=mi.inputSeq||localInput.inputSeq||0}else{localInput.dx=0;localInput.dy=0}return}oldRead()};
   const oldHud=updateHud;
   updateHud=function(){oldHud();try{if($('buildView'))$('buildView').textContent=LOCAL_BUILD;if($('buildTag'))$('buildTag').textContent='BUILD '+LOCAL_BUILD;if($('modeView')&&localPad.enabled)$('modeView').textContent=(battle&&battle.on&&battle.team)?'LOCAL A VS B':'LOCAL PAD x'+localPad.ids.length;if($('playersView')&&localPad.enabled)$('playersView').textContent=Object.values(players).filter(p=>p.alive).length+'/'+localPad.ids.length}catch(e){}};
   const oldMake=makePlayer;
