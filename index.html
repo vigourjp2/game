@@ -1807,7 +1807,7 @@ function carAreaExplosion(car){
   bombs.slice().forEach(b=>{if(cells.some(([c,r])=>b.c===c&&b.r===r))explode(b)});
   enemies.forEach(e=>{if(e.alive&&cells.some(([c,r])=>e.c===c&&e.r===r))damageEnemyByHazard(e,'carExplosion:'+car.id,e.boss?5:2,520)});
   shockwave(car.x,car.y,86,'#ff7a18');partsBurst(car.x,car.y,'#ff7a18',44);shake=Math.max(shake,14);sfx('explode');
-  car.state='frame';car.hp=1;car.burnTimer=0;car.frameBornAt=now();car.frameImmuneUntil=now()+760;msg='CAR EXPLOSION - 黒こげフレーム残存';
+  car.state='frame';car.hp=1;car.burnTimer=0;car.frameBornAt=now();car.frameIgnoreExpId=expId;car.frameImmuneUntil=now()+Math.max(1200,900/Math.max(.25,(viewMode3D?VIEW3D_SPEED_SCALE:1)));msg='CAR EXPLOSION - 黒こげフレーム残存';
 }
 function updateCar(cart,dt){
   if(!cart||cart.mode!=='car'||cart.state==='dead')return;
@@ -1835,7 +1835,7 @@ function updateCar(cart,dt){
     if(cart.burnTimer<=0)carAreaExplosion(cart);
   }else if(cart.state==='frame'){
     Object.values(players||{}).forEach(p=>{if(p&&p.alive&&Math.hypot(p.x-cart.x,p.y-cart.y)<p.rad+22)damagePlayer(p,isHost?'local':'remote');});
-    if(now()>(cart.frameImmuneUntil||0)&&flameHit(cart.c,cart.r)){cart.hp=(cart.hp||1)-1;partsBurst(cart.x,cart.y,'#111827',18);sfx('hit',1.1);}
+    if(now()>(cart.frameImmuneUntil||0)&&flameHitExcept(cart.c,cart.r,cart.frameIgnoreExpId||null)){cart.hp=(cart.hp||1)-1;partsBurst(cart.x,cart.y,'#111827',18);sfx('hit',1.1);}
     if((cart.hp||0)<=0){cart.state='dead';partsBurst(cart.x,cart.y,'#6b7280',26);shockwave(cart.x,cart.y,48,'#6b7280');msg='CAR FRAME DESTROYED - 再発動可能';}
   }
 }
@@ -2300,6 +2300,7 @@ function releasePlayerItems(p){if(!p)return;let bag=ensureItemBag(p),drops=[];['
 function itemApply(p,it,emit=true){it={...it,id:itemKey(it)};applyItemStats(p,it);sfx('item',1+((p.kickLevel||0)+(p.handLevel||0))*.05);partsBurst(it.x,it.y,{fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6'}[it.type]||'#fff',18);msg=`${p.name} GET ${it.type.toUpperCase()} Lv ${it.type==='kick'?p.kickLevel:it.type==='hand'?p.handLevel:''}`;if(mode==='join'&&p.id===myId){markLocalItemCollected(it);if(emit)sendGameEvent('itemCollect',{playerId:p.id,itemId:itemKey(it),item:it,c:it.c,r:it.r,type:it.type})}}
 function collectItemsForPlayer(p,emit=true){if(!p||!p.alive)return;for(let i=items.length-1;i>=0;i--){let it=items[i];if(localCollectedItems.has(itemKey(it))){items.splice(i,1);continue}if(Math.hypot(p.x-it.x,p.y-it.y)<32){if(it.special)continue;itemApply(p,it,emit);items.splice(i,1)}}}
 function flameHit(c,r,ownerFilter=null){return flames.some(f=>f.c===c&&f.r===r&&(!ownerFilter||f.owner===ownerFilter||f.localOwner===ownerFilter))}
+function flameHitExcept(c,r,ignoreExpId=null,ownerFilter=null){return flames.some(f=>f.c===c&&f.r===r&&(!ignoreExpId||f.expId!==ignoreExpId)&&(!ownerFilter||f.owner===ownerFilter||f.localOwner===ownerFilter))}
 function nearestReviverFor(p){if(battle.on&&!battle.team)return null;let best=null,bd=Infinity;for(const q of Object.values(players)){if(!q||!q.alive||q.id===p.id)continue;if(battle.on&&battle.team&&battleTeamKey(q)!==battleTeamKey(p))continue;let d=Math.hypot((q.x||0)-(p.x||0),(q.y||0)-(p.y||0));if(d<REVIVE_RADIUS&&d<bd){best=q;bd=d}}return best}
 function revivePlayer(p,by=null){if(!p)return;p.alive=true;p.revive=0;p.reviveBy=null;p.invuln=Math.max(p.invuln||0,REVIVE_INVULN_MS);p.shield=Math.max(p.shield||0,900);p.vx=0;p.vy=0;partsBurst(p.x,p.y,p.color,34);shockwave(p.x,p.y,58,p.color);sfx('item');msg=`${p.name} REVIVED${by?' BY '+by.name:''}`}
 function updateRevives(dt){for(const p of Object.values(players)){if(!p||p.alive)continue;let by=nearestReviverFor(p);if(by){p.reviveBy=by.id;p.revive=Math.min(1,(p.revive||0)+REVIVE_GAIN_PER_SEC*dt);if(p.revive>=1)revivePlayer(p,by)}else{p.reviveBy=null;p.revive=Math.max(0,(p.revive||0)-REVIVE_DECAY_PER_SEC*dt)}}}
