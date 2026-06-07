@@ -2021,6 +2021,25 @@ function pollProconInput(){
   // Nintendo layout: B is the bottom face button, A is the right face button in standard mapping.
   const bDown=proconButtonDown(gp,0);
   const aDown=proconButtonDown(gp,1);
+  const comboDown=aDown&&bDown;
+  const comboPrev=!!proconInput.prevAB;
+  if(started&&comboDown&&!comboPrev){
+    const p=players&&players[myId];
+    if(p&&typeof window.__openAiOmakase==='function'){
+      window.__openAiOmakase(myId,p.name||nameVal()||'YOU');
+      proconInput.prevAB=true;
+      proconInput.prevB=bDown;
+      proconInput.prevA=aDown;
+      return;
+    }
+  }
+  if(comboDown){
+    proconInput.prevAB=true;
+    proconInput.prevB=bDown;
+    proconInput.prevA=aDown;
+    return;
+  }
+  proconInput.prevAB=false;
   if(bDown&&!proconInput.prevB)queueBomb();
   if(aDown&&!proconInput.prevA){let p=players[myId];if(p&&specialItemUnderPlayer(p))queueSpecial();else if(p&&fallbackActiveSpecial(p)==='mastersword')startMasterSwordCharge(p);else queueSpecial();}
   if(!aDown&&proconInput.prevA){let p=players[myId];if(p&&p.masterSwordCharge&&p.masterSwordCharge.holding)releaseMasterSwordCharge(p,localInput);}
@@ -3852,7 +3871,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function prepRoster(ps){localPad.ids=[];members={};inputs={};ps.forEach((gp,i)=>{const m=localMember(gp,i),id=m.id;localPad.ids.push(id);members[id]=m;inputs[id]={id,name:m.name,dx:0,dy:0,bombSeq:0,handSeq:0,specialSeq:0,inputSeq:0,local:true,last:now(),teamChoice:m.teamChoice}})}
   function applyTeams(){Object.entries(players||{}).forEach(([id,p])=>{const m=members&&members[id];if(!p||!m)return;p.name=m.name;p.teamChoice=m.teamChoice||'I';p.teamBadge=m.teamBadge||badge(p.teamChoice);p.teamKey=m.teamKey||tkey(id);p.teamColor=m.teamColor||tcolor(p.teamChoice,id);p.color=p.teamColor||p.color;if(m.cam){p.cam=m.cam}})}
   function startLocalNoPhoto(){
-    startAudio&&startAudio();closeLocalPhotoOverlay(false);const ps=pads();
+    startAudio&&startAudio();closeLocalPhotoOverlay(false);updateLobby();const ps=pads();
     if(!ps.length){panel('接続済みProコンが0台です。スマホにSwitch Pro Controllerを接続して、任意のボタンを1回押してから開始してください。');return}
     localPad.enabled=true;localPad.prev=Object.create(null);localPad.pads=ps;prepRoster(ps);myId=localPad.ids[0];
     beginGameBgmFromUserGesture&&beginGameBgmFromUserGesture();roomId='LOCAL-CONTROLLER';roomSeed=hashSeed(roomId+'_'+Date.now());mode='offline';isHost=true;
@@ -3874,6 +3893,21 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       // LOCAL-PAD-HANDDIR-V12: ボタン入力を処理する前に、そのコントローラーの最新方向を必ずプレイヤーへ反映する。
       // ここが後ろにあると、Bで持上げ/投げした瞬間だけ lastDir が初期値(右)のまま使われ、全員が右投げになる。
       rememberLocalPadDir(p,inp,d,false)
+      const combo=!!(btn(gp,0)&&btn(gp,1));
+      const comboKey=id+':AB_WAVE_AI';
+      const comboPre=!!localPad.prev[comboKey];
+      localPad.prev[comboKey]=combo;
+      if(started&&combo&&!comboPre&&p&&typeof window.__openAiOmakase==='function'){
+        window.__openAiOmakase(id,p.name||members[id].name||('P'+(i+1)));
+        localPad.prev[gp.index+':0']=true;
+        localPad.prev[gp.index+':1']=true;
+        return;
+      }
+      if(combo){
+        localPad.prev[gp.index+':0']=true;
+        localPad.prev[gp.index+':1']=true;
+        return;
+      }
       if(edge(gp,0)){
         rememberLocalPadDir(p,inp,d,true);
         inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;
@@ -4041,8 +4075,10 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function aiLevel(id){let v=ai.players[id]&&ai.players[id].level;return Math.max(1,Math.min(9,Number.isFinite(+v)?(+v|0):5))}
   function button(){let b=$('aiOmakaseBtn');if(b)return b;b=document.createElement('button');b.id='aiOmakaseBtn';b.type='button';b.textContent='AIおまかせ';b.style.cssText='position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 116px);transform:translateX(-50%);z-index:34;border:2px solid #fef08a;border-radius:18px;background:linear-gradient(160deg,#7c3aed,#0ea5e9);color:#fff;box-shadow:0 12px 34px #000b;padding:10px 14px;font-size:12px;font-weight:1000;line-height:1.05;touch-action:manipulation;user-select:none';b.onclick=()=>openAiLevelModal(myId,(players&&players[myId]&&players[myId].name)||'YOU');document.body.appendChild(b);return b}
   function ensureModal(){let m=$('aiOmakaseModal');if(m)return m;m=document.createElement('div');m.id='aiOmakaseModal';m.style.cssText='position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,.78);backdrop-filter:blur(5px);padding:18px';let nums='';for(let i=1;i<=9;i++)nums+='<button type="button" data-ai-lv="'+i+'" style="border:1px solid #ffffff55;border-radius:16px;background:linear-gradient(160deg,#334155,#0f172a);color:#fff;font-size:20px;font-weight:1000;padding:14px 0">'+i+'</button>';m.innerHTML='<div style="width:min(92vw,430px);border:1px solid #ffffff55;border-radius:24px;background:linear-gradient(180deg,#0f172a,#020617);box-shadow:0 22px 80px #000;color:#fff;padding:16px;font-family:system-ui,sans-serif"><div id="aiOmakaseTitle" style="font-size:18px;font-weight:1000;color:#fde047;text-align:center;margin-bottom:8px">AIにおまかせ</div><div id="aiOmakaseMsg" style="font-size:13px;font-weight:900;color:#dbeafe;text-align:center;line-height:1.55;margin-bottom:12px">強さ 1〜9 を選択</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'+nums+'</div><button id="aiOmakaseOff" type="button" style="width:100%;margin-top:10px;border:1px solid #ffffff55;border-radius:16px;background:#475569;color:#fff;font-weight:1000;padding:12px">このプレイヤーを手動に戻す</button><button id="aiOmakaseCancel" type="button" style="width:100%;margin-top:8px;border:1px solid #ffffff33;border-radius:16px;background:#111827;color:#cbd5e1;font-weight:1000;padding:10px">キャンセル</button></div>';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeAiLevelModal();let lv=e.target&&e.target.dataset&&e.target.dataset.aiLv;if(lv){setAiOmakase(ai.targetId,+lv);closeAiLevelModal();}});$('aiOmakaseCancel').onclick=closeAiLevelModal;$('aiOmakaseOff').onclick=()=>{if(ai.targetId){delete ai.players[ai.targetId];msg=((players&&players[ai.targetId]&&players[ai.targetId].name)||ai.targetName||'PLAYER')+' MANUAL';}closeAiLevelModal();};return m}
-  function openAiLevelModal(id,name){if(!started||!players||!players[id]){msg='WAVE中にAIおまかせを選択';return}ai.targetId=id;ai.targetName=name||'PLAYER';let m=ensureModal(),t=$('aiOmakaseTitle'),mm=$('aiOmakaseMsg');if(t)t.textContent=(name||'PLAYER')+' をAIにおまかせ';if(mm)mm.textContent='強さ 1〜9 を選択。高いほど攻撃・購入・回避判断が速い';m.style.display='flex';}
+  function paintAiLevelCursor(){let m=$('aiOmakaseModal');if(!m)return;let sel=Math.max(1,Math.min(9,ai.selectedLevel||5));m.querySelectorAll('[data-ai-lv]').forEach(btn=>{let on=(+(btn.dataset.aiLv||0)===sel);btn.style.outline=on?'3px solid #fde047':'0';btn.style.boxShadow=on?'0 0 22px #fde047aa':'none';btn.style.transform=on?'scale(1.06)':'scale(1)';});}
+  function openAiLevelModal(id,name){if(!started||!players||!players[id]){msg='WAVE中にAIおまかせを選択';return}ai.targetId=id;ai.targetName=name||'PLAYER';ai.selectedLevel=aiLevel(id)||5;let m=ensureModal(),t=$('aiOmakaseTitle'),mm=$('aiOmakaseMsg');if(t)t.textContent=(name||'PLAYER')+' をAIにおまかせ';if(mm)mm.textContent='強さ 1〜9 を選択。方向キーで選択、Aで決定';m.style.display='flex';paintAiLevelCursor();}
   function closeAiLevelModal(){let m=$('aiOmakaseModal');if(m)m.style.display='none'}
+  window.__openAiOmakase=openAiLevelModal;
   function setAiOmakase(id,level){if(!id)return;ai.players[id]={on:true,level:Math.max(1,Math.min(9,level|0)),lastThink:0,lastBomb:0,lastSpecial:0,lastHand:0,lastWiggle:0,wiggle:{dx:0,dy:0}};let p=players&&players[id];msg=(p&&p.name||'PLAYER')+' AI Lv'+ai.players[id].level+' START';try{sfx('item',1.25)}catch(e){}}
   function teamKeyOf(p){return (p&&(p.teamKey||p.teamChoice||p.teamBadge||p.name))||''}
   function sameTeam(a,b){if(!a||!b)return false;if(battle&&battle.team)return teamKeyOf(a)===teamKeyOf(b);return false}
@@ -4061,7 +4097,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   const oldReadLocalInput=readLocalInput;
   readLocalInput=function(){oldReadLocalInput();button();if(started&&aiOn(myId)){applyAiToInput(myId,localInput,LOCK_DT);if(mode==='join')writeInput(true)}let lp=window.__pbomberLocalPad;if(started&&lp&&lp.enabled&&inputs){(lp.ids||Object.keys(inputs)).forEach(id=>{if(inputs[id]&&aiOn(id))applyAiToInput(id,inputs[id],LOCK_DT)});checkLocalPadAiCombo(lp)}};
-  function checkLocalPadAiCombo(lp){let pads=[];try{pads=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){pads=[]}pads.forEach((gp,i)=>{let id='local_gp_'+String(gp.index)+'_'+String(i||0),a=!!(gp.buttons&&gp.buttons[0]&&(gp.buttons[0].pressed||gp.buttons[0].value>.5)),b=!!(gp.buttons&&gp.buttons[1]&&(gp.buttons[1].pressed||gp.buttons[1].value>.5)),combo=a&&b,pre=!!ai.comboPrev[id];ai.comboPrev[id]=combo;if(combo&&!pre&&players&&players[id])openAiLevelModal(id,players[id].name||('P'+(i+1)));});}
+  function padPressed(gp,idx){return !!(gp&&gp.buttons&&gp.buttons[idx]&&(gp.buttons[idx].pressed||gp.buttons[idx].value>.5))}
+  function pollAiLevelPad(gp,key){let m=$('aiOmakaseModal');if(!m||m.style.display==='none')return false;let left=padPressed(gp,14),right=padPressed(gp,15),up=padPressed(gp,12),down=padPressed(gp,13),a=padPressed(gp,1)||padPressed(gp,0),b=padPressed(gp,8)||padPressed(gp,9);let nav=left||right||up||down,preNav=!!ai.comboPrev[key+':modalNav'];ai.comboPrev[key+':modalNav']=nav;if(nav&&!preNav){let lv=Math.max(1,Math.min(9,ai.selectedLevel||5));if(left)lv--;if(right)lv++;if(up)lv-=3;if(down)lv+=3;ai.selectedLevel=Math.max(1,Math.min(9,lv));paintAiLevelCursor();try{sfx('item',.55)}catch(e){}}let preA=!!ai.comboPrev[key+':modalA'];ai.comboPrev[key+':modalA']=a;if(a&&!preA&&ai.targetId){setAiOmakase(ai.targetId,ai.selectedLevel||5);closeAiLevelModal();return true}let preB=!!ai.comboPrev[key+':modalB'];ai.comboPrev[key+':modalB']=b;if(b&&!preB){closeAiLevelModal();return true}return true}
+  function checkLocalPadAiCombo(lp){let pads=[];try{pads=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){pads=[]}pads.forEach((gp,i)=>{let id='local_gp_'+String(gp.index)+'_'+String(i||0);if(pollAiLevelPad(gp,id))return;let a=padPressed(gp,0),b=padPressed(gp,1),combo=a&&b,pre=!!ai.comboPrev[id];ai.comboPrev[id]=combo;if(combo&&!pre&&players&&players[id])openAiLevelModal(id,players[id].name||('P'+(i+1)));});}
   const oldUpdateHost=updateHost;
   updateHost=function(dt){if(started&&inputs){Object.keys(inputs).forEach(id=>{if(aiOn(id)&&players&&players[id])applyAiToInput(id,inputs[id],dt)});if(aiOn(myId)&&players&&players[myId])applyAiToInput(myId,localInput,dt)}oldUpdateHost(dt)};
   const oldBootGame=bootGame;
