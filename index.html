@@ -4064,9 +4064,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V10-20260608: 単独攻略CPU根本作り直し。残り炎を即死危険として最優先回避し、爆発後も炎が消えるまで再侵入しない。 */
+/* AI-OMAKASE-PLAYER-V11-20260608: ダメージギミックをAI上の通行不可セルとして扱い、経路探索・目的地・移動先読みから完全除外する。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V10-20260608';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V11-20260608';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -4108,7 +4108,24 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function empty(c,r){return inside(c,r)&&gridAt(c,r)===EMPTY}
   function bombCell(b){if(!b)return{c:-99,r:-99};if(Number.isFinite(b.c)&&Number.isFinite(b.r))return{c:b.c,r:b.r};return cell(b.x||0,b.y||0)}
   function bombAt(c,r){return (bombs||[]).some(b=>b&&!b.carriedBy&&bombCell(b).c===c&&bombCell(b).r===r)}
-  function passable(p,c,r,allowStart){if(!empty(c,r))return false;if(!allowStart&&bombAt(c,r))return false;let o=center(c,r);try{return canAt(p,o.x,o.y,p&&p.id)!==false}catch(e){return true}}
+  const AI_HARD_GIMMICKS={fire:1,electric:1,zapper:1,press:1,gear:1};
+  function aiDamageGimmickAt(c,r){
+    if(!inside(c,r))return true;
+    for(const g of gimmicks||[]){
+      if(!g)continue;
+      let gc=g.c|0,gr=g.r|0,t=g.type||'';
+      if(t==='oil'&&g.burn>0&&gc===c&&gr===r)return true;
+      if(AI_HARD_GIMMICKS[t]&&gc===c&&gr===r)return true;
+      if(t==='zapper'&&Math.abs(gc-c)+Math.abs(gr-r)<=1)return true;
+    }
+    for(const cart of carts||[]){
+      if(!cart)continue;
+      let cc0=Number.isFinite(+cart.c)?(+cart.c|0):cell(cart.x||0,cart.y||0).c,rr0=Number.isFinite(+cart.r)?(+cart.r|0):cell(cart.x||0,cart.y||0).r;
+      if(cc0===c&&rr0===r)return true;
+    }
+    return false;
+  }
+  function passable(p,c,r,allowStart){if(!empty(c,r))return false;if(!allowStart&&aiDamageGimmickAt(c,r))return false;if(!allowStart&&bombAt(c,r))return false;let o=center(c,r);try{return canAt(p,o.x,o.y,p&&p.id)!==false}catch(e){return true}}
   function teamKey(p){return (p&&(p.teamKey||p.teamChoice||p.teamBadge||p.name))||''}
   function sameTeam(a,b){return !!(a&&b&&battle&&battle.team&&teamKey(a)===teamKey(b))}
   function hostilePlayer(me,q){if(!me||!q||me===q||!q.alive)return false;if(battle&&battle.team)return !sameTeam(me,q);return wave>=50}
@@ -4156,6 +4173,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function cellDanger(c,r,level,me,virtualBomb){
     if(!inside(c,r))return 999999;
     let o=center(c,r),danger=enemyDangerAtPoint(o.x,o.y,level,me)+flameCellDanger(c,r,me);
+    if(aiDamageGimmickAt(c,r))danger+=999999;
     for(const f of falling||[])if(f&&f.c===c&&f.r===r)danger+=f.phase==='warn'?80:10000;
     let all=(bombs||[]).slice();if(virtualBomb)all.push(virtualBomb);
     for(const b of all){
@@ -4190,8 +4208,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function distanceObj(p,t){return Math.hypot((t.x||p.x)-p.x,(t.y||p.y)-p.y)}
   function chooseTarget(p){let list=liveEnemies().concat(hostilePlayers(p));list.forEach(t=>t.dist=distanceObj(p,t));list.sort((a,b)=>a.dist-b.dist);return list[0]||null}
   function softTargets(p){let arr=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(!empty(c,r)||bombAt(c,r))continue;let near=false;for(const d of D4){let x=c+d[0],y=r+d[1];if(inside(x,y)&&gridAt(x,y)===SOFT)near=true;}if(near&&passable(p,c,r,false))arr.push({kind:'soft',c,r,x:center(c,r).x,y:center(c,r).y});}return arr}
-  function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(it.special){try{if(!canBuySpecial(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,score:it.special?-60:-25});}return arr}
-  function goalTarget(){if(goalGate&&!goalGate.hidden&&!battle.on){let g=cell(goalGate.x,goalGate.y);return{kind:'goal',c:g.c,r:g.r,x:goalGate.x,y:goalGate.y,score:-80}}return null}
+  function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(!passable(p,it.c,it.r,false))continue;if(it.special){try{if(!canBuySpecial(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,score:it.special?-60:-25});}return arr}
+  function goalTarget(){if(goalGate&&!goalGate.hidden&&!battle.on){let g=cell(goalGate.x,goalGate.y);if(aiDamageGimmickAt(g.c,g.r))return null;return{kind:'goal',c:g.c,r:g.r,x:goalGate.x,y:goalGate.y,score:-80}}return null}
   function reviveTargets(p){let arr=[];for(const q of Object.values(players||{})){if(!q||q.alive||!friendPlayer(p,q))continue;let qc=cell(q.x,q.y);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)arr.push({kind:'revive',c:qc.c+dx,r:qc.r+dy,x:q.x,y:q.y,friend:q,score:-90});}return arr}
 
   function attackPlantCells(p,target,level){
@@ -4253,7 +4271,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(Math.hypot(dx,dy)<.05)return{dx:0,dy:0};
     for(let i=1;i<=4;i++){
       let nx=p.x+dx*step*(i/4),ny=p.y+dy*step*(i/4),ccell=cell(nx,ny),fd=flamePointDanger(nx,ny,p)+flameCellDanger(ccell.c,ccell.r,p),ed=enemyDangerAtPoint(nx,ny,level,p),dg=cellDanger(ccell.c,ccell.r,level,p);
-      if(fd>=900||ed>=180||dg>=400){let s=safestNode(p,level,target);return s?vecToNode(p,s):{dx:0,dy:0};}
+      if(aiDamageGimmickAt(ccell.c,ccell.r)||fd>=900||ed>=180||dg>=400){let s=safestNode(p,level,target);return s?vecToNode(p,s):{dx:0,dy:0};}
     }
     return mv;
   }
@@ -4274,12 +4292,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let p=players&&players[id];if(!p||!inp||!aiOn(id))return;let st=ai.players[id],level=aiLevel(id),t=tnow();
     inp.local=true;inp.name=p.name||inp.name||'AI';inp.last=now();
     if(!p.alive||p.jumpState){inp.dx=0;inp.dy=0;return;}
-    let hereCell=cell(p.x,p.y),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p);
-    if(hereFlame>=900){st.plan=null;let esc=safestNode(p,level,chooseTarget(p));let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
+    let hereCell=cell(p.x,p.y),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p),hereGimmick=aiDamageGimmickAt(hereCell.c,hereCell.r);
+    if(hereGimmick||hereFlame>=900){st.plan=null;let esc=safestNode(p,level,chooseTarget(p));let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
     let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
     let thinkWait=Math.max(40,180-level*14);if(!st.plan||t-(st.lastPlanAt||0)>thinkWait||st.stuckMs>700){st.plan=choosePlan(p,level,st);st.lastPlanAt=t;}
     let plan=st.plan||choosePlan(p,level,st),target=plan.target||chooseTarget(p);
-    if(plan&&plan.node&&(flameCellDanger(plan.node.c,plan.node.r,p)>=900||cellDanger(plan.node.c,plan.node.r,level,p)>=9000)){st.plan=choosePlan(p,level,st);plan=st.plan||plan;target=plan.target||target;}
+    if(plan&&plan.node&&(aiDamageGimmickAt(plan.node.c,plan.node.r)||flameCellDanger(plan.node.c,plan.node.r,p)>=900||cellDanger(plan.node.c,plan.node.r,level,p)>=9000)){st.plan=choosePlan(p,level,st);plan=st.plan||plan;target=plan.target||target;}
     let mv=plan.action==='move'?vecToNode(p,plan.node):{dx:0,dy:0};
     if(plan.action==='bomb')mv={dx:0,dy:0};
     if(st.stuckMs>1000&&plan.action!=='bomb'){let soft=nearestByPath(p,openPlantCells(p,target,level),level,{allowDanger:false,allowEnemyNear:false});if(soft){plan=soft.node.dist===0?{action:'bomb',reason:'unstuckOpen',target}:{action:'move',node:soft.node,reason:'unstuckRoute',target};st.plan=plan;mv=plan.action==='move'?vecToNode(p,plan.node):{dx:0,dy:0};}}
