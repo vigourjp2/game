@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-DIAGONAL-FREE-MOVE-V1-20260607',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V2-20260607',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -1017,11 +1017,13 @@ async function publishCamera(){
   let g=cv.getContext('2d'),w=cv.width,h=cv.height;
   g.save();g.clearRect(0,0,w,h);g.translate(w,0);g.scale(-1,1);g.drawImage(video,0,0,w,h);g.restore();
   camLocalData=cv.toDataURL('image/jpeg',.34);
+  if(members&&members[myId]){members[myId].cam=camLocalData;members[myId].camAt=t;}
+  if(players&&players[myId]){players[myId].cam=camLocalData;players[myId].camAt=t;}
   try{await roomRef.child('members/'+myId).update({cam:camLocalData,camAt:t});}catch(e){}
 }
 function camImageFor(id){
   if(id===myId&&camLocalData){let im=camImgs[id]||(camImgs[id]=new Image());if(im.src!==camLocalData)im.src=camLocalData;return (im.complete&&im.naturalWidth>0)?im:null;}
-  let m=members&&members[id],src=m&&m.cam;if(!src)return null;
+  let m=members&&members[id],pp=players&&players[id],src=(m&&m.cam)||(pp&&pp.cam);if(!src)return null;
   let im=camImgs[id]||(camImgs[id]=new Image());
   if(im.src!==src)im.src=src;
   return (im.complete&&im.naturalWidth>0)?im:null;
@@ -1186,7 +1188,7 @@ async function setupRtcJoin(){
 }
 
 
-async function registerMember(){if(!roomRef)return;let payload={id:myId,name:nameVal(),joined:now(),last:now()};await roomRef.child('members/'+myId).set(payload);roomRef.child('members/'+myId).onDisconnect().remove();roomRef.child('inputs/'+myId).onDisconnect().remove()}
+async function registerMember(){if(!roomRef)return;let payload={id:myId,name:nameVal(),joined:now(),last:now()};if(camLocalData){payload.cam=camLocalData;payload.camAt=now()}await roomRef.child('members/'+myId).set(payload);roomRef.child('members/'+myId).onDisconnect().remove();roomRef.child('inputs/'+myId).onDisconnect().remove()}
 function chosenStartWave(){let el=$('seedWave'),n=el?parseInt(el.value,10):1;return Math.max(0,Math.min(83,Number.isFinite(n)?n:1));}
 function chosenBattleTeam(){let el=$('battleType');return !!(el&&el.value==='team')}
 
@@ -3177,12 +3179,31 @@ function draw3DWorld(){
   function itemIcon3D(type){return ({fire:'🔥',bomb:'💣',speed:'⚡',shield:'🛡️',kick:'👟',hand:'✋',money:'💰',jump:'🪽',launchbomb:'🚀',summonblock:'🧱',shadowservant:'👥',overdrive:'⏳',packunga:'🍲',remote:'🎮',homing:'🦵',shoretsuha:'💥',car:'🏎️',mastersword:'⚔️'}[type]||((SPECIALS[type]&&SPECIALS[type].icon)||'?'));}
   function itemLabel3D(type){return ({fire:'FIRE',bomb:'BOMB+',speed:'SPEED',shield:'SHIELD',kick:'KICK',hand:'HAND',money:'MONEY',jump:'JUMP',launchbomb:'発射台',summonblock:'BLOCK',shadowservant:'SHADOW',overdrive:'TIME',packunga:'LINE',remote:'REMOTE',homing:'HOMING',shoretsuha:'衝裂破',car:'CAR',mastersword:'剣'}[type]||'?');}
   function draw3DIconPlate(icon,cx,cy,h,label,scale=1){let p=projectWorld(cx,cy,h);if(!p)return;let s=Math.max(18,30*p.sc*scale);ctx.save();ctx.fillStyle='rgba(255,255,255,.94)';round(p.x-s*.68,p.y-s*.54,s*1.36,s*1.08,Math.max(6,s*.22));ctx.fill();ctx.strokeStyle='rgba(15,23,42,.80)';ctx.lineWidth=Math.max(1,2*p.sc);ctx.stroke();ctx.fillStyle='#07101d';ctx.font='900 '+Math.max(12,s*.58)+'px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(icon||'?'),p.x,p.y-s*.06);if(label){ctx.font='900 '+Math.max(8,s*.22)+'px system-ui';ctx.fillText(String(label).slice(0,8),p.x,p.y+s*.34);}ctx.restore();}
+  function draw3DPlayerCameraFace(p,b,jh){
+    let im=camImageFor(p&&p.id);if(!im)return false;
+    let head=projectWorld(b.x,b.y,T*.77+jh);if(!head)return false;
+    let sr=Math.max(9,T*.20*head.sc),w=sr*2.15,h=sr*2.15;
+    ctx.save();
+    ctx.beginPath();ctx.ellipse(head.x,head.y,w*.50,h*.50,0,0,Math.PI*2);ctx.clip();
+    ctx.drawImage(im,head.x-w*.50,head.y-h*.50,w,h);
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,.90)';ctx.lineWidth=Math.max(1,2.4*head.sc);
+    ctx.beginPath();ctx.ellipse(head.x,head.y,w*.50,h*.50,0,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle=p.teamColor||p.color||'#60a5fa';ctx.lineWidth=Math.max(1,3.2*head.sc);
+    ctx.beginPath();ctx.ellipse(head.x,head.y,w*.56,h*.56,0,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+    return true;
+  }
   function drawPlayerBody(p,label){
     let b=player3DBase(p),col=p.color||'#60a5fa',jh=b.h||0;if(jh>2){let s=projectWorld(b.x,b.y,0),e=projectWorld(b.x,b.y,jh);if(s&&e){ctx.save();ctx.strokeStyle='rgba(183,247,255,.72)';ctx.lineWidth=Math.max(2,4*s.sc);ctx.setLineDash([8,6]);ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(e.x,e.y);ctx.stroke();ctx.setLineDash([]);ctx.restore();}}
     drawCylinder(b.x,b.y,T*.19,T*.52+jh,col,label);
     drawSphere(b.x,b.y,T*.18+jh,shade(col,1.25),'');
-    drawTextureBadge(p.id===myId?'自':(p.teamBadge||'P'),b.x,b.y,T*.58+jh,.78);
-    let head=projectWorld(b.x,b.y,T*.78+jh);if(head){ctx.save();ctx.fillStyle='#07101d';ctx.beginPath();ctx.arc(head.x-5*head.sc,head.y-2*head.sc,Math.max(2,3*head.sc),0,Math.PI*2);ctx.arc(head.x+5*head.sc,head.y-2*head.sc,Math.max(2,3*head.sc),0,Math.PI*2);ctx.fill();ctx.restore();}
+    let cameraDrawn=draw3DPlayerCameraFace(p,b,jh);
+    if(!cameraDrawn){
+      drawTextureBadge(p.id===myId?'自':(p.teamBadge||'P'),b.x,b.y,T*.58+jh,.78);
+      let head=projectWorld(b.x,b.y,T*.78+jh);if(head){ctx.save();ctx.fillStyle='#07101d';ctx.beginPath();ctx.arc(head.x-5*head.sc,head.y-2*head.sc,Math.max(2,3*head.sc),0,Math.PI*2);ctx.arc(head.x+5*head.sc,head.y-2*head.sc,Math.max(2,3*head.sc),0,Math.PI*2);ctx.fill();ctx.restore();}
+    }
   }
   function drawEnemyBody(e,label){
     let col=e.color||'#f87171',s=e.boss?1.55:1;drawCylinder(e.x,e.y,T*.20*s,T*.50*s,col,label);drawSphere(e.x,e.y,T*.22*s,shade(col,1.12),'');
