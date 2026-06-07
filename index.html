@@ -3739,7 +3739,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 (function installLocalPadTeamFix(){
   if(window.__pbomberLocalPadTeamFix)return;
   window.__pbomberLocalPadTeamFix=true;
-  const LOCAL_BUILD='LOCAL-PAD-CAMERA-AB-COMBO-V1-20260606';
+  const LOCAL_BUILD='LOCAL-PAD-CAMERA-TOP-ONLY-V2-20260607';
   const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD,hudState:Object.create(null),photoData:Object.create(null),comboPrev:Object.create(null),photoCapture:null,photoTimer:null};
   try{document.body.dataset.localPadTeamFixBuild=LOCAL_BUILD}catch(e){}
   function pads(){let a=[];try{a=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){a=[]}return a}
@@ -3787,11 +3787,16 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     localPad.teamEl.innerHTML='<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="color:#ffe66d;font-size:13px">ローカルチームエントリー V13</b><span style="font-size:11px;color:#cfe5ff">A=TEAM A / B=TEAM B / 未表明=個人</span></div><div style="position:relative;min-height:156px;border-radius:18px;background:radial-gradient(circle at 38% 50%,rgba(59,130,246,.32),transparent 37%),radial-gradient(circle at 62% 50%,rgba(239,68,68,.32),transparent 37%),#020617;border:1px solid #ffffff22;overflow:hidden;padding:8px"><div style="position:absolute;left:7%;top:14px;width:48%;height:126px;border:2px solid rgba(96,165,250,.9);border-radius:50%;background:rgba(37,99,235,.12)"></div><div style="position:absolute;right:7%;top:14px;width:48%;height:126px;border:2px solid rgba(248,113,113,.9);border-radius:50%;background:rgba(220,38,38,.12)"></div><div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;min-height:140px;align-items:start"><div><div style="text-align:center;color:#93c5fd;font-weight:1000;font-size:12px;margin-bottom:4px">Aチーム</div>'+(A.join('')||'<div style="text-align:center;color:#93c5fd99;font-size:11px">A待ち</div>')+'</div><div><div style="text-align:center;color:#fde68a;font-weight:1000;font-size:12px;margin-bottom:4px">個人</div>'+(I.join('')||'<div style="text-align:center;color:#fde68a99;font-size:11px">未表明なし</div>')+'</div><div><div style="text-align:center;color:#fca5a5;font-weight:1000;font-size:12px;margin-bottom:4px">Bチーム</div>'+(B.join('')||'<div style="text-align:center;color:#fca5a599;font-size:11px">B待ち</div>')+'</div></div></div><div style="font-size:11px;color:#cfe5ff;margin-top:7px;line-height:1.45">開始ボタンを押した時点でFIX。A/B両方がいる場合だけ A VS B、片側だけなら個人戦として開始します。</div>';
   }
   function anyBtnPressed(gp){try{return Array.from((gp&&gp.buttons)||[]).some(b=>b&&(b.pressed||b.value>.5))}catch(e){return false}}
+  function localPadPhotoAllowed(){
+    const panelEl=$('panel');
+    return !started&&(!panelEl||!panelEl.classList.contains('hidden'));
+  }
   function openLocalPadPhoto(gp,i){
+    if(!localPadPhotoAllowed())return;
     const id=pid(gp,i);localPad.photoCapture={id,gpIndex:gp.index,name:pname(gp,i),armed:false,openedAt:performance.now(),seenRelease:false};
     startLocalPhotoOverlay();
   }
-  function draft(ps){ps.forEach((gp,i)=>{const id=pid(gp,i),combo=btn(gp,0)&&btn(gp,1),pre=!!localPad.comboPrev[id];localPad.comboPrev[id]=combo;if(combo&&!pre){openLocalPadPhoto(gp,i);localPad.prev[gp.index+':0']=true;localPad.prev[gp.index+':1']=true;return}if(combo)return;if(edge(gp,1)){localPad.teamDraft[id]='A';localPad.flash[id]=performance.now()+650;try{sfx('item',1.35)}catch(e){}}if(edge(gp,0)){localPad.teamDraft[id]='B';localPad.flash[id]=performance.now()+650;try{sfx('item',1.05)}catch(e){}}})} 
+  function draft(ps){if(!localPadPhotoAllowed())return;ps.forEach((gp,i)=>{const id=pid(gp,i),combo=btn(gp,0)&&btn(gp,1),pre=!!localPad.comboPrev[id];localPad.comboPrev[id]=combo;if(combo&&!pre){openLocalPadPhoto(gp,i);localPad.prev[gp.index+':0']=true;localPad.prev[gp.index+':1']=true;return}if(combo)return;if(edge(gp,1)){localPad.teamDraft[id]='A';localPad.flash[id]=performance.now()+650;try{sfx('item',1.35)}catch(e){}}if(edge(gp,0)){localPad.teamDraft[id]='B';localPad.flash[id]=performance.now()+650;try{sfx('item',1.05)}catch(e){}}})} 
   function ensureLocalPhotoOverlay(){
     let ov=$('localPadPhotoOverlay');
     if(ov)return ov;
@@ -3805,6 +3810,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   async function startLocalPhotoOverlay(){
     const cap=localPad.photoCapture;if(!cap)return;
+    if(!localPadPhotoAllowed()){localPad.photoCapture=null;return;}
     const ov=ensureLocalPhotoOverlay(),v=$('localPadPhotoVideo'),title=$('localPadPhotoTitle'),msgEl=$('localPadPhotoMsg');
     if(title)title.textContent=cap.name+' PHOTO';
     if(msgEl)msgEl.textContent='顔を黄色い円の中に入れて、ボタンを一度離してから任意ボタンでシャッター';
@@ -3833,6 +3839,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function pollLocalPhotoCapture(){
     const cap=localPad.photoCapture;if(!cap)return;
+    if(!localPadPhotoAllowed()){closeLocalPhotoOverlay(false);return;}
     const ps=pads(),gp=ps.find(g=>g&&g.index===cap.gpIndex),pressed=gp&&anyBtnPressed(gp),msgEl=$('localPadPhotoMsg');
     if(!gp){if(msgEl)msgEl.textContent='コントローラーが見つかりません。キャンセルしてください';return}
     if(!pressed)cap.seenRelease=true;
@@ -3845,7 +3852,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function prepRoster(ps){localPad.ids=[];members={};inputs={};ps.forEach((gp,i)=>{const m=localMember(gp,i),id=m.id;localPad.ids.push(id);members[id]=m;inputs[id]={id,name:m.name,dx:0,dy:0,bombSeq:0,handSeq:0,specialSeq:0,inputSeq:0,local:true,last:now(),teamChoice:m.teamChoice}})}
   function applyTeams(){Object.entries(players||{}).forEach(([id,p])=>{const m=members&&members[id];if(!p||!m)return;p.name=m.name;p.teamChoice=m.teamChoice||'I';p.teamBadge=m.teamBadge||badge(p.teamChoice);p.teamKey=m.teamKey||tkey(id);p.teamColor=m.teamColor||tcolor(p.teamChoice,id);p.color=p.teamColor||p.color;if(m.cam){p.cam=m.cam}})}
   function startLocalNoPhoto(){
-    startAudio&&startAudio();updateLobby();const ps=pads();
+    startAudio&&startAudio();closeLocalPhotoOverlay(false);const ps=pads();
     if(!ps.length){panel('接続済みProコンが0台です。スマホにSwitch Pro Controllerを接続して、任意のボタンを1回押してから開始してください。');return}
     localPad.enabled=true;localPad.prev=Object.create(null);localPad.pads=ps;prepRoster(ps);myId=localPad.ids[0];
     beginGameBgmFromUserGesture&&beginGameBgmFromUserGesture();roomId='LOCAL-CONTROLLER';roomSeed=hashSeed(roomId+'_'+Date.now());mode='offline';isHost=true;
