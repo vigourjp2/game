@@ -2892,7 +2892,7 @@ function updateHost(dt){let t=now();if(gameEnded){endingTimer-=dt*1000;if(ending
   updateBombPasses();
   bombs.forEach(b=>{if(b.carriedBy||b.fusePaused||b.armed===false||isTimeStopped()){}else b.timer-=dt*1000;if(b.carriedBy)return;if(updateBombHop(b,dt))return;if(updateHomingBomb(b,dt))return;if(b.vx||b.vy){let ox=b.x,oy=b.y;b.x+=b.vx*dt;b.y+=b.vy*dt;b.spin=(b.spin||0)+(Math.hypot(b.vx,b.vy)*dt*.035);b.slideT=(b.slideT||0)-dt*1000;let fr=(b.slideT>0)?.982:.90;b.vx*=fr;b.vy*=fr;if(Math.hypot(b.vx,b.vy)<24||b.slideT<=-160){b.vx=0;b.vy=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b)}let cell=tc(b.x,b.y);let blocked=!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY||bombs.some(o=>o!==b&&!o.carriedBy&&o.c===cell.c&&o.r===cell.r&&!(b.kickGroup&&o.kickGroup===b.kickGroup));if(blocked){let gid=b.kickGroup;b.x=cc(b.c,b.r).x;b.y=cc(b.c,b.r).y;b.vx=0;b.vy=0;b.slideT=0;if(b.armed===false||b.fusePaused)armBombAfterLanding(b);if(gid)stopKickedBombLine(gid);sfx('hit',b.power||1);partsBurst(ox,oy,'#dfeaff',10+(b.power||0)*2);msg='BOMB STOP'}else{b.c=cell.c;b.r=cell.r;if(!b.vx&&!b.vy)b.kickGroup=null;impactBomb(b)}}});bombs.slice().forEach(b=>{if(!isTimeStopped()&&b.armed!==false&&!b.fusePaused&&b.timer<=0)explode(b)});
   flames.forEach(f=>f.t-=dt*1000);flames=flames.filter(f=>f.t>0);
-  Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r))damagePlayer(p,isHost?'local':'remote');collectItemsForPlayer(p,false);});
+  Object.values(players).forEach(p=>{if(p.alive&&flameHit(p.c,p.r)){let aiOwnSafe=false;try{aiOwnSafe=!!(window.__aiOmakaseShouldIgnoreOwnFlame&&window.__aiOmakaseShouldIgnoreOwnFlame(p))}catch(e){}if(!aiOwnSafe)damagePlayer(p,isHost?'local':'remote');}collectItemsForPlayer(p,false);});
   enemies.forEach(e=>{if(!e.alive)return;if(isTimeStopped()){e.vx=0;e.vy=0;damageEnemyByFlamesOnce(e);enemyBodyContactDamage(e,'timeStopContact');return;}if(e.invuln>0)e.invuln-=dt*1000;if(e.teleportBlink>0)e.teleportBlink-=dt*1000;let target=nearestAlivePlayer(e);if(e.boss)updateBossAI(e,dt,target);else updateEnemySpecial(e,dt,target);if((!e.boss&&e.enemyTelegraph)||e.actionLock>0){damageEnemyByFlamesOnce(e);enemyBodyContactDamage(e);return;}if(e.boss&&(e.bossAction||e.actionLock>0)){damageEnemyByFlamesOnce(e);enemyBodyContactDamage(e);return;}e.think-=dt*1000;if(e.think<=0){if(target){let ax=target.x-e.x,ay=target.y-e.y,build=e.build||{},flee=!!(e.boss&&build.flee&&e.hp<e.max*.55);if(rand()<.72){let sx=Math.sign(ax),sy=Math.sign(ay);if(flee){sx=-sx;sy=-sy}if(e.zigzag&&rand()<.5){let t=sx;sx=-sy;sy=t}e.dir=Math.abs(ax)>Math.abs(ay)?[sx,0]:[0,sy]}else e.dir=DIRS[rnd(0,3)]}else e.dir=DIRS[rnd(0,3)];e.think=e.boss?rnd(180,520):(e.type==='hopper'?rnd(160,360):rnd(250,760))}let moved=true;if(!(e.boss&&e.actionLock>0)){let sp0=e.speed;if((e.traits&&e.traits.hopStar)&&Math.floor((e.pulse||0)/280)%2===0)e.speed+=16;if(e.floaty)e.speed+=8;moved=moveEntity(e,e.dir[0],e.dir[1],dt,e.id);e.speed=sp0;applyTerrain(e,dt,false);if(!moved)e.think=0;}damageEnemyByFlamesOnce(e);enemyBodyContactDamage(e)});enemies=enemies.filter(e=>e.alive);
   dropTimer-=dt*1000;if(dropTimer<=0){dropTimer=Math.max(1200,3600-wave*90);let p=emptyDropCell();if(p){let [c,r]=p;let o=cc(c,r);falling.push({id:'drop_'+(++dropSeq)+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:900,warn:900,totalWarn:900});msg='WARNING: BLOCK DROP - 赤マスから離脱'}}falling.forEach(f=>{if(f.phase==='warn'){f.t-=dt*1000;f.warn=f.t;if(f.t<=0){f.phase='fall';f.t=240;f.y=OY-32}}else{f.t-=dt*1000;f.y+=dt*390;if(f.t<=0&&inside(f.c,f.r)&&grid[f.r][f.c]===EMPTY){markLocalBlockSet(f.c,f.r,0,'drop');sfx('drop');shake=Math.max(shake,6);broadcastAuthoritativeState(true);Object.values(players).forEach(p=>{if(p.alive&&p.c===f.c&&p.r===f.r)damagePlayer(p)});enemies.forEach(e=>{if(e.alive&&e.c===f.c&&e.r===f.r)damageEnemyByHazard(e,'drop:'+f.id,e.boss?6:3,999999)});partsBurst(cc(f.c,f.r).x,cc(f.c,f.r).y,'#8b5a2b',18);f.done=true}}});falling=falling.filter(f=>!f.done&&(f.phase==='warn'||f.t>0));
   updateGimmicks(dt);updateRevives(dt);updateBattleWin(dt);if(!battle.on&&!waveIsBoss&&waveQueue.length>0){waveSpawnTimer-=dt*1000;if(waveSpawnTimer<=0&&enemies.filter(e=>e.alive).length<3){if(spawnNextQueuedEnemy())waveSpawnTimer=waveSpawnInterval;else waveSpawnTimer=600}}if(!battle.on&&!gameEnded&&enemies.length===0&&waveQueue.length===0)revealGoalGate();updateGoalGate(dt);parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=(p.grav||0)*dt;p.vx*=.96;p.vy*=.96}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);swordFx=swordFx.filter(f=>{f.t-=dt*1000;return f.t>0&&(!f.born||performance.now()-f.born<Math.max(1500,(f.total||400)+500));});if(shake>0)shake-=dt*18;
@@ -4064,54 +4064,254 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V1-20260607: WAVE中にAIへ操作委任。既存入力Seqへ流して爆弾・購入/発動・キック・ハンド・逃げ・復活を同じ経路で処理する。 */
+/* AI-OMAKASE-PLAYER-V10-20260608: 単独攻略CPU根本作り直し。残り炎を即死危険として最優先回避し、爆発後も炎が消えるまで再侵入しない。 */
 (function installAiOmakasePlayer(){
-  if(window.__pbomberAiOmakaseInstalled)return;
-  window.__pbomberAiOmakaseInstalled=true;
-  const AI_BUILD='AI-OMAKASE-PLAYER-V1-20260607';
-  const ai={players:Object.create(null),modal:null,targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),lastUi:0};
+  const AI_BUILD='AI-OMAKASE-PLAYER-V10-20260608';
+  const prevApi=window.__pbomberAiOmakaseApi;
+  const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
+  window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
   try{document.body.dataset.aiOmakaseBuild=AI_BUILD}catch(e){}
+
+  const D4=[[1,0],[-1,0],[0,1],[0,-1]];
+  function tnow(){return (typeof performance!=='undefined'&&performance.now)?performance.now():now()}
+  function lim(v,a,b){return Math.max(a,Math.min(b,v))}
+  function key(c,r){return c+','+r}
+  function center(c,r){return cc(c,r)}
+  function cell(x,y){return tc(x,y)}
   function aiOn(id){return !!(id&&ai.players[id]&&ai.players[id].on)}
-  function aiLevel(id){let v=ai.players[id]&&ai.players[id].level;return Math.max(1,Math.min(9,Number.isFinite(+v)?(+v|0):5))}
-  function button(){let b=$('aiOmakaseBtn');if(b)return b;b=document.createElement('button');b.id='aiOmakaseBtn';b.type='button';b.textContent='AIおまかせ';b.style.cssText='position:fixed;left:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 166px);transform:none;z-index:34;border:2px solid #fef08a;border-radius:18px;background:linear-gradient(160deg,#7c3aed,#0ea5e9);color:#fff;box-shadow:0 12px 34px #000b;padding:10px 14px;font-size:12px;font-weight:1000;line-height:1.05;touch-action:manipulation;user-select:none';b.onclick=()=>openAiLevelModal(myId,(players&&players[myId]&&players[myId].name)||'YOU');document.body.appendChild(b);return b}
-  function ensureModal(){let m=$('aiOmakaseModal');if(m)return m;m=document.createElement('div');m.id='aiOmakaseModal';m.style.cssText='position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,.78);backdrop-filter:blur(5px);padding:18px';let nums='';for(let i=1;i<=9;i++)nums+='<button type="button" data-ai-lv="'+i+'" style="border:1px solid #ffffff55;border-radius:16px;background:linear-gradient(160deg,#334155,#0f172a);color:#fff;font-size:20px;font-weight:1000;padding:14px 0">'+i+'</button>';m.innerHTML='<div style="width:min(92vw,430px);border:1px solid #ffffff55;border-radius:24px;background:linear-gradient(180deg,#0f172a,#020617);box-shadow:0 22px 80px #000;color:#fff;padding:16px;font-family:system-ui,sans-serif"><div id="aiOmakaseTitle" style="font-size:18px;font-weight:1000;color:#fde047;text-align:center;margin-bottom:8px">AIにおまかせ</div><div id="aiOmakaseMsg" style="font-size:13px;font-weight:900;color:#dbeafe;text-align:center;line-height:1.55;margin-bottom:12px">強さ 1〜9 を選択</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'+nums+'</div><button id="aiOmakaseOff" type="button" style="width:100%;margin-top:10px;border:1px solid #ffffff55;border-radius:16px;background:#475569;color:#fff;font-weight:1000;padding:12px">このプレイヤーを手動に戻す</button><button id="aiOmakaseCancel" type="button" style="width:100%;margin-top:8px;border:1px solid #ffffff33;border-radius:16px;background:#111827;color:#cbd5e1;font-weight:1000;padding:10px">キャンセル</button></div>';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeAiLevelModal();let lv=e.target&&e.target.dataset&&e.target.dataset.aiLv;if(lv){setAiOmakase(ai.targetId,+lv);closeAiLevelModal();}});$('aiOmakaseCancel').onclick=closeAiLevelModal;$('aiOmakaseOff').onclick=()=>{if(ai.targetId){delete ai.players[ai.targetId];msg=((players&&players[ai.targetId]&&players[ai.targetId].name)||ai.targetName||'PLAYER')+' MANUAL';}closeAiLevelModal();};return m}
-  function paintAiLevelCursor(){let m=$('aiOmakaseModal');if(!m)return;let sel=Math.max(1,Math.min(9,ai.selectedLevel||5));m.querySelectorAll('[data-ai-lv]').forEach(btn=>{let on=(+(btn.dataset.aiLv||0)===sel);btn.style.outline=on?'3px solid #fde047':'0';btn.style.boxShadow=on?'0 0 22px #fde047aa':'none';btn.style.transform=on?'scale(1.06)':'scale(1)';});}
+  function aiLevel(id){let v=ai.players[id]&&ai.players[id].level;return lim(Number.isFinite(+v)?(+v|0):5,1,9)}
+
+  function button(){
+    let b=$('aiOmakaseBtn');if(b)return b;
+    b=document.createElement('button');b.id='aiOmakaseBtn';b.type='button';b.textContent='AIおまかせ';
+    b.style.cssText='position:fixed;left:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 166px);transform:none;z-index:34;border:2px solid #fef08a;border-radius:18px;background:linear-gradient(160deg,#7c3aed,#0ea5e9);color:#fff;box-shadow:0 12px 34px #000b;padding:10px 14px;font-size:12px;font-weight:1000;line-height:1.05;touch-action:manipulation;user-select:none';
+    b.onclick=()=>openAiLevelModal(myId,(players&&players[myId]&&players[myId].name)||'YOU');document.body.appendChild(b);return b;
+  }
+  function ensureModal(){
+    let m=$('aiOmakaseModal');if(m)return m;
+    m=document.createElement('div');m.id='aiOmakaseModal';m.style.cssText='position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,.78);backdrop-filter:blur(5px);padding:18px';
+    let nums='';for(let i=1;i<=9;i++)nums+='<button type="button" data-ai-lv="'+i+'" style="border:1px solid #ffffff55;border-radius:16px;background:linear-gradient(160deg,#334155,#0f172a);color:#fff;font-size:20px;font-weight:1000;padding:14px 0">'+i+'</button>';
+    m.innerHTML='<div style="width:min(92vw,430px);border:1px solid #ffffff55;border-radius:24px;background:linear-gradient(180deg,#0f172a,#020617);box-shadow:0 22px 80px #000;color:#fff;padding:16px;font-family:system-ui,sans-serif"><div id="aiOmakaseTitle" style="font-size:18px;font-weight:1000;color:#fde047;text-align:center;margin-bottom:8px">AIにおまかせ</div><div id="aiOmakaseMsg" style="font-size:13px;font-weight:900;color:#dbeafe;text-align:center;line-height:1.55;margin-bottom:12px">強さ 1〜9 を選択</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'+nums+'</div><button id="aiOmakaseOff" type="button" style="width:100%;margin-top:10px;border:1px solid #ffffff55;border-radius:16px;background:#475569;color:#fff;font-weight:1000;padding:12px">このプレイヤーを手動に戻す</button><button id="aiOmakaseCancel" type="button" style="width:100%;margin-top:8px;border:1px solid #ffffff33;border-radius:16px;background:#111827;color:#cbd5e1;font-weight:1000;padding:10px">キャンセル</button></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click',e=>{if(e.target===m)closeAiLevelModal();let lv=e.target&&e.target.dataset&&e.target.dataset.aiLv;if(lv){setAiOmakase(ai.targetId,+lv);closeAiLevelModal();}});
+    $('aiOmakaseCancel').onclick=closeAiLevelModal;
+    $('aiOmakaseOff').onclick=()=>{if(ai.targetId){delete ai.players[ai.targetId];msg=((players&&players[ai.targetId]&&players[ai.targetId].name)||ai.targetName||'PLAYER')+' MANUAL';}closeAiLevelModal();};
+    return m;
+  }
+  function paintAiLevelCursor(){let m=$('aiOmakaseModal');if(!m)return;let sel=lim(ai.selectedLevel||5,1,9);m.querySelectorAll('[data-ai-lv]').forEach(btn=>{let on=(+(btn.dataset.aiLv||0)===sel);btn.style.outline=on?'3px solid #fde047':'0';btn.style.boxShadow=on?'0 0 22px #fde047aa':'none';btn.style.transform=on?'scale(1.06)':'scale(1)';});}
   function openAiLevelModal(id,name){if(!started||!players||!players[id]){msg='WAVE中にAIおまかせを選択';return}ai.targetId=id;ai.targetName=name||'PLAYER';ai.selectedLevel=aiLevel(id)||5;let m=ensureModal(),t=$('aiOmakaseTitle'),mm=$('aiOmakaseMsg');if(t)t.textContent=(name||'PLAYER')+' をAIにおまかせ';if(mm)mm.textContent='強さ 1〜9 を選択。方向キーで選択、Aで決定';m.style.display='flex';paintAiLevelCursor();}
   function closeAiLevelModal(){let m=$('aiOmakaseModal');if(m)m.style.display='none'}
   window.__openAiOmakase=openAiLevelModal;
-  function setAiOmakase(id,level){if(!id)return;ai.players[id]={on:true,level:Math.max(1,Math.min(9,level|0)),lastThink:0,lastBomb:0,lastSpecial:0,lastHand:0,lastWiggle:0,wiggle:{dx:0,dy:0}};let p=players&&players[id];msg=(p&&p.name||'PLAYER')+' AI Lv'+ai.players[id].level+' START';try{sfx('item',1.25)}catch(e){}}
-  function teamKeyOf(p){return (p&&(p.teamKey||p.teamChoice||p.teamBadge||p.name))||''}
-  function sameTeam(a,b){if(!a||!b)return false;if(battle&&battle.team)return teamKeyOf(a)===teamKeyOf(b);return false}
-  function isEnemyPlayer(me,p){if(!me||!p||me===p||!p.alive)return false;if(battle&&battle.team)return !sameTeam(me,p);return (wave>=50)}
-  function isFriendPlayer(me,p){if(!me||!p||me===p)return false;if(battle&&battle.team)return sameTeam(me,p);return wave<50}
-  function clearLine(c1,r1,c2,r2){let dc=Math.sign(c2-c1),dr=Math.sign(r2-r1),c=c1+dc,r=r1+dr;while(c!==c2||r!==r2){if(!inside(c,r)||grid[r][c]!==EMPTY)return false;c+=dc;r+=dr}return true}
-  function dangerCell(c,r,level){let danger=0,soon=1700-level*95;for(const b of bombs||[]){if(!b||b.carriedBy)continue;let bc=Number.isFinite(b.c)?b.c:tc(b.x,b.y).c,br=Number.isFinite(b.r)?b.r:tc(b.x,b.y).r,range=b.range||2,timer=Number.isFinite(b.timer)?b.timer:3000;if(bc===c&&br===r)danger+=4;if(timer<soon||b.remoteBomb||b.homingBomb){if(br===r&&Math.abs(bc-c)<=range&&clearLine(bc,br,c,r))danger+=Math.max(1,4-timer/700);if(bc===c&&Math.abs(br-r)<=range&&clearLine(bc,br,c,r))danger+=Math.max(1,4-timer/700)}}for(const f of flames||[])if(f&&f.c===c&&f.r===r)danger+=8;for(const f of falling||[])if(f&&f.c===c&&f.r===r)danger+=f.phase==='warn'?4:8;let o=cc(c,r);for(const e of enemies||[]){if(!e||!e.alive)continue;let ed=Math.hypot((e.x||o.x)-o.x,(e.y||o.y)-o.y),hit=(e.rad||20)+(T*.48);if(ed<hit)danger+=18+(hit-ed)/5;if(ed<T*1.35)danger+=Math.max(0,(T*1.35-ed)/T)*(7+level*.8);if(e.enemyTelegraph&&ed<(e.enemyTelegraph.radius||96))danger+=10;}for(const q of Object.values(players||{})){if(!q||!q.alive||q.id===myId)continue;let qd=Math.hypot((q.x||o.x)-o.x,(q.y||o.y)-o.y);if(wave>=50&&qd<T*.8)danger+=5;}return danger}
-  function nearSoft(c,r){return DIRS.some(d=>inside(c+d[0],r+d[1])&&grid[r+d[1]][c+d[0]]===SOFT)}
-  function nearest(list,p){let best=null,bd=Infinity;for(const o of list){if(!o)continue;let d=Math.hypot((o.x||0)-p.x,(o.y||0)-p.y);if(d<bd){bd=d;best=o}}return best?{obj:best,dist:bd}:null}
-  function nearestTarget(p){let hostilePlayers=Object.values(players||{}).filter(q=>isEnemyPlayer(p,q));let liveEnemies=(enemies||[]).filter(e=>e&&e.alive);let deadFriends=Object.values(players||{}).filter(q=>!q.alive&&isFriendPlayer(p,q));let friendly=Object.values(players||{}).filter(q=>q&&q.alive&&isFriendPlayer(p,q));if(deadFriends.length){let n=nearest(deadFriends,p);if(n)return{kind:'revive',obj:n.obj,dist:n.dist,x:n.obj.x,y:n.obj.y}}let hp=nearest(hostilePlayers,p),en=nearest(liveEnemies,p);if(wave>=50&&hp&&(!en||hp.dist<en.dist*1.35))return{kind:'player',obj:hp.obj,dist:hp.dist,x:hp.obj.x,y:hp.obj.y};if(en)return{kind:'enemy',obj:en.obj,dist:en.dist,x:en.obj.x,y:en.obj.y};if(hp)return{kind:'player',obj:hp.obj,dist:hp.dist,x:hp.obj.x,y:hp.obj.y};let buy=(items||[]).filter(it=>it&&it.special&&canBuySpecial&&players&&canBuySpecial(p,it)).map(it=>({x:cc(it.c,it.r).x,y:cc(it.c,it.r).y,it}));let bi=nearest(buy,p);if(bi)return{kind:'buy',obj:bi.obj.it,dist:bi.dist,x:bi.obj.x,y:bi.obj.y};let normal=(items||[]).filter(it=>it&&!it.special).map(it=>({x:cc(it.c,it.r).x,y:cc(it.c,it.r).y,it}));let ni=nearest(normal,p);if(ni)return{kind:'item',obj:ni.obj.it,dist:ni.dist,x:ni.obj.x,y:ni.obj.y};if(goalGate&&!goalGate.hidden&&!battle.on)return{kind:'goal',obj:goalGate,dist:Math.hypot(goalGate.x-p.x,goalGate.y-p.y),x:goalGate.x,y:goalGate.y};if(friendly.length&&wave<50){let fr=nearest(friendly,p);if(fr&&fr.dist>120)return{kind:'friend',obj:fr.obj,dist:fr.dist,x:fr.obj.x,y:fr.obj.y}}return null}
-  function chooseMove(p,target,level){let cell=tc(p.x,p.y),dirs=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],best={dx:0,dy:0,score:-1e9};let aggressive=(wave>=50)||(target&&(target.kind==='enemy'||target.kind==='player')),nowT=performance.now();for(const d of dirs){let rawDx=d[0],rawDy=d[1],dx=rawDx,dy=rawDy,nx=p.x+rawDx*34,ny=p.y+rawDy*34,nc=cell.c+rawDx,nr=cell.r+rawDy;if(dx||dy){let len=Math.hypot(dx,dy);dx/=len;dy/=len}let score=0;if(!inside(nc,nr)||!canAt(p,nx,ny,p.id)){score-=1600}else{let danger=dangerCell(nc,nr,level),hereDanger=dangerCell(cell.c,cell.r,level);score-=danger*(320+level*28);if(hereDanger>0&&danger<hereDanger)score+=720+level*70;if(rawDx||rawDy){let nx2=p.x+dx*72,ny2=p.y+dy*72;if(canAt(p,nx2,ny2,p.id))score+=22+level*4}}
-      if(target){let tx=target.x||p.x,ty=target.y||p.y,nd=Math.hypot(tx-nx,ty-ny),cd=Math.hypot(tx-p.x,ty-p.y),line=(Math.abs(tx-p.x)<T*.45||Math.abs(ty-p.y)<T*.45);if(target.kind==='revive'||target.kind==='buy'||target.kind==='item'||target.kind==='goal'||target.kind==='friend'){score+=(cd-nd)*(5.2+level*.18)}else if(target.kind==='enemy'){let ideal=T*(2.15+Math.max(0,5-level)*.08);score-=Math.abs(nd-ideal)*(1.8+level*.18);if(cd>ideal+T*.3)score+=(cd-nd)*(2.1+level*.25);if(nd<T*1.55)score-=1400+(T*1.55-nd)*18;if(line&&nd<T*(p.bombRange||p.range||3)+T*.8&&nd>T*1.45)score+=360+level*42;if(level>=7&&nd>T*1.6&&nd<T*3.7)score+=160}else if(aggressive){score+=(cd-nd)*(3.0+level*.42);if(nd<T*1.05)score-=520;if(line&&nd<T*(p.bombRange||p.range||3)+T*.8)score+=190+level*28;if(nd<T*(1.35+level*.07))score+=55+level*10;if(level>=7&&nd<T*3.2)score+=110}}
-      if(nearSoft(nc,nr))score+=target?35+level*7:90+level*10;if(rawDx===0&&rawDy===0&&dangerCell(cell.c,cell.r,level)<=0)score-=20;if(nowT-(p.aiLastProgressAt||0)>900)score+=Math.random()*(120+level*20);if(score>best.score)best={dx,dy,score}}if(target){let curD=Math.hypot((target.x||p.x)-p.x,(target.y||p.y)-p.y);let nxtD=Math.hypot((target.x||p.x)-(p.x+(best.dx||0)*34),(target.y||p.y)-(p.y+(best.dy||0)*34));if(nxtD<curD-4)p.aiLastProgressAt=nowT}return best}
-  function adjacentTarget(p,target){if(!target)return false;return Math.abs((target.x||0)-p.x)<T*1.15&&Math.abs((target.y||0)-p.y)<T*1.15}
+  function setAiOmakase(id,level){if(!id)return;ai.players[id]={on:true,level:lim(level|0,1,9),lastThink:0,lastBomb:0,lastSpecial:0,lastHand:0,lastX:0,lastY:0,stuckMs:0,plan:null,lastPlanAt:0,escapeBomb:null};let p=players&&players[id];msg=(p&&p.name||'PLAYER')+' AI Lv'+ai.players[id].level+' START';try{sfx('item',1.25)}catch(e){}}
 
-  function hasEscapeAfterBomb(p,level){let cell=tc(p.x,p.y),range=(p.bombRange||p.range||2),dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1],[0,0]];for(const d of dirs){for(let step=1;step<=4;step++){let nc=cell.c+d[0]*step,nr=cell.r+d[1]*step;if(!inside(nc,nr)||grid[nr][nc]!==EMPTY)break;let o=cc(nc,nr);if(!canAt(p,o.x,o.y,p.id))break;let inBlast=(nc===cell.c&&Math.abs(nr-cell.r)<=range&&clearLine(cell.c,cell.r,nc,nr))||(nr===cell.r&&Math.abs(nc-cell.c)<=range&&clearLine(cell.c,cell.r,nc,nr));if(!inBlast&&dangerCell(nc,nr,level)<=0)return true;}}return false}
-  function shouldBomb(p,target,level,t){if(!p.alive||p.carryBombId)return false;if(dangerCell(p.c,p.r,level)>0)return false;if((p.placed||0)>=(p.bombMax||1))return false;if(!hasEscapeAfterBomb(p,level))return false;let wait=Math.max(170,760-level*58);if(t-(p.aiLastBomb||0)<wait)return false;if(target&&(target.kind==='enemy'||target.kind==='player')){let tc0=tc(target.x||0,target.y||0),sameLine=(tc0.r===p.r||tc0.c===p.c),range=(p.bombRange||p.range||2)+1;if(sameLine&&Math.abs(tc0.c-p.c)+Math.abs(tc0.r-p.r)<=range&&clearLine(p.c,p.r,tc0.c,tc0.r))return true;if(target.dist<T*(1.55+level*.18))return true;if(level>=7&&target.dist<T*3.6)return true}if(target&&target.kind==='enemy'&&target.dist<T*(1.8+level*.16))return true;if(nearSoft(p.c,p.r)&&t-(p.aiLastBomb||0)>Math.max(230,820-level*55))return true;return false}
-  function shouldSpecial(p,target,level,t){if(t-(p.aiLastSpecial||0)<Math.max(180,900-level*80))return false;if(specialItemUnderPlayer&&specialItemUnderPlayer(p))return true;if(!target)return false;ensureSpecialBag(p);let active=fallbackActiveSpecial(p);if(!active||!(p.specials&&p.specials[active]>0))return false;if(active==='jump')return dangerCell(p.c,p.r,level)>0||target.dist>120+level*26;if(active==='overdrive')return (target.kind==='enemy'||target.kind==='player')&&target.dist<320;if(active==='remote')return bombs.some(b=>b&&b.owner===p.id&&b.remoteBomb);if(active==='homing'||active==='car'||active==='mastersword'||active==='shoretsuha'||active==='packunga'||active==='launchbomb')return target.dist<330+level*18;if(active==='summonblock')return target.dist<190||dangerCell(p.c,p.r,level)>0;return false}
-  function applyAiToInput(id,inp,dt){let p=players&&players[id];if(!p||!inp||!aiOn(id))return;let level=aiLevel(id),t=performance.now();inp.local=true;inp.name=p.name||inp.name||'AI';inp.last=now();if(!p.alive){inp.dx=0;inp.dy=0;return}let target=nearestTarget(p),mv=chooseMove(p,target,level);if(t-(p.aiThinkAt||0)>Math.max(90,260-level*18)){p.aiThinkAt=t;p.aiMove=mv;p.aiTarget=target}mv=p.aiMove||mv;target=p.aiTarget||target;inp.dx=mv.dx||0;inp.dy=mv.dy||0;if(Math.hypot(inp.dx,inp.dy)>.18){let sd=snapThrowDir(inp.dx,inp.dy);p.lastDirX=sd.x;p.lastDirY=sd.y;inp.lastDirX=sd.x;inp.lastDirY=sd.y}if(shouldSpecial(p,target,level,t)){inp.specialSeq=(inp.specialSeq||0)+1;p.aiLastSpecial=t;p.lastSpecialSeq=p.lastSpecialSeq||0}if(shouldBomb(p,target,level,t)){inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t}else if(p.carryBombId&&t-(p.aiLastHand||0)>Math.max(280,900-level*55)){inp.handSeq=(inp.handSeq||0)+1;p.aiLastHand=t}else if(p.handLevel>0&&target&&adjacentTarget(p,target)&&t-(p.aiLastBomb||0)>900){inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t}
+  function gridAt(c,r){return inside(c,r)&&grid&&grid[r]?grid[r][c]:HARD}
+  function empty(c,r){return inside(c,r)&&gridAt(c,r)===EMPTY}
+  function bombCell(b){if(!b)return{c:-99,r:-99};if(Number.isFinite(b.c)&&Number.isFinite(b.r))return{c:b.c,r:b.r};return cell(b.x||0,b.y||0)}
+  function bombAt(c,r){return (bombs||[]).some(b=>b&&!b.carriedBy&&bombCell(b).c===c&&bombCell(b).r===r)}
+  function passable(p,c,r,allowStart){if(!empty(c,r))return false;if(!allowStart&&bombAt(c,r))return false;let o=center(c,r);try{return canAt(p,o.x,o.y,p&&p.id)!==false}catch(e){return true}}
+  function teamKey(p){return (p&&(p.teamKey||p.teamChoice||p.teamBadge||p.name))||''}
+  function sameTeam(a,b){return !!(a&&b&&battle&&battle.team&&teamKey(a)===teamKey(b))}
+  function hostilePlayer(me,q){if(!me||!q||me===q||!q.alive)return false;if(battle&&battle.team)return !sameTeam(me,q);return wave>=50}
+  function friendPlayer(me,q){if(!me||!q||me===q)return false;if(battle&&battle.team)return sameTeam(me,q);return wave<50}
+  function lineClearForBlast(bc,br,c,r){if(bc!==c&&br!==r)return false;let dx=Math.sign(c-bc),dy=Math.sign(r-br),x=bc,y=br,steps=Math.abs(c-bc)+Math.abs(r-br);for(let i=0;i<steps;i++){x+=dx;y+=dy;if(!inside(x,y))return false;let g=gridAt(x,y);if(g===HARD)return false;if(i<steps-1&&g===SOFT)return false;}return true}
+  function blastHits(bc,br,c,r,range){range=Math.max(1,range|0);if(bc===c&&Math.abs(br-r)<=range)return lineClearForBlast(bc,br,c,r);if(br===r&&Math.abs(bc-c)<=range)return lineClearForBlast(bc,br,c,r);return false}
+
+  function enemyDangerAtPoint(x,y,level,me){
+    let danger=0;
+    for(const e of enemies||[]){
+      if(!e||!e.alive)continue;
+      let ex=Number.isFinite(e.x)?e.x:x,ey=Number.isFinite(e.y)?e.y:y,rad=(e.rad||18),d=Math.hypot(ex-x,ey-y),kill=rad+(me&&me.rad||15)+10;
+      if(d<kill)danger+=10000;
+      else if(d<T*.95)danger+=420;
+      else if(d<T*1.45)danger+=180;
+      else if(d<T*2.05)danger+=55;
+      if(e.enemyTelegraph){let tg=e.enemyTelegraph;if(tg.cells&&tg.cells.some(q=>q&&cell(x,y).c===q.c&&cell(x,y).r===q.r))danger+=600;if(tg.radius&&d<tg.radius+20)danger+=420;}
+      if(e.bossAction&&e.bossAction.warnCells&&e.bossAction.warnCells.some(q=>q&&cell(x,y).c===q.c&&cell(x,y).r===q.r))danger+=800;
+    }
+    for(const q of Object.values(players||{})){if(q&&q.alive&&hostilePlayer(me,q)){let d=Math.hypot((q.x||x)-x,(q.y||y)-y);if(d<T*.75)danger+=360;else if(d<T*1.25)danger+=90;}}
+    return danger;
   }
-  const oldReadLocalInput=readLocalInput;
-  readLocalInput=function(){oldReadLocalInput();button();if(started&&aiOn(myId)){applyAiToInput(myId,localInput,LOCK_DT);if(mode==='join')writeInput(true)}let lp=window.__pbomberLocalPad;if(started&&lp&&lp.enabled&&inputs){(lp.ids||Object.keys(inputs)).forEach(id=>{if(inputs[id]&&aiOn(id))applyAiToInput(id,inputs[id],LOCK_DT)});checkLocalPadAiCombo(lp)}};
+  function flameTLeft(f){return Number.isFinite(+f.t)?+f.t:560}
+  function flameCellDanger(c,r,me){
+    let danger=0;
+    for(const f of flames||[]){
+      if(!f)continue;
+      let fc=Number.isFinite(+f.c)?(+f.c|0):-999,fr=Number.isFinite(+f.r)?(+f.r|0):-999,life=flameTLeft(f),own=!!(me&&(f.owner===me.id||f.localOwner===me.id));
+      let md=Math.abs(fc-c)+Math.abs(fr-r);
+      if(md===0)danger+=own?24000:18000;
+      else if(md===1&&life>110)danger+=own?1350:900;
+    }
+    return danger;
+  }
+  function flamePointDanger(x,y,me){
+    let danger=0;
+    for(const f of flames||[]){
+      if(!f)continue;
+      let o=center(f.c|0,f.r|0),d=Math.hypot(o.x-x,o.y-y),life=flameTLeft(f),own=!!(me&&(f.owner===me.id||f.localOwner===me.id));
+      if(d<T*.68)danger+=own?26000:20000;
+      else if(d<T*.95&&life>80)danger+=own?1800:1200;
+    }
+    return danger;
+  }
+  function cellDanger(c,r,level,me,virtualBomb){
+    if(!inside(c,r))return 999999;
+    let o=center(c,r),danger=enemyDangerAtPoint(o.x,o.y,level,me)+flameCellDanger(c,r,me);
+    for(const f of falling||[])if(f&&f.c===c&&f.r===r)danger+=f.phase==='warn'?80:10000;
+    let all=(bombs||[]).slice();if(virtualBomb)all.push(virtualBomb);
+    for(const b of all){
+      if(!b||b.carriedBy||b.fusePaused||b.armed===false)continue;
+      let bc=bombCell(b),timer=Number.isFinite(b.timer)?b.timer:2800,range=b.range||2,own=me&&b.owner===me.id;
+      if(bc.c===c&&bc.r===r)danger+=own?520:240;
+      if(blastHits(bc.c,bc.r,c,r,range)){
+        if(own)danger+=420;
+        if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=260;
+      }
+      if(b.homingBomb&&b.homingAwake&&Math.hypot((b.x||o.x)-o.x,(b.y||o.y)-o.y)<T*1.25)danger+=1200;
+    }
+    return danger;
+  }
+  function safeCell(p,c,r,level,virtualBomb){return passable(p,c,r,false)&&cellDanger(c,r,level,p,virtualBomb)<160}
+
+  function bfs(p,level,opt){
+    opt=opt||{};let st=cell(p.x,p.y),root={c:st.c,r:st.r,dist:0,first:null,prev:null},q=[root],map=new Map([[key(st.c,st.r),root]]),vb=opt.virtualBomb||null,max=opt.maxSteps||80;
+    while(q.length){let n=q.shift();if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!passable(p,c,r,c===st.c&&r===st.r))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
+    return map;
+  }
+  function nearestByPath(p,targets,level,opt){
+    if(!targets||!targets.length)return null;opt=opt||{};let map=bfs(p,level,opt),best=null,bs=Infinity;
+    for(const t of targets){let n=map.get(key(t.c,t.r));if(!n)continue;let danger=cellDanger(t.c,t.r,level,p,opt.virtualBomb);let s=n.dist*10+danger*.12+(t.score||0);if(s<bs){bs=s;best=Object.assign({},t,{node:n,score:s})}}
+    return best;
+  }
+  function vecToNode(p,node){if(!node)return{dx:0,dy:0};let s=node.first||node,o=center(s.c,s.r),dx=o.x-p.x,dy=o.y-p.y,l=Math.hypot(dx,dy);if(l<5)return{dx:0,dy:0};return{dx:dx/l,dy:dy/l}}
+  function aimAt(p,t){if(!p||!t)return;let dx=(t.x||p.x)-p.x,dy=(t.y||p.y)-p.y;if(Math.hypot(dx,dy)<1)return;let d=snapThrowDir(dx,dy);p.lastDirX=d.x||p.lastDirX||1;p.lastDirY=d.y||p.lastDirY||0;}
+
+  function liveEnemies(){return (enemies||[]).filter(e=>e&&e.alive).map(e=>{let ec=cell(e.x,e.y);return{kind:'enemy',obj:e,x:e.x,y:e.y,c:Number.isFinite(e.c)?e.c:ec.c,r:Number.isFinite(e.r)?e.r:ec.r,rad:e.rad||18}})}
+  function hostilePlayers(p){return Object.values(players||{}).filter(q=>hostilePlayer(p,q)).map(q=>{let qc=cell(q.x,q.y);return{kind:'player',obj:q,x:q.x,y:q.y,c:qc.c,r:qc.r,rad:q.rad||15}})}
+  function distanceObj(p,t){return Math.hypot((t.x||p.x)-p.x,(t.y||p.y)-p.y)}
+  function chooseTarget(p){let list=liveEnemies().concat(hostilePlayers(p));list.forEach(t=>t.dist=distanceObj(p,t));list.sort((a,b)=>a.dist-b.dist);return list[0]||null}
+  function softTargets(p){let arr=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(!empty(c,r)||bombAt(c,r))continue;let near=false;for(const d of D4){let x=c+d[0],y=r+d[1];if(inside(x,y)&&gridAt(x,y)===SOFT)near=true;}if(near&&passable(p,c,r,false))arr.push({kind:'soft',c,r,x:center(c,r).x,y:center(c,r).y});}return arr}
+  function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(it.special){try{if(!canBuySpecial(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,score:it.special?-60:-25});}return arr}
+  function goalTarget(){if(goalGate&&!goalGate.hidden&&!battle.on){let g=cell(goalGate.x,goalGate.y);return{kind:'goal',c:g.c,r:g.r,x:goalGate.x,y:goalGate.y,score:-80}}return null}
+  function reviveTargets(p){let arr=[];for(const q of Object.values(players||{})){if(!q||q.alive||!friendPlayer(p,q))continue;let qc=cell(q.x,q.y);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)arr.push({kind:'revive',c:qc.c+dx,r:qc.r+dy,x:q.x,y:q.y,friend:q,score:-90});}return arr}
+
+  function attackPlantCells(p,target,level){
+    if(!target)return[];let range=p.range||2,out=[];
+    for(const d of D4){for(let i=1;i<=range;i++){let c=target.c-d[0]*i,r=target.r-d[1]*i;if(!inside(c,r))break;if(gridAt(c,r)===HARD)break;if(gridAt(c,r)===SOFT)break;if(!passable(p,c,r,false))continue;let o=center(c,r);if(enemyDangerAtPoint(o.x,o.y,level,p)>=180)continue;if(!blastHits(c,r,target.c,target.r,range))continue;out.push({kind:'attackPlant',c,r,x:o.x,y:o.y,target,score:i*4});}}
+    return out;
+  }
+  function openPlantCells(p,target,level){
+    let range=p.range||2,out=[];
+    for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){
+      if(!passable(p,c,r,false))continue;if(cellDanger(c,r,level,p)>=160)continue;if(enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;
+      let hits=0,near=999;
+      for(const d of D4){for(let i=1;i<=range;i++){let x=c+d[0]*i,y=r+d[1]*i;if(!inside(x,y)||gridAt(x,y)===HARD)break;if(gridAt(x,y)===SOFT){hits++;if(target)near=Math.min(near,Math.abs(x-target.c)+Math.abs(y-target.r));break;}}}
+      if(hits>0)out.push({kind:'openPlant',c,r,x:center(c,r).x,y:center(c,r).y,score:(target?near*2:0)-hits*18});
+    }
+    return out;
+  }
+  function escapeAfterBomb(p,level,bc,br,range){
+    let vb={c:bc,r:br,range:range||p.range||2,owner:p.id,timer:2600},map=bfs(p,level,{allowDanger:true,allowEnemyNear:false,virtualBomb:vb,maxSteps:60}),best=null,bs=Infinity;
+    for(const n of map.values()){if(n.dist<1)continue;if(blastHits(bc,br,n.c,n.r,range))continue;let dg=cellDanger(n.c,n.r,level,p,vb);if(dg>=150)continue;let s=n.dist*10+dg*.2+enemyDangerAtPoint(center(n.c,n.r).x,center(n.c,n.r).y,level,p)*.1;if(s<bs){bs=s;best=n}}
+    return best;
+  }
+  function canBombHere(p,level,kind,target){
+    if(!p||!p.alive||p.carryBombId)return false;if((p.placed||0)>=(p.bombMax||1))return false;let c=cell(p.x,p.y);if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;if(cellDanger(c.c,c.r,level,p)>=120)return false;if(enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;let esc=escapeAfterBomb(p,level,c.c,c.r,p.range||2);if(!esc)return false;if(kind==='attack'&&target)return blastHits(c.c,c.r,target.c,target.r,p.range||2);if(kind==='open')return openPlantCells(p,target,level).some(o=>o.c===c.c&&o.r===c.r);return false;
+  }
+  function safestNode(p,level,target){
+    let map=bfs(p,level,{allowDanger:true,allowEnemyNear:true,maxSteps:70}),best=null,bs=Infinity;
+    for(const n of map.values()){
+      if(n.dist<1)continue;
+      let o=center(n.c,n.r),ed=enemyDangerAtPoint(o.x,o.y,level,p),fd=flameCellDanger(n.c,n.r,p)+flamePointDanger(o.x,o.y,p),dg=cellDanger(n.c,n.r,level,p);
+      if(fd>=9000||ed>=10000||dg>=13000)continue;
+      let far=0;if(target)far=-(Math.hypot(o.x-target.x,o.y-target.y))*0.01;
+      let s=fd*8+dg*2+ed*2+n.dist*8+far;
+      if(s<bs){bs=s;best=n}
+    }
+    return best;
+  }
+  function emergencyEscape(p,level,target){let c=cell(p.x,p.y),fd=flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(c.c,c.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p);if(fd<900&&dg<140&&ed<120)return null;let n=safestNode(p,level,target);return n?{action:'move',node:n,reason:fd>=900?'flameEvade':(ed>=120?'enemyEvade':'dangerEvade')}:{action:'idle',reason:'panicStop'};}
+
+  function choosePlan(p,level,st){
+    let target=chooseTarget(p),em=emergencyEscape(p,level,target);if(em)return em;
+    let c=cell(p.x,p.y),own=(bombs||[]).filter(b=>b&&b.owner===p.id&&!b.carriedBy&&!b.fusePaused&&b.armed!==false).sort((a,b)=>(a.timer||9999)-(b.timer||9999))[0];
+    if(own){let bc=bombCell(own),esc=escapeAfterBomb(p,level,bc.c,bc.r,own.range||p.range||2);if(esc)return{action:'move',node:esc,reason:'escapeOwnBomb',target};let sn=safestNode(p,level,target);return sn?{action:'move',node:sn,reason:'safeOwnBomb',target}:{action:'idle',reason:'waitOwnBomb',target};}
+    let rev=nearestByPath(p,reviveTargets(p),level,{allowDanger:false,allowEnemyNear:false});if(rev)return{action:'move',node:rev.node,reason:'revive',target:rev};
+    let gt=goalTarget();if(gt&&(!target||(enemies||[]).filter(e=>e&&e.alive).length===0)){let g=nearestByPath(p,[gt],level,{allowDanger:false,allowEnemyNear:false});if(g)return{action:'move',node:g.node,reason:'goal',target:g};}
+    let items=itemTargets(p,level),it=nearestByPath(p,items,level,{allowDanger:false,allowEnemyNear:false});if(it&&it.node.dist<=5)return{action:'move',node:it.node,reason:it.kind,target:it};
+    if(target){
+      let plants=attackPlantCells(p,target,level),ap=nearestByPath(p,plants,level,{allowDanger:false,allowEnemyNear:false});
+      if(ap){if(ap.node.dist===0)return{action:'bomb',reason:'attackBomb',target};return{action:'move',node:ap.node,reason:'attackSet',target};}
+    }
+    let open=nearestByPath(p,openPlantCells(p,target,level),level,{allowDanger:false,allowEnemyNear:false});
+    if(open){if(open.node.dist===0)return{action:'bomb',reason:'openBomb',target};return{action:'move',node:open.node,reason:'openRoute',target};}
+    if(it)return{action:'move',node:it.node,reason:it.kind,target:it};
+    if(target){let near=nearestByPath(p,attackPlantCells(p,target,level).concat(softTargets(p)),level,{allowDanger:false,allowEnemyNear:false});if(near)return{action:'move',node:near.node,reason:'setup',target};}
+    let safe=safestNode(p,level,target);return safe?{action:'move',node:safe,reason:'safe',target}:{action:'idle',reason:'idle',target};
+  }
+  function safeMoveVector(p,mv,level,target){
+    let dx=mv.dx||0,dy=mv.dy||0,step=Math.max(18,(p.speed||170)*LOCK_DT*1.65);
+    if(Math.hypot(dx,dy)<.05)return{dx:0,dy:0};
+    for(let i=1;i<=4;i++){
+      let nx=p.x+dx*step*(i/4),ny=p.y+dy*step*(i/4),ccell=cell(nx,ny),fd=flamePointDanger(nx,ny,p)+flameCellDanger(ccell.c,ccell.r,p),ed=enemyDangerAtPoint(nx,ny,level,p),dg=cellDanger(ccell.c,ccell.r,level,p);
+      if(fd>=900||ed>=180||dg>=400){let s=safestNode(p,level,target);return s?vecToNode(p,s):{dx:0,dy:0};}
+    }
+    return mv;
+  }
+  function shouldUseSpecial(p,level,target,t){
+    if(t-(p.aiLastSpecial||0)<Math.max(400,1200-level*60))return false;
+    try{let it=specialItemUnderPlayer(p);if(it&&canBuySpecial(p,it))return true}catch(e){}
+    if(!target)return false;try{ensureSpecialBag(p)}catch(e){}
+    let active=fallbackActiveSpecial(p);if(!active||!p.specials||p.specials[active]<=0||p.specialCooldown>0)return false;
+    if(enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;
+    if(active==='overdrive')return target.dist<T*4.5;
+    if(active==='mastersword')return target.dist>T*1.25&&target.dist<T*3.8;
+    if(active==='remote'){
+      let list=(bombs||[]).filter(b=>b&&b.owner===p.id&&b.remoteBomb&&!b.carriedBy&&b.armed!==false);if(!list.length)return false;let b=list[0],bc=bombCell(b),pc=cell(p.x,p.y);if(blastHits(bc.c,bc.r,pc.c,pc.r,b.range||p.range||2))return false;return blastHits(bc.c,bc.r,target.c,target.r,b.range||p.range||2);
+    }
+    return false;
+  }
+  function applyAiToInput(id,inp,dt){
+    let p=players&&players[id];if(!p||!inp||!aiOn(id))return;let st=ai.players[id],level=aiLevel(id),t=tnow();
+    inp.local=true;inp.name=p.name||inp.name||'AI';inp.last=now();
+    if(!p.alive||p.jumpState){inp.dx=0;inp.dy=0;return;}
+    let hereCell=cell(p.x,p.y),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p);
+    if(hereFlame>=900){st.plan=null;let esc=safestNode(p,level,chooseTarget(p));let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
+    let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
+    let thinkWait=Math.max(40,180-level*14);if(!st.plan||t-(st.lastPlanAt||0)>thinkWait||st.stuckMs>700){st.plan=choosePlan(p,level,st);st.lastPlanAt=t;}
+    let plan=st.plan||choosePlan(p,level,st),target=plan.target||chooseTarget(p);
+    if(plan&&plan.node&&(flameCellDanger(plan.node.c,plan.node.r,p)>=900||cellDanger(plan.node.c,plan.node.r,level,p)>=9000)){st.plan=choosePlan(p,level,st);plan=st.plan||plan;target=plan.target||target;}
+    let mv=plan.action==='move'?vecToNode(p,plan.node):{dx:0,dy:0};
+    if(plan.action==='bomb')mv={dx:0,dy:0};
+    if(st.stuckMs>1000&&plan.action!=='bomb'){let soft=nearestByPath(p,openPlantCells(p,target,level),level,{allowDanger:false,allowEnemyNear:false});if(soft){plan=soft.node.dist===0?{action:'bomb',reason:'unstuckOpen',target}:{action:'move',node:soft.node,reason:'unstuckRoute',target};st.plan=plan;mv=plan.action==='move'?vecToNode(p,plan.node):{dx:0,dy:0};}}
+    mv=safeMoveVector(p,mv,level,target);inp.dx=mv.dx||0;inp.dy=mv.dy||0;
+    if(Math.hypot(inp.dx,inp.dy)>.12){let d=snapThrowDir(inp.dx,inp.dy);p.lastDirX=d.x;p.lastDirY=d.y;inp.lastDirX=d.x;inp.lastDirY=d.y;}
+    if(target)aimAt(p,target);
+    if(shouldUseSpecial(p,level,target,t)){inp.dx=0;inp.dy=0;inp.specialSeq=(inp.specialSeq||0)+1;p.aiLastSpecial=t;st.lastSpecial=t;st.plan=null;return;}
+    if(p.carryBombId&&t-(p.aiLastHand||0)>Math.max(420,1100-level*60)&&target&&enemyDangerAtPoint(p.x,p.y,level,p)<120){aimAt(p,target);inp.handSeq=(inp.handSeq||0)+1;p.aiLastHand=t;st.lastHand=t;return;}
+    let wait=Math.max(360,980-level*65);if(plan.action==='bomb'&&t-(p.aiLastBomb||0)>wait){let kind=plan.reason&&plan.reason.indexOf('attack')>=0?'attack':'open';if(canBombHere(p,level,kind,target)){inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;st.plan={action:'move',node:escapeAfterBomb(p,level,cell(p.x,p.y).c,cell(p.x,p.y).r,p.range||2),reason:'escapeNewBomb',target};return;}}
+  }
+
+  window.__aiOmakaseShouldIgnoreOwnFlame=function(p){
+    if(!p||!p.id||!aiOn(p.id))return false;
+    let pc=cell(p.x,p.y),hit=(flames||[]).filter(f=>f&&f.c===pc.c&&f.r===pc.r);
+    if(!hit.length)return false;
+    return hit.every(f=>f.owner===p.id||f.localOwner===p.id);
+  };
   function padPressed(gp,idx){return !!(gp&&gp.buttons&&gp.buttons[idx]&&(gp.buttons[idx].pressed||gp.buttons[idx].value>.5))}
-  function pollAiLevelPad(gp,key){let m=$('aiOmakaseModal');if(!m||m.style.display==='none')return false;let left=padPressed(gp,14),right=padPressed(gp,15),up=padPressed(gp,12),down=padPressed(gp,13),a=padPressed(gp,1)||padPressed(gp,0),b=padPressed(gp,8)||padPressed(gp,9);let nav=left||right||up||down,preNav=!!ai.comboPrev[key+':modalNav'];ai.comboPrev[key+':modalNav']=nav;if(nav&&!preNav){let lv=Math.max(1,Math.min(9,ai.selectedLevel||5));if(left)lv--;if(right)lv++;if(up)lv-=3;if(down)lv+=3;ai.selectedLevel=Math.max(1,Math.min(9,lv));paintAiLevelCursor();try{sfx('item',.55)}catch(e){}}let preA=!!ai.comboPrev[key+':modalA'];ai.comboPrev[key+':modalA']=a;if(a&&!preA&&ai.targetId){setAiOmakase(ai.targetId,ai.selectedLevel||5);closeAiLevelModal();return true}let preB=!!ai.comboPrev[key+':modalB'];ai.comboPrev[key+':modalB']=b;if(b&&!preB){closeAiLevelModal();return true}return true}
+  function pollAiLevelPad(gp,kid){let m=$('aiOmakaseModal');if(!m||m.style.display==='none')return false;let left=padPressed(gp,14),right=padPressed(gp,15),up=padPressed(gp,12),down=padPressed(gp,13),a=padPressed(gp,1)||padPressed(gp,0),b=padPressed(gp,8)||padPressed(gp,9);let nav=left||right||up||down,preNav=!!ai.comboPrev[kid+':modalNav'];ai.comboPrev[kid+':modalNav']=nav;if(nav&&!preNav){let lv=lim(ai.selectedLevel||5,1,9);if(left)lv--;if(right)lv++;if(up)lv-=3;if(down)lv+=3;ai.selectedLevel=lim(lv,1,9);paintAiLevelCursor();try{sfx('item',.55)}catch(e){}}let preA=!!ai.comboPrev[kid+':modalA'];ai.comboPrev[kid+':modalA']=a;if(a&&!preA&&ai.targetId){setAiOmakase(ai.targetId,ai.selectedLevel||5);closeAiLevelModal();return true}let preB=!!ai.comboPrev[kid+':modalB'];ai.comboPrev[kid+':modalB']=b;if(b&&!preB){closeAiLevelModal();return true}return true}
   function checkLocalPadAiCombo(lp){let pads=[];try{pads=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){pads=[]}pads.forEach((gp,i)=>{let id='local_gp_'+String(gp.index)+'_'+String(i||0);if(pollAiLevelPad(gp,id))return;let a=padPressed(gp,0),b=padPressed(gp,1),combo=a&&b,pre=!!ai.comboPrev[id];ai.comboPrev[id]=combo;if(combo&&!pre&&players&&players[id])openAiLevelModal(id,players[id].name||('P'+(i+1)));});}
+
+  const oldReadLocalInput=readLocalInput;
+  readLocalInput=function(){oldReadLocalInput();button();let bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{};if(started&&bag[myId]&&bag[myId].on){applyAiToInput(myId,localInput,LOCK_DT);if(mode==='join')writeInput(true)}let lp=window.__pbomberLocalPad;if(started&&lp&&lp.enabled&&inputs){(lp.ids||Object.keys(inputs)).forEach(id=>{if(inputs[id]&&bag[id]&&bag[id].on)applyAiToInput(id,inputs[id],LOCK_DT)});checkLocalPadAiCombo(lp)}};
   const oldUpdateHost=updateHost;
-  updateHost=function(dt){if(started&&inputs){Object.keys(inputs).forEach(id=>{if(aiOn(id)&&players&&players[id])applyAiToInput(id,inputs[id],dt)});if(aiOn(myId)&&players&&players[myId])applyAiToInput(myId,localInput,dt)}oldUpdateHost(dt)};
+  updateHost=function(dt){let bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{};if(started&&inputs){Object.keys(inputs).forEach(id=>{if(bag[id]&&bag[id].on&&players&&players[id])applyAiToInput(id,inputs[id],dt)});if(bag[myId]&&bag[myId].on&&players&&players[myId])applyAiToInput(myId,localInput,dt)}oldUpdateHost(dt)};
   const oldBootGame=bootGame;
-  bootGame=function(preserveMembers){ai.players=Object.create(null);return oldBootGame(preserveMembers)};
+  bootGame=function(preserveMembers){let api=window.__pbomberAiOmakaseApi;if(api&&api.ai)api.ai.players=Object.create(null);return oldBootGame(preserveMembers)};
   const oldDraw=draw;
-  draw=function(){oldDraw();try{Object.entries(ai.players).forEach(([id,st])=>{if(!st||!st.on)return;let p=players&&players[id];if(!p)return;ctx.save();ctx.textAlign='center';ctx.font='1000 11px system-ui';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.8)';ctx.fillStyle='#fde047';ctx.strokeText('AI Lv'+(st.level||5),p.x,p.y+p.rad+24);ctx.fillText('AI Lv'+(st.level||5),p.x,p.y+p.rad+24);ctx.restore();})}catch(e){}};
-  setInterval(()=>{let b=button();let p=players&&players[myId],on=aiOn(myId);b.textContent=on?('AI Lv'+aiLevel(myId)+' 操作中'):'AIおまかせ';b.style.opacity=started&&p?'1':'.55';},250);
+  draw=function(){oldDraw();try{let bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{};Object.entries(bag).forEach(([id,st])=>{if(!st||!st.on)return;let p=players&&players[id];if(!p)return;ctx.save();ctx.textAlign='center';ctx.font='1000 11px system-ui';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.8)';ctx.fillStyle='#fde047';ctx.strokeText('AI Lv'+(st.level||5),p.x,p.y+p.rad+24);ctx.fillText('AI Lv'+(st.level||5),p.x,p.y+p.rad+24);if(st.plan&&st.plan.reason){ctx.font='900 9px system-ui';ctx.strokeText(st.plan.reason,p.x,p.y+p.rad+36);ctx.fillText(st.plan.reason,p.x,p.y+p.rad+36)}ctx.restore();})}catch(e){}};
+  setInterval(()=>{let b=button(),bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{},p=players&&players[myId],on=!!(bag[myId]&&bag[myId].on);b.textContent=on?('AI Lv'+aiLevel(myId)+' 操作中'):'AIおまかせ';b.style.opacity=started&&p?'1':'.55';},250);
 })();
+
 
 
 /* LOCAL-PAD-MINIHINT-V11 compact one-line hints only. No fixed HUD, no large boxes. */
