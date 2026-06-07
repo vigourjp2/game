@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-SPECIAL-VISUAL-REPAIR-V7-20260607',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-MASTER-SWORD-SPIN-V8-20260607',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -3224,15 +3224,59 @@ function draw3DWorld(){
     drawCuboid(x-T*.04,y,T*.42,T*.34,T*.54,'#fecdd3','BODY','rgba(255,255,255,.22)');
     for(let sx of [-1,1])for(let sy of [-1,1])drawCylinder(x+sx*T*.30,y+sy*T*.18,T*.08,T*.11,'#111827','');
   }
+  function draw3DSpinSlashVortex3D(cx,cy,lv,progress,label){
+    progress=clamp(Number.isFinite(progress)?progress:0,0,1);lv=Math.max(1,lv||1);
+    let baseRad=T*(.92+Math.min(.72,lv*.10)),outerRad=T*(1.22+Math.min(.95,lv*.13));
+    let rot=progress*Math.PI*5.8+performance.now()/95;
+    let alpha=Math.max(.18,1-progress*.72);
+    // 地面に広がる3D衝撃波。画面上の円ではなく、ワールド座標の円周を細かく投影してつなぐ。
+    function strokeWorldRing(rad,h,phase,color,width,segments=56,arc=Math.PI*2){
+      ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();let started=false;
+      for(let i=0;i<=segments;i++){
+        let a=phase+(i/segments)*arc;
+        let q=projectWorld(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad,h);
+        if(!q){started=false;continue;}
+        if(!started){ctx.moveTo(q.x,q.y);started=true;}else ctx.lineTo(q.x,q.y);
+      }
+      ctx.stroke();ctx.restore();
+    }
+    strokeWorldRing(baseRad*(1+progress*.28),T*.18,rot,'rgba(191,219,254,.92)',Math.max(2,6));
+    strokeWorldRing(outerRad*(1+progress*.38),T*.32,rot+Math.PI*.35,'rgba(59,130,246,.72)',Math.max(2,4));
+    strokeWorldRing(outerRad*(.72+progress*.22),T*.72,rot+Math.PI*.70,'rgba(255,255,255,.72)',Math.max(2,5));
+    // 剣そのものを複数本の残像として円周上に配置。高さ差を付けて、水平回転斬りに見えるようにする。
+    for(let i=0;i<10;i++){
+      let age=i/10,ang=rot-age*Math.PI*.92,rad=baseRad+age*T*.18;
+      let x1=cx+Math.cos(ang)*T*.28,y1=cy+Math.sin(ang)*T*.28;
+      let x2=cx+Math.cos(ang)*rad,y2=cy+Math.sin(ang)*rad;
+      let x3=cx+Math.cos(ang+.34)*outerRad,y3=cy+Math.sin(ang+.34)*outerRad;
+      let h1=T*(.55+age*.04),h2=T*(.92+Math.sin(progress*Math.PI)*.18),h3=T*(.84-age*.03);
+      let a=projectWorld(x1,y1,h1),b=projectWorld(x2,y2,h2),c=projectWorld(x3,y3,h3);
+      if(!a||!b)continue;
+      ctx.save();ctx.globalAlpha=alpha*(1-age*.075);ctx.lineCap='round';ctx.lineJoin='round';
+      ctx.strokeStyle='rgba(147,197,253,.38)';ctx.lineWidth=Math.max(7,18*a.sc);ctx.beginPath();ctx.moveTo(a.x,a.y);if(c)ctx.quadraticCurveTo(b.x,b.y,c.x,c.y);else ctx.lineTo(b.x,b.y);ctx.stroke();
+      ctx.strokeStyle='rgba(255,255,255,.96)';ctx.lineWidth=Math.max(2,6*a.sc);ctx.beginPath();ctx.moveTo(a.x,a.y);if(c)ctx.quadraticCurveTo(b.x,b.y,c.x,c.y);else ctx.lineTo(b.x,b.y);ctx.stroke();
+      // 刃先の青白い火花
+      let tip=c||b;ctx.fillStyle='rgba(224,242,254,.92)';ctx.beginPath();ctx.arc(tip.x,tip.y,Math.max(2,5*a.sc),0,Math.PI*2);ctx.fill();
+      ctx.restore();
+    }
+    // 斬撃の風圧柱。円周上に短い縦光を置き、立体的な回転範囲を出す。
+    for(let i=0;i<14;i++){
+      let ang=rot+i*Math.PI*2/14,rad=outerRad*(.82+.10*Math.sin(i*1.7+progress*8));
+      let a=projectWorld(cx+Math.cos(ang)*rad,cy+Math.sin(ang)*rad,T*.20);
+      let b=projectWorld(cx+Math.cos(ang)*rad,cy+Math.sin(ang)*rad,T*(.95+.32*Math.sin(progress*Math.PI)));
+      if(!a||!b)continue;
+      ctx.save();ctx.globalAlpha=alpha*.55;ctx.strokeStyle='rgba(219,234,254,.68)';ctx.lineWidth=Math.max(1,3*a.sc);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.restore();
+    }
+    if(label){draw3DWorldBadgeText(label,cx,cy,T*(1.75+.22*Math.sin(progress*Math.PI)),'#dbeafe')}
+  }
   function draw3DMasterSwordForPlayer(p){
     if(!p||!p.specials||!(p.specials.mastersword>0))return;
     let bx=Number.isFinite(p.x)?p.x:0,by=Number.isFinite(p.y)?p.y:0,dx=Number.isFinite(p.lastDirX)?p.lastDirX:1,dy=Number.isFinite(p.lastDirY)?p.lastDirY:0;
     let len=Math.hypot(dx,dy)||1;dx/=len;dy/=len;let rx=-dy,ry=dx;
     let anim=p.masterSwordAnim||{},nowT=performance.now()/120,raise=(anim.type==='charge'||(p.masterSwordCharge&&p.masterSwordCharge.holding))?T*.30:0;
     if(anim.type==='spin'){
-      let a=Math.max(0,Math.min(1,(anim.t||0)/(anim.total||620))),u=1-a,rot=u*Math.PI*2.8+performance.now()/170;
-      let center=projectWorld(bx,by,T*.72);if(center){ctx.save();ctx.globalAlpha=.96;ctx.strokeStyle='rgba(224,242,254,.96)';ctx.lineWidth=Math.max(4,10*center.sc);ctx.beginPath();ctx.arc(center.x,center.y,Math.max(24,T*(.76+u*.42)*center.sc),0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(147,197,253,.72)';ctx.lineWidth=Math.max(3,6*center.sc);ctx.beginPath();ctx.arc(center.x,center.y,Math.max(36,T*(1.02+u*.55)*center.sc),0,Math.PI*2);ctx.stroke();for(let i=0;i<4;i++){let ang=rot+i*Math.PI/2,a1=projectWorld(bx+Math.cos(ang)*T*.22,by+Math.sin(ang)*T*.22,T*.82),a2=projectWorld(bx+Math.cos(ang)*T*(1.12+u*.35),by+Math.sin(ang)*T*(1.12+u*.35),T*.92);if(a1&&a2){ctx.strokeStyle='rgba(255,255,255,.94)';ctx.lineWidth=Math.max(3,8*a1.sc);ctx.beginPath();ctx.moveTo(a1.x,a1.y);ctx.lineTo(a2.x,a2.y);ctx.stroke();ctx.strokeStyle='rgba(147,197,253,.86)';ctx.lineWidth=Math.max(2,4*a1.sc);ctx.stroke();}}ctx.restore();}
-      draw3DWorldBadgeText('回転斬り',bx,by,T*1.55,'#dbeafe');
+      let a=Math.max(0,Math.min(1,(anim.t||0)/(anim.total||620))),u=1-a;
+      draw3DSpinSlashVortex3D(bx,by,Math.max(1,p.specials.mastersword|0),u,'回転斬り');
       return;
     }
     let a=projectWorld(bx+rx*T*.20,by+ry*T*.20,T*.55+raise),b=projectWorld(bx+dx*T*.68+rx*T*.20,by+dy*T*.68+ry*T*.20,T*.92+raise+Math.sin(nowT)*2);
@@ -3247,9 +3291,104 @@ function draw3DWorld(){
     }
     let c=projectWorld(x,y,T*.68);if(!c)return;ctx.save();ctx.globalAlpha=a;ctx.lineCap='round';
     if(f.type==='spin'){
-      let rad=Math.max(22,T*(.86+u*.55+(f.lv||1)*.08)*c.sc);ctx.strokeStyle='rgba(224,242,254,.96)';ctx.lineWidth=Math.max(4,12*c.sc);ctx.beginPath();ctx.arc(c.x,c.y,rad,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(147,197,253,.78)';ctx.lineWidth=Math.max(2,6*c.sc);ctx.beginPath();ctx.arc(c.x,c.y,rad*1.28,0,Math.PI*2);ctx.stroke();draw3DLabel('回転斬り',c.x,c.y-rad-12,70);ctx.restore();return;
+      ctx.restore();
+      draw3DSpinSlashVortex3D(x,y,Math.max(1,f.lv||1),u,'回転斬り');
+      return;
     }
     ctx.strokeStyle='rgba(147,197,253,.90)';ctx.lineWidth=Math.max(3,9*c.sc);ctx.beginPath();ctx.arc(c.x,c.y,Math.max(18,T*(.55+(f.lv||1)*.10)*c.sc),-Math.PI*.15,Math.PI*1.28);ctx.stroke();ctx.fillStyle='rgba(147,197,253,.20)';ctx.beginPath();ctx.arc(c.x,c.y,Math.max(14,T*(.38+(f.lv||1)*.08)*c.sc),0,Math.PI*2);ctx.fill();ctx.restore();
+  }
+
+  function flameRand3D(seed){
+    let x=Math.sin(seed*12.9898+78.233)*43758.5453;
+    return x-Math.floor(x);
+  }
+  function draw3DHeatLine(x1,y1,h1,x2,y2,h2,alpha,width){
+    let a=projectWorld(x1,y1,h1),b=projectWorld(x2,y2,h2);if(!a||!b)return;
+    ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle='rgba(255,245,180,.95)';ctx.lineWidth=Math.max(1,width*a.sc);ctx.lineCap='round';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.restore();
+  }
+  function draw3DPhysicalFlame(f,x,y){
+    if(!f)return;
+    const style=f.flameStyle||(f.enemyFlame?'enemy':'player');
+    const life=style==='player'?430:(style==='boss'?760:620);
+    const remain=Number.isFinite(+f.t)?(+f.t):life;
+    const age=clamp(1-remain/life,0,1);
+    const fade=clamp(remain/life,0,1);
+    const seed=((f.c||0)+1)*97+((f.r||0)+1)*193+(String(f.expId||'').length*31);
+    const time=performance.now()/1000;
+    const baseR=T*(style==='boss'?.42:.34)*(1+.22*Math.sin(time*10+seed));
+    const height=T*(1.05+.65*(1-fade)+.22*Math.sin(time*7+seed));
+    const core=projectWorld(x,y,T*.10); if(!core)return;
+
+    ctx.save();
+    // 地面に広がる灼熱コア。板ではなく、床面の楕円熱溜まりとして描く。
+    let glowR=Math.max(18,baseR*core.sc*1.55);
+    let g=ctx.createRadialGradient(core.x,core.y,Math.max(2,glowR*.08),core.x,core.y,glowR);
+    g.addColorStop(0,'rgba(255,255,210,'+(.72*fade)+')');
+    g.addColorStop(.24,'rgba(255,185,40,'+(.62*fade)+')');
+    g.addColorStop(.58,'rgba(255,65,10,'+(.38*fade)+')');
+    g.addColorStop(1,'rgba(90,0,0,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(core.x,core.y+glowR*.10,glowR,glowR*.34,0,0,Math.PI*2);ctx.fill();
+
+    // 熱波リング。爆発直後ほど太く、上から見ても揺らぎが出る。
+    for(let k=0;k<3;k++){
+      let ringP=projectWorld(x,y,T*(.12+k*.18)); if(!ringP)continue;
+      let rr=Math.max(12,baseR*ringP.sc*(1.0+k*.55+age*.75));
+      ctx.globalAlpha=(.36-k*.08)*fade;
+      ctx.strokeStyle=k===0?'rgba(255,249,196,.95)':(k===1?'rgba(255,159,28,.74)':'rgba(255,67,16,.50)');
+      ctx.lineWidth=Math.max(1.5,5*ringP.sc*(1-k*.16));
+      ctx.beginPath();ctx.ellipse(ringP.x,ringP.y,rr,rr*.30,Math.sin(time*2+seed)*.08,0,Math.PI*2);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // 疑似物理粒子。火の粉は上昇、外へ拡散、時間で減衰。座標は3D投影する。
+    const n=style==='boss'?34:24;
+    for(let i=0;i<n;i++){
+      let r1=flameRand3D(seed+i*11),r2=flameRand3D(seed+i*17),r3=flameRand3D(seed+i*23),r4=flameRand3D(seed+i*29);
+      let local=(age+r1*.72)%1;
+      let theta=r2*Math.PI*2+time*(1.8+r3*1.7)+age*3.2;
+      let swirl=Math.sin(time*5+r4*9+seed)*.35;
+      let radius=baseR*(.18+r3*.92)*(1+.55*local);
+      let px=x+Math.cos(theta+swirl)*radius;
+      let py=y+Math.sin(theta-swirl)*radius*.72;
+      let h=T*.10+height*(local*.96)+Math.sin(local*Math.PI)*T*.22;
+      let pr=projectWorld(px,py,h); if(!pr)continue;
+      let sz=Math.max(2,(T*(.045+r4*.075))*pr.sc*(1-local*.55));
+      let alpha=fade*(1-local*.78)*(.55+r1*.45);
+      let col=(local<.22)?'rgba(255,255,218,':(local<.56?'rgba(255,179,38,':'rgba(255,63,12,');
+      ctx.fillStyle=col+alpha+')';
+      ctx.beginPath();ctx.arc(pr.x,pr.y,sz,0,Math.PI*2);ctx.fill();
+      // 速度ベクトルの残光。上昇感を出す。
+      let tail=projectWorld(px-Math.cos(theta)*radius*.10,py-Math.sin(theta)*radius*.06,h-T*(.12+r4*.14));
+      if(tail){ctx.strokeStyle='rgba(255,212,88,'+(alpha*.60)+')';ctx.lineWidth=Math.max(1,sz*.55);ctx.beginPath();ctx.moveTo(tail.x,tail.y);ctx.lineTo(pr.x,pr.y);ctx.stroke();}
+    }
+
+    // 炎柱の芯。複数の曲線で、上昇する灼熱の流れを作る。
+    for(let i=0;i<7;i++){
+      let a=i*Math.PI*2/7+time*2.4+seed*.01;
+      let r=baseR*(.18+.13*Math.sin(time*3+i));
+      let x1=x+Math.cos(a)*r*.4,y1=y+Math.sin(a)*r*.3;
+      let x2=x+Math.cos(a+1.15)*r*.85,y2=y+Math.sin(a+1.15)*r*.55;
+      let p1=projectWorld(x1,y1,T*.18),p2=projectWorld((x1+x2)/2,(y1+y2)/2,height*.55),p3=projectWorld(x2,y2,height*(.95+.06*Math.sin(time*5+i)));if(!p1||!p2||!p3)continue;
+      ctx.save();ctx.globalAlpha=.68*fade;ctx.strokeStyle=i%2?'rgba(255,232,116,.92)':'rgba(255,94,20,.82)';ctx.lineWidth=Math.max(2,7*p1.sc*(1-i*.035));ctx.lineCap='round';ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.quadraticCurveTo(p2.x,p2.y,p3.x,p3.y);ctx.stroke();ctx.restore();
+    }
+
+    // 煙と熱歪み。上部に黒煙、周辺に半透明ゆらぎ。
+    for(let i=0;i<10;i++){
+      let r1=flameRand3D(seed+300+i*13),r2=flameRand3D(seed+400+i*19),r3=flameRand3D(seed+500+i*23);
+      let local=(age*.75+r1)%1;
+      let theta=r2*Math.PI*2+time*.65;
+      let px=x+Math.cos(theta)*baseR*(.35+local*.85);
+      let py=y+Math.sin(theta)*baseR*(.25+local*.65);
+      let h=height*(.72+local*.55);
+      let sp=projectWorld(px,py,h); if(!sp)continue;
+      let sr=Math.max(5,T*(.08+r3*.10)*sp.sc*(1+local));
+      ctx.fillStyle='rgba(15,23,42,'+(.22*fade*(1-local*.45))+')';
+      ctx.beginPath();ctx.ellipse(sp.x,sp.y,sr*1.25,sr*.72,theta*.25,0,Math.PI*2);ctx.fill();
+    }
+
+    // 中心の白熱球。灼熱感の核。
+    let hot=projectWorld(x,y,T*.52);if(hot){let hr=Math.max(7,T*.16*hot.sc);let hg=ctx.createRadialGradient(hot.x,hot.y,1,hot.x,hot.y,hr*2.2);hg.addColorStop(0,'rgba(255,255,255,'+(.95*fade)+')');hg.addColorStop(.28,'rgba(255,246,160,'+(.74*fade)+')');hg.addColorStop(.72,'rgba(255,78,16,'+(.25*fade)+')');hg.addColorStop(1,'rgba(255,78,16,0)');ctx.fillStyle=hg;ctx.beginPath();ctx.arc(hot.x,hot.y,hr*2.2,0,Math.PI*2);ctx.fill();}
+    ctx.restore();
   }
   function draw3DShoretsuhaWorld(f,p){
     if(!f&&!p)return;let bx=(f&&f.x)||p.x,by=(f&&f.y)||p.y,dx=(f&&f.dx)||p.lastDirX||1,dy=(f&&f.dy)||p.lastDirY||0,lv=(f&&f.lv)||((p.specials&&p.specials.shoretsuha)||1);
@@ -3297,7 +3436,7 @@ function draw3DWorld(){
       if(o.obj&&o.obj.remoteBomb)draw3DRemoteDetails(o.obj);
       if(o.obj&&o.obj.homingBomb)draw3DHomingDetails(o.obj);
     }else if(o.kind==='flame'){
-      let p=projectWorld(o.x,o.y,T*.18);if(p){let s=Math.max(14,T*.33*p.sc);ctx.fillStyle='rgba(255,80,20,.88)';ctx.beginPath();ctx.moveTo(p.x,p.y-s*1.35);ctx.quadraticCurveTo(p.x+s*.62,p.y-s*.45,p.x,p.y+s*.1);ctx.quadraticCurveTo(p.x-s*.62,p.y-s*.45,p.x,p.y-s*1.35);ctx.fill();ctx.fillStyle='rgba(255,235,90,.9)';ctx.beginPath();ctx.arc(p.x,p.y-s*.35,s*.28,0,Math.PI*2);ctx.fill();}
+      draw3DPhysicalFlame(o.obj,o.x,o.y);
     }else if(o.kind==='cart'){
       if(o.obj&&o.obj.mode==='car'&&o.obj.state==='frame')draw3DCharredCarFrame(o.obj);
       else if(o.obj&&o.obj.mode==='car')draw3DNormalCarBody(o.obj);
