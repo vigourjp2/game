@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V3-AI-HAND-SHADOW-20260608',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V3-AI-SHADOWBOMB-FIX-20260609',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -734,7 +734,7 @@ function enableShadowAi(id){
 function configureShadowEnemyPlayer(p,w=wave){
   if(!p)return p;
   p.name='シャドウ';p.isShadowEnemy=true;p.shadowWave=w|0;p.teamKey=SHADOW_ENEMY_TEAM;p.teamColor='#111827';p.color='#111827';p.outlineColor='#f8fafc';
-  p.speed=Math.max(p.speed||170,230);p.bombMax=Math.max(p.bombMax||1,4);p.range=Math.max(p.range||2,5);p.kick=true;p.kickLevel=Math.max(p.kickLevel||0,2);p.handLevel=Math.max(p.handLevel||0,2);
+  p.speed=Math.max(p.speed||170,240);p.bombMax=Math.max(p.bombMax||1,5);p.range=Math.max(p.range||2,5);p.kick=true;p.kickLevel=Math.max(p.kickLevel||0,2);p.handLevel=Math.max(p.handLevel||0,2);p.shadowAggro=true;
   /* SHADOW ENEMY FIX: ensureShadowEnemyPlayerForWave() is called every host tick.
      Do not refresh spawn invuln/shield here, otherwise Shadow blinks forever and cannot be defeated. */
   p.gold=0;p.shield=0;p.invuln=0;p.revive=0;p.reviveBy=null;p.activeSpecial=p.activeSpecial||'jump';p.lastSeen=now()+86400000;
@@ -4129,9 +4129,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V16-BREAKROUTE-LITE-20260608: 爆弾設置後に逃げ固定へ戻さず、危険度評価で連続設置と退避を切り替える。 */
+/* AI-OMAKASE-PLAYER-V22-SHADOWBOMB-DIRECT-20260609: shadowBombの表示だけ発火して設置入力が弾かれる経路を廃止し、シャドウ敵は攻撃爆弾を直接配置する。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V16-BREAKROUTE-LITE-20260608';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V22-SHADOWBOMB-DIRECT-20260609';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -4189,10 +4189,33 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return AI_PERF.gimmickCells.has(key(c,r));
   }
   function passable(p,c,r,allowStart){if(!empty(c,r))return false;if(!allowStart&&aiDamageGimmickAt(c,r))return false;if(!allowStart&&bombAt(c,r))return false;let o=center(c,r);try{return canAt(p,o.x,o.y,p&&p.id)!==false}catch(e){return true}}
-  function teamKey(p){return (p&&(p.teamKey||p.teamChoice||p.teamBadge||p.name))||''}
-  function sameTeam(a,b){return !!(a&&b&&battle&&battle.team&&teamKey(a)===teamKey(b))}
-  function hostilePlayer(me,q){if(!me||!q||me===q||!q.alive)return false;if(me.isShadowEnemy)return !q.isShadowEnemy;if(q.isShadowEnemy)return !me.isShadowEnemy;if(battle&&battle.team)return !sameTeam(me,q);return wave>=50}
-  function friendPlayer(me,q){if(!me||!q||me===q)return false;if(me.isShadowEnemy||q.isShadowEnemy)return !!(me.isShadowEnemy&&q.isShadowEnemy);if(battle&&battle.team)return sameTeam(me,q);return wave<50}
+  function explicitTeamKey(p){
+    if(!p)return '';
+    let raw=(p.teamKey||p.teamChoice||p.teamBadge||'');
+    raw=String(raw).trim();
+    if(!raw||raw==='I'||raw==='solo'||raw==='undefined'||raw==='null')return '';
+    return raw;
+  }
+  function teamKey(p){return explicitTeamKey(p)||(battle&&battle.team?normTeamName((p&&p.name)||'PLAYER'):'')}
+  function sameTeam(a,b){let ak=teamKey(a),bk=teamKey(b);return !!(a&&b&&ak&&bk&&ak===bk)}
+  function hostilePlayer(me,q){
+    if(!me||!q||me===q||!q.alive)return false;
+    if(me.isShadowEnemy)return !q.isShadowEnemy;
+    if(q.isShadowEnemy)return !me.isShadowEnemy;
+    let mt=explicitTeamKey(me),qt=explicitTeamKey(q);
+    if(mt&&qt)return mt!==qt;
+    if(battle&&battle.team)return !sameTeam(me,q);
+    if(battle&&battle.on)return true;
+    return wave>=50;
+  }
+  function friendPlayer(me,q){
+    if(!me||!q||me===q)return false;
+    if(me.isShadowEnemy||q.isShadowEnemy)return !!(me.isShadowEnemy&&q.isShadowEnemy);
+    let mt=explicitTeamKey(me),qt=explicitTeamKey(q);
+    if(mt&&qt)return mt===qt;
+    if(battle&&battle.team)return sameTeam(me,q);
+    return wave<50;
+  }
   function lineClearForBlast(bc,br,c,r){if(bc!==c&&br!==r)return false;let dx=Math.sign(c-bc),dy=Math.sign(r-br),x=bc,y=br,steps=Math.abs(c-bc)+Math.abs(r-br);for(let i=0;i<steps;i++){x+=dx;y+=dy;if(!inside(x,y))return false;let g=gridAt(x,y);if(g===HARD)return false;if(i<steps-1&&g===SOFT)return false;}return true}
   function blastHits(bc,br,c,r,range){range=Math.max(1,range|0);if(bc===c&&Math.abs(br-r)<=range)return lineClearForBlast(bc,br,c,r);if(br===r&&Math.abs(bc-c)<=range)return lineClearForBlast(bc,br,c,r);return false}
 
@@ -4316,6 +4339,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function reachableBombBreakPlan(p,level,target){
     if(!p||!p.alive||p.carryBombId)return null;
+    syncAiPlacedCount(p);
     if((p.placed||0)>=(p.bombMax||1))return null;
 
     /* AI BREAKROUTE LITE:
@@ -4356,9 +4380,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function aimAt(p,t){if(!p||!t)return;let dx=(t.x||p.x)-p.x,dy=(t.y||p.y)-p.y;if(Math.hypot(dx,dy)<1)return;let d=snapThrowDir(dx,dy);p.lastDirX=d.x||p.lastDirX||1;p.lastDirY=d.y||p.lastDirY||0;}
 
   function liveEnemies(){return (enemies||[]).filter(e=>e&&e.alive).map(e=>{let ec=cell(e.x,e.y);return{kind:'enemy',obj:e,x:e.x,y:e.y,c:Number.isFinite(e.c)?e.c:ec.c,r:Number.isFinite(e.r)?e.r:ec.r,rad:e.rad||18}})}
-  function hostilePlayers(p){return Object.values(players||{}).filter(q=>hostilePlayer(p,q)).map(q=>{let qc=cell(q.x,q.y);return{kind:'player',obj:q,x:q.x,y:q.y,c:qc.c,r:qc.r,rad:q.rad||15}})}
+  function hostilePlayers(p){return Object.values(players||{}).filter(q=>hostilePlayer(p,q)).map(q=>{let qc=cell(q.x,q.y);return{kind:'player',monster:true,obj:q,x:q.x,y:q.y,c:qc.c,r:qc.r,rad:q.rad||15,teamMonster:true}})}
   function distanceObj(p,t){return Math.hypot((t.x||p.x)-p.x,(t.y||p.y)-p.y)}
-  function chooseTarget(p){let list=liveEnemies().concat(hostilePlayers(p));list.forEach(t=>t.dist=distanceObj(p,t));list.sort((a,b)=>a.dist-b.dist);return list[0]||null}
+  function chooseTarget(p){let list=liveEnemies().concat(hostilePlayers(p));list.forEach(t=>{t.dist=distanceObj(p,t);if(t.kind==='player')t.score=(p&&p.isShadowEnemy)?-140:-80;});list.sort((a,b)=>((a.dist+(a.score||0))-(b.dist+(b.score||0))));return list[0]||null}
   function softTargets(p){let arr=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(!empty(c,r)||bombAt(c,r))continue;let near=false;for(const d of D4){let x=c+d[0],y=r+d[1];if(inside(x,y)&&gridAt(x,y)===SOFT)near=true;}if(near&&passable(p,c,r,false))arr.push({kind:'soft',c,r,x:center(c,r).x,y:center(c,r).y});}return arr}
   function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(!passable(p,it.c,it.r,false))continue;if(it.special){try{if(!canBuySpecial(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,score:it.special?-60:-25});}return arr}
   function goalTarget(){if(goalGate&&!goalGate.hidden&&!battle.on){let g=cell(goalGate.x,goalGate.y);if(aiDamageGimmickAt(g.c,g.r))return null;return{kind:'goal',c:g.c,r:g.r,x:goalGate.x,y:goalGate.y,score:-80}}return null}
@@ -4384,8 +4408,87 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     for(const n of map.values()){if(n.dist<1)continue;if(blastHits(bc,br,n.c,n.r,range))continue;let dg=cellDanger(n.c,n.r,level,p,vb);if(dg>=150)continue;let s=n.dist*10+dg*.2+enemyDangerAtPoint(center(n.c,n.r).x,center(n.c,n.r).y,level,p)*.1;if(s<bs){bs=s;best=n}}
     return best;
   }
+  function targetIsTeamMonster(target){return !!(target&&target.kind==='player'&&target.obj)}
+  function canBombPressureHere(p,level,target){
+    if(!p||!p.alive||p.carryBombId||!targetIsTeamMonster(target))return false;
+    if((p.placed||0)>=(p.bombMax||1))return false;
+    let c=cell(p.x,p.y),range=p.range||2;
+    if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;
+    let hereDanger=cellDanger(c.c,c.r,level,p);
+    let shadowVsPlayer=!!(p&&p.isShadowEnemy&&target&&target.kind==='player');
+    if(hereDanger>=(shadowVsPlayer?620:160))return false;
+    if(!(p&&p.isShadowEnemy)&&enemyDangerAtPoint(p.x,p.y,level,p)>=180)return false;
+    let esc=escapeAfterBomb(p,level,c.c,c.r,range);if(!esc)return false;
+    let md=Math.abs(c.c-target.c)+Math.abs(c.r-target.r),dist=target.dist||Math.hypot((target.x||p.x)-p.x,(target.y||p.y)-p.y);
+    if(blastHits(c.c,c.r,target.c,target.r,range))return true;
+    return dist<T*2.35&&md<=3;
+  }
+  function syncAiPlacedCount(p){
+    if(!p||!p.id)return 0;
+    let n=0;
+    for(const b of bombs||[])if(b&&b.owner===p.id&&!b.carriedBy&&b.armed!==false)n++;
+    if((p.placed|0)!==n)p.placed=n;
+    return n;
+  }
+  function isAttackBombReason(reason){
+    reason=String(reason||'').toLowerCase();
+    return reason.includes('attack')||reason.includes('shadow')||reason.includes('team');
+  }
+  function queueAiBombInput(p,st,inp,t){
+    inp.dx=0;inp.dy=0;
+    inp.bombSeq=(inp.bombSeq||0)+1;
+    inp.seq=inp.bombSeq;
+    p.aiLastBomb=t;
+    if(st){st.lastBomb=t;st.plan=null;st.lastPlanAt=0;}
+  }
+  function directShadowBombNow(p,st,inp,t,reason){
+    if(!p||!p.isShadowEnemy||!p.alive||p.carryBombId)return false;
+    syncAiPlacedCount(p);
+    if((p.placed||0)>=(p.bombMax||1))return false;
+    let c=cell(p.x,p.y);
+    if(!inside(c.c,c.r)||gridAt(c.c,c.r)!==EMPTY||bombAt(c.c,c.r))return false;
+    if(flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p)>=900)return false;
+    let seq='shadow_ai_'+(lockFrame||0)+'_'+(p.aiDirectBombSeq=(p.aiDirectBombSeq||0)+1);
+    let acted=false;
+    try{acted=placeBomb(p,seq)}catch(e){acted=false}
+    if(acted){
+      if(inp){inp.dx=0;inp.dy=0;}
+      p.aiLastBomb=t;p.lastPrimaryActionAt=now();p.lastPrimaryActionSeq=seq;
+      if(st){st.lastBomb=t;st.plan=null;st.lastPlanAt=0;st.lastDirectShadowBomb=t;st.lastDirectShadowReason=reason||'shadowBomb';}
+      try{msg='シャドウ '+String(reason||'shadowBomb')}catch(e){}
+      return true;
+    }
+    return false;
+  }
+  function fireAiBomb(p,st,inp,t,reason,target){
+    if(p&&p.isShadowEnemy&&isAttackBombReason(reason)&&(targetIsTeamMonster(target)||String(reason||'').toLowerCase().includes('shadow'))){
+      if(directShadowBombNow(p,st,inp,t,reason))return true;
+      /* 直接配置できない時だけ従来入力へ落とす。表示だけちらつく状態を避けるため、ここではlastBombを更新しない。 */
+      return false;
+    }
+    queueAiBombInput(p,st,inp,t);
+    return true;
+  }
   function canBombHere(p,level,kind,target){
-    if(!p||!p.alive||p.carryBombId)return false;if((p.placed||0)>=(p.bombMax||1))return false;let c=cell(p.x,p.y);if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;if(cellDanger(c.c,c.r,level,p)>=120)return false;if(!(p&&p.isShadowEnemy&&kind==='attack')&&enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;let esc=escapeAfterBomb(p,level,c.c,c.r,p.range||2);if(!esc)return false;if(kind==='attack'&&target)return blastHits(c.c,c.r,target.c,target.r,p.range||2);if(kind==='open')return openPlantCells(p,target,level).some(o=>o.c===c.c&&o.r===c.r);return false;
+    if(!p||!p.alive||p.carryBombId)return false;syncAiPlacedCount(p);if((p.placed||0)>=(p.bombMax||1))return false;let c=cell(p.x,p.y);if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;let shadowAttack=!!(p&&p.isShadowEnemy&&kind==='attack'&&target&&target.kind==='player'),hereDanger=cellDanger(c.c,c.r,level,p);if(hereDanger>=(shadowAttack?620:120))return false;if(!(p&&p.isShadowEnemy&&kind==='attack')&&enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;let esc=escapeAfterBomb(p,level,c.c,c.r,p.range||2);if(!esc)return false;if(kind==='attack'&&target)return blastHits(c.c,c.r,target.c,target.r,p.range||2)||canBombPressureHere(p,level,target);if(kind==='open')return openPlantCells(p,target,level).some(o=>o.c===c.c&&o.r===c.r);return false;
+  }
+  function shadowDirectAttack(p,level,st,target,t,inp){
+    if(!p||!p.isShadowEnemy||!target||target.kind!=='player'||!target.obj||!target.obj.alive)return false;
+    if(p.carryBombId)return false;
+    syncAiPlacedCount(p);
+    if((p.placed||0)>=(p.bombMax||1))return false;
+    if(t-(p.aiLastBomb||0)<Math.max(240,620-level*36))return false;
+    let c=cell(p.x,p.y),range=p.range||5;
+    if(!inside(c.c,c.r)||bombAt(c.c,c.r)||!empty(c.c,c.r))return false;
+    if(flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p)>=900)return false;
+    let sdg=cellDanger(c.c,c.r,level,p);
+    if(sdg>=620)return false;
+    let md=Math.abs(c.c-target.c)+Math.abs(c.r-target.r),dist=target.dist||Math.hypot((target.x||p.x)-p.x,(target.y||p.y)-p.y);
+    let inPressure=blastHits(c.c,c.r,target.c,target.r,range)||dist<T*2.65||md<=4;
+    if(!inPressure)return false;
+    let esc=escapeAfterBomb(p,level,c.c,c.r,range);
+    if(!esc&&md>1)return false;
+    return fireAiBomb(p,st,inp,t,'shadowDirectBomb',target);
   }
   function ownBombMinTimer(p){
     let m=999999;if(!p)return m;
@@ -4394,6 +4497,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function canForcedChainBombHere(p,level,target){
     if(!p||!p.alive||p.carryBombId)return false;
+    syncAiPlacedCount(p);
     if((p.placed||0)<=0||(p.placed||0)>=(p.bombMax||1))return false;
     let c=cell(p.x,p.y),range=p.range||2;
     if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;
@@ -4404,6 +4508,39 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(val.soft<=0&&!val.targetHit)return false;
     let esc=escapeAfterBomb(p,level,c.c,c.r,range);
     return !!esc;
+  }
+  function shadowReattackPlan(p,level,target){
+    if(!p||!p.isShadowEnemy||!target||target.kind!=='player'||!target.obj||!target.obj.alive)return null;
+    let ownLeft=ownBombMinTimer(p);
+    if(ownLeft===999999||ownLeft<880)return null;
+    let c=cell(p.x,p.y),fd=flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(c.c,c.r,level,p);
+    if(fd>=900||dg>=1180)return null;
+    syncAiPlacedCount(p);
+    if((p.placed||0)<(p.bombMax||1)&&canBombPressureHere(p,level,target))return{action:'bomb',reason:'shadowReBomb',target};
+    let plants=attackPlantCells(p,target,level).concat(pressureStepCells(p,target,level));
+    let best=nearestByPath(p,plants,level,{allowDanger:true,allowEnemyNear:true,maxSteps:72});
+    if(best&&best.node){
+      let nd=cellDanger(best.node.c,best.node.r,level,p),nf=flameCellDanger(best.node.c,best.node.r,p);
+      if(nf<900&&nd<1120){
+        return best.node.dist===0
+          ? {action:'bomb',reason:'shadowReBomb',target}
+          : {action:'move',node:best.node,reason:'shadowReAttackSet',target};
+      }
+    }
+    return null;
+  }
+  function pressureStepCells(p,target,level){
+    if(!p||!target)return[];
+    let out=[],tc=target.c,tr=target.r;
+    for(let r=tr-3;r<=tr+3;r++)for(let c=tc-3;c<=tc+3;c++){
+      if(!inside(c,r)||!passable(p,c,r,false)||bombAt(c,r))continue;
+      let md=Math.abs(c-tc)+Math.abs(r-tr);
+      if(md<1||md>4)continue;
+      let o=center(c,r),dg=cellDanger(c,r,level,p),fd=flameCellDanger(c,r,p)+flamePointDanger(o.x,o.y,p);
+      if(fd>=900||dg>=1120)continue;
+      out.push({kind:'shadowPressureStep',c,r,x:o.x,y:o.y,target,score:md*5+dg*.04});
+    }
+    return out;
   }
   function safestNode(p,level,target){
     let map=bfs(p,level,{allowDanger:true,allowEnemyNear:true,maxSteps:54}),best=null,bs=Infinity;
@@ -4417,10 +4554,11 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     }
     return best;
   }
-  function emergencyEscape(p,level,target){let c=cell(p.x,p.y),fd=flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(c.c,c.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p);if(fd<900&&dg<140&&ed<120)return null;let n=safestNode(p,level,target);return n?{action:'move',node:n,reason:fd>=900?'flameEvade':(ed>=120?'enemyEvade':'dangerEvade')}:{action:'idle',reason:'panicStop'};}
+  function emergencyEscape(p,level,target){let c=cell(p.x,p.y),fd=flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(c.c,c.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p);let shadowAssault=!!(p&&p.isShadowEnemy&&target&&target.kind==='player'&&ownBombMinTimer(p)>900);if(shadowAssault){if(fd<900&&dg<520&&ed<220)return null;}else if(fd<900&&dg<140&&ed<120)return null;let n=safestNode(p,level,target);return n?{action:'move',node:n,reason:fd>=900?'flameEvade':(ed>=120?'enemyEvade':'dangerEvade')}:{action:'idle',reason:'panicStop'};}
 
   function choosePlan(p,level,st){
-    let target=chooseTarget(p),em=emergencyEscape(p,level,target);if(em)return em;
+    let target=chooseTarget(p),shadowRe=shadowReattackPlan(p,level,target);if(shadowRe)return shadowRe;
+    let em=emergencyEscape(p,level,target);if(em)return em;
     let c=cell(p.x,p.y),own=(bombs||[]).filter(b=>b&&b.owner===p.id&&!b.carriedBy&&!b.fusePaused&&b.armed!==false).sort((a,b)=>(a.timer||9999)-(b.timer||9999))[0];
     /* AI CHAIN-BOMB FIX: 自分の爆弾があるだけで逃げ専用にしない。
        退避は emergencyEscape と cellDanger の残り時間評価で判断する。 */
@@ -4428,7 +4566,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let gt=goalTarget();if(gt&&(!target||(enemies||[]).filter(e=>e&&e.alive).length===0)){let g=nearestByPath(p,[gt],level,{allowDanger:false,allowEnemyNear:false});if(g)return{action:'move',node:g.node,reason:'goal',target:g};}
     let items=itemTargets(p,level),it=nearestByPath(p,items,level,{allowDanger:false,allowEnemyNear:false});if(it&&it.node.dist<=5)return{action:'move',node:it.node,reason:it.kind,target:it};
     if(target){
-      let plants=attackPlantCells(p,target,level),ap=nearestByPath(p,plants,level,{allowDanger:false,allowEnemyNear:!(p&&p.isShadowEnemy&&target&&target.kind==='player')});
+      if(targetIsTeamMonster(target)&&canBombPressureHere(p,level,target))return{action:'bomb',reason:(p&&p.isShadowEnemy)?'shadowBomb':'teamBomb',target};
+      let shadowAssault=!!(p&&p.isShadowEnemy&&target&&target.kind==='player');
+      let plants=attackPlantCells(p,target,level),ap=nearestByPath(p,plants,level,{allowDanger:shadowAssault,allowEnemyNear:!shadowAssault,maxSteps:shadowAssault?70:80});
       if(ap){if(ap.node.dist===0)return{action:'bomb',reason:'attackBomb',target};return{action:'move',node:ap.node,reason:'attackSet',target};}
     }
     let rb=reachableBombBreakPlan(p,level,target);
@@ -4445,7 +4585,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     for(let i=1;i<=2;i++){
       let nx=p.x+dx*step*(i/2),ny=p.y+dy*step*(i/2),ccell=cell(nx,ny),fd=flamePointDanger(nx,ny,p)+flameCellDanger(ccell.c,ccell.r,p),ed=enemyDangerAtPoint(nx,ny,level,p),dg=cellDanger(ccell.c,ccell.r,level,p);
       const shadowChasingPlayer=!!(p&&p.isShadowEnemy&&target&&target.kind==='player');
-      if(aiDamageGimmickAt(ccell.c,ccell.r)||fd>=900||(!shadowChasingPlayer&&ed>=180)||dg>=400){let s=safestNode(p,level,target);return s?vecToNode(p,s):{dx:0,dy:0};}
+      const dgLimit=shadowChasingPlayer?(ownBombMinTimer(p)>900?1200:520):400;
+      if(aiDamageGimmickAt(ccell.c,ccell.r)||fd>=900||(!shadowChasingPlayer&&ed>=180)||dg>=dgLimit){let s=safestNode(p,level,target);return s?vecToNode(p,s):{dx:0,dy:0};}
     }
     return mv;
   }
@@ -4491,11 +4632,16 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(hereGimmick||hereFlame>=900){st.plan=null;let esc=safestNode(p,level,chooseTarget(p));let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
     let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
     let earlyTarget=chooseTarget(p);
+    syncAiPlacedCount(p);
     if(aiHandleCarriedBomb(p,level,st,earlyTarget,t,inp))return;
     else{st.aiCarryBombId=null;st.aiCarryStartedAt=0;}
+    if(shadowDirectAttack(p,level,st,earlyTarget,t,inp))return;
     let chainWait=Math.max(190,520-level*42);
+    if(earlyTarget&&targetIsTeamMonster(earlyTarget)&&canBombPressureHere(p,level,earlyTarget)&&t-(p.aiLastBomb||0)>Math.max(220,720-level*46)){
+      if(fireAiBomb(p,st,inp,t,'teamBomb',earlyTarget))return;
+    }
     if(canForcedChainBombHere(p,level,earlyTarget)&&t-(p.aiLastBomb||0)>chainWait){
-      inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;st.plan=null;st.lastPlanAt=0;return;
+      if(fireAiBomb(p,st,inp,t,'chainBomb',earlyTarget))return;
     }
     let thinkWait=Math.max(90,260-level*16);if(!st.plan||t-(st.lastPlanAt||0)>thinkWait||st.stuckMs>700){st.plan=choosePlan(p,level,st);st.lastPlanAt=t;}
     let plan=st.plan||choosePlan(p,level,st),target=plan.target||chooseTarget(p);
@@ -4508,7 +4654,15 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(target)aimAt(p,target);
     if(shouldUseSpecial(p,level,target,t)){inp.dx=0;inp.dy=0;inp.specialSeq=(inp.specialSeq||0)+1;p.aiLastSpecial=t;st.lastSpecial=t;st.plan=null;return;}
     if(p.carryBombId&&aiHandleCarriedBomb(p,level,st,target,t,inp))return;
-    let wait=Math.max(320,900-level*62);if(plan.action==='bomb'&&t-(p.aiLastBomb||0)>wait){let kind=plan.reason&&plan.reason.indexOf('attack')>=0?'attack':'open';if(canBombHere(p,level,kind,target)||plan.escape){inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;/* AI CHAIN-BOMB NODEG FIX: ここで escapeNewBomb を固定すると、次のセルへ移動後も逃げ計画が残り、実質1個置きへデグレする。設置後は計画を破棄し、次フレームで emergencyEscape / canBombHere / reachableBombBreakPlan に再判断させる。 */st.plan=null;st.lastPlanAt=0;return;}}
+    let wait=Math.max(320,900-level*62);
+    if(plan.action==='bomb'&&t-(p.aiLastBomb||0)>wait){
+      let kind=isAttackBombReason(plan.reason)?'attack':'open';
+      let ok=canBombHere(p,level,kind,target);
+      if(!ok&&p&&p.isShadowEnemy&&kind==='attack'&&targetIsTeamMonster(target))ok=canBombPressureHere(p,level,target);
+      if(ok||plan.escape){
+        if(fireAiBomb(p,st,inp,t,plan.reason,target))return;
+      }
+    }
   }
 
   window.__aiOmakaseShouldIgnoreOwnFlame=function(p){
