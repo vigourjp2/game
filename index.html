@@ -4064,20 +4064,20 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V15-FORCED-CHAINBOMB-NODEG-20260608: 爆弾設置後に逃げ固定へ戻さず、危険度評価で連続設置と退避を切り替える。 */
+/* AI-OMAKASE-PLAYER-V16-BREAKROUTE-LITE-20260608: 爆弾設置後に逃げ固定へ戻さず、危険度評価で連続設置と退避を切り替える。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V15-FORCED-CHAINBOMB-NODEG-20260608';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V16-BREAKROUTE-LITE-20260608';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
   try{document.body.dataset.aiOmakaseBuild=AI_BUILD}catch(e){}
 
   const D4=[[1,0],[-1,0],[0,1],[0,-1]];
-  const AI_PERF={stamp:-1,bombCells:new Set(),gimmickCells:new Set(),danger:new Map(),enemy:new Map(),flameCell:new Map(),flamePoint:new Map()};
+  const AI_PERF={stamp:-1,bombCells:new Set(),gimmickCells:new Set(),danger:new Map(),enemy:new Map(),flameCell:new Map(),flamePoint:new Map(),route:new Map()};
   function aiPerfReset(){
     let st=(typeof lockFrame!=='undefined'?lockFrame:0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|'+((gimmicks&&gimmicks.length)||0)+'|'+((falling&&falling.length)||0)+'|'+((enemies&&enemies.length)||0)+'|'+((carts&&carts.length)||0);
     if(AI_PERF.stamp===st)return;
-    AI_PERF.stamp=st;AI_PERF.bombCells.clear();AI_PERF.gimmickCells.clear();AI_PERF.danger.clear();AI_PERF.enemy.clear();AI_PERF.flameCell.clear();AI_PERF.flamePoint.clear();
+    AI_PERF.stamp=st;AI_PERF.bombCells.clear();AI_PERF.gimmickCells.clear();AI_PERF.danger.clear();AI_PERF.enemy.clear();AI_PERF.flameCell.clear();AI_PERF.flamePoint.clear();AI_PERF.route.clear();
     for(const b of bombs||[]){if(!b||b.carriedBy)continue;let bc=bombCell(b);AI_PERF.bombCells.add(key(bc.c,bc.r));}
     for(const g of gimmicks||[]){if(!g)continue;let gc=g.c|0,gr=g.r|0,t=g.type||'';if(t==='oil'&&g.burn>0)AI_PERF.gimmickCells.add(key(gc,gr));if(AI_HARD_GIMMICKS[t])AI_PERF.gimmickCells.add(key(gc,gr));if(t==='zapper'){AI_PERF.gimmickCells.add(key(gc,gr));AI_PERF.gimmickCells.add(key(gc+1,gr));AI_PERF.gimmickCells.add(key(gc-1,gr));AI_PERF.gimmickCells.add(key(gc,gr+1));AI_PERF.gimmickCells.add(key(gc,gr-1));}}
     for(const cart of carts||[]){if(!cart)continue;let cc0=Number.isFinite(+cart.c)?(+cart.c|0):cell(cart.x||0,cart.y||0).c,rr0=Number.isFinite(+cart.r)?(+cart.r|0):cell(cart.x||0,cart.y||0).r;AI_PERF.gimmickCells.add(key(cc0,rr0));}
@@ -4252,19 +4252,39 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function reachableBombBreakPlan(p,level,target){
     if(!p||!p.alive||p.carryBombId)return null;
     if((p.placed||0)>=(p.bombMax||1))return null;
-    let range=p.range||2,pc=cell(p.x,p.y),map=bfs(p,level,{allowDanger:false,allowEnemyNear:false,maxSteps:58}),best=null,bs=Infinity;
+
+    /* AI BREAKROUTE LITE:
+       breakRoute中の重さは、候補セル全部に対して「爆弾設置後の逃げBFS」を毎回走らせていたのが主因。
+       先に軽い評価で候補を絞り、逃げBFSは上位候補だけに限定する。表示は残す。 */
+    aiPerfReset();
+    let range=p.range||2,pc=cell(p.x,p.y);
+    let tk=target?(target.c+','+target.r+','+(target.kind||'')):'none';
+    let ck='break|'+AI_PERF.stamp+'|'+(p.id||'')+'|'+level+'|'+pc.c+','+pc.r+'|'+(p.placed||0)+'/'+(p.bombMax||1)+'|'+range+'|'+tk;
+    if(AI_PERF.route.has(ck))return AI_PERF.route.get(ck);
+
+    let maxSteps=target?46:38;
+    let map=bfs(p,level,{allowDanger:false,allowEnemyNear:false,maxSteps}),cands=[];
     for(const n of map.values()){
       if(!inside(n.c,n.r)||!empty(n.c,n.r)||bombAt(n.c,n.r))continue;
+      if(n.dist>maxSteps)continue;
       let o=center(n.c,n.r),dg=cellDanger(n.c,n.r,level,p),ed=enemyDangerAtPoint(o.x,o.y,level,p);
       if(dg>=120||ed>=120)continue;
       let val=bombBreakValueFrom(n.c,n.r,target,range);
       if(val.soft<=0&&!val.targetHit)continue;
+      let pre=n.dist*14+dg*.18+ed*.18-val.soft*70+(val.targetHit?-110:0)+(target?Math.min(val.near,35)*3:0);
+      if(n.c===pc.c&&n.r===pc.r)pre-=18;
+      cands.push({n,val,pre});
+    }
+    cands.sort((a,b)=>a.pre-b.pre);
+    let limit=Math.min(cands.length,target?10:7),best=null,bs=Infinity;
+    for(let i=0;i<limit;i++){
+      let q=cands[i],n=q.n,val=q.val;
       let esc=escapeAfterBombFromCell(p,level,n.c,n.r,n.c,n.r,range);
       if(!esc)continue;
-      let score=n.dist*14+dg*.18+ed*.18-val.soft*70+(val.targetHit?-110:0)+(target?Math.min(val.near,35)*3:0);
-      if(n.c===pc.c&&n.r===pc.r)score-=18;
+      let score=q.pre+esc.dist*3;
       if(score<bs){bs=score;best={action:(n.dist===0?'bomb':'move'),node:n,escape:esc,reason:(val.targetHit?'blastRoute':'breakRoute'),target,score,soft:val.soft};}
     }
+    AI_PERF.route.set(ck,best);
     return best;
   }
   function vecToNode(p,node){if(!node)return{dx:0,dy:0};let s=node.first||node,o=center(s.c,s.r),dx=o.x-p.x,dy=o.y-p.y,l=Math.hypot(dx,dy);if(l<5)return{dx:0,dy:0};return{dx:dx/l,dy:dy/l}}
