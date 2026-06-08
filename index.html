@@ -1462,7 +1462,7 @@ function decorateEnemy(e,type){
   if(e.traits.warp||type==='warper')e.warpCd=1600+rnd(0,1200);
   if(e.traits.mirror||type==='mirror')e.mirror=true;
 }
-function spawnEnemy(type='grunt',opts={}){let p=emptyCell(true)||emptyCell(false);if(!p)return null;let [c,r]=p,o=cc(c,r);let e={id:'e'+(++enemySeq),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,invuln:opts.invuln===0?0:(opts.invuln||2200),color:'#ff6767',bossCooldown:0,bossHandCd:0,bossShieldCd:0};if(type!=='boss')decorateEnemy(e,type);if(type==='boss'){let build=opts.build||bossBuildForWave(wave);let bossHp=Math.max(10,Math.ceil((18+wave*5+Math.floor((build.score||1)*4))*.5));if(wave>=6)bossHp=Math.max(9,Math.ceil(bossHp*.62));e.hp=e.max=bossHp;e.rad=18;e.visualRad=34+Math.min(10,Math.floor(wave/9));e.speed=86+wave*2+(build.fast?32:0);if(wave>=6)e.speed=Math.min(e.speed,112+(build.fast?12:0));e.boss=true;e.wave=wave;e.noBodyHit=wave>=6;e.build=build;e.bossKind=build.kind;e.bossName=build.name;e.kick=!!build.kick;e.kickLevel=build.kick||0;e.handLevel=build.hand||0;e.shield=build.shield?2600:0;e.specialCd=900;e.phase=0;e.invuln=3200;e.color=build.color||(build.powerBomb?'#ff244d':(build.shield?'#45ff98':'#ff3d90'));e.type='boss';}
+function spawnEnemy(type='grunt',opts={}){let p=emptyCell(true)||emptyCell(false);if(!p)return null;let [c,r]=p,o=cc(c,r);let e={id:'e'+(++enemySeq),type,c,r,x:o.x,y:o.y,vx:0,vy:0,rad:15,alive:true,hp:1,max:1,speed:68+wave*5,dir:DIRS[rnd(0,3)],think:0,invuln:opts.invuln===0?0:(opts.invuln||2200),color:'#ff6767',bossCooldown:0,bossHandCd:0,bossShieldCd:0};if(type!=='boss')decorateEnemy(e,type);if(type==='boss'){let build=opts.build||bossBuildForWave(wave);let bossHp=Math.max(10,Math.ceil((18+wave*5+Math.floor((build.score||1)*4))*.5));if(wave>=6)bossHp=Math.max(9,Math.ceil(bossHp*.62));e.hp=e.max=bossHp;e.rad=18;e.visualRad=34+Math.min(10,Math.floor(wave/9));e.speed=86+wave*2+(build.fast?32:0);if(wave>=6)e.speed=Math.min(e.speed,112+(build.fast?12:0));e.boss=true;e.wave=wave;e.noBodyHit=wave>=6;e.build=build;e.bossKind=build.kind;e.bossName=build.name;e.kick=!!build.kick;e.kickLevel=build.kick||0;e.handLevel=build.hand||0;e.shield=build.shield?2600:0;e.specialCd=(build.kind==='freezer'?9000:900);e.phase=0;e.invuln=3200;e.color=build.color||(build.powerBomb?'#ff244d':(build.shield?'#45ff98':'#ff3d90'));e.type='boss';}
   enemies.push(e);return e}
 function makeNormalWaveQueue(){let n=3+Math.floor(wave*1.35),q=[],ch=Math.floor((wave-1)/3);for(let i=0;i<n;i++)q.push(enemyTypeForSlot(i,ch));return q.sort((a,b)=>({grunt:1,fast:2,hopper:3,flyer:3,currenter:3,spider:4,zapper:5,warper:5,mirror:5,bomber:6,shield:7,drill:8,gearling:8,tank:9,coreling:10}[a]||4)-({grunt:1,fast:2,hopper:3,flyer:3,currenter:3,spider:4,zapper:5,warper:5,mirror:5,bomber:6,shield:7,drill:8,gearling:8,tank:9,coreling:10}[b]||4));}
 function spawnNextQueuedEnemy(){if(!waveQueue.length||enemies.filter(e=>e.alive).length>=3)return false;let type=waveQueue.shift();let e=spawnEnemy(type,{invuln:2600});if(e){msg='ENEMY SPAWN - 点滅中は接触なし / 攻撃は通る';return true}waveQueue.unshift(type);return false}
@@ -2597,7 +2597,7 @@ function updateBossAction(e,dt){
   return true;
 }
 function bossAddGimmick(type,c,r,extra={}){if(!inside(c,r)||grid[r][c]!==EMPTY)return false;if(gimmicks.some(g=>g.c===c&&g.r===r&&g.type===type))return false;gimmicks.push({type,c,r,t:0,on:true,cool:0,dx:extra.dx||0,dy:extra.dy||0,burn:extra.burn||0,down:false,spin:0});return true}
-function bossDropAt(c,r,label='BOSS DROP'){if(!inside(c,r)||grid[r][c]!==EMPTY)return false;if(falling.some(f=>f.c===c&&f.r===r))return false;let o=cc(c,r);falling.push({id:'bossdrop_'+(++dropSeq)+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:700,warn:700,totalWarn:700});msg=label;return true}
+function bossDropAt(c,r,label='BOSS DROP',warnMs=700){if(!inside(c,r)||grid[r][c]!==EMPTY)return false;if(falling.some(f=>f.c===c&&f.r===r))return false;warnMs=Math.max(700,warnMs||700);let o=cc(c,r);falling.push({id:'bossdrop_'+(++dropSeq)+'_'+c+'_'+r,c,r,x:o.x,y:OY-96,phase:'warn',t:warnMs,warn:warnMs,totalWarn:warnMs});msg=label;return true}
 function bossSpecialNow(e,target){
   if(!e||!e.alive||!e.boss||!target)return false;
   const b=e.build||{},kind=b.kind||'',tc0=tc(target.x,target.y),ec=tc(e.x,e.y);
@@ -2609,8 +2609,8 @@ function bossSpecialNow(e,target){
     gimmicks.filter(g=>g.type==='oil'&&Math.abs(g.c-ec.c)<=3&&Math.abs(g.r-ec.r)<=3).forEach(g=>g.burn=2600);msg='溶鉱炉ゴーレム 炎噴射';shake=Math.max(shake,5);return true;
   }
   if(kind==='freezer'){
-    [[0,0],[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>bossDropAt(tc0.c+dx,tc0.r+dy,'フリーザーコア 氷柱生成'));
-    bossAddGimmick('ice',tc0.c,tc0.r);return true;
+    [[0,0],[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>bossDropAt(tc0.c+dx,tc0.r+dy,'フリーザーコア 最終氷柱',1600));
+    bossAddGimmick('ice',tc0.c,tc0.r);shake=Math.max(shake,7);return true;
   }
   if(kind==='conveyorBoss'){
     for(let i=-2;i<=2;i++)bossAddGimmick('conveyor',tc0.c+i,tc0.r,{dx:i<0?-1:1});
@@ -2645,8 +2645,19 @@ function bossSpecialNow(e,target){
   }
   return false;
 }
+function bossSpecialReady(e,target){
+  if(!e||!e.alive||!e.boss||!target)return false;
+  let b=e.build||{},kind=b.kind||'';
+  if(kind==='freezer')return e.hp<=Math.max(1,Math.floor(e.max*.45));
+  return true;
+}
+function bossSpecialCooldown(e){
+  let b=e&&e.build||{},kind=b.kind||'';
+  if(kind==='freezer')return 15000;
+  return Math.max(1350,3300-(b.score||3)*120);
+}
 function bossSpecial(e,target){
-  if(!e||!e.alive||!e.boss||!target||e.bossAction)return false;
+  if(!e||!e.alive||!e.boss||!target||e.bossAction||!bossSpecialReady(e,target))return false;
   let b=e.build||{},kind=b.kind||'';
   if(kind==='train'){
     let dir=target.x>=e.x?1:-1,tx=e.x+dir*T*3,ty=e.y;
@@ -2661,7 +2672,7 @@ function updateBossAI(e,dt,target){
   if(updateBossAction(e,dt))return;
   if(e.actionLock>0){e.actionLock=Math.max(0,e.actionLock-dt*1000);e.vx=0;e.vy=0;e.dir=[0,0];return;}
   if(bossShieldIfPinch(e))return;
-  if(target&&e.specialCd<=0){if(bossSpecial(e,target)){e.specialCd=Math.max(1350,3300-(build.score||3)*120);return;}}
+  if(target&&e.specialCd<=0){if(bossSpecial(e,target)){e.specialCd=bossSpecialCooldown(e);return;}}
   if(target&&build.hand&&e.bossHandCd<=0&&(Math.hypot(target.x-e.x,target.y-e.y)>120||e.hp<e.max*.5)){if(bossHandLeap(e,target))return;}
   if(build.bomb&&e.bossCooldown<=0&&target&&Math.hypot(target.x-e.x,target.y-e.y)<300){if(bossPlaceBomb(e,target))return;}
 }
