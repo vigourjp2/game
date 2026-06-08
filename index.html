@@ -4064,15 +4064,24 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V12-20260608: 到達可能な安全セルを全候補評価し、爆弾設置後に逃げ道がある位置だけで開通爆破する。 */
+/* AI-OMAKASE-PLAYER-V15-FORCED-CHAINBOMB-NODEG-20260608: 爆弾設置後に逃げ固定へ戻さず、危険度評価で連続設置と退避を切り替える。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V12-20260608';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V15-FORCED-CHAINBOMB-NODEG-20260608';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
   try{document.body.dataset.aiOmakaseBuild=AI_BUILD}catch(e){}
 
   const D4=[[1,0],[-1,0],[0,1],[0,-1]];
+  const AI_PERF={stamp:-1,bombCells:new Set(),gimmickCells:new Set(),danger:new Map(),enemy:new Map(),flameCell:new Map(),flamePoint:new Map()};
+  function aiPerfReset(){
+    let st=(typeof lockFrame!=='undefined'?lockFrame:0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|'+((gimmicks&&gimmicks.length)||0)+'|'+((falling&&falling.length)||0)+'|'+((enemies&&enemies.length)||0)+'|'+((carts&&carts.length)||0);
+    if(AI_PERF.stamp===st)return;
+    AI_PERF.stamp=st;AI_PERF.bombCells.clear();AI_PERF.gimmickCells.clear();AI_PERF.danger.clear();AI_PERF.enemy.clear();AI_PERF.flameCell.clear();AI_PERF.flamePoint.clear();
+    for(const b of bombs||[]){if(!b||b.carriedBy)continue;let bc=bombCell(b);AI_PERF.bombCells.add(key(bc.c,bc.r));}
+    for(const g of gimmicks||[]){if(!g)continue;let gc=g.c|0,gr=g.r|0,t=g.type||'';if(t==='oil'&&g.burn>0)AI_PERF.gimmickCells.add(key(gc,gr));if(AI_HARD_GIMMICKS[t])AI_PERF.gimmickCells.add(key(gc,gr));if(t==='zapper'){AI_PERF.gimmickCells.add(key(gc,gr));AI_PERF.gimmickCells.add(key(gc+1,gr));AI_PERF.gimmickCells.add(key(gc-1,gr));AI_PERF.gimmickCells.add(key(gc,gr+1));AI_PERF.gimmickCells.add(key(gc,gr-1));}}
+    for(const cart of carts||[]){if(!cart)continue;let cc0=Number.isFinite(+cart.c)?(+cart.c|0):cell(cart.x||0,cart.y||0).c,rr0=Number.isFinite(+cart.r)?(+cart.r|0):cell(cart.x||0,cart.y||0).r;AI_PERF.gimmickCells.add(key(cc0,rr0));}
+  }
   function tnow(){return (typeof performance!=='undefined'&&performance.now)?performance.now():now()}
   function lim(v,a,b){return Math.max(a,Math.min(b,v))}
   function key(c,r){return c+','+r}
@@ -4107,23 +4116,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function gridAt(c,r){return inside(c,r)&&grid&&grid[r]?grid[r][c]:HARD}
   function empty(c,r){return inside(c,r)&&gridAt(c,r)===EMPTY}
   function bombCell(b){if(!b)return{c:-99,r:-99};if(Number.isFinite(b.c)&&Number.isFinite(b.r))return{c:b.c,r:b.r};return cell(b.x||0,b.y||0)}
-  function bombAt(c,r){return (bombs||[]).some(b=>b&&!b.carriedBy&&bombCell(b).c===c&&bombCell(b).r===r)}
+  function bombAt(c,r){aiPerfReset();return AI_PERF.bombCells.has(key(c,r))}
   const AI_HARD_GIMMICKS={fire:1,electric:1,zapper:1,press:1,gear:1};
   function aiDamageGimmickAt(c,r){
     if(!inside(c,r))return true;
-    for(const g of gimmicks||[]){
-      if(!g)continue;
-      let gc=g.c|0,gr=g.r|0,t=g.type||'';
-      if(t==='oil'&&g.burn>0&&gc===c&&gr===r)return true;
-      if(AI_HARD_GIMMICKS[t]&&gc===c&&gr===r)return true;
-      if(t==='zapper'&&Math.abs(gc-c)+Math.abs(gr-r)<=1)return true;
-    }
-    for(const cart of carts||[]){
-      if(!cart)continue;
-      let cc0=Number.isFinite(+cart.c)?(+cart.c|0):cell(cart.x||0,cart.y||0).c,rr0=Number.isFinite(+cart.r)?(+cart.r|0):cell(cart.x||0,cart.y||0).r;
-      if(cc0===c&&rr0===r)return true;
-    }
-    return false;
+    aiPerfReset();
+    return AI_PERF.gimmickCells.has(key(c,r));
   }
   function passable(p,c,r,allowStart){if(!empty(c,r))return false;if(!allowStart&&aiDamageGimmickAt(c,r))return false;if(!allowStart&&bombAt(c,r))return false;let o=center(c,r);try{return canAt(p,o.x,o.y,p&&p.id)!==false}catch(e){return true}}
   function teamKey(p){return (p&&(p.teamKey||p.teamChoice||p.teamBadge||p.name))||''}
@@ -4134,6 +4132,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function blastHits(bc,br,c,r,range){range=Math.max(1,range|0);if(bc===c&&Math.abs(br-r)<=range)return lineClearForBlast(bc,br,c,r);if(br===r&&Math.abs(bc-c)<=range)return lineClearForBlast(bc,br,c,r);return false}
 
   function enemyDangerAtPoint(x,y,level,me){
+    aiPerfReset();
+    let ck=(me&&me.id||'')+'|'+(level|0)+'|'+(Math.round(x/8)|0)+'|'+(Math.round(y/8)|0);
+    if(AI_PERF.enemy.has(ck))return AI_PERF.enemy.get(ck);
     let danger=0;
     for(const e of enemies||[]){
       if(!e||!e.alive)continue;
@@ -4146,10 +4147,13 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       if(e.bossAction&&e.bossAction.warnCells&&e.bossAction.warnCells.some(q=>q&&cell(x,y).c===q.c&&cell(x,y).r===q.r))danger+=800;
     }
     for(const q of Object.values(players||{})){if(q&&q.alive&&hostilePlayer(me,q)){let d=Math.hypot((q.x||x)-x,(q.y||y)-y);if(d<T*.75)danger+=360;else if(d<T*1.25)danger+=90;}}
-    return danger;
+    AI_PERF.enemy.set(ck,danger);return danger;
   }
   function flameTLeft(f){return Number.isFinite(+f.t)?+f.t:560}
   function flameCellDanger(c,r,me){
+    aiPerfReset();
+    let ck=(me&&me.id||'')+'|'+c+'|'+r;
+    if(AI_PERF.flameCell.has(ck))return AI_PERF.flameCell.get(ck);
     let danger=0;
     for(const f of flames||[]){
       if(!f)continue;
@@ -4158,9 +4162,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       if(md===0)danger+=own?24000:18000;
       else if(md===1&&life>110)danger+=own?1350:900;
     }
-    return danger;
+    AI_PERF.flameCell.set(ck,danger);return danger;
   }
   function flamePointDanger(x,y,me){
+    aiPerfReset();
+    let ck=(me&&me.id||'')+'|'+(Math.round(x/8)|0)+'|'+(Math.round(y/8)|0);
+    if(AI_PERF.flamePoint.has(ck))return AI_PERF.flamePoint.get(ck);
     let danger=0;
     for(const f of flames||[]){
       if(!f)continue;
@@ -4168,31 +4175,44 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       if(d<T*.68)danger+=own?26000:20000;
       else if(d<T*.95&&life>80)danger+=own?1800:1200;
     }
-    return danger;
+    AI_PERF.flamePoint.set(ck,danger);return danger;
   }
   function cellDanger(c,r,level,me,virtualBomb){
     if(!inside(c,r))return 999999;
+    aiPerfReset();
+    let vk=virtualBomb?('|vb:'+virtualBomb.c+','+virtualBomb.r+','+(virtualBomb.range||0)+','+(virtualBomb.timer||0)) : '';
+    let ck=(me&&me.id||'')+'|'+(level|0)+'|'+c+','+r+vk;
+    if(AI_PERF.danger.has(ck))return AI_PERF.danger.get(ck);
     let o=center(c,r),danger=enemyDangerAtPoint(o.x,o.y,level,me)+flameCellDanger(c,r,me);
     if(aiDamageGimmickAt(c,r))danger+=999999;
     for(const f of falling||[])if(f&&f.c===c&&f.r===r)danger+=f.phase==='warn'?80:10000;
-    let all=(bombs||[]).slice();if(virtualBomb)all.push(virtualBomb);
-    for(const b of all){
+    for(const b of bombs||[]){
       if(!b||b.carriedBy||b.fusePaused||b.armed===false)continue;
       let bc=bombCell(b),timer=Number.isFinite(b.timer)?b.timer:2800,range=b.range||2,own=me&&b.owner===me.id;
       if(bc.c===c&&bc.r===r)danger+=own?520:240;
       if(blastHits(bc.c,bc.r,c,r,range)){
-        if(own)danger+=420;
-        if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=260;
+        /* AI CHAIN-BOMB FIX: 自分の爆弾は「残り時間が十分ある間」だけ低危険扱いにし、
+           追加設置・移動計画を潰さない。短時間になったら従来どおり強制退避級にする。 */
+        if(own){
+          if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=45;
+        }else{
+          if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=260;
+        }
       }
       if(b.homingBomb&&b.homingAwake&&Math.hypot((b.x||o.x)-o.x,(b.y||o.y)-o.y)<T*1.25)danger+=1200;
     }
-    return danger;
+    if(virtualBomb){
+      const b=virtualBomb;let bc=bombCell(b),timer=Number.isFinite(b.timer)?b.timer:2800,range=b.range||2,own=me&&b.owner===me.id;
+      if(bc.c===c&&bc.r===r)danger+=own?520:240;
+      if(blastHits(bc.c,bc.r,c,r,range)){if(own)danger+=420;if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=260;}
+    }
+    AI_PERF.danger.set(ck,danger);return danger;
   }
   function safeCell(p,c,r,level,virtualBomb){return passable(p,c,r,false)&&cellDanger(c,r,level,p,virtualBomb)<160}
 
   function bfs(p,level,opt){
     opt=opt||{};let st=cell(p.x,p.y),root={c:st.c,r:st.r,dist:0,first:null,prev:null},q=[root],map=new Map([[key(st.c,st.r),root]]),vb=opt.virtualBomb||null,max=opt.maxSteps||80;
-    while(q.length){let n=q.shift();if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!passable(p,c,r,c===st.c&&r===st.r))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
+    for(let qi=0;qi<q.length;qi++){let n=q[qi];if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!passable(p,c,r,c===st.c&&r===st.r))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
     return map;
   }
   function nearestByPath(p,targets,level,opt){
@@ -4203,11 +4223,11 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
   function bfsFromCell(p,level,sc,sr,opt){
     opt=opt||{};let root={c:sc,r:sr,dist:0,first:null,prev:null},q=[root],map=new Map([[key(sc,sr),root]]),vb=opt.virtualBomb||null,max=opt.maxSteps||80;
-    while(q.length){let n=q.shift();if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!passable(p,c,r,false))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
+    for(let qi=0;qi<q.length;qi++){let n=q[qi];if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!passable(p,c,r,false))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
     return map;
   }
   function escapeAfterBombFromCell(p,level,sc,sr,bc,br,range){
-    let vb={c:bc,r:br,range:range||p.range||2,owner:p.id,timer:2600},map=bfsFromCell(p,level,sc,sr,{allowDanger:true,allowEnemyNear:false,virtualBomb:vb,maxSteps:70}),best=null,bs=Infinity;
+    let vb={c:bc,r:br,range:range||p.range||2,owner:p.id,timer:2600},map=bfsFromCell(p,level,sc,sr,{allowDanger:true,allowEnemyNear:false,virtualBomb:vb,maxSteps:54}),best=null,bs=Infinity;
     for(const n of map.values()){
       if(n.dist<1)continue;
       if(blastHits(bc,br,n.c,n.r,range))continue;
@@ -4232,7 +4252,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function reachableBombBreakPlan(p,level,target){
     if(!p||!p.alive||p.carryBombId)return null;
     if((p.placed||0)>=(p.bombMax||1))return null;
-    let range=p.range||2,pc=cell(p.x,p.y),map=bfs(p,level,{allowDanger:false,allowEnemyNear:false,maxSteps:85}),best=null,bs=Infinity;
+    let range=p.range||2,pc=cell(p.x,p.y),map=bfs(p,level,{allowDanger:false,allowEnemyNear:false,maxSteps:58}),best=null,bs=Infinity;
     for(const n of map.values()){
       if(!inside(n.c,n.r)||!empty(n.c,n.r)||bombAt(n.c,n.r))continue;
       let o=center(n.c,n.r),dg=cellDanger(n.c,n.r,level,p),ed=enemyDangerAtPoint(o.x,o.y,level,p);
@@ -4275,15 +4295,33 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return out;
   }
   function escapeAfterBomb(p,level,bc,br,range){
-    let vb={c:bc,r:br,range:range||p.range||2,owner:p.id,timer:2600},map=bfs(p,level,{allowDanger:true,allowEnemyNear:false,virtualBomb:vb,maxSteps:60}),best=null,bs=Infinity;
+    let vb={c:bc,r:br,range:range||p.range||2,owner:p.id,timer:2600},map=bfs(p,level,{allowDanger:true,allowEnemyNear:false,virtualBomb:vb,maxSteps:50}),best=null,bs=Infinity;
     for(const n of map.values()){if(n.dist<1)continue;if(blastHits(bc,br,n.c,n.r,range))continue;let dg=cellDanger(n.c,n.r,level,p,vb);if(dg>=150)continue;let s=n.dist*10+dg*.2+enemyDangerAtPoint(center(n.c,n.r).x,center(n.c,n.r).y,level,p)*.1;if(s<bs){bs=s;best=n}}
     return best;
   }
   function canBombHere(p,level,kind,target){
     if(!p||!p.alive||p.carryBombId)return false;if((p.placed||0)>=(p.bombMax||1))return false;let c=cell(p.x,p.y);if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;if(cellDanger(c.c,c.r,level,p)>=120)return false;if(enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;let esc=escapeAfterBomb(p,level,c.c,c.r,p.range||2);if(!esc)return false;if(kind==='attack'&&target)return blastHits(c.c,c.r,target.c,target.r,p.range||2);if(kind==='open')return openPlantCells(p,target,level).some(o=>o.c===c.c&&o.r===c.r);return false;
   }
+  function ownBombMinTimer(p){
+    let m=999999;if(!p)return m;
+    for(const b of bombs||[])if(b&&b.owner===p.id&&!b.carriedBy&&!b.fusePaused&&b.armed!==false)m=Math.min(m,Number.isFinite(+b.timer)?+b.timer:2800);
+    return m;
+  }
+  function canForcedChainBombHere(p,level,target){
+    if(!p||!p.alive||p.carryBombId)return false;
+    if((p.placed||0)<=0||(p.placed||0)>=(p.bombMax||1))return false;
+    let c=cell(p.x,p.y),range=p.range||2;
+    if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;
+    if(ownBombMinTimer(p)<1250)return false;
+    let dg=cellDanger(c.c,c.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p);
+    if(dg>=520||ed>=160)return false;
+    let val=bombBreakValueFrom(c.c,c.r,target,range);
+    if(val.soft<=0&&!val.targetHit)return false;
+    let esc=escapeAfterBomb(p,level,c.c,c.r,range);
+    return !!esc;
+  }
   function safestNode(p,level,target){
-    let map=bfs(p,level,{allowDanger:true,allowEnemyNear:true,maxSteps:70}),best=null,bs=Infinity;
+    let map=bfs(p,level,{allowDanger:true,allowEnemyNear:true,maxSteps:54}),best=null,bs=Infinity;
     for(const n of map.values()){
       if(n.dist<1)continue;
       let o=center(n.c,n.r),ed=enemyDangerAtPoint(o.x,o.y,level,p),fd=flameCellDanger(n.c,n.r,p)+flamePointDanger(o.x,o.y,p),dg=cellDanger(n.c,n.r,level,p);
@@ -4299,7 +4337,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function choosePlan(p,level,st){
     let target=chooseTarget(p),em=emergencyEscape(p,level,target);if(em)return em;
     let c=cell(p.x,p.y),own=(bombs||[]).filter(b=>b&&b.owner===p.id&&!b.carriedBy&&!b.fusePaused&&b.armed!==false).sort((a,b)=>(a.timer||9999)-(b.timer||9999))[0];
-    if(own){let bc=bombCell(own),esc=escapeAfterBomb(p,level,bc.c,bc.r,own.range||p.range||2);if(esc)return{action:'move',node:esc,reason:'escapeOwnBomb',target};let sn=safestNode(p,level,target);return sn?{action:'move',node:sn,reason:'safeOwnBomb',target}:{action:'idle',reason:'waitOwnBomb',target};}
+    /* AI CHAIN-BOMB FIX: 自分の爆弾があるだけで逃げ専用にしない。
+       退避は emergencyEscape と cellDanger の残り時間評価で判断する。 */
     let rev=nearestByPath(p,reviveTargets(p),level,{allowDanger:false,allowEnemyNear:false});if(rev)return{action:'move',node:rev.node,reason:'revive',target:rev};
     let gt=goalTarget();if(gt&&(!target||(enemies||[]).filter(e=>e&&e.alive).length===0)){let g=nearestByPath(p,[gt],level,{allowDanger:false,allowEnemyNear:false});if(g)return{action:'move',node:g.node,reason:'goal',target:g};}
     let items=itemTargets(p,level),it=nearestByPath(p,items,level,{allowDanger:false,allowEnemyNear:false});if(it&&it.node.dist<=5)return{action:'move',node:it.node,reason:it.kind,target:it};
@@ -4318,8 +4357,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function safeMoveVector(p,mv,level,target){
     let dx=mv.dx||0,dy=mv.dy||0,step=Math.max(18,(p.speed||170)*LOCK_DT*1.65);
     if(Math.hypot(dx,dy)<.05)return{dx:0,dy:0};
-    for(let i=1;i<=4;i++){
-      let nx=p.x+dx*step*(i/4),ny=p.y+dy*step*(i/4),ccell=cell(nx,ny),fd=flamePointDanger(nx,ny,p)+flameCellDanger(ccell.c,ccell.r,p),ed=enemyDangerAtPoint(nx,ny,level,p),dg=cellDanger(ccell.c,ccell.r,level,p);
+    for(let i=1;i<=2;i++){
+      let nx=p.x+dx*step*(i/2),ny=p.y+dy*step*(i/2),ccell=cell(nx,ny),fd=flamePointDanger(nx,ny,p)+flameCellDanger(ccell.c,ccell.r,p),ed=enemyDangerAtPoint(nx,ny,level,p),dg=cellDanger(ccell.c,ccell.r,level,p);
       if(aiDamageGimmickAt(ccell.c,ccell.r)||fd>=900||ed>=180||dg>=400){let s=safestNode(p,level,target);return s?vecToNode(p,s):{dx:0,dy:0};}
     }
     return mv;
@@ -4344,7 +4383,11 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let hereCell=cell(p.x,p.y),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p),hereGimmick=aiDamageGimmickAt(hereCell.c,hereCell.r);
     if(hereGimmick||hereFlame>=900){st.plan=null;let esc=safestNode(p,level,chooseTarget(p));let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
     let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
-    let thinkWait=Math.max(40,180-level*14);if(!st.plan||t-(st.lastPlanAt||0)>thinkWait||st.stuckMs>700){st.plan=choosePlan(p,level,st);st.lastPlanAt=t;}
+    let earlyTarget=chooseTarget(p),chainWait=Math.max(190,520-level*42);
+    if(canForcedChainBombHere(p,level,earlyTarget)&&t-(p.aiLastBomb||0)>chainWait){
+      inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;st.plan=null;st.lastPlanAt=0;return;
+    }
+    let thinkWait=Math.max(90,260-level*16);if(!st.plan||t-(st.lastPlanAt||0)>thinkWait||st.stuckMs>700){st.plan=choosePlan(p,level,st);st.lastPlanAt=t;}
     let plan=st.plan||choosePlan(p,level,st),target=plan.target||chooseTarget(p);
     if(plan&&plan.node&&(aiDamageGimmickAt(plan.node.c,plan.node.r)||flameCellDanger(plan.node.c,plan.node.r,p)>=900||cellDanger(plan.node.c,plan.node.r,level,p)>=9000)){st.plan=choosePlan(p,level,st);plan=st.plan||plan;target=plan.target||target;}
     let mv=plan.action==='move'?vecToNode(p,plan.node):{dx:0,dy:0};
@@ -4355,7 +4398,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(target)aimAt(p,target);
     if(shouldUseSpecial(p,level,target,t)){inp.dx=0;inp.dy=0;inp.specialSeq=(inp.specialSeq||0)+1;p.aiLastSpecial=t;st.lastSpecial=t;st.plan=null;return;}
     if(p.carryBombId&&t-(p.aiLastHand||0)>Math.max(420,1100-level*60)&&target&&enemyDangerAtPoint(p.x,p.y,level,p)<120){aimAt(p,target);inp.handSeq=(inp.handSeq||0)+1;p.aiLastHand=t;st.lastHand=t;return;}
-    let wait=Math.max(320,900-level*62);if(plan.action==='bomb'&&t-(p.aiLastBomb||0)>wait){let kind=plan.reason&&plan.reason.indexOf('attack')>=0?'attack':'open';if(canBombHere(p,level,kind,target)||plan.escape){inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;let pc2=cell(p.x,p.y);st.plan={action:'move',node:plan.escape||escapeAfterBomb(p,level,pc2.c,pc2.r,p.range||2),reason:'escapeNewBomb',target};return;}}
+    let wait=Math.max(320,900-level*62);if(plan.action==='bomb'&&t-(p.aiLastBomb||0)>wait){let kind=plan.reason&&plan.reason.indexOf('attack')>=0?'attack':'open';if(canBombHere(p,level,kind,target)||plan.escape){inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;/* AI CHAIN-BOMB NODEG FIX: ここで escapeNewBomb を固定すると、次のセルへ移動後も逃げ計画が残り、実質1個置きへデグレする。設置後は計画を破棄し、次フレームで emergencyEscape / canBombHere / reachableBombBreakPlan に再判断させる。 */st.plan=null;st.lastPlanAt=0;return;}}
   }
 
   window.__aiOmakaseShouldIgnoreOwnFlame=function(p){
