@@ -4142,7 +4142,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   const AI_FORCED_ESCAPE_HOLD_MS=900;
   const AI_FORCED_ESCAPE_REPLAN_MS=360;
   const AI_FORCED_ESCAPE_STUCK_REPLAN_MS=520;
-  const AI_PERF={stamp:-1,bombCells:new Set(),gimmickCells:new Set(),danger:new Map(),enemy:new Map(),flameCell:new Map(),flamePoint:new Map(),route:new Map()};
+  const AI_PERF={stamp:-1,bombCells:new Set(),gimmickCells:new Set(),danger:new Map(),enemy:new Map(),flameCell:new Map(),flamePoint:new Map(),route:new Map(),bombChain:new Map()};
   const AI_RECENT_FLAME_GIMMICK_MS=650;
   const AI_RECENT_FLAME_CELLS=new Map();
   function aiNowMs(){return (typeof performance!=='undefined'&&performance.now)?performance.now():now()}
@@ -4166,7 +4166,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function aiPerfReset(){
     let st=(typeof lockFrame!=='undefined'?lockFrame:0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|'+((gimmicks&&gimmicks.length)||0)+'|'+((falling&&falling.length)||0)+'|'+((enemies&&enemies.length)||0)+'|'+((carts&&carts.length)||0);
     if(AI_PERF.stamp===st)return;
-    AI_PERF.stamp=st;AI_PERF.bombCells.clear();AI_PERF.gimmickCells.clear();AI_PERF.danger.clear();AI_PERF.enemy.clear();AI_PERF.flameCell.clear();AI_PERF.flamePoint.clear();AI_PERF.route.clear();
+    AI_PERF.stamp=st;AI_PERF.bombCells.clear();AI_PERF.gimmickCells.clear();AI_PERF.danger.clear();AI_PERF.enemy.clear();AI_PERF.flameCell.clear();AI_PERF.flamePoint.clear();AI_PERF.route.clear();AI_PERF.bombChain.clear();
     for(const b of bombs||[]){if(!b||b.carriedBy)continue;let bc=bombCell(b);AI_PERF.bombCells.add(key(bc.c,bc.r));}
     for(const g of gimmicks||[]){if(!g)continue;let gc=g.c|0,gr=g.r|0,t=g.type||'';if(t==='oil'&&g.burn>0)AI_PERF.gimmickCells.add(key(gc,gr));if(AI_HARD_GIMMICKS[t])AI_PERF.gimmickCells.add(key(gc,gr));if(t==='zapper'){AI_PERF.gimmickCells.add(key(gc,gr));AI_PERF.gimmickCells.add(key(gc+1,gr));AI_PERF.gimmickCells.add(key(gc-1,gr));AI_PERF.gimmickCells.add(key(gc,gr+1));AI_PERF.gimmickCells.add(key(gc,gr-1));}}
     aiMarkRecentFlames();
@@ -4207,6 +4207,36 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function empty(c,r){return inside(c,r)&&gridAt(c,r)===EMPTY}
   function bombCell(b){if(!b)return{c:-99,r:-99};if(Number.isFinite(b.c)&&Number.isFinite(b.r))return{c:b.c,r:b.r};return cell(b.x||0,b.y||0)}
   function bombAt(c,r){aiPerfReset();return AI_PERF.bombCells.has(key(c,r))}
+  function aiVirtualBombKey(virtualBomb){return virtualBomb?('|vb:'+virtualBomb.c+','+virtualBomb.r+','+(virtualBomb.range||0)+','+(virtualBomb.timer||0)+','+(virtualBomb.owner||'')) : ''}
+  function aiActiveBombSources(virtualBomb){
+    aiPerfReset();
+    const vk=aiVirtualBombKey(virtualBomb),ck='chain|'+AI_PERF.stamp+vk;
+    if(AI_PERF.bombChain.has(ck))return AI_PERF.bombChain.get(ck);
+    const arr=[];
+    for(const b of bombs||[]){
+      if(!b||b.carriedBy||b.fusePaused||b.armed===false)continue;
+      let bc=bombCell(b),timer=Number.isFinite(+b.timer)?+b.timer:2800,range=b.range||2;
+      arr.push({b,bc,timer,eff:timer,range,virtual:false,chain:false});
+    }
+    if(virtualBomb){
+      let b=virtualBomb,bc=bombCell(b),timer=Number.isFinite(+b.timer)?+b.timer:2800,range=b.range||2;
+      arr.push({b,bc,timer,eff:timer,range,virtual:true,chain:false});
+    }
+    for(let loop=0;loop<arr.length;loop++){
+      let changed=false;
+      for(let i=0;i<arr.length;i++){
+        const src=arr[i];
+        for(let j=0;j<arr.length;j++){
+          if(i===j)continue;
+          const dst=arr[j];
+          if(src.eff>=dst.eff)continue;
+          if(blastHits(src.bc.c,src.bc.r,dst.bc.c,dst.bc.r,src.range)){dst.eff=src.eff;dst.chain=true;changed=true;}
+        }
+      }
+      if(!changed)break;
+    }
+    AI_PERF.bombChain.set(ck,arr);return arr;
+  }
   const AI_HARD_GIMMICKS={fire:1,electric:1,zapper:1,press:1,gear:1};
   function aiDamageGimmickAt(c,r,me){
     if(!inside(c,r))return true;
@@ -4299,31 +4329,25 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function cellDanger(c,r,level,me,virtualBomb){
     if(!inside(c,r))return 999999;
     aiPerfReset();
-    let vk=virtualBomb?('|vb:'+virtualBomb.c+','+virtualBomb.r+','+(virtualBomb.range||0)+','+(virtualBomb.timer||0)) : '';
+    let vk=aiVirtualBombKey(virtualBomb);
     let ck=(me&&me.id||'')+'|'+(level|0)+'|'+c+','+r+vk;
     if(AI_PERF.danger.has(ck))return AI_PERF.danger.get(ck);
     let o=center(c,r),danger=enemyDangerAtPoint(o.x,o.y,level,me)+flameCellDanger(c,r,me);
     if(aiDamageGimmickAt(c,r,me))danger+=999999;
     for(const f of falling||[])if(f&&f.c===c&&f.r===r)danger+=f.phase==='warn'?80:10000;
-    for(const b of bombs||[]){
-      if(!b||b.carriedBy||b.fusePaused||b.armed===false)continue;
-      let bc=bombCell(b),timer=Number.isFinite(b.timer)?b.timer:2800,range=b.range||2,own=me&&b.owner===me.id;
+    for(const src of aiActiveBombSources(virtualBomb)){
+      const b=src.b,bc=src.bc,timer=src.eff,range=src.range||2,own=me&&b.owner===me.id;
       if(bc.c===c&&bc.r===r)danger+=own?520:240;
       if(blastHits(bc.c,bc.r,c,r,range)){
-        /* AI CHAIN-BOMB FIX: 自分の爆弾は「残り時間が十分ある間」だけ低危険扱いにし、
-           追加設置・移動計画を潰さない。短時間になったら従来どおり強制退避級にする。 */
+        /* AI CHAIN-BOMB PREDICT: 誘爆で前倒しされる爆弾は effective timer で危険判定する。
+           Aの爆風がBに届く場合、Bの爆風範囲もAの爆発時刻で燃える前提にする。 */
         if(own){
-          if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=45;
+          if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=src.chain?520:45;
         }else{
-          if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=260;
+          if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=src.chain?900:260;
         }
       }
       if(b.homingBomb&&b.homingAwake&&Math.hypot((b.x||o.x)-o.x,(b.y||o.y)-o.y)<T*1.25)danger+=1200;
-    }
-    if(virtualBomb){
-      const b=virtualBomb;let bc=bombCell(b),timer=Number.isFinite(b.timer)?b.timer:2800,range=b.range||2,own=me&&b.owner===me.id;
-      if(bc.c===c&&bc.r===r)danger+=own?520:240;
-      if(blastHits(bc.c,bc.r,c,r,range)){if(own)danger+=420;if(timer<900)danger+=13000;else if(timer<1700)danger+=1600;else danger+=260;}
     }
     AI_PERF.danger.set(ck,danger);return danger;
   }
