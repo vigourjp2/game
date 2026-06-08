@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V2-20260607',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V3-AI-HAND-20260608',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -4363,6 +4363,27 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     }
     return mv;
   }
+  function aiThrowDir(p,level,target){
+    // AI-HAND-NO-FREEZE: HANDで持った爆弾は必ず短時間で投げる。
+    // 敵がいない時や狭所で固まった時でも、前方の通れる方向へ逃がして保持ロックを作らない。
+    if(target){let dx=(target.x||p.x)-p.x,dy=(target.y||p.y)-p.y;if(Math.hypot(dx,dy)>1)return snapThrowDir(dx,dy);}
+    let dirs=[snapThrowDir(p.lastDirX||1,p.lastDirY||0),{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}],base=cell(p.x,p.y),best=null,bs=-Infinity;
+    dirs.forEach(d=>{if(!d||(!d.x&&!d.y))return;let c=base.c+d.x,r=base.r+d.y,score=0;if(inside(c,r)&&gridAt(c,r)===EMPTY)score+=1000;if(!aiDamageGimmickAt(c,r))score+=400;if(!bombAt(c,r))score+=120;score-=cellDanger(c,r,level,p)*.05;score-=enemyDangerAtPoint((center(c,r)||{}).x||p.x,(center(c,r)||{}).y||p.y,level,p)*.3;if(score>bs){bs=score;best=d;}});
+    return best||{x:1,y:0};
+  }
+  function aiHandleCarriedBomb(p,level,st,target,t,inp){
+    if(!p||!p.carryBombId)return false;
+    let b=(bombs||[]).find(q=>q&&q.id===p.carryBombId&&q.carriedBy===p.id);
+    if(!b){p.carryBombId=null;st.aiCarryStartedAt=0;return false;}
+    if(st.aiCarryBombId!==p.carryBombId){st.aiCarryBombId=p.carryBombId;st.aiCarryStartedAt=t;st.aiCarryThrowTryAt=0;st.plan=null;}
+    let held=t-(st.aiCarryStartedAt||t),danger=enemyDangerAtPoint(p.x,p.y,level,p)+flamePointDanger(p.x,p.y,p)+flameCellDanger(cell(p.x,p.y).c,cell(p.x,p.y).r,p);
+    let throwWait=Math.max(180,560-level*42);
+    if(held>throwWait||danger>=120||st.stuckMs>420){let d=aiThrowDir(p,level,target);p.forceThrowDir={x:d.x,y:d.y,t:now()};p.lastDirX=d.x;p.lastDirY=d.y;inp.dx=0;inp.dy=0;inp.handSeq=(inp.handSeq||0)+1;p.aiLastHand=t;st.lastHand=t;st.aiCarryThrowTryAt=t;st.plan=null;return true;}
+    if(target){aimAt(p,target);let mv=safeMoveVector(p,{dx:(target.x-p.x)/(target.dist||Math.hypot(target.x-p.x,target.y-p.y)||1),dy:(target.y-p.y)/(target.dist||Math.hypot(target.x-p.x,target.y-p.y)||1)},level,target);inp.dx=mv.dx||0;inp.dy=mv.dy||0;}
+    else{let s=safestNode(p,level,target),mv=s?vecToNode(p,s):{dx:0,dy:0};inp.dx=mv.dx||0;inp.dy=mv.dy||0;}
+    return true;
+  }
+
   function shouldUseSpecial(p,level,target,t){
     if(t-(p.aiLastSpecial||0)<Math.max(400,1200-level*60))return false;
     try{let it=specialItemUnderPlayer(p);if(it&&canBuySpecial(p,it))return true}catch(e){}
@@ -4383,7 +4404,10 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let hereCell=cell(p.x,p.y),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p),hereGimmick=aiDamageGimmickAt(hereCell.c,hereCell.r);
     if(hereGimmick||hereFlame>=900){st.plan=null;let esc=safestNode(p,level,chooseTarget(p));let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
     let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
-    let earlyTarget=chooseTarget(p),chainWait=Math.max(190,520-level*42);
+    let earlyTarget=chooseTarget(p);
+    if(aiHandleCarriedBomb(p,level,st,earlyTarget,t,inp))return;
+    else{st.aiCarryBombId=null;st.aiCarryStartedAt=0;}
+    let chainWait=Math.max(190,520-level*42);
     if(canForcedChainBombHere(p,level,earlyTarget)&&t-(p.aiLastBomb||0)>chainWait){
       inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;st.plan=null;st.lastPlanAt=0;return;
     }
@@ -4397,7 +4421,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(Math.hypot(inp.dx,inp.dy)>.12){let d=snapThrowDir(inp.dx,inp.dy);p.lastDirX=d.x;p.lastDirY=d.y;inp.lastDirX=d.x;inp.lastDirY=d.y;}
     if(target)aimAt(p,target);
     if(shouldUseSpecial(p,level,target,t)){inp.dx=0;inp.dy=0;inp.specialSeq=(inp.specialSeq||0)+1;p.aiLastSpecial=t;st.lastSpecial=t;st.plan=null;return;}
-    if(p.carryBombId&&t-(p.aiLastHand||0)>Math.max(420,1100-level*60)&&target&&enemyDangerAtPoint(p.x,p.y,level,p)<120){aimAt(p,target);inp.handSeq=(inp.handSeq||0)+1;p.aiLastHand=t;st.lastHand=t;return;}
+    if(p.carryBombId&&aiHandleCarriedBomb(p,level,st,target,t,inp))return;
     let wait=Math.max(320,900-level*62);if(plan.action==='bomb'&&t-(p.aiLastBomb||0)>wait){let kind=plan.reason&&plan.reason.indexOf('attack')>=0?'attack':'open';if(canBombHere(p,level,kind,target)||plan.escape){inp.dx=0;inp.dy=0;inp.bombSeq=(inp.bombSeq||0)+1;inp.seq=inp.bombSeq;p.aiLastBomb=t;st.lastBomb=t;/* AI CHAIN-BOMB NODEG FIX: ここで escapeNewBomb を固定すると、次のセルへ移動後も逃げ計画が残り、実質1個置きへデグレする。設置後は計画を破棄し、次フレームで emergencyEscape / canBombHere / reachableBombBreakPlan に再判断させる。 */st.plan=null;st.lastPlanAt=0;return;}}
   }
 
