@@ -4259,9 +4259,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V35-MISSION-BLOCKSAFE-20260610: 勝利目的ベース。生成ブロックで自分を閉じ込める行動を禁止し、antiIdleは最終手段に固定。 */
+/* AI-OMAKASE-PLAYER-V36-BLAST-NOSTEP-20260610: 勝利目的ベース。生成ブロックで自分を閉じ込める行動を禁止し、antiIdleは最終手段に固定。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V35-MISSION-BLOCKSAFE-20260610';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V36-BLAST-NOSTEP-20260610';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -5209,6 +5209,37 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return false;
   }
 
+  function aiAnyBombBlastThreatAt(c,r){
+    for(const b of bombs||[]){
+      if(!b||b.carriedBy||b.fusePaused||b.armed===false)continue;
+      let bc=bombCell(b),range=b.range||2;
+      if(blastHits(bc.c,bc.r,c,r,range))return true;
+    }
+    return false;
+  }
+  function aiImmediateFlameOrBlastAt(p,level,c,r,x,y){
+    if(!inside(c,r))return true;
+    let px=Number.isFinite(+x)?+x:center(c,r).x,py=Number.isFinite(+y)?+y:center(c,r).y;
+    if(aiDamageGimmickAt(c,r,p))return true;
+    if(flameCellDanger(c,r,p)>=900||flamePointDanger(px,py,p)>=900)return true;
+    if(cellDanger(c,r,level,p)>=9000)return true;
+    return false;
+  }
+  function aiMoveStepForbidden(p,level,target,fromC,fromR,toC,toR){
+    if(!inside(toC,toR))return true;
+    if(!aiDirectionalPassable(p,fromC,fromR,toC,toR,false))return true;
+    let o=center(toC,toR);
+    if(aiImmediateFlameOrBlastAt(p,level,toC,toR,o.x,o.y))return true;
+    let ownHere=ownBombBlastThreatAt(p,fromC,fromR)||ownRemoteBlastThreatAt(p,fromC,fromR);
+    let ownThere=ownBombBlastThreatAt(p,toC,toR)||ownRemoteBlastThreatAt(p,toC,toR);
+    if(ownThere&&!ownHere)return true;
+    /* 敵/中立爆弾の爆風予定ラインも、移動先としては原則禁止。
+       以前はタイマーが長い爆弾ラインを低危険扱いしていたため、
+       移動中に爆発してそのまま突っ込む事故が起きた。 */
+    if(aiAnyBombBlastThreatAt(toC,toR)&&!aiAnyBombBlastThreatAt(fromC,fromR))return true;
+    return false;
+  }
+
   function ownTimedBombBlastThreatAt(p,c,r){
     for(const b of ownActiveBombs(p)){
       if(b&&b.remoteBomb)continue;
@@ -5382,7 +5413,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     for(const n of map.values()){
       if(n.dist<1)continue;
       let o=center(n.c,n.r),ed=enemyDangerAtPoint(o.x,o.y,level,p),fd=flameCellDanger(n.c,n.r,p)+flamePointDanger(o.x,o.y,p),dg=cellDanger(n.c,n.r,level,p);
-      if(fd>=9000||ed>=10000||dg>=13000)continue;
+      if(fd>=900||ed>=10000||dg>=9000||aiAnyBombBlastThreatAt(n.c,n.r))continue;
       let far=0;if(target)far=-(Math.hypot(o.x-target.x,o.y-target.y))*0.01;
       let s=fd*8+dg*2+ed*2+n.dist*8+far;
       if(s<bs){bs=s;best=n}
@@ -5417,15 +5448,30 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let safe=safestNode(p,level,target);return safe?{action:'move',node:safe,reason:'safe',target}:{action:'idle',reason:'idle',target};
   }
   function safeMoveVector(p,mv,level,target){
-    let dx=mv.dx||0,dy=mv.dy||0,step=Math.max(18,(p.speed||170)*LOCK_DT*1.65);
+    let dx=mv&&mv.dx||0,dy=mv&&mv.dy||0,step=Math.max(18,(p.speed||170)*LOCK_DT*1.65);
     let pcNow=cell(p.x,p.y);
     if(Math.hypot(dx,dy)<.05)return{dx:0,dy:0};
-    for(let i=1;i<=2;i++){
-      let nx=p.x+dx*step*(i/2),ny=p.y+dy*step*(i/2),ccell=cell(nx,ny),fd=flamePointDanger(nx,ny,p)+flameCellDanger(ccell.c,ccell.r,p),ed=enemyDangerAtPoint(nx,ny,level,p),dg=cellDanger(ccell.c,ccell.r,level,p);
+
+    /* AI BLAST-NOSTEP:
+       点の先読みだけだと、隣マスが爆風/炎でもセル境界を越える直前まで検知できない。
+       まず入力方向から「次に入るタイル」を決め、そのタイルが炎・残り炎・予定爆風なら即キャンセル。 */
+    let sx=Math.abs(dx)>=Math.abs(dy)?Math.sign(dx):0,sy=Math.abs(dy)>Math.abs(dx)?Math.sign(dy):0;
+    if(sx||sy){
+      let nc=pcNow.c+sx,nr=pcNow.r+sy;
+      if(aiMoveStepForbidden(p,level,target,pcNow.c,pcNow.r,nc,nr)){
+        let s=aiCurrentEscapeNode(p,level,target)||safeOwnBombEscapeNode(p,level,target)||safestNode(p,level,target);
+        if(s&&!(s.c===nc&&s.r===nr))return vecToNode(p,s);
+        return{dx:0,dy:0};
+      }
+    }
+
+    for(let i=1;i<=3;i++){
+      let nx=p.x+dx*step*(i/3),ny=p.y+dy*step*(i/3),ccell=cell(nx,ny),fd=flamePointDanger(nx,ny,p)+flameCellDanger(ccell.c,ccell.r,p),ed=enemyDangerAtPoint(nx,ny,level,p),dg=cellDanger(ccell.c,ccell.r,level,p);
       const shadowChasingPlayer=!!(p&&p.isShadowEnemy&&target&&target.kind==='player');
       const dgLimit=shadowChasingPlayer?(ownBombMinTimer(p)>900?1200:520):400;
-      let ownFuture=ownBombBlastThreatAt(p,ccell.c,ccell.r)||ownRemoteBlastThreatAt(p,ccell.c,ccell.r),ownHere=ownBombBlastThreatAt(p,cell(p.x,p.y).c,cell(p.x,p.y).r)||ownRemoteBlastThreatAt(p,cell(p.x,p.y).c,cell(p.x,p.y).r);
-      if(aiCountdownBlockAt(ccell.c,ccell.r)||aiStepAgainstCurrent(pcNow.c,pcNow.r,ccell.c,ccell.r,p)||aiDamageGimmickAt(ccell.c,ccell.r,p)||fd>=900||(!shadowChasingPlayer&&ed>=180)||dg>=dgLimit||(ownFuture&&!ownHere)){
+      let ownFuture=ownBombBlastThreatAt(p,ccell.c,ccell.r)||ownRemoteBlastThreatAt(p,ccell.c,ccell.r),ownHere=ownBombBlastThreatAt(p,pcNow.c,pcNow.r)||ownRemoteBlastThreatAt(p,pcNow.c,pcNow.r);
+      let anyFuture=aiAnyBombBlastThreatAt(ccell.c,ccell.r),anyHere=aiAnyBombBlastThreatAt(pcNow.c,pcNow.r);
+      if(aiCountdownBlockAt(ccell.c,ccell.r)||aiStepAgainstCurrent(pcNow.c,pcNow.r,ccell.c,ccell.r,p)||aiDamageGimmickAt(ccell.c,ccell.r,p)||fd>=900||(!shadowChasingPlayer&&ed>=180)||dg>=dgLimit||(ownFuture&&!ownHere)||(anyFuture&&!anyHere&&dg>=260)){
         let s=ownHere?safeOwnBombEscapeNode(p,level,target):(aiCurrentEscapeNode(p,level,target)||safestNode(p,level,target));
         return s?vecToNode(p,s):{dx:0,dy:0};
       }
@@ -5586,19 +5632,19 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return ownBombBlastThreatAt(p,c.c,c.r)||ownRemoteBlastThreatAt(p,c.c,c.r);
   }
 
-  /* AI OBJECTIVE CORE 20260609:
+  /* AI OBJECTIVE CORE 20260610:
      おまかせAIの根っこを「できる行動」ではなく「勝利目的」から決める。
-     WAVE: 生存 > 敵/ボス撃破 > ゴール > 自己強化 > 開通。
-     BATTLE: 生存 > 敵プレイヤー撃破 > 自己強化 > 有利位置。
-     この目的に寄与しないジャンプ・左右往復・買えない物への粘着を禁止する。 */
+     WAVE: 生存 > 敵/ボス撃破 > ゴール > 開通。
+     BATTLE: 生存 > 敵プレイヤー撃破 > 有利位置。
+     パワーアップはミッション目的から除外し、移動中に拾える物だけ自然取得する。 */
   function aiModeObjectiveKind(){return (battle&&battle.on)?'battle':'wave'}
   function aiObjectiveFor(p,level,st,target){
     let pc=cell(p.x,p.y),fd=flameCellDanger(pc.c,pc.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(pc.c,pc.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p),own=ownBombBlastThreatAt(p,pc.c,pc.r)||ownRemoteBlastThreatAt(p,pc.c,pc.r);
     if(fd>=900||dg>=9000||ed>=180||own)return{kind:'survive',target:null,priority:100000,reason:'survive'};
     if(target){let boss=!!(target.obj&&target.obj.boss);return{kind:battle&&battle.on?'killPlayer':(boss?'killBoss':'killEnemy'),target,priority:boss?90000:80000,reason:boss?'boss':'enemy'};}
     let gt=goalTarget();if(gt)return{kind:'goal',target:gt,priority:70000,reason:'goal'};
-    let buy=null;try{buy=aiBestBuyTarget(p,level)}catch(e){buy=null}
-    if(buy)return{kind:'powerup',target:buy,priority:56000+(buy.price||0),reason:'powerup'};
+    /* パワーアップ/購入はミッション目的にしない。
+       近くを通った時の通常アイテム取得、足元スペシャル購入だけに任せる。 */
     let soft=null;try{let cells=openPlantCellsLimited(p,target,level,8,6);soft=cells&&cells[0]}catch(e){soft=null}
     if(soft)return{kind:'open',target:soft,priority:42000,reason:'open'};
     return{kind:'survive',target:null,priority:20000,reason:'safe'};
@@ -5654,7 +5700,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       score+=objectiveGain*260;
       score+=freeGain*140;
       if(obj&&obj.kind==='survive')score+=nd<cur?420:0;
-      if(obj&&/kill|goal|powerup|open/.test(obj.kind)&&objectiveGain<=0&&!panicJump)score-=1200;
+      if(obj&&/kill|goal|open/.test(obj.kind)&&objectiveGain<=0&&!panicJump)score-=1200;
       if(!overObstacle&&objectiveGain<=0&&freeGain<=0&&!panicJump)score-=1800;
       score-=nd*.08;
       if(score>bs){bs=score;best={type:'jump',dir:d,score,reason:'objectiveJump',fromKey,toKey,objective:obj};}
@@ -5868,14 +5914,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let forced=forcedOwnBombEscapePlan(p,level,st,target,t);if(forced)return forced;
     let own=ownBombEscapePlan(p,level,target);if(own)return own;
     let em=emergencyEscape(p,level,target);if(em)return em;
-    if(obj&&obj.kind==='powerup'&&obj.target&&obj.target.node)return {action:'move',node:obj.target.node,reason:'missionPowerup',target:obj.target,objective:obj};
     if(obj&&obj.kind==='goal'&&obj.target){let g=nearestByPath(p,[obj.target],level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});if(g&&g.node)return {action:'move',node:g.node,reason:'missionGoal',target:g,objective:obj};}
     if(target){
       if(targetIsTeamMonster(target)&&canBombPressureHere(p,level,target))return{action:'bomb',reason:'missionKillBomb',target,objective:obj};
       let plants=attackPlantCells(p,target,level),ap=nearestByPath(p,plants,level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});
       if(ap&&ap.node)return ap.node.dist===0?{action:'bomb',reason:'missionAttackBomb',target,objective:obj}:{action:'move',node:ap.node,reason:'missionAttackSet',target,objective:obj};
     }
-    let buy=aiBestBuyTarget(p,level);if(buy&&buy.node)return {action:'move',node:buy.node,reason:'missionBuy',target:buy,objective:obj};
     let rb=reachableBombBreakPlan(p,level,target);if(rb){rb.reason='mission'+String(rb.reason||'Open');rb.objective=obj;return rb;}
     let open=nearestByPath(p,openPlantCells(p,target,level),level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});
     if(open&&open.node)return open.node.dist===0&&canBombHere(p,level,'open',target)?{action:'bomb',reason:'missionOpenBomb',target,objective:obj}:{action:'move',node:open.node,reason:'missionOpenRoute',target:open,objective:obj};
@@ -5973,7 +6017,10 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
         }
       }
     }
+    mv=safeMoveVector(p,mv,level,target);
     inp.dx=mv.dx||0;inp.dy=mv.dy||0;
+    /* 最終防波堤: このフレームの入力で爆風/炎マスへ入る方向なら入力をゼロ化。 */
+    {let pcGuard=cell(p.x,p.y),gx=Math.abs(inp.dx)>=Math.abs(inp.dy)?Math.sign(inp.dx||0):0,gy=Math.abs(inp.dy)>Math.abs(inp.dx)?Math.sign(inp.dy||0):0;if((gx||gy)&&aiMoveStepForbidden(p,level,target,pcGuard.c,pcGuard.r,pcGuard.c+gx,pcGuard.r+gy)){inp.dx=0;inp.dy=0;st.plan=null;st.lastPlanAt=0;}}
     if(Math.hypot(inp.dx,inp.dy)>.12){let d=snapThrowDir(inp.dx,inp.dy);p.lastDirX=d.x;p.lastDirY=d.y;inp.lastDirX=d.x;inp.lastDirY=d.y;}
     if(target)aimAt(p,target);
     if(aiUseBestTacticalSpecial(p,level,st,target,t,inp,'normal'))return;
