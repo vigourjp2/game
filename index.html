@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V4-JUMP-SLOW-STEP-20260609',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V4-AI-MISSION-LIFEFIRST-GAUGEFILTER-20260610',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -270,13 +270,14 @@ const proconInput={dx:0,dy:0,prevB:false,prevA:false,connected:false,lastId:'',l
 const SPECIALS={jump:{type:'jump',name:'JUMP',icon:'🪽',price:120},launchbomb:{type:'launchbomb',name:'LAUNCH BOMB',icon:'🚀',price:180},summonblock:{type:'summonblock',name:'BLOCK SUMMON',icon:'🧱',price:160},shadowservant:{type:'shadowservant',name:'SHADOW SERVANT',icon:'👥',price:520},overdrive:{type:'overdrive',name:'OVERDRIVE',icon:'⏳',price:720},packunga:{type:'packunga',name:'LINE BOMB',icon:'🍲',price:260},remote:{type:'remote',name:'REMOTE',icon:'🎮',price:680},homing:{type:'homing',name:'HOMING BOMB',icon:'🦵',price:820},shoretsuha:{type:'shoretsuha',name:'衝裂破',icon:'💥',price:460},car:{type:'car',name:'CAR',icon:'🏎️',price:1280},mastersword:{type:'mastersword',name:'MASTER SWORD',icon:'⚔️',price:2600}};
 const BLOCK_SUMMON_USE_COST=10;
 const DEBUG_MONEY_MULT=10,SHADOW_TRAIL_STEP_MS=85,SHADOW_SPACING_STEPS=5;
-const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=0,CART_AUTHORITY_LOCK_MS=1250,JUMP_AUTHORITY_LOCK_MS=1250;
+const LOCK_DT=1/60,LOCK_DT_MS=1000/60,LOCK_MAX_STEPS=8,JOIN_PREDICT_GRACE_MS=0,CART_AUTHORITY_LOCK_MS=1250,JUMP_AUTHORITY_LOCK_MS=1250,JUMP_WRAP_INVULN_MS=1600;
 const JOIN_SELF_PREDICT_MAX_DT=.035,JOIN_SELF_CORRECT_SOFT=72,JOIN_SELF_CORRECT_HARD=220;
 const JOIN_SELF_REWIND_ERR=260,JOIN_HOST_ACCEPT_ERR=6,JOIN_HOST_FORCE_ERR=150;
 const AUTH_STATE_HZ=60,AUTH_STATE_MS=1000/AUTH_STATE_HZ,AUTH_FULL_MS=1200,AUTH_FIREBASE_MS=1800;
 let lockFrame=0,lockAcc=0,lockstepPackets={},lockstepStarted=false,lastStepPacketAt=0,lastLockBroadcast=0,lockstepSnapEvery=90,lastJoinPredictAt=0,lastAuthStateSent=0,lastAuthFullStateSent=0;
 let timeStop={active:false,owner:null,ownerName:'',timer:0,total:0,level:0,seq:0};
 const REVIVE_RADIUS=92,REVIVE_GAIN_PER_SEC=.34,REVIVE_DECAY_PER_SEC=.08,REVIVE_INVULN_MS=2600;
+const GIMMICK_BREAK_RADIUS=92,GIMMICK_BREAK_GAIN_PER_SEC=.34,GIMMICK_BREAK_DECAY_PER_SEC=.08;
 let camOn=false,camStream=null,lastCamWrite=0,camLocalData='',camImgs={};
 // Firebaseは部屋・シグナリング用。リアルタイム操作とstate配信はWebRTC DataChannelを優先する。
 let rtcPeers={},rtcChannels={},rtcStateChannels={},rtcInputChannel=null,rtcStateChannel=null,rtcConnected=false,rtcHostListenerOff=false,lastRtcPing=0,pendingRemoteState=null,lastRemoteApply=0,lastDroppedInput=0,lastSentInputSig='';
@@ -1793,10 +1794,11 @@ function convertRemoteBombsToNormal(owner){let converted=0;bombs.forEach(b=>{if(
 function buySpecial(p,it){if(!canBuySpecial(p,it))return false;ensureSpecialBag(p);let switchingFromRemote=it.type!=='remote'&&((p.specials.remote||0)>0||currentRemoteBombCount(p.id)>0);let converted=switchingFromRemote?convertRemoteBombsToNormal(p.id):0;let price=Math.floor(it.price||specialPrice(it.type));p.gold=Math.max(0,Math.floor(p.gold||0)-price);p.masterSwordCharge=null;p.masterSwordAnim=null;p.specials[it.type]=(p.specials[it.type]||0)+1;p.activeSpecial=it.type;if(it.type==='mastersword')startMasterSwordBgmOnFirstPurchase();if(it.type==='shadowservant'){p.shadowTrail=[];p.shadowTrailT=0;}markLocalItemCollected(it);items=items.filter(x=>itemKey(x)!==itemKey(it));addMoneyText(it.x,it.y,-price,p.id,'BUY');partsBurst(it.x,it.y,'#b7f7ff',28);shockwave(it.x,it.y,54,'#b7f7ff');sfx('item',1.5);msg=`${p.name} BUY ${specialName(it.type)} Lv${p.specials[it.type]}${converted?' / REMOTE -> NORMAL x'+converted:''}`;return true;}
 function jumpLandingFree(c,r,selfId){return inside(c,r)&&c>0&&r>0&&c<C-1&&r<R-1&&grid[r][c]===EMPTY&&!bombs.some(b=>!b.carriedBy&&b.c===c&&b.r===r)&&!enemies.some(e=>e.alive&&e.c===c&&e.r===r)}
 function currentPlayerArrowDir(p,inp={}){let dx=0,dy=0;if(inp&&(Math.abs(inp.dx||0)>.2||Math.abs(inp.dy||0)>.2)){dx=Number(inp.dx)||0;dy=Number(inp.dy)||0}else{dx=Number.isFinite(p&&p.lastDirX)?p.lastDirX:1;dy=Number.isFinite(p&&p.lastDirY)?p.lastDirY:0}let d=snapThrowDir(dx,dy);if(!d.x&&!d.y)d={x:1,y:0};return d}
-function jumpNextCell(c,r,dx,dy,step=2){step=Math.max(1,Math.floor(Number(step)||2));let nc=c+dx*step,nr=r+dy*step;if(!inside(nc,nr)||nc<1||nr<1||nc>C-2||nr>R-2){let w=wrapPlayCell(nc,nr);nc=w.c;nr=w.r}return{c:nc,r:nr,step}}
-function startPlayerJump(p,inp={}){ensureSpecialBag(p);if(!p.alive||p.jumpState||!(p.specials.jump>0))return false;let lv=Math.max(1,p.specials.jump|0),d=currentPlayerArrowDir(p,inp),cell=tc(p.x,p.y),n=jumpNextCell(cell.c,cell.r,d.x,d.y),steps=Math.max(1,Math.min(18,lv));p.jumpState={fromC:cell.c,fromR:cell.r,toC:n.c,toR:n.r,dx:d.x,dy:d.y,t:0,dur:620,left:steps,arc:38+Math.min(22,lv*3),turnsLeft:Math.max(0,lv-1),started:true};markPlayerJumpAuthority(p.id,JUMP_AUTHORITY_LOCK_MS);p.lastDirX=d.x;p.lastDirY=d.y;p.vx=0;p.vy=0;partsBurst(p.x,p.y,'#b7f7ff',18);sfx('throw',1.1);msg=`${p.name} JUMP Lv${p.specials.jump}`;return true;}
+function jumpNextCell(c,r,dx,dy,step=2){step=Math.max(1,Math.floor(Number(step)||2));let nc=c+dx*step,nr=r+dy*step,wrapped=false;if(!inside(nc,nr)||nc<1||nr<1||nc>C-2||nr>R-2){let w=wrapPlayCell(nc,nr);nc=w.c;nr=w.r;wrapped=true}return{c:nc,r:nr,step,wrapped}}
+function grantJumpWrapInvuln(p){if(!p)return;p.invuln=Math.max(p.invuln||0,JUMP_WRAP_INVULN_MS);p.teleportBlink=Math.max(p.teleportBlink||0,JUMP_WRAP_INVULN_MS);partsBurst(p.x,p.y,'#b7f7ff',24);msg='JUMP WRAP - 無敵点滅で反対側から再突入';}
+function startPlayerJump(p,inp={}){ensureSpecialBag(p);if(!p.alive||p.jumpState||!(p.specials.jump>0))return false;let lv=Math.max(1,p.specials.jump|0),d=currentPlayerArrowDir(p,inp),cell=tc(p.x,p.y),n=jumpNextCell(cell.c,cell.r,d.x,d.y),steps=Math.max(1,Math.min(18,lv));p.jumpState={fromC:cell.c,fromR:cell.r,toC:n.c,toR:n.r,dx:d.x,dy:d.y,t:0,dur:620,left:steps,arc:38+Math.min(22,lv*3),turnsLeft:Math.max(0,lv-1),started:true,wrapped:!!n.wrapped};if(n.wrapped)grantJumpWrapInvuln(p);markPlayerJumpAuthority(p.id,JUMP_AUTHORITY_LOCK_MS);p.lastDirX=d.x;p.lastDirY=d.y;p.vx=0;p.vy=0;partsBurst(p.x,p.y,'#b7f7ff',18);sfx('throw',1.1);msg=n.wrapped?'JUMP WRAP - 無敵点滅で反対側へ':`${p.name} JUMP Lv${p.specials.jump}`;return true;}
 function createLaunchPadBomb(p){ensureSpecialBag(p);if(!p.alive||!(p.specials.launchbomb>0))return false;if(p.specialCooldown>0){msg='SPECIAL COOLING';return false;}let cell=tc(p.x,p.y);if(!inside(cell.c,cell.r)||grid[cell.r][cell.c]!==EMPTY)return false;if(bombs.some(b=>!b.carriedBy&&b.c===cell.c&&b.r===cell.r))return false;let o=cc(cell.c,cell.r),lv=Math.max(1,p.specials.launchbomb|0),id='lb_'+p.id+'_'+lockFrame+'_'+(++specialSeq);bombs.push({id,c:cell.c,r:cell.r,x:o.x,y:o.y,owner:p.id,passOwner:p.id,range:0,timer:1700,rad:18,vx:0,vy:0,power:lv,slideT:0,thrownBy:p.id,spin:0,carriedBy:null,carryOff:0,armed:true,fusePaused:false,hop:null,landed:true,launchPad:true,bombStyle:'launchpad',flameStyle:'launchpad'});p.specialCooldown=900;partsBurst(o.x,o.y,'#ffcf70',18);shockwave(o.x,o.y,44,'#ffcf70');sfx('bomb');msg=`${p.name} LAUNCH BOMB PAD`;return true;}
-function summonFrontBlock(p,inp={}){ensureSpecialBag(p);if(!p.alive||!(p.specials.summonblock>0))return false;if(p.specialCooldown>0){msg='SPECIAL COOLING';return false;}let cost=BLOCK_SUMMON_USE_COST;if(Math.floor(p.gold||0)<cost){msg='BLOCK SUMMON NEED $'+cost;addMoneyText(p.x,p.y,-cost,p.id,'NO MONEY');sfx('hit',.8);return false;}let d=currentPlayerArrowDir(p,inp),cell=tc(p.x,p.y),c=cell.c+d.x,r=cell.r+d.y;if(!inside(c,r)||c<=0||r<=0||c>=C-1||r>=R-1){msg='BLOCK SUMMON OUT';return false;}if(grid[r][c]!==EMPTY){msg='BLOCK SUMMON BLOCKED';return false;}if(bombs.some(b=>!b.carriedBy&&b.c===c&&b.r===r)||items.some(it=>it.c===c&&it.r===r)||Object.values(players).some(q=>q&&q.alive&&q.c===c&&q.r===r)||enemies.some(e=>e.alive&&e.c===c&&e.r===r)){msg='BLOCK SUMMON BLOCKED';return false;}let lv=Math.max(1,p.specials.summonblock|0),o=cc(c,r);p.gold=Math.max(0,Math.floor(p.gold||0)-cost);addMoneyText(p.x,p.y-18,-cost,p.id,'BLOCK SUMMON');markLocalBlockSet(c,r,lv,'summon');p.lastDirX=d.x;p.lastDirY=d.y;p.specialCooldown=650;partsBurst(o.x,o.y,'#c4b5fd',22);shockwave(o.x,o.y,44,'#c4b5fd');sfx('drop');msg=`${p.name} BLOCK SUMMON Lv${lv} -$${cost}`;return true;}
+function summonFrontBlock(p,inp={}){ensureSpecialBag(p);if(!p.alive||!(p.specials.summonblock>0))return false;if(p.specialCooldown>0){msg='SPECIAL COOLING';return false;}let cost=BLOCK_SUMMON_USE_COST;if(Math.floor(p.gold||0)<cost){msg='BLOCK SUMMON NEED $'+cost;addMoneyText(p.x,p.y,-cost,p.id,'NO MONEY');sfx('hit',.8);return false;}let d=currentPlayerArrowDir(p,inp),cell=tc(p.x,p.y),c=cell.c+d.x,r=cell.r+d.y;if(!inside(c,r)||c<=0||r<=0||c>=C-1||r>=R-1){msg='BLOCK SUMMON OUT';return false;}if(grid[r][c]!==EMPTY){msg='BLOCK SUMMON BLOCKED';return false;}if(bombs.some(b=>!b.carriedBy&&b.c===c&&b.r===r)||items.some(it=>it.c===c&&it.r===r)||Object.values(players).some(q=>q&&q.alive&&q.c===c&&q.r===r)||enemies.some(e=>e.alive&&e.c===c&&e.r===r)){msg='BLOCK SUMMON BLOCKED';return false;}try{if(window.__aiOmakaseBlockSummonAllowed&&window.__aiOmakaseBlockSummonAllowed(p,c,r)===false){msg='AI BLOCK SUMMON CANCEL - SELF TRAP';return false;}}catch(e){}let lv=Math.max(1,p.specials.summonblock|0),o=cc(c,r);p.gold=Math.max(0,Math.floor(p.gold||0)-cost);addMoneyText(p.x,p.y-18,-cost,p.id,'BLOCK SUMMON');markLocalBlockSet(c,r,lv,'summon');p.lastDirX=d.x;p.lastDirY=d.y;p.specialCooldown=650;partsBurst(o.x,o.y,'#c4b5fd',22);shockwave(o.x,o.y,44,'#c4b5fd');sfx('drop');msg=`${p.name} BLOCK SUMMON Lv${lv} -$${cost}`;return true;}
 function launchPadExplode(b){let lv=Math.max(1,b.power||1),origin=cc(b.c,b.r),owner=b.owner||myId;shake=Math.max(shake,7+lv);sfx('throw',1+lv*.25);partsBurst(origin.x,origin.y,'#ffcf70',34+lv*6);shockwave(origin.x,origin.y,70,'#ffcf70');DIRS.forEach(([dx,dy],i)=>{let id='lbb_'+owner+'_'+lockFrame+'_'+(++itemSeq)+'_'+i,nb={id,c:b.c,r:b.r,x:origin.x+dx*10,y:origin.y+dy*10,owner,passOwner:null,range:Math.min(8,2+Math.floor(lv/2)),timer:BOMB_FUSE,rad:17,vx:0,vy:0,power:Math.max(1,lv),slideT:0,thrownBy:owner,spin:10+i*3,carriedBy:null,carryOff:0,armed:false,fusePaused:true,hop:null,landed:false,bombStyle:'player',flameStyle:'player'};startBombHop(nb,dx,dy,Math.max(1,lv));bombs.push(nb)});msg='4 WAY BOMB LAUNCH';}
 function overdriveDurationMs(lv){return 7000+Math.max(0,(lv|0)-1)*3000}
 function isTimeStopped(){return !!(timeStop&&timeStop.active&&timeStop.timer>0)}
@@ -1958,7 +1960,7 @@ function masterSwordSpin(p,inp={},lv0=1){ensureSpecialBag(p);let lv=Math.max(1,l
 }
 function updateMasterSwordCharges(dt){updateMasterSwordBeamProjectiles(dt);Object.values(players).forEach(p=>{if(p&&p.masterSwordAnim){p.masterSwordAnim.t-=dt*1000;if(p.masterSwordAnim.t<=0)p.masterSwordAnim=null;}let ch=p&&p.masterSwordCharge;if(!ch||!ch.holding)return;ch.t=(ch.t||0)+dt*1000;ch.pct=Math.min(1,ch.t/1250);if(ch.pct>=1&&!ch.ready){ch.ready=true;partsBurst(p.x,p.y,'#ffffff',30);shockwave(p.x,p.y,74,'#93c5fd');sfx('msReady',1.1+Math.min(.5,(ch.lv||1)*.04));msg=`${p.name} MASTER SWORD 100%`;}});}
 function useSpecialAction(p,inp={}){let it=specialItemUnderPlayer(p);if(it)return buySpecial(p,it);ensureSpecialBag(p);let active=fallbackActiveSpecial(p);if(active==='mastersword'&&p.specials.mastersword>0)return masterSwordSlash(p,inp);if(active==='car'&&p.specials.car>0)return startCarSpecial(p,inp);if(active==='shoretsuha'&&p.specials.shoretsuha>0)return shoretsuhaBurst(p,inp);if(active==='homing'&&p.specials.homing>0)return createHomingBomb(p);if(active==='remote'&&p.specials.remote>0)return detonateRemoteBombs(p);if(active==='overdrive'&&p.specials.overdrive>0)return startOverdrive(p);if(active==='packunga'&&p.specials.packunga>0)return packungaLineBomb(p,inp);if(active==='shadowservant'&&p.specials.shadowservant>0){msg=`${p.name} SHADOW SERVANT Lv${p.specials.shadowservant} READY`;return true;}if(active==='summonblock'&&p.specials.summonblock>0)return summonFrontBlock(p,inp);if(active==='launchbomb'&&p.specials.launchbomb>0)return createLaunchPadBomb(p);if(active==='jump'&&p.specials.jump>0)return startPlayerJump(p,inp);return false;}
-function updatePlayerJump(p,dt,inp={}){let j=p&&p.jumpState;if(!j)return false;j.t+=dt*1000;let a=clamp(j.t/j.dur,0,1),fo=cc(j.fromC,j.fromR),to=cc(j.toC,j.toR),arc=Math.sin(a*Math.PI)*(j.arc||38);p.x=fo.x+(to.x-fo.x)*a;p.y=fo.y+(to.y-fo.y)*a-arc;p.vx=0;p.vy=0;if(a<1)return true;p.c=j.toC;p.r=j.toR;p.x=to.x;p.y=to.y;j.left=Math.max(0,(j.left||1)-1);partsBurst(p.x,p.y,'#b7f7ff',8);if(j.left<=0){if(jumpLandingFree(p.c,p.r,p.id)){p.jumpState=null;clearPlayerJumpAuthority(p.id);partsBurst(p.x,p.y,'#b7f7ff',16);shockwave(p.x,p.y,42,'#b7f7ff');sfx('kick',1);msg=`${p.name} JUMP LAND`;return true}p.jumpState=null;depen(p,p.id);clearPlayerJumpAuthority(p.id);msg='JUMP STOP';return true;}let d=currentPlayerArrowDir(p,inp);let turned=(d.x!==j.dx||d.y!==j.dy);if(turned&&j.turnsLeft>0){j.turnsLeft--;j.dx=d.x;j.dy=d.y;p.lastDirX=d.x;p.lastDirY=d.y;msg=`JUMP TURN ${j.turnsLeft}`;}else if(!turned){p.lastDirX=j.dx;p.lastDirY=j.dy;}let hopStep=1,n=jumpNextCell(p.c,p.r,j.dx,j.dy,hopStep);if(n.c!==p.c+j.dx*hopStep||n.r!==p.r+j.dy*hopStep)msg='JUMP WRAP - 反対側から再突入';j.fromC=p.c;j.fromR=p.r;j.toC=n.c;j.toR=n.r;j.t=0;j.nextDx=undefined;j.nextDy=undefined;return true;}
+function updatePlayerJump(p,dt,inp={}){let j=p&&p.jumpState;if(!j)return false;j.t+=dt*1000;let a=clamp(j.t/j.dur,0,1),fo=cc(j.fromC,j.fromR),to=cc(j.toC,j.toR),arc=Math.sin(a*Math.PI)*(j.arc||38);p.x=fo.x+(to.x-fo.x)*a;p.y=fo.y+(to.y-fo.y)*a-arc;p.vx=0;p.vy=0;if(a<1)return true;p.c=j.toC;p.r=j.toR;p.x=to.x;p.y=to.y;if(j.wrapped){grantJumpWrapInvuln(p);j.wrapped=false;}j.left=Math.max(0,(j.left||1)-1);partsBurst(p.x,p.y,'#b7f7ff',8);if(j.left<=0){if(jumpLandingFree(p.c,p.r,p.id)){p.jumpState=null;clearPlayerJumpAuthority(p.id);partsBurst(p.x,p.y,'#b7f7ff',16);shockwave(p.x,p.y,42,'#b7f7ff');sfx('kick',1);msg=`${p.name} JUMP LAND`;return true}p.jumpState=null;depen(p,p.id);clearPlayerJumpAuthority(p.id);msg='JUMP STOP';return true;}let d=currentPlayerArrowDir(p,inp);let turned=(d.x!==j.dx||d.y!==j.dy);if(turned&&j.turnsLeft>0){j.turnsLeft--;j.dx=d.x;j.dy=d.y;p.lastDirX=d.x;p.lastDirY=d.y;msg=`JUMP TURN ${j.turnsLeft}`;}else if(!turned){p.lastDirX=j.dx;p.lastDirY=j.dy;}let hopStep=1,n=jumpNextCell(p.c,p.r,j.dx,j.dy,hopStep);if(n.wrapped){grantJumpWrapInvuln(p);msg='JUMP WRAP - 無敵点滅で反対側から再突入';}j.fromC=p.c;j.fromR=p.r;j.toC=n.c;j.toR=n.r;j.wrapped=!!n.wrapped;j.t=0;j.nextDx=undefined;j.nextDy=undefined;return true;}
 function updateMoneyTexts(dt){moneyTexts.forEach(m=>{m.y+=(m.vy||-42)*dt;m.life-=dt*1000});moneyTexts=moneyTexts.filter(m=>m.life>0)}
 
 function drawCarUpright(cart){
@@ -2987,9 +2989,70 @@ function cartBreakSoftBlocks(cart){
   }
   return broke;
 }
+function gimmickBreakTarget(g){
+  if(!g)return false;
+  const t=String(g.type||'');
+  // レール等、もともと地面扱い・背景扱いのギミックはゲージ破壊対象外。
+  // 近くにいるだけでゲージが出ると煩わしく、壊す意味も薄い。
+  if(t==='rail'||t==='bridge'||t==='switch')return false;
+  return true;
+}
+function nearestGimmickBreakerFor(g){
+  if(!g)return null;
+  const o=cc(g.c|0,g.r|0);
+  let best=null,bd=Infinity;
+  for(const p of Object.values(players||{})){
+    if(!p||!p.alive||p.isShadowEnemy)continue;
+    const d=Math.hypot((p.x||0)-o.x,(p.y||0)-o.y);
+    if(d<GIMMICK_BREAK_RADIUS&&d<bd){best=p;bd=d;}
+  }
+  return best;
+}
+function breakGimmickToFlat(g,by=null){
+  if(!g)return false;
+  const o=cc(g.c|0,g.r|0),label=String(g.type||'GIMMICK').toUpperCase();
+  partsBurst(o.x,o.y,'#67e8f9',22);
+  shockwave(o.x,o.y,42,'#67e8f9');
+  sfx('hit',1.25);
+  msg=label+' BREAK - 平地化'+(by?(' BY '+by.name):'');
+  return true;
+}
+function updateGimmickBreakGauges(dt){
+  if(!Array.isArray(gimmicks)||!gimmicks.length)return;
+  const keep=[];
+  let broke=false;
+  for(const g of gimmicks){
+    if(!g)continue;
+    if(!gimmickBreakTarget(g)){
+      g.breakBy=null;
+      g.breakGauge=0;
+      keep.push(g);
+      continue;
+    }
+    let by=nearestGimmickBreakerFor(g);
+    if(by){
+      g.breakBy=by.id;
+      g.breakGauge=Math.min(1,(g.breakGauge||0)+GIMMICK_BREAK_GAIN_PER_SEC*dt);
+    }else{
+      g.breakBy=null;
+      g.breakGauge=Math.max(0,(g.breakGauge||0)-GIMMICK_BREAK_DECAY_PER_SEC*dt);
+    }
+    if((g.breakGauge||0)>=1){
+      breakGimmickToFlat(g,by);
+      broke=true;
+      continue;
+    }
+    keep.push(g);
+  }
+  if(broke){
+    gimmicks=keep;
+    if(isHost&&mode!=='offline')broadcastAuthoritativeState(true);
+  }
+}
 function updateGimmicks(dt){
   purgeMinecartChapterLeak(wave);
   gimmicks.forEach(g=>{if(g.burn>0&&g.burn<900000){g.burn-=dt*1000;if(g.burn<=0){g.type='oil';g.burn=0}};g.t=(g.t||0)+dt*1000;if(g.cool>0)g.cool-=dt*1000;if(g.type==='electric'&&g.t>900){g.t=0;g.on=!g.on}else if(g.type==='zapper'&&g.t>1300){g.t=0;g.on=!g.on}else if(g.type==='press'&&g.t>1000){g.t=0;g.down=!g.down}else if(g.type==='gear'){g.spin=(g.spin||0)+dt*3.2}});
+  updateGimmickBreakGauges(dt);
   carts.forEach(cart=>{
     if(cart&&cart.mode==='car'){updateCar(cart,dt);return;}
     cart.cool=Math.max(0,(cart.cool||0)-dt*1000);
@@ -3689,7 +3752,7 @@ function round(x,y,w,h,r){
 }
 
 function draw(){beginFrame();purgeMinecartChapterLeak(wave);updateCamera();let th=currentTheme||themeForWave(wave);ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=th.bg||'#0d1a2e';ctx.fillRect(0,0,W,H);if(shake>0)ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);ctx.translate(viewOffX,viewOffY);ctx.scale(viewScale,viewScale);ctx.translate(-camX,-camY);ctx.fillStyle=th.floor||'#14294b';ctx.fillRect(OX,OY,C*T,R*T);for(let r=0;r<R;r++)for(let c=0;c<C;c++){let x=OX+c*T,y=OY+r*T;ctx.strokeStyle=th.grid||'#263d63';ctx.strokeRect(x,y,T,T);if(grid[r][c]===HARD){ctx.fillStyle=th.hard||'#5c6f91';round(x+3,y+3,T-6,T-6,7);ctx.fillStyle='rgba(255,255,255,.22)';ctx.fillRect(x+8,y+8,T-16,6)}else if(grid[r][c]===SOFT){ctx.fillStyle=th.soft||'#965c30';round(x+5,y+5,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(x+9,y+10,T-18,7);let hp=blockHpAt(c,r);if(hp>0){ctx.fillStyle='rgba(8,16,27,.82)';round(x+14,y+17,T-28,T-28,8);ctx.fillStyle='#fff';ctx.font='900 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(hp),x+T/2,y+T/2+2)}}}
-gimmicks.forEach(g=>{let x=OX+g.c*T,y=OY+g.r*T;if(g.type==='ice'){ctx.fillStyle='rgba(125,230,255,.42)';round(x+4,y+4,T-8,T-8,8);ctx.strokeStyle='rgba(255,255,255,.6)';ctx.strokeRect(x+10,y+12,T-20,T-24)}else if(g.type==='conveyor'){ctx.fillStyle='rgba(90,120,170,.72)';round(x+4,y+10,T-8,T-20,6);ctx.fillStyle='#dfeaff';ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((g.dx||0)>0?'▶':'◀',x+T/2,y+T/2)}else if(g.type==='oil'){ctx.fillStyle='rgba(20,16,10,.72)';ctx.beginPath();ctx.ellipse(x+T/2,y+T/2,T*.34,T*.22,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,220,90,.35)';ctx.beginPath();ctx.ellipse(x+T*.42,y+T*.42,T*.10,T*.05,-.4,0,Math.PI*2);ctx.fill()}else if(g.type==='fire'){ctx.fillStyle='rgba(255,98,35,.65)';round(x+7,y+7,T-14,T-14,8);ctx.fillStyle='rgba(255,230,70,.72)';ctx.beginPath();ctx.arc(x+T/2,y+T/2,10+Math.sin(performance.now()/70)*3,0,Math.PI*2);ctx.fill()}else if(g.type==='rail'){let cx=x+T/2,cy=y+T/2;ctx.strokeStyle='#5f4731';ctx.lineWidth=13;ctx.lineCap='round';ctx.beginPath();for(const[dX,dY]of DIRS){if(gimmickAt(g.c+dX,g.r+dY,'rail')){ctx.moveTo(cx,cy);ctx.lineTo(cx+dX*T*.50,cy+dY*T*.50)}}ctx.stroke();ctx.strokeStyle='#d2b074';ctx.lineWidth=5;ctx.beginPath();for(const[dX,dY]of DIRS){if(gimmickAt(g.c+dX,g.r+dY,'rail')){ctx.moveTo(cx,cy);ctx.lineTo(cx+dX*T*.50,cy+dY*T*.50)}}ctx.stroke();ctx.fillStyle='#6b4a2f';for(let k=-1;k<=1;k+=2){if(gimmickAt(g.c+k,g.r,'rail'))ctx.fillRect(cx-3,cy-15,6,30);if(gimmickAt(g.c,g.r+k,'rail'))ctx.fillRect(cx-15,cy-3,30,6)}ctx.fillStyle='#ffe1a3';ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);ctx.fill()}else if(g.type==='bridge'){ctx.fillStyle='rgba(150,98,52,.9)';round(x+2,y+15,T-4,T-30,5);ctx.strokeStyle='rgba(255,230,180,.45)';ctx.strokeRect(x+7,y+20,T-14,T-40)}else if(g.type==='seesaw'){ctx.save();ctx.translate(x+T/2,y+T/2);ctx.rotate((g.tilt||1)*.25);ctx.fillStyle='#d8a75f';round(-T*.36,-5,T*.72,10,5);ctx.restore();ctx.fillStyle='#72543b';ctx.beginPath();ctx.arc(x+T/2,y+T/2+8,7,0,Math.PI*2);ctx.fill()}else if(g.type==='water'||g.type==='current'){ctx.fillStyle='rgba(56,189,248,.34)';round(x+4,y+4,T-8,T-8,8);ctx.strokeStyle='rgba(125,230,255,.7)';ctx.beginPath();ctx.moveTo(x+9,y+T/2);ctx.quadraticCurveTo(x+T/2,y+T/2-8,x+T-9,y+T/2);ctx.stroke();if(g.type==='current'){ctx.fillStyle='#cffafe';ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.fillText((g.dx||0)>0?'⇒':'⇐',x+T/2,y+T/2+7)}}else if(g.type==='electric'){ctx.fillStyle=g.on?'rgba(250,255,80,.55)':'rgba(90,90,70,.28)';round(x+6,y+6,T-12,T-12,8);ctx.strokeStyle='#fef08a';ctx.beginPath();ctx.moveTo(x+15,y+10);ctx.lineTo(x+T-16,y+T/2);ctx.lineTo(x+18,y+T-10);ctx.stroke()}else if(g.type==='switch'){ctx.fillStyle=g.on?'#86efac':'#64748b';round(x+10,y+16,T-20,T-32,7);ctx.fillStyle='#111827';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText('SW',x+T/2,y+T/2+4)}else if(g.type==='zapper'){ctx.fillStyle='#1f2937';round(x+12,y+6,T-24,T-12,7);ctx.strokeStyle=g.on?'#fef08a':'#64748b';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x+T/2,y+T/2,18+(g.on?Math.sin(performance.now()/70)*4:0),0,Math.PI*2);ctx.stroke()}else if(g.type==='press'){ctx.fillStyle=g.down?'#ef4444':'#64748b';round(x+8,y+(g.down?8:2),T-16,14,4);ctx.fillStyle='rgba(0,0,0,.38)';round(x+10,y+T-14,T-20,8,4)}else if(g.type==='gear'){ctx.save();ctx.translate(x+T/2,y+T/2);ctx.rotate(g.spin||0);ctx.fillStyle='#cbd5e1';for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);ctx.fillRect(12,-3,8,6)}ctx.beginPath();ctx.arc(0,0,15,0,Math.PI*2);ctx.fill();ctx.fillStyle='#475569';ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);ctx.fill();ctx.restore()}else if(g.type==='lowgrav'){ctx.fillStyle='rgba(196,181,253,.30)';round(x+5,y+5,T-10,T-10,10);ctx.fillStyle='#ede9fe';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText('0G',x+T/2,y+T/2+6)}else if(g.type==='warp'){ctx.strokeStyle='#d8b4fe';ctx.lineWidth=4;ctx.beginPath();ctx.arc(x+T/2,y+T/2,16+Math.sin(performance.now()/120)*4,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(240,171,252,.55)';ctx.beginPath();ctx.arc(x+T/2,y+T/2,8,0,Math.PI*2);ctx.stroke()}else if(g.type==='mirror'){ctx.fillStyle='rgba(240,171,252,.28)';round(x+8,y+5,T-16,T-10,7);ctx.strokeStyle='rgba(255,255,255,.75)';ctx.beginPath();ctx.moveTo(x+14,y+T-12);ctx.lineTo(x+T-12,y+14);ctx.stroke()}});
+gimmicks.forEach(g=>{let x=OX+g.c*T,y=OY+g.r*T;if(g.type==='ice'){ctx.fillStyle='rgba(125,230,255,.42)';round(x+4,y+4,T-8,T-8,8);ctx.strokeStyle='rgba(255,255,255,.6)';ctx.strokeRect(x+10,y+12,T-20,T-24)}else if(g.type==='conveyor'){ctx.fillStyle='rgba(90,120,170,.72)';round(x+4,y+10,T-8,T-20,6);ctx.fillStyle='#dfeaff';ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText((g.dx||0)>0?'▶':'◀',x+T/2,y+T/2)}else if(g.type==='oil'){ctx.fillStyle='rgba(20,16,10,.72)';ctx.beginPath();ctx.ellipse(x+T/2,y+T/2,T*.34,T*.22,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(255,220,90,.35)';ctx.beginPath();ctx.ellipse(x+T*.42,y+T*.42,T*.10,T*.05,-.4,0,Math.PI*2);ctx.fill()}else if(g.type==='fire'){ctx.fillStyle='rgba(255,98,35,.65)';round(x+7,y+7,T-14,T-14,8);ctx.fillStyle='rgba(255,230,70,.72)';ctx.beginPath();ctx.arc(x+T/2,y+T/2,10+Math.sin(performance.now()/70)*3,0,Math.PI*2);ctx.fill()}else if(g.type==='rail'){let cx=x+T/2,cy=y+T/2;ctx.strokeStyle='#5f4731';ctx.lineWidth=13;ctx.lineCap='round';ctx.beginPath();for(const[dX,dY]of DIRS){if(gimmickAt(g.c+dX,g.r+dY,'rail')){ctx.moveTo(cx,cy);ctx.lineTo(cx+dX*T*.50,cy+dY*T*.50)}}ctx.stroke();ctx.strokeStyle='#d2b074';ctx.lineWidth=5;ctx.beginPath();for(const[dX,dY]of DIRS){if(gimmickAt(g.c+dX,g.r+dY,'rail')){ctx.moveTo(cx,cy);ctx.lineTo(cx+dX*T*.50,cy+dY*T*.50)}}ctx.stroke();ctx.fillStyle='#6b4a2f';for(let k=-1;k<=1;k+=2){if(gimmickAt(g.c+k,g.r,'rail'))ctx.fillRect(cx-3,cy-15,6,30);if(gimmickAt(g.c,g.r+k,'rail'))ctx.fillRect(cx-15,cy-3,30,6)}ctx.fillStyle='#ffe1a3';ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);ctx.fill()}else if(g.type==='bridge'){ctx.fillStyle='rgba(150,98,52,.9)';round(x+2,y+15,T-4,T-30,5);ctx.strokeStyle='rgba(255,230,180,.45)';ctx.strokeRect(x+7,y+20,T-14,T-40)}else if(g.type==='seesaw'){ctx.save();ctx.translate(x+T/2,y+T/2);ctx.rotate((g.tilt||1)*.25);ctx.fillStyle='#d8a75f';round(-T*.36,-5,T*.72,10,5);ctx.restore();ctx.fillStyle='#72543b';ctx.beginPath();ctx.arc(x+T/2,y+T/2+8,7,0,Math.PI*2);ctx.fill()}else if(g.type==='water'||g.type==='current'){ctx.fillStyle='rgba(56,189,248,.34)';round(x+4,y+4,T-8,T-8,8);ctx.strokeStyle='rgba(125,230,255,.7)';ctx.beginPath();ctx.moveTo(x+9,y+T/2);ctx.quadraticCurveTo(x+T/2,y+T/2-8,x+T-9,y+T/2);ctx.stroke();if(g.type==='current'){ctx.fillStyle='#cffafe';ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.fillText((g.dx||0)>0?'⇒':'⇐',x+T/2,y+T/2+7)}}else if(g.type==='electric'){ctx.fillStyle=g.on?'rgba(250,255,80,.55)':'rgba(90,90,70,.28)';round(x+6,y+6,T-12,T-12,8);ctx.strokeStyle='#fef08a';ctx.beginPath();ctx.moveTo(x+15,y+10);ctx.lineTo(x+T-16,y+T/2);ctx.lineTo(x+18,y+T-10);ctx.stroke()}else if(g.type==='switch'){ctx.fillStyle=g.on?'#86efac':'#64748b';round(x+10,y+16,T-20,T-32,7);ctx.fillStyle='#111827';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText('SW',x+T/2,y+T/2+4)}else if(g.type==='zapper'){ctx.fillStyle='#1f2937';round(x+12,y+6,T-24,T-12,7);ctx.strokeStyle=g.on?'#fef08a':'#64748b';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x+T/2,y+T/2,18+(g.on?Math.sin(performance.now()/70)*4:0),0,Math.PI*2);ctx.stroke()}else if(g.type==='press'){ctx.fillStyle=g.down?'#ef4444':'#64748b';round(x+8,y+(g.down?8:2),T-16,14,4);ctx.fillStyle='rgba(0,0,0,.38)';round(x+10,y+T-14,T-20,8,4)}else if(g.type==='gear'){ctx.save();ctx.translate(x+T/2,y+T/2);ctx.rotate(g.spin||0);ctx.fillStyle='#cbd5e1';for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);ctx.fillRect(12,-3,8,6)}ctx.beginPath();ctx.arc(0,0,15,0,Math.PI*2);ctx.fill();ctx.fillStyle='#475569';ctx.beginPath();ctx.arc(0,0,6,0,Math.PI*2);ctx.fill();ctx.restore()}else if(g.type==='lowgrav'){ctx.fillStyle='rgba(196,181,253,.30)';round(x+5,y+5,T-10,T-10,10);ctx.fillStyle='#ede9fe';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText('0G',x+T/2,y+T/2+6)}else if(g.type==='warp'){ctx.strokeStyle='#d8b4fe';ctx.lineWidth=4;ctx.beginPath();ctx.arc(x+T/2,y+T/2,16+Math.sin(performance.now()/120)*4,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(240,171,252,.55)';ctx.beginPath();ctx.arc(x+T/2,y+T/2,8,0,Math.PI*2);ctx.stroke()}else if(g.type==='mirror'){ctx.fillStyle='rgba(240,171,252,.28)';round(x+8,y+5,T-16,T-10,7);ctx.strokeStyle='rgba(255,255,255,.75)';ctx.beginPath();ctx.moveTo(x+14,y+T-12);ctx.lineTo(x+T-12,y+14);ctx.stroke()}let gb=gimmickBreakTarget(g)?Math.max(0,Math.min(1,g.breakGauge||0)):0;if(gb>0){ctx.fillStyle='rgba(0,0,0,.56)';round(x+6,y+T-10,T-12,6,3);ctx.fillStyle='#67e8f9';round(x+6,y+T-10,(T-12)*gb,6,3);ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=1;ctx.strokeRect(x+6,y+T-10,T-12,6);ctx.fillStyle='#ecfeff';ctx.font='900 9px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.floor(gb*100)+'%',x+T/2,y+T-17)}});
 carts.forEach(cart=>{ctx.save();if(cart.mode==='car'){drawCarUpright(cart);ctx.restore();return;}ctx.shadowColor='rgba(255,225,120,.9)';ctx.shadowBlur=cart.state==='run'?18:10;ctx.fillStyle=cart.state==='run'?'#d96a24':'#9b5528';round(cart.x-24,cart.y-18,48,32,8);ctx.shadowBlur=0;ctx.strokeStyle='#fff1a8';ctx.lineWidth=3;ctx.stroke();ctx.fillStyle='#ffd166';ctx.fillRect(cart.x-16,cart.y-12,32,10);ctx.fillStyle='#111';ctx.beginPath();ctx.arc(cart.x-14,cart.y+16,6,0,Math.PI*2);ctx.arc(cart.x+14,cart.y+16,6,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('CART',cart.x,cart.y+1);if(cart.state!=='run'){ctx.fillStyle='#fff';ctx.font='bold 10px system-ui';ctx.fillText('乗ると発車',cart.x,cart.y-27)}ctx.restore();});
 falling.forEach(f=>{let bx=OX+f.c*T,by=OY+f.r*T;if(f.phase==='warn'){let a=.38+.30*Math.sin(performance.now()/80);ctx.fillStyle=`rgba(255,30,30,${a})`;round(bx+3,by+3,T-6,T-6,9);ctx.strokeStyle='rgba(255,245,120,.98)';ctx.lineWidth=4;ctx.strokeRect(bx+6,by+6,T-12,T-12);ctx.fillStyle='rgba(0,0,0,.38)';ctx.beginPath();ctx.ellipse(bx+T/2,by+T/2+10,T*.34,T*.14,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='bold 19px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(Math.max(1,Math.ceil(f.t/1000)),bx+T/2,by+T/2-2);ctx.font='bold 9px system-ui';ctx.fillText('DROP',bx+T/2,by+T/2+15)}else{ctx.fillStyle='rgba(255,220,80,.35)';round(bx+5,by+5,T-10,T-10,8);ctx.fillStyle='#7d4b2c';round(OX+f.c*T+5,f.y-22,T-10,T-10,6);ctx.fillStyle='#b9783f';ctx.fillRect(OX+f.c*T+10,f.y-16,T-20,7)}});items.forEach(it=>{if(it.type==='mastersword'){let t=performance.now(),a=.55+.35*Math.sin(t/170);ctx.save();ctx.translate(it.x,it.y);ctx.fillStyle=`rgba(147,197,253,${.16+a*.08})`;ctx.beginPath();ctx.arc(0,0,24+a*6,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,18+a*4,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='#bfdbfe';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(0,-20-a*5);ctx.lineTo(0,12);ctx.stroke();ctx.strokeStyle='#fde68a';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-12,-3);ctx.lineTo(12,-3);ctx.stroke();ctx.fillStyle='#60a5fa';ctx.beginPath();ctx.moveTo(0,-30-a*4);ctx.lineTo(-6,-18);ctx.lineTo(0,-22);ctx.lineTo(6,-18);ctx.closePath();ctx.fill();ctx.fillStyle='rgba(255,255,255,.32)';ctx.beginPath();ctx.ellipse(0,16,18,5,0,0,Math.PI*2);ctx.fill();ctx.restore();if(it.special){ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillStyle='#ffe66d';ctx.fillText('$'+Math.floor(it.price||specialPrice(it.type)),it.x,it.y+29)}return;}if(it.type==='remote'){let t=performance.now(),a=.55+.25*Math.sin(t/220);ctx.save();ctx.translate(it.x,it.y);ctx.fillStyle='rgba(56,189,248,.16)';ctx.beginPath();ctx.arc(0,0,18+a*3,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(56,189,248,.72)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,-2,21+a*5,Math.PI*.82,Math.PI*1.18);ctx.stroke();ctx.fillStyle='#0b1220';ctx.strokeStyle='#e2e8f0';ctx.lineWidth=2;round(-10,-14,20,28,7);ctx.fill();ctx.stroke();ctx.fillStyle=Math.floor(t/250)%2===0?'#ef4444':'#991b1b';ctx.beginPath();ctx.arc(0,1,5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#38bdf8';ctx.fillRect(-5,-8,10,3);ctx.restore();if(it.special){ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillStyle='#ffe66d';ctx.fillText('$'+Math.floor(it.price||specialPrice(it.type)),it.x,it.y+25)}return;}ctx.fillStyle={fire:'#ff8a2a',bomb:'#ffef72',speed:'#63e7ff',shield:'#8dff8d',kick:'#ff87e6',hand:'#ffd0a6',jump:'#b7f7ff',launchbomb:'#ffcf70',summonblock:'#c4b5fd',shadowservant:'#d8b4fe',overdrive:'#67e8f9',packunga:'#fb923c',remote:'#facc15',shoretsuha:'#f87171',car:'#fb7185',mastersword:'#93c5fd'}[it.type]||'#fff';ctx.beginPath();ctx.arc(it.x,it.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#08101b';ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText({fire:'F',bomb:'B',speed:'S',shield:'🛡',kick:'K',hand:'H',jump:'🪽',launchbomb:'🚀',summonblock:'🧱',shadowservant:'👥',overdrive:'⏳',packunga:'🍲',remote:'🎮',shoretsuha:'衝',car:'🏎',mastersword:'⚔️'}[it.type]||'?',it.x,it.y+1);if(it.special){ctx.font='bold 10px system-ui';ctx.fillStyle='#ffe66d';ctx.fillText('$'+Math.floor(it.price||specialPrice(it.type)),it.x,it.y+25)}});
 bombs.forEach(b=>{let pulse=Math.sin(performance.now()/95)*3,sp=Math.hypot(b.vx||0,b.vy||0),ang=Math.atan2(b.vy||0,b.vx||1)+(b.spin||0),style=b.bombStyle||(b.bossBomb?'boss':(b.enemyBomb?'enemy':'player'));if(sp>40){ctx.strokeStyle=style==='player'?'rgba(255,208,166,.38)':(style==='boss'?'rgba(255,45,125,.55)':'rgba(139,92,246,.50)');ctx.lineWidth=3+Math.min(8,(b.power||0));ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.lineTo(b.x-(b.vx||0)*.08,b.y-(b.vy||0)*.08);ctx.stroke()}if(b.carriedBy){ctx.strokeStyle='rgba(255,255,255,.55)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(b.x,b.y,24+Math.sin(performance.now()/80)*2,0,Math.PI*2);ctx.stroke()}ctx.save();ctx.translate(b.x,b.y);ctx.rotate(ang*.08);if(b.launchPad||style==='launchpad'){ctx.fillStyle='#3b2505';ctx.strokeStyle='#ffcf70';ctx.lineWidth=4;round(-20-pulse*.25,-16-pulse*.2,40+pulse*.5,32+pulse*.4,8);ctx.fill();ctx.stroke();ctx.fillStyle='#ffcf70';ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('🚀',0,1);ctx.strokeStyle='#fff3bf';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-16,-21);ctx.lineTo(0,-31-pulse);ctx.lineTo(16,-21);ctx.stroke()}else if(b.homingBomb||style==='homing'){let t=performance.now(),awake=!!b.homingAwake,run=awake&&!(b.homingPoseT>0),wave=Math.sin(t/75);ctx.save();if(awake){ctx.strokeStyle='#fed7aa';ctx.lineWidth=4;for(const sx of [-1,1]){ctx.beginPath();let armY=(b.homingPoseT>0)?-25:-10+wave*8;ctx.moveTo(sx*12,-6);ctx.lineTo(sx*(23+Math.sin(t/90)*5),armY);ctx.stroke();ctx.beginPath();let legX=sx*(9+Math.sin(t/65)*5),legY=24+Math.cos(t/70)*4;ctx.moveTo(sx*8,13);ctx.lineTo(legX,legY);ctx.stroke();ctx.fillStyle='#fed7aa';ctx.beginPath();ctx.ellipse(legX,legY,7,3,0,0,Math.PI*2);ctx.fill();}}ctx.fillStyle='#10131c';ctx.beginPath();ctx.arc(0,0,17+pulse,0,Math.PI*2);ctx.fill();ctx.strokeStyle=awake?'#fb923c':'#ffffff';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,19+pulse*.3,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#ffec5b';ctx.beginPath();ctx.arc(-5,-6,5,0,Math.PI*2);ctx.fill();if(awake){ctx.fillStyle='#fff7ed';ctx.beginPath();ctx.arc(5,-6,3.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#fb923c';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,7,7,0,Math.PI);ctx.stroke();ctx.font='900 8px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff7ed';ctx.fillText((b.homingPoseT>0)?'BANZAI':'CHASE',0,-25);}ctx.restore()}else if(b.remoteBomb||style==='remote'){let t=performance.now(),blink=Math.floor(t/260)%2===0,glow=.45+.25*Math.sin(t/180);ctx.save();ctx.rotate(Math.sin(t/520)*.08);ctx.fillStyle='rgba(56,189,248,.10)';ctx.beginPath();ctx.ellipse(0,0,28+glow*5,22+glow*3,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(56,189,248,.55)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,-2,27+glow*7,Math.PI*.92,Math.PI*1.18);ctx.stroke();ctx.beginPath();ctx.arc(0,-2,34+glow*9,Math.PI*.92,Math.PI*1.18);ctx.stroke();ctx.fillStyle='#0b1220';ctx.strokeStyle='#93a4b8';ctx.lineWidth=4;ctx.beginPath();ctx.ellipse(0,1,18,21,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.strokeStyle='#64748b';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-16,-6);ctx.lineTo(16,-6);ctx.moveTo(0,-21);ctx.lineTo(0,21);ctx.stroke();ctx.fillStyle=blink?'#ff3636':'#7f1d1d';ctx.strokeStyle='#fecaca';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,1,6+glow*1.5,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#dbeafe';ctx.font='900 8px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('WAIT',0,-12);ctx.restore()}else if(style==='boss'){ctx.fillStyle='#3b0718';ctx.strokeStyle='#ff2d7d';ctx.lineWidth=4;poly(8,22+pulse*.45,Math.PI/8);ctx.fill();ctx.stroke();ctx.strokeStyle='#ffd1e2';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-15,0);ctx.lineTo(15,0);ctx.moveTo(0,-15);ctx.lineTo(0,15);ctx.stroke();ctx.fillStyle='#ffdf5d';ctx.beginPath();ctx.arc(0,0,6+Math.max(0,pulse*.35),0,Math.PI*2);ctx.fill()}else if(style==='enemy'){ctx.fillStyle='#1d1238';ctx.strokeStyle='#a78bfa';ctx.lineWidth=3;round(-17-pulse*.25,-14-pulse*.2,34+pulse*.5,28+pulse*.4,6);ctx.stroke();ctx.fillStyle='#8b5cf6';ctx.fillRect(-12,-8,24,16);ctx.strokeStyle='#f0abfc';ctx.beginPath();ctx.moveTo(-16,-15);ctx.lineTo(-8,-24);ctx.lineTo(0,-15);ctx.lineTo(8,-24);ctx.lineTo(16,-15);ctx.stroke()}else{ctx.fillStyle='#10131c';ctx.beginPath();ctx.arc(0,0,17+pulse,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#ffffff';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,19+pulse*.3,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#ffec5b';ctx.beginPath();ctx.arc(-5,-6,5,0,Math.PI*2);ctx.fill()}ctx.restore();if(b.fusePaused||b.armed===false){ctx.fillStyle='#9ff';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(b.carriedBy?'HOLD':(b.launchPad?'4WAY':(b.remoteBomb?'REMOTE':(b.homingBomb?(b.homingAwake?'BANZAI':'SLEEP'):'WAIT'))),b.x,b.y+31)}else{ctx.fillStyle=style==='player'?'#fff':(style==='boss'?'#ffd1e2':'#ddd6fe');ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.fillText(Math.max(1,Math.ceil((b.timer||0)/1000)),b.x,b.y+31)}});flames.forEach(f=>{let style=f.flameStyle||(f.enemyFlame?'enemy':'player'),life=style==='player'?430:520,a=Math.max(0,f.t/life);if(style==='boss'){ctx.fillStyle=`rgba(255,45,125,${.78*a})`;round(OX+f.c*T+2,OY+f.r*T+2,T-4,T-4,10);ctx.fillStyle=`rgba(255,223,93,${.46*a})`;ctx.beginPath();ctx.arc(OX+f.c*T+T/2,OY+f.r*T+T/2,T*.26,0,Math.PI*2);ctx.fill();ctx.strokeStyle=`rgba(255,255,255,${.42*a})`;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(OX+f.c*T+6,OY+f.r*T+T/2);ctx.lineTo(OX+f.c*T+T-6,OY+f.r*T+T/2);ctx.moveTo(OX+f.c*T+T/2,OY+f.r*T+6);ctx.lineTo(OX+f.c*T+T/2,OY+f.r*T+T-6);ctx.stroke()}else if(style==='enemy'){ctx.fillStyle=`rgba(139,92,246,${.72*a})`;round(OX+f.c*T+5,OY+f.r*T+5,T-10,T-10,8);ctx.strokeStyle=`rgba(240,171,252,${.80*a})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(OX+f.c*T+T/2,OY+f.r*T+T/2,T*.30+Math.sin(performance.now()/70)*3,0,Math.PI*2);ctx.stroke()}else{ctx.fillStyle=`rgba(255,205,58,${.82*a})`;round(OX+f.c*T+4,OY+f.r*T+4,T-8,T-8,8);ctx.fillStyle=`rgba(255,74,40,${.65*a})`;round(OX+f.c*T+13,OY+f.r*T+13,T-26,T-26,7)}});
@@ -4196,9 +4259,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V34-PANIC-SPECIAL-USE-20260609: リモコン爆弾の起爆待ちで狭所に固まる経路を、連鎖爆風外への事前退避ルートで解除する。 */
+/* AI-OMAKASE-PLAYER-V35-MISSION-BLOCKSAFE-20260610: 勝利目的ベース。生成ブロックで自分を閉じ込める行動を禁止し、antiIdleは最終手段に固定。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V34-PANIC-SPECIAL-USE-20260609';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V35-MISSION-BLOCKSAFE-20260610';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -4268,17 +4331,46 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function openAiLevelModal(id,name){if(!started||!players||!players[id]){msg='WAVE中にAIおまかせを選択';return}ai.targetId=id;ai.targetName=name||'PLAYER';ai.selectedLevel=aiLevel(id)||5;let m=ensureModal(),t=$('aiOmakaseTitle'),mm=$('aiOmakaseMsg');if(t)t.textContent=(name||'PLAYER')+' をAIにおまかせ';if(mm)mm.textContent='強さ 1〜9 を選択。方向キーで選択、Aで決定';m.style.display='flex';paintAiLevelCursor();}
   function closeAiLevelModal(){let m=$('aiOmakaseModal');if(m)m.style.display='none'}
   window.__openAiOmakase=openAiLevelModal;
-  function setAiOmakase(id,level){if(!id)return;ai.players[id]={on:true,level:lim(level|0,1,9),lastThink:0,lastBomb:0,lastSpecial:0,lastHand:0,lastX:0,lastY:0,stuckMs:0,plan:null,lastPlanAt:0,escapeBomb:null};let p=players&&players[id];msg=(p&&p.name||'PLAYER')+' AI Lv'+ai.players[id].level+' START';try{sfx('item',1.25)}catch(e){}}
+  function setAiOmakase(id,level){if(!id)return;ai.players[id]={on:true,level:lim(level|0,1,9),lastThink:0,lastBomb:0,lastSpecial:0,lastHand:0,lastX:0,lastY:0,stuckMs:0,plan:null,lastPlanAt:0,escapeBomb:null,objective:null,objectiveAt:0,lastJumpFrom:'',lastJumpTo:'',lastJumpAt:0,jumpLoopLockUntil:0,jumpPurpose:'',sameObjectiveJumpCount:0,mission:null,missionAt:0,lastProgressCell:'',lastProgressAt:0,lastProgressDist:9999,antiIdleLoop:0,aiAntiIdleDisabledUntil:0,aiLastAntiIdleCell:'',aiLastAntiIdleAt:0,aiFailedAntiIdle:Object.create(null)};let p=players&&players[id];msg=(p&&p.name||'PLAYER')+' AI Lv'+ai.players[id].level+' START';try{sfx('item',1.25)}catch(e){}}
 
   function gridAt(c,r){return inside(c,r)&&grid&&grid[r]?grid[r][c]:HARD}
   function empty(c,r){return inside(c,r)&&gridAt(c,r)===EMPTY}
   function bombCell(b){if(!b)return{c:-99,r:-99};if(Number.isFinite(b.c)&&Number.isFinite(b.r))return{c:b.c,r:b.r};return cell(b.x||0,b.y||0)}
   function bombAt(c,r){aiPerfReset();return AI_PERF.bombCells.has(key(c,r))}
+  function aiCountdownBlockAt(c,r){
+    if(!inside(c,r))return true;
+    for(const f of falling||[]){
+      if(!f)continue;
+      if((f.c|0)===(c|0)&&(f.r|0)===(r|0)&&(f.phase==='warn'||f.phase==='fall'))return true;
+    }
+    return false;
+  }
+  function aiCountdownBlockThreat(c,r){
+    if(!inside(c,r))return 999999;
+    let danger=0;
+    for(const f of falling||[]){
+      if(!f)continue;
+      if((f.c|0)!==(c|0)||(f.r|0)!==(r|0))continue;
+      // カウントダウン落下ブロックは「死なないこと」最優先。
+      // 予兆中でも通路扱いしない。残り時間が長くてもAIは進入禁止級にする。
+      if(f.phase==='warn'){
+        let left=Number.isFinite(+f.t)?+f.t:900;
+        danger+=left<450?999999:65000;
+      }else if(f.phase==='fall'){
+        danger+=999999;
+      }
+    }
+    return danger;
+  }
   const AI_HARD_GIMMICKS={fire:1,electric:1,zapper:1,press:1,gear:1};
   function aiDamageGimmickAt(c,r,me){
     if(!inside(c,r))return true;
     aiPerfReset();
     if(AI_PERF.gimmickCells.has(key(c,r)))return true;
+    /* AI LIFE-FIRST COUNTDOWN-BLOCK:
+       落下ブロックの赤い予兆/落下中セルは、AIにとって地面ではなく即死予約セル。
+       openRoute / antiIdle / item回収 / buy移動 / jump着地の全経路から除外する。 */
+    if(aiCountdownBlockAt(c,r))return true;
     /* AI FLAME TEMP-GIMMICK: 炎セルはダメージギミックと同じく通行不可。
        消滅直後だけ短時間保持し、判定順・描画更新のズレで再突入しないようにする。長すぎる待機はしない。 */
     if(aiRecentFlameGimmickAt(c,r))return true;
@@ -4287,6 +4379,152 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return false;
   }
   function passable(p,c,r,allowStart){if(!empty(c,r))return false;if(!allowStart&&aiDamageGimmickAt(c,r,p))return false;if(!allowStart&&bombAt(c,r))return false;let o=center(c,r);try{return canAt(p,o.x,o.y,p&&p.id)!==false}catch(e){return true}}
+
+  /* AI CURRENT ROUTE FIX:
+     水流マスは物理的に流されるため、逆流方向の一歩を経路探索に入れると
+     openRoute と antiIdle/unstuck が同じ無理ルートを交互に選び続ける。
+     AIだけ、現在地または進入先の current に逆らう一歩は通行不可として扱う。 */
+  function aiCurrentAt(c,r){try{return gimmickAt(c,r,'current')}catch(e){return null}}
+  function aiCurrentVector(g){return g?{x:Math.sign(g.dx||0),y:Math.sign(g.dy||0)}:{x:0,y:0}}
+  function aiStepAgainstCurrent(fromC,fromR,toC,toR,p){
+    if(!inside(fromC,fromR)||!inside(toC,toR))return false;
+    let sx=Math.sign(toC-fromC),sy=Math.sign(toR-fromR);
+    if(!sx&&!sy)return false;
+    let from=aiCurrentVector(aiCurrentAt(fromC,fromR)),to=aiCurrentVector(aiCurrentAt(toC,toR));
+    if((from.x||from.y)&&(sx*from.x+sy*from.y)<0)return true;
+    if((to.x||to.y)&&(sx*to.x+sy*to.y)<0)return true;
+    return false;
+  }
+  function aiDirectionalPassable(p,fromC,fromR,toC,toR,allowStart){
+    if(!passable(p,toC,toR,allowStart))return false;
+    if(!allowStart&&aiStepAgainstCurrent(fromC,fromR,toC,toR,p))return false;
+    return true;
+  }
+  function aiCurrentEscapeNode(p,level,target){
+    if(!p)return null;
+    let pc=cell(p.x,p.y),cur=aiCurrentAt(pc.c,pc.r);
+    /* AI CURRENTESCAPE FREEZE FIX:
+       currentEscape は水流(current)専用。water/ice等の通常ギミック上で呼ぶと、
+       openRoute → currentEscape → openRoute の表示チラつきだけで実移動ゼロになりやすい。 */
+    if(!cur)return null;
+    let cv=aiCurrentVector(cur),best=null,bs=Infinity;
+    for(const d of D4){
+      let c=pc.c+d[0],r=pc.r+d[1];
+      if(!aiDirectionalPassable(p,pc.c,pc.r,c,r,false))continue;
+      let dot=d[0]*(cv.x||0)+d[1]*(cv.y||0);
+      let o=center(c,r),dg=cellDanger(c,r,level,p),fd=flameCellDanger(c,r,p)+flamePointDanger(o.x,o.y,p),ed=enemyDangerAtPoint(o.x,o.y,level,p);
+      if(fd>=900||dg>=9000||ed>=10000)continue;
+      let s=dg*.12+fd*.4+ed*.24-dot*80;
+      if(aiCurrentAt(c,r))s+=35;
+      if(target)s-=Math.hypot(o.x-(target.x||o.x),o.y-(target.y||o.y))*.01;
+      if(s<bs){bs=s;best={c,r,dist:1,first:{c,r,dx:d[0],dy:d[1]},prev:null,danger:dg,reason:'currentEscape'};}
+    }
+    return best;
+  }
+  function aiMissionCellForAntiIdle(st,target){
+    let obj=(st&&st.objective)||null,t=(obj&&obj.target)||target;
+    if(!t)return null;
+    if(Number.isFinite(t.c)&&Number.isFinite(t.r))return {c:t.c|0,r:t.r|0,kind:(obj&&obj.kind)||t.kind||'target'};
+    if(Number.isFinite(t.x)&&Number.isFinite(t.y)){let q=cell(t.x,t.y);return {c:q.c,r:q.r,kind:(obj&&obj.kind)||t.kind||'target'};}
+    return null;
+  }
+  function aiReachableAreaFrom(p,level,c,r){
+    try{return bfsFromCell(p,level,c,r,{allowDanger:false,allowEnemyNear:false,maxSteps:18}).size||0}catch(e){return 0}
+  }
+
+  function aiVirtualPassable(p,level,fromC,fromR,toC,toR,blockC,blockR,allowStart){
+    if((toC|0)===(blockC|0)&&(toR|0)===(blockR|0))return false;
+    if(!aiDirectionalPassable(p,fromC,fromR,toC,toR,allowStart))return false;
+    return true;
+  }
+  function aiReachableAreaWithVirtualBlock(p,level,startC,startR,blockC,blockR,maxSteps=36){
+    if((startC|0)===(blockC|0)&&(startR|0)===(blockR|0))return 0;
+    let q=[{c:startC|0,r:startR|0,d:0}],seen=new Set([key(startC|0,startR|0)]),head=0;
+    while(head<q.length){
+      let n=q[head++];if(n.d>=maxSteps)continue;
+      for(const d of D4){
+        let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(seen.has(kk))continue;
+        if(!aiVirtualPassable(p,level,n.c,n.r,c,r,blockC,blockR,false))continue;
+        let o=center(c,r);if(flameCellDanger(c,r,p)+flamePointDanger(o.x,o.y,p)>=900)continue;
+        if(cellDanger(c,r,level,p)>=9000)continue;
+        seen.add(kk);q.push({c,r,d:n.d+1});
+      }
+    }
+    return seen.size;
+  }
+  function aiFreeNeighborsWithVirtualBlock(p,level,baseC,baseR,blockC,blockR){
+    let n=0;
+    for(const d of D4){
+      let c=baseC+d[0],r=baseR+d[1];
+      if(aiVirtualPassable(p,level,baseC,baseR,c,r,blockC,blockR,false)){
+        let o=center(c,r);if(flameCellDanger(c,r,p)+flamePointDanger(o.x,o.y,p)<900&&cellDanger(c,r,level,p)<9000)n++;
+      }
+    }
+    return n;
+  }
+  function aiWouldSelfTrapBySummon(p,level,blockC,blockR,target){
+    if(!p)return true;
+    let pc=cell(p.x,p.y);
+    if(Math.abs((blockC|0)-pc.c)+Math.abs((blockR|0)-pc.r)!==1)return true;
+    let beforeArea=aiReachableAreaFrom(p,level,pc.c,pc.r),afterArea=aiReachableAreaWithVirtualBlock(p,level,pc.c,pc.r,blockC,blockR,36);
+    let afterExits=aiFreeNeighborsWithVirtualBlock(p,level,pc.c,pc.r,blockC,blockR);
+    if(afterExits<=0)return true;
+    if(afterArea<4)return true;
+    if(beforeArea>=6&&afterArea<=Math.max(3,Math.floor(beforeArea*.35)))return true;
+    if(beforeArea>=10&&afterArea<6)return true;
+    let objCell=null;
+    try{if(target){objCell=Number.isFinite(target.c)&&Number.isFinite(target.r)?{c:target.c|0,r:target.r|0}:cell(target.x||0,target.y||0)}}catch(e){objCell=null}
+    if(objCell&&afterArea<beforeArea&&Math.abs(objCell.c-pc.c)+Math.abs(objCell.r-pc.r)>2){
+      let towardBefore=Math.abs(objCell.c-pc.c)+Math.abs(objCell.r-pc.r),towardAfter=Math.abs(objCell.c-blockC)+Math.abs(objCell.r-blockR);
+      if(towardAfter>=towardBefore&&afterArea<8)return true;
+    }
+    return false;
+  }
+  window.__aiOmakaseBlockSummonAllowed=function(p,c,r){
+    try{if(!aiOmakaseActiveForPlayer(p&&p.id))return true;return !aiWouldSelfTrapBySummon(p,aiLevel(p.id),c,r,chooseTarget(p));}catch(e){return false;}
+  };
+  function aiObjectivePlanDistance(p,level,node,st,target){
+    let m=aiMissionCellForAntiIdle(st,target);
+    if(!m||!node)return 0;
+    return Math.abs((m.c|0)-(node.c|0))+Math.abs((m.r|0)-(node.r|0));
+  }
+  function aiMarkAntiIdleFailure(st,node,t){
+    if(!st||!node)return;
+    let kk=key(node.c,node.r);
+    st.aiFailedAntiIdle=st.aiFailedAntiIdle||Object.create(null);
+    st.aiFailedAntiIdle[kk]=t;
+    st.aiAntiIdleDisabledUntil=Math.max(st.aiAntiIdleDisabledUntil||0,t+650);
+    st.antiIdleLoop=(st.antiIdleLoop||0)+1;
+    if(st.antiIdleLoop>=2)st.aiAntiIdleDisabledUntil=Math.max(st.aiAntiIdleDisabledUntil||0,t+1600);
+  }
+  function aiAntiIdleStepNode(p,level,target,st,t){
+    if(!p||!st)return null;
+    if(t<(st.aiAntiIdleDisabledUntil||0))return null;
+    let pc=cell(p.x,p.y),best=null,bs=Infinity,last=st&&st.aiLastAntiIdleCell||'';
+    let mission=aiMissionCellForAntiIdle(st,target),baseDist=mission?Math.abs(mission.c-pc.c)+Math.abs(mission.r-pc.r):0;
+    let baseArea=aiReachableAreaFrom(p,level,pc.c,pc.r);
+    for(const d of D4){
+      let c=pc.c+d[0],r=pc.r+d[1],kk=key(c,r);
+      if(kk===last&&t-(st.aiLastAntiIdleAt||0)<1500)continue;
+      if(st.aiFailedAntiIdle&&st.aiFailedAntiIdle[kk]&&t-st.aiFailedAntiIdle[kk]<2600)continue;
+      if(!aiDirectionalPassable(p,pc.c,pc.r,c,r,false))continue;
+      let o=center(c,r),dg=cellDanger(c,r,level,p),fd=flameCellDanger(c,r,p)+flamePointDanger(o.x,o.y,p),ed=enemyDangerAtPoint(o.x,o.y,level,p);
+      if(fd>=900||dg>=9000||ed>=10000)continue;
+      let afterDist=mission?Math.abs(mission.c-c)+Math.abs(mission.r-r):0,progress=baseDist-afterDist;
+      let area=aiReachableAreaFrom(p,level,c,r),areaGain=area-baseArea;
+      /* antiIdleStep は勝利目的へ進む・可動域が増える時だけ許可。
+         目的にも近づかず、可動域も増えない一歩はチラチラ無限ループの温床なので候補にしない。 */
+      if(mission&&progress<1&&areaGain<2&&st.stuckMs<1300)continue;
+      if(!mission&&areaGain<2&&st.stuckMs<1300)continue;
+      let gm=gimmickAt(c,r),s=dg*.15+fd*.5+ed*.25-progress*260-areaGain*45;
+      if(gm&&gm.type==='current')s+=160;
+      if(gm&&gm.type==='water')s+=40;
+      if(target)s+=Math.hypot(o.x-(target.x||o.x),o.y-(target.y||o.y))*.002;
+      if(s<bs){bs=s;best={c,r,dist:1,first:{c,r,dx:d[0],dy:d[1]},prev:null,danger:dg,reason:'antiIdleStep',missionProgress:progress,areaGain};}
+    }
+    if(best&&st){st.aiLastAntiIdleCell=key(best.c,best.r);st.aiLastAntiIdleAt=t;}
+    return best;
+  }
   function explicitTeamKey(p){
     if(!p)return '';
     let raw=(p.teamKey||p.teamChoice||p.teamBadge||'');
@@ -4371,7 +4609,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(AI_PERF.danger.has(ck))return AI_PERF.danger.get(ck);
     let o=center(c,r),danger=enemyDangerAtPoint(o.x,o.y,level,me)+flameCellDanger(c,r,me);
     if(aiDamageGimmickAt(c,r,me))danger+=999999;
-    for(const f of falling||[])if(f&&f.c===c&&f.r===r)danger+=f.phase==='warn'?80:10000;
+    danger+=aiCountdownBlockThreat(c,r);
     for(const b of bombs||[]){
       if(!b||b.carriedBy||b.fusePaused||b.armed===false)continue;
       let bc=bombCell(b),timer=Number.isFinite(b.timer)?b.timer:2800,range=b.range||2,own=me&&b.owner===me.id;
@@ -4398,7 +4636,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
   function bfs(p,level,opt){
     opt=opt||{};let st=cell(p.x,p.y),root={c:st.c,r:st.r,dist:0,first:null,prev:null},q=[root],map=new Map([[key(st.c,st.r),root]]),vb=opt.virtualBomb||null,max=opt.maxSteps||80;
-    for(let qi=0;qi<q.length;qi++){let n=q[qi];if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!passable(p,c,r,c===st.c&&r===st.r))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
+    for(let qi=0;qi<q.length;qi++){let n=q[qi];if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!aiDirectionalPassable(p,n.c,n.r,c,r,c===st.c&&r===st.r))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
     return map;
   }
   function nearestByPath(p,targets,level,opt){
@@ -4409,7 +4647,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
   function bfsFromCell(p,level,sc,sr,opt){
     opt=opt||{};let root={c:sc,r:sr,dist:0,first:null,prev:null},q=[root],map=new Map([[key(sc,sr),root]]),vb=opt.virtualBomb||null,max=opt.maxSteps||80;
-    for(let qi=0;qi<q.length;qi++){let n=q[qi];if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!passable(p,c,r,false))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
+    for(let qi=0;qi<q.length;qi++){let n=q[qi];if(n.dist>=max)continue;for(const d of D4){let c=n.c+d[0],r=n.r+d[1],kk=key(c,r);if(map.has(kk))continue;if(!aiDirectionalPassable(p,n.c,n.r,c,r,false))continue;let danger=cellDanger(c,r,level,p,vb);if(!opt.allowDanger&&danger>=160)continue;if(!opt.allowEnemyNear&&enemyDangerAtPoint(center(c,r).x,center(c,r).y,level,p)>=180)continue;let child={c,r,dist:n.dist+1,first:n.first||{c,r,dx:d[0],dy:d[1]},prev:n,danger};map.set(kk,child);q.push(child);}}
     return map;
   }
   function escapeAfterBombFromCell(p,level,sc,sr,bc,br,range){
@@ -5187,8 +5425,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       const shadowChasingPlayer=!!(p&&p.isShadowEnemy&&target&&target.kind==='player');
       const dgLimit=shadowChasingPlayer?(ownBombMinTimer(p)>900?1200:520):400;
       let ownFuture=ownBombBlastThreatAt(p,ccell.c,ccell.r)||ownRemoteBlastThreatAt(p,ccell.c,ccell.r),ownHere=ownBombBlastThreatAt(p,cell(p.x,p.y).c,cell(p.x,p.y).r)||ownRemoteBlastThreatAt(p,cell(p.x,p.y).c,cell(p.x,p.y).r);
-      if(aiDamageGimmickAt(ccell.c,ccell.r,p)||fd>=900||(!shadowChasingPlayer&&ed>=180)||dg>=dgLimit||(ownFuture&&!ownHere)){
-        let s=ownHere?safeOwnBombEscapeNode(p,level,target):safestNode(p,level,target);
+      if(aiCountdownBlockAt(ccell.c,ccell.r)||aiStepAgainstCurrent(pcNow.c,pcNow.r,ccell.c,ccell.r,p)||aiDamageGimmickAt(ccell.c,ccell.r,p)||fd>=900||(!shadowChasingPlayer&&ed>=180)||dg>=dgLimit||(ownFuture&&!ownHere)){
+        let s=ownHere?safeOwnBombEscapeNode(p,level,target):(aiCurrentEscapeNode(p,level,target)||safestNode(p,level,target));
         return s?vecToNode(p,s):{dx:0,dy:0};
       }
     }
@@ -5347,25 +5585,88 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let c=cell(p.x,p.y);
     return ownBombBlastThreatAt(p,c.c,c.r)||ownRemoteBlastThreatAt(p,c.c,c.r);
   }
+
+  /* AI OBJECTIVE CORE 20260609:
+     おまかせAIの根っこを「できる行動」ではなく「勝利目的」から決める。
+     WAVE: 生存 > 敵/ボス撃破 > ゴール > 自己強化 > 開通。
+     BATTLE: 生存 > 敵プレイヤー撃破 > 自己強化 > 有利位置。
+     この目的に寄与しないジャンプ・左右往復・買えない物への粘着を禁止する。 */
+  function aiModeObjectiveKind(){return (battle&&battle.on)?'battle':'wave'}
+  function aiObjectiveFor(p,level,st,target){
+    let pc=cell(p.x,p.y),fd=flameCellDanger(pc.c,pc.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(pc.c,pc.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p),own=ownBombBlastThreatAt(p,pc.c,pc.r)||ownRemoteBlastThreatAt(p,pc.c,pc.r);
+    if(fd>=900||dg>=9000||ed>=180||own)return{kind:'survive',target:null,priority:100000,reason:'survive'};
+    if(target){let boss=!!(target.obj&&target.obj.boss);return{kind:battle&&battle.on?'killPlayer':(boss?'killBoss':'killEnemy'),target,priority:boss?90000:80000,reason:boss?'boss':'enemy'};}
+    let gt=goalTarget();if(gt)return{kind:'goal',target:gt,priority:70000,reason:'goal'};
+    let buy=null;try{buy=aiBestBuyTarget(p,level)}catch(e){buy=null}
+    if(buy)return{kind:'powerup',target:buy,priority:56000+(buy.price||0),reason:'powerup'};
+    let soft=null;try{let cells=openPlantCellsLimited(p,target,level,8,6);soft=cells&&cells[0]}catch(e){soft=null}
+    if(soft)return{kind:'open',target:soft,priority:42000,reason:'open'};
+    return{kind:'survive',target:null,priority:20000,reason:'safe'};
+  }
+  function aiObjectiveCell(obj){let t=obj&&obj.target;if(!t)return null;return Number.isFinite(t.c)&&Number.isFinite(t.r)?{c:t.c,r:t.r}:cell(t.x||0,t.y||0)}
+  function aiObjectiveDistanceFromCell(c,r,obj){let oc=aiObjectiveCell(obj);if(!oc)return 0;return Math.abs((oc.c|0)-c)+Math.abs((oc.r|0)-r)}
+  function aiRefreshObjective(p,level,st,target,t){
+    let obj=aiObjectiveFor(p,level,st,target);
+    let sig=obj.kind+':'+(obj.target?(obj.target.kind||'t')+':'+(obj.target.c|0)+','+(obj.target.r|0):'none');
+    if(!st.objective||st.objectiveSig!==sig||t-(st.objectiveAt||0)>900){st.objective=obj;st.objectiveSig=sig;st.objectiveAt=t;st.sameObjectiveJumpCount=0;}
+    return st.objective||obj;
+  }
+  function aiCountFreeNeighborsForCell(p,c,r,level){
+    let n=0;for(const d of D4){let x=c+d[0],y=r+d[1];if(!inside(x,y))continue;if(!passable(p,x,y,false))continue;if(cellDanger(x,y,level,p)>=9000)continue;if(flameCellDanger(x,y,p)>=900)continue;n++;}return n;
+  }
+  function aiJumpWouldLoop(p,st,fromKey,toKey,t,obj){
+    if(!st)return false;
+    if(t<(st.jumpLoopLockUntil||0))return true;
+    if(st.lastJumpFrom===toKey&&st.lastJumpTo===fromKey&&t-(st.lastJumpAt||0)<2600)return true;
+    if(st.lastJumpTo===toKey&&t-(st.lastJumpAt||0)<1700)return true;
+    let purpose=(obj&&obj.kind)||'';
+    if(purpose&&st.jumpPurpose===purpose&&st.sameObjectiveJumpCount>=2&&t-(st.lastJumpAt||0)<4200)return true;
+    return false;
+  }
+  function aiRecordJumpDecision(st,fromKey,toKey,t,obj){
+    if(!st)return;
+    let purpose=(obj&&obj.kind)||'';
+    if(st.jumpPurpose===purpose)st.sameObjectiveJumpCount=(st.sameObjectiveJumpCount||0)+1;else st.sameObjectiveJumpCount=1;
+    st.jumpPurpose=purpose;st.lastJumpFrom=fromKey;st.lastJumpTo=toKey;st.lastJumpAt=t;
+  }
   function aiJumpDecision(p,level,st,target,panic){
     if(!p||!(p.specials&&p.specials.jump>0)||p.jumpState)return null;
-    let base=cell(p.x,p.y),cur=aiDangerScoreAtCellForUse(p,level,base.c,base.r,target),best=null,bs=-Infinity;
+    let t=tnow();
+    let obj=aiRefreshObjective(p,level,st,target,t);
+    let base=cell(p.x,p.y),fromKey=key(base.c,base.r),cur=aiDangerScoreAtCellForUse(p,level,base.c,base.r,target);
+    let currentFree=aiCountFreeNeighborsForCell(p,base.c,base.r,level);
+    let ownThreat=aiOwnHereThreat(p),panicJump=(panic>=4||cur>=900||ownThreat);
+    let beforeObj=aiObjectiveDistanceFromCell(base.c,base.r,obj);
+    let best=null,bs=-Infinity;
     [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].forEach(d=>{
-      let n=jumpNextCell(base.c,base.r,d.x,d.y);
+      let n=jumpNextCell(base.c,base.r,d.x,d.y),toKey=key(n.c,n.r);
       if(!jumpLandingFree(n.c,n.r,p.id))return;
+      if(aiJumpWouldLoop(p,st,fromKey,toKey,t,obj))return;
       let nd=aiDangerScoreAtCellForUse(p,level,n.c,n.r,target);
       if(nd>=9000)return;
       let adjC=base.c+d.x,adjR=base.r+d.y;
-      let obstacleBonus=(!inside(adjC,adjR)||gridAt(adjC,adjR)!==EMPTY||bombAt(adjC,adjR))?520:0;
-      let escapeBonus=(cur>=900||aiOwnHereThreat(p)||panic>=4)?900:0;
-      let far=target?Math.hypot(center(n.c,n.r).x-(target.x||p.x),center(n.c,n.r).y-(target.y||p.y))*.08:0;
-      let score=(cur-nd)+obstacleBonus+escapeBonus+far;
-      if(score>bs){bs=score;best={type:'jump',dir:d,score,reason:'smartJump'};}
+      let overObstacle=(!inside(adjC,adjR)||gridAt(adjC,adjR)!==EMPTY||bombAt(adjC,adjR)||aiDamageGimmickAt(adjC,adjR,p));
+      let afterObj=aiObjectiveDistanceFromCell(n.c,n.r,obj),objectiveGain=beforeObj-afterObj;
+      let freeGain=aiCountFreeNeighborsForCell(p,n.c,n.r,level)-currentFree;
+      let score=0;
+      if(panicJump)score+=(cur-nd)+1200;
+      if(overObstacle)score+=360;
+      score+=objectiveGain*260;
+      score+=freeGain*140;
+      if(obj&&obj.kind==='survive')score+=nd<cur?420:0;
+      if(obj&&/kill|goal|powerup|open/.test(obj.kind)&&objectiveGain<=0&&!panicJump)score-=1200;
+      if(!overObstacle&&objectiveGain<=0&&freeGain<=0&&!panicJump)score-=1800;
+      score-=nd*.08;
+      if(score>bs){bs=score;best={type:'jump',dir:d,score,reason:'objectiveJump',fromKey,toKey,objective:obj};}
     });
     if(!best)return null;
-    if(panic>=4||bs>420||cur>=900||aiOwnHereThreat(p))return best;
-    return null;
+    /* JUMPは「生存」「目的接近」「詰みから可動域増加」のどれかがない限り禁止。
+       これで左右に飛べるだけの無限ジャンプを潰す。 */
+    if(!(panicJump||best.score>=520))return null;
+    aiRecordJumpDecision(st,best.fromKey,best.toKey,t,best.objective);
+    return best;
   }
+
   function aiShoretsuhaDirsFromDir(dir,lv){
     let count=Math.min(8,Math.max(1,lv|0)),arr=[];
     for(let i=0;i<count;i++)arr.push(rotateDirClockwise45(dir,i));
@@ -5463,16 +5764,33 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function aiSummonBlockDecision(p,level,st,target,panic){
     if(!p||!(p.specials&&p.specials.summonblock>0)||p.specialCooldown>0)return null;
     if(Math.floor(p.gold||0)<BLOCK_SUMMON_USE_COST)return null;
-    let dirs=[snapThrowDir(p.lastDirX||1,p.lastDirY||0),{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}],base=cell(p.x,p.y),best=null,bs=-Infinity;
+    /* BLOCK SUMMONは「置けるから置く」禁止。AIが自分の退路を塞いで詰む原因なので、
+       勝利目的に効く上に、置いた後も十分な可動域が残る時だけ許可する。 */
+    let base=cell(p.x,p.y),curArea=aiReachableAreaFrom(p,level,base.c,base.r),curExits=aiCountFreeNeighborsForCell(p,base.c,base.r,level);
+    if(curExits<=1||curArea<4)return null;
+    let dirs=[snapThrowDir(p.lastDirX||1,p.lastDirY||0),{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}],best=null,bs=-Infinity;
     dirs.forEach(d=>{
       if(!d||(!d.x&&!d.y))return;let c=base.c+d.x,r=base.r+d.y;if(!inside(c,r)||gridAt(c,r)!==EMPTY||bombAt(c,r))return;
-      let score=0;
-      if(target){let before=Math.abs((target.c|0)-base.c)+Math.abs((target.r|0)-base.r),after=Math.abs((target.c|0)-c)+Math.abs((target.r|0)-r);if(before<=3&&after<before)score+=520;}
-      if(panic>=4)score+=240;
-      score-=cellDanger(c,r,level,p)*.1;
-      if(score>bs){bs=score;best={type:'summonblock',dir:d,score,reason:'smartBlock'};}
+      if(bombs.some(b=>!b.carriedBy&&bombCell(b).c===c&&bombCell(b).r===r)||items.some(it=>it&&it.c===c&&it.r===r)||Object.values(players).some(q=>q&&q.alive&&q.id!==p.id&&q.c===c&&q.r===r)||enemies.some(e=>e.alive&&e.c===c&&e.r===r))return;
+      if(aiWouldSelfTrapBySummon(p,level,c,r,target))return;
+      let score=0,meaning=false;
+      if(target){
+        let tc0=Number.isFinite(target.c)&&Number.isFinite(target.r)?{c:target.c|0,r:target.r|0}:cell(target.x||0,target.y||0);
+        let before=Math.abs(tc0.c-base.c)+Math.abs(tc0.r-base.r),after=Math.abs(tc0.c-c)+Math.abs(tc0.r-r);
+        let aligned=(Math.sign(tc0.c-base.c)===d.x&&d.x!==0)||(Math.sign(tc0.r-base.r)===d.y&&d.y!==0);
+        let nearTarget=Math.abs(tc0.c-c)+Math.abs(tc0.r-r)<=1;
+        let between=aligned&&before>=1&&before<=4&&after<before;
+        if(between){score+=760;meaning=true;}
+        if(nearTarget){score+=360;meaning=true;}
+        if(panic>=4&&between)score+=260;
+      }
+      let afterArea=aiReachableAreaWithVirtualBlock(p,level,base.c,base.r,c,r,36),areaLoss=Math.max(0,curArea-afterArea);
+      score-=areaLoss*85;
+      score-=cellDanger(c,r,level,p)*.16;
+      if(!meaning)return;
+      if(score>bs){bs=score;best={type:'summonblock',dir:d,score,reason:'missionBlockSafe',areaAfter:afterArea};}
     });
-    return best&&best.score>=420?best:null;
+    return best&&best.score>=560?best:null;
   }
   function aiCarDecision(p,level,st,target,panic){
     if(!p||!(p.specials&&p.specials.car>0)||p.specialCooldown>0||!canUseCarSpecial(p))return null;
@@ -5542,17 +5860,66 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     }
     return false;
   }
+
+  function aiStrategicPlanForObjective(p,level,st,target,t){
+    let obj=aiRefreshObjective(p,level,st,target,t);
+    let pc=cell(p.x,p.y);
+    /* 最優先は生存。ここは既存の爆風・炎退避を尊重する。 */
+    let forced=forcedOwnBombEscapePlan(p,level,st,target,t);if(forced)return forced;
+    let own=ownBombEscapePlan(p,level,target);if(own)return own;
+    let em=emergencyEscape(p,level,target);if(em)return em;
+    if(obj&&obj.kind==='powerup'&&obj.target&&obj.target.node)return {action:'move',node:obj.target.node,reason:'missionPowerup',target:obj.target,objective:obj};
+    if(obj&&obj.kind==='goal'&&obj.target){let g=nearestByPath(p,[obj.target],level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});if(g&&g.node)return {action:'move',node:g.node,reason:'missionGoal',target:g,objective:obj};}
+    if(target){
+      if(targetIsTeamMonster(target)&&canBombPressureHere(p,level,target))return{action:'bomb',reason:'missionKillBomb',target,objective:obj};
+      let plants=attackPlantCells(p,target,level),ap=nearestByPath(p,plants,level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});
+      if(ap&&ap.node)return ap.node.dist===0?{action:'bomb',reason:'missionAttackBomb',target,objective:obj}:{action:'move',node:ap.node,reason:'missionAttackSet',target,objective:obj};
+    }
+    let buy=aiBestBuyTarget(p,level);if(buy&&buy.node)return {action:'move',node:buy.node,reason:'missionBuy',target:buy,objective:obj};
+    let rb=reachableBombBreakPlan(p,level,target);if(rb){rb.reason='mission'+String(rb.reason||'Open');rb.objective=obj;return rb;}
+    let open=nearestByPath(p,openPlantCells(p,target,level),level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});
+    if(open&&open.node)return open.node.dist===0&&canBombHere(p,level,'open',target)?{action:'bomb',reason:'missionOpenBomb',target,objective:obj}:{action:'move',node:open.node,reason:'missionOpenRoute',target:open,objective:obj};
+    let safe=safestNode(p,level,target);return safe?{action:'move',node:safe,reason:'missionSafe',target,objective:obj}:{action:'idle',reason:'missionIdle',target,objective:obj};
+  }
+  function aiUpdateMissionProgress(p,level,st,target,t){
+    if(!st||!p)return;
+    let obj=aiRefreshObjective(p,level,st,target,t),pc=cell(p.x,p.y),dist=aiObjectiveDistanceFromCell(pc.c,pc.r,obj),ck=key(pc.c,pc.r);
+    if(st.lastProgressCell!==ck||dist<(st.lastProgressDist||9999)){st.lastProgressCell=ck;st.lastProgressDist=dist;st.lastProgressAt=t;st.antiIdleLoop=0;return;}
+    if(t-(st.lastProgressAt||0)>1800){
+      st.plan=null;st.unstuckRouteCache=null;st.unstuckOpenCache=null;st.aiAntiIdleDisabledUntil=Math.max(st.aiAntiIdleDisabledUntil||0,t+1000);
+    }
+  }
+  function aiTryObjectiveJumpRecovery(p,level,st,target,t,inp){
+    if(!p||!inp)return false;
+    let best=aiJumpDecision(p,level,st,target,Math.max(0,aiPanicLevel(p,level,st,target)));
+    if(!best||best.score<560)return false;
+    return aiSetSpecialAndFire(p,st,inp,t,'jump',best.dir,'missionJump');
+  }
   function applyAiToInput(id,inp,dt){
     let p=players&&players[id];if(!p||!inp||!aiOn(id))return;let st=ai.players[id],level=aiLevel(id),t=tnow();
     inp.local=true;inp.name=p.name||inp.name||'AI';inp.last=now();
     if(!p.alive||p.jumpState){inp.dx=0;inp.dy=0;return;}
-    let hereCell=cell(p.x,p.y),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p),hereGimmick=aiDamageGimmickAt(hereCell.c,hereCell.r,p);
+    let hereCell=cell(p.x,p.y),hereCountdown=aiCountdownBlockAt(hereCell.c,hereCell.r),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p),hereGimmick=aiDamageGimmickAt(hereCell.c,hereCell.r,p);
     let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
     let earlyTarget=chooseTarget(p);
+    let aiObj=aiRefreshObjective(p,level,st,earlyTarget,t);
+    aiUpdateMissionProgress(p,level,st,earlyTarget,t);
+    if(st.stuckMs>420){
+      let pc0=cell(p.x,p.y),g0=aiCurrentAt(pc0.c,pc0.r);
+      if(g0){st.plan=null;st.unstuckRouteCache=null;st.unstuckOpenCache=null;st.lastPlanAt=0;}
+    }
     /* AI PANIC SPECIAL USE:
        ピンチ時ほど shouldUseSpecial の通常攻撃条件に入れず、静かに死を待つ逆転挙動を潰す。
        危険セル・爆風・敵接近・詰まりでは、移動計画より先にJUMP/HAND/OVERDRIVE等を割り込ませる。 */
     if(aiPanicSpecialUse(p,level,st,earlyTarget,t,inp))return;
+    if(hereCountdown){
+      st.plan=null;st.unstuckRouteCache=null;st.unstuckOpenCache=null;
+      let esc=safestNode(p,level,earlyTarget);
+      let mv0=esc?safeMoveVector(p,vecToNode(p,esc),level,earlyTarget):{dx:0,dy:0};
+      inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;
+      if(Math.hypot(inp.dx,inp.dy)<.05&&aiTryObjectiveJumpRecovery(p,level,st,earlyTarget,t,inp))return;
+      return;
+    }
     if(hereGimmick||hereFlame>=900){st.plan=null;let esc=safestNode(p,level,earlyTarget);let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
     syncAiPlacedCount(p);
     /* AI REMOTE FULL SUPPRESS:
@@ -5577,13 +5944,36 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(canForcedChainBombHere(p,level,earlyTarget)&&t-(p.aiLastBomb||0)>chainWait){
       if(fireAiBomb(p,st,inp,t,'chainBomb',earlyTarget))return;
     }
-    let thinkWait=Math.max(90,260-level*16);if(!st.plan||t-(st.lastPlanAt||0)>thinkWait||st.stuckMs>700){st.plan=choosePlan(p,level,st);st.lastPlanAt=t;}
-    let plan=st.plan||choosePlan(p,level,st),target=plan.target||chooseTarget(p);
-    if(plan&&plan.node&&(aiDamageGimmickAt(plan.node.c,plan.node.r,p)||flameCellDanger(plan.node.c,plan.node.r,p)>=900||cellDanger(plan.node.c,plan.node.r,level,p)>=9000)){st.plan=choosePlan(p,level,st);plan=st.plan||plan;target=plan.target||target;}
+    let thinkWait=Math.max(90,260-level*16);if(!st.plan||t-(st.lastPlanAt||0)>thinkWait||st.stuckMs>700){st.plan=aiStrategicPlanForObjective(p,level,st,earlyTarget,t)||choosePlan(p,level,st);st.lastPlanAt=t;}
+    let plan=st.plan||aiStrategicPlanForObjective(p,level,st,earlyTarget,t)||choosePlan(p,level,st),target=plan.target||earlyTarget||chooseTarget(p);
+    if(plan&&plan.node&&(aiCountdownBlockAt(plan.node.c,plan.node.r)||aiDamageGimmickAt(plan.node.c,plan.node.r,p)||flameCellDanger(plan.node.c,plan.node.r,p)>=900||cellDanger(plan.node.c,plan.node.r,level,p)>=9000)){st.plan=aiStrategicPlanForObjective(p,level,st,target,t)||choosePlan(p,level,st);plan=st.plan||plan;target=plan.target||target;}
     let mv=plan.action==='move'?vecToNode(p,plan.node):{dx:0,dy:0};
     if(plan.action==='bomb')mv={dx:0,dy:0};
     if(st.stuckMs>650&&plan.action!=='bomb'){let up=unstuckRoutePlanLite(p,level,st,target,t);if(up){plan=up;st.plan=plan;mv=plan.action==='move'?vecToNode(p,plan.node):{dx:0,dy:0};}}
-    mv=safeMoveVector(p,mv,level,target);inp.dx=mv.dx||0;inp.dy=mv.dy||0;
+    mv=safeMoveVector(p,mv,level,target);
+    if(Math.hypot(mv.dx||0,mv.dy||0)<.05&&st.stuckMs>420){
+      /* AI ROOT MISSION RECOVERY:
+         antiIdleStepを即選ばず、まず勝利目的ベースで再計画する。
+         それでも進めない時だけ、目的進展があるantiIdleStepを一回だけ使う。 */
+      if(aiUseBestTacticalSpecial(p,level,st,target,t,inp,'normal'))return;
+      if(aiTryObjectiveJumpRecovery(p,level,st,target,t,inp))return;
+      let missionPlan=aiStrategicPlanForObjective(p,level,st,target,t);
+      if(missionPlan&&missionPlan.action==='move'&&missionPlan.node){
+        st.plan=missionPlan;st.lastPlanAt=t;mv=safeMoveVector(p,vecToNode(p,missionPlan.node),level,target);
+      }
+      if(Math.hypot(mv.dx||0,mv.dy||0)<.05){
+        let pcFix=cell(p.x,p.y),ce=aiCurrentAt(pcFix.c,pcFix.r)?aiCurrentEscapeNode(p,level,target):null;
+        if(ce){st.plan={action:'move',node:ce,reason:'currentEscape',target};st.lastPlanAt=t;mv=safeMoveVector(p,vecToNode(p,ce),level,target);}
+        else{
+          let aiStep=aiAntiIdleStepNode(p,level,target,st,t);
+          if(aiStep){
+            st.plan={action:'move',node:aiStep,reason:'antiIdleStep',target};st.lastPlanAt=t;mv=safeMoveVector(p,vecToNode(p,aiStep),level,target);
+            if(Math.hypot(mv.dx||0,mv.dy||0)<.05){aiMarkAntiIdleFailure(st,aiStep,t);st.plan=null;st.unstuckRouteCache=null;st.unstuckOpenCache=null;}
+          }else{st.plan=null;st.unstuckRouteCache=null;st.unstuckOpenCache=null;}
+        }
+      }
+    }
+    inp.dx=mv.dx||0;inp.dy=mv.dy||0;
     if(Math.hypot(inp.dx,inp.dy)>.12){let d=snapThrowDir(inp.dx,inp.dy);p.lastDirX=d.x;p.lastDirY=d.y;inp.lastDirX=d.x;inp.lastDirY=d.y;}
     if(target)aimAt(p,target);
     if(aiUseBestTacticalSpecial(p,level,st,target,t,inp,'normal'))return;
