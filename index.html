@@ -4497,8 +4497,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function chooseTarget(p){let list=liveEnemies().concat(hostilePlayers(p));list.forEach(t=>{t.dist=distanceObj(p,t);if(t.kind==='player')t.score=(p&&p.isShadowEnemy)?-140:-80;});list.sort((a,b)=>((a.dist+(a.score||0))-(b.dist+(b.score||0))));return list[0]||null}
   function softTargets(p){let arr=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(!empty(c,r)||bombAt(c,r))continue;let near=false;for(const d of D4){let x=c+d[0],y=r+d[1];if(inside(x,y)&&gridAt(x,y)===SOFT)near=true;}if(near&&passable(p,c,r,false))arr.push({kind:'soft',c,r,x:center(c,r).x,y:center(c,r).y});}return arr}
   function aiSpecialPrice(it){return Math.floor((it&&it.price)||specialPrice(it&&it.type)||0)}
-  function aiCurrentSpecialPrice(p){try{ensureSpecialBag(p)}catch(e){}let active=fallbackActiveSpecial(p);return active&&p&&p.specials&&p.specials[active]>0?Math.floor(specialPrice(active)||0):0}
-  function aiCanBuySpecialItem(p,it){if(!p||!it||!it.special)return false;if(it.type==='remote')return false;let price=aiSpecialPrice(it);if(Math.floor(p.gold||0)<price)return false;return price>=aiCurrentSpecialPrice(p)}
+  function aiCurrentSpecialLevel(p,type){try{ensureSpecialBag(p)}catch(e){}return Math.max(0,((p&&p.specials&&p.specials[type])||0)|0)}
+  function aiCanBuySpecialItem(p,it){if(!p||!it||!it.special)return false;if(it.type==='remote')return false;let price=aiSpecialPrice(it);return Math.floor(p.gold||0)>=price}
+  function aiSpecialBuyPriority(p,it){let price=aiSpecialPrice(it),lv=aiCurrentSpecialLevel(p,it&&it.type);return {unset:lv<=0?1:0,price}}
   function aiBestBuyTarget(p,level){
     if(!p||!p.alive)return null;
     let map=bfs(p,level,{allowDanger:false,allowEnemyNear:false,maxSteps:80}),best=null,bs=-Infinity;
@@ -4508,13 +4509,16 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       if(!passable(p,it.c,it.r,false))continue;
       let n=map.get(key(it.c,it.r));if(!n)continue;
       let dg=cellDanger(it.c,it.r,level,p);if(dg>=160)continue;
-      let o=center(it.c,it.r),price=aiSpecialPrice(it);
-      let score=price*1000-n.dist*12-dg*.25;
-      if(score>bs){bs=score;best={kind:'buy',c:it.c,r:it.r,x:o.x,y:o.y,it,node:n,price,score,reason:'bestBuy'}}
+      let o=center(it.c,it.r),price=aiSpecialPrice(it),prio=aiSpecialBuyPriority(p,it);
+      /* AI SPECIAL BUY PRIORITY:
+         リモコン爆弾は買わない。現在フィールド上にあり、所持金で買えて、BFSで到達可能な物だけ対象。
+         優先順位は「未セット(Lv0)」を最優先、同条件なら高額、最後に近さと安全度で微調整。 */
+      let score=prio.unset*100000000+price*10000-n.dist*12-dg*.25;
+      if(score>bs){bs=score;best={kind:'buy',c:it.c,r:it.r,x:o.x,y:o.y,it,node:n,price,score,reason:prio.unset?'bestBuyUnset':'bestBuyPrice'}}
     }
     return best;
   }
-  function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(!passable(p,it.c,it.r,false))continue;if(it.special){try{if(!aiCanBuySpecialItem(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;let price=it.special?aiSpecialPrice(it):0;arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,price,score:it.special?(-60-price*2):-25});}return arr}
+  function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(!passable(p,it.c,it.r,false))continue;if(it.special){try{if(!aiCanBuySpecialItem(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;let price=it.special?aiSpecialPrice(it):0,prio=it.special?aiSpecialBuyPriority(p,it):{unset:0,price:0};arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,price,score:it.special?(-10000-prio.unset*5000-price*2):-25});}return arr}
   function goalTarget(){if(goalGate&&!goalGate.hidden&&!battle.on){let g=cell(goalGate.x,goalGate.y);if(aiDamageGimmickAt(g.c,g.r))return null;return{kind:'goal',c:g.c,r:g.r,x:goalGate.x,y:goalGate.y,score:-80}}return null}
   function reviveTargets(p){let arr=[];for(const q of Object.values(players||{})){if(!q||q.alive||!friendPlayer(p,q))continue;let qc=cell(q.x,q.y);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)arr.push({kind:'revive',c:qc.c+dx,r:qc.r+dy,x:q.x,y:q.y,friend:q,score:-90});}return arr}
 
