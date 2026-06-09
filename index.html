@@ -5328,6 +5328,191 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     for(const e of enemies||[]){if(!e||!e.alive)continue;let d=Math.abs((e.c|0)-pc.c)+Math.abs((e.r|0)-pc.r);if(d<bd&&d<=2){bd=d;best={x:Math.sign((e.c|0)-pc.c)||1,y:Math.sign((e.r|0)-pc.r)||0};}}
     return best;
   }
+  function aiSpecialRecent(p,type,t,ms){
+    if(!p||!type)return false;
+    let m=p.aiSpecialUseAt||(p.aiSpecialUseAt=Object.create(null));
+    return !!(m[type]&&t-m[type]<ms);
+  }
+  function aiMarkSpecialUse(p,type,t){
+    if(!p||!type)return;
+    let m=p.aiSpecialUseAt||(p.aiSpecialUseAt=Object.create(null));
+    m[type]=t||tnow();
+  }
+  function aiDangerScoreAtCellForUse(p,level,c,r,target){
+    if(!inside(c,r))return 999999;
+    let o=center(c,r);
+    return cellDanger(c,r,level,p)+flameCellDanger(c,r,p)*7+flamePointDanger(o.x,o.y,p)*7+enemyDangerAtPoint(o.x,o.y,level,p)*2+(aiDamageGimmickAt(c,r,p)?999999:0);
+  }
+  function aiOwnHereThreat(p){
+    let c=cell(p.x,p.y);
+    return ownBombBlastThreatAt(p,c.c,c.r)||ownRemoteBlastThreatAt(p,c.c,c.r);
+  }
+  function aiJumpDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.jump>0)||p.jumpState)return null;
+    let base=cell(p.x,p.y),cur=aiDangerScoreAtCellForUse(p,level,base.c,base.r,target),best=null,bs=-Infinity;
+    [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].forEach(d=>{
+      let n=jumpNextCell(base.c,base.r,d.x,d.y);
+      if(!jumpLandingFree(n.c,n.r,p.id))return;
+      let nd=aiDangerScoreAtCellForUse(p,level,n.c,n.r,target);
+      if(nd>=9000)return;
+      let adjC=base.c+d.x,adjR=base.r+d.y;
+      let obstacleBonus=(!inside(adjC,adjR)||gridAt(adjC,adjR)!==EMPTY||bombAt(adjC,adjR))?520:0;
+      let escapeBonus=(cur>=900||aiOwnHereThreat(p)||panic>=4)?900:0;
+      let far=target?Math.hypot(center(n.c,n.r).x-(target.x||p.x),center(n.c,n.r).y-(target.y||p.y))*.08:0;
+      let score=(cur-nd)+obstacleBonus+escapeBonus+far;
+      if(score>bs){bs=score;best={type:'jump',dir:d,score,reason:'smartJump'};}
+    });
+    if(!best)return null;
+    if(panic>=4||bs>420||cur>=900||aiOwnHereThreat(p))return best;
+    return null;
+  }
+  function aiShoretsuhaDirsFromDir(dir,lv){
+    let count=Math.min(8,Math.max(1,lv|0)),arr=[];
+    for(let i=0;i<count;i++)arr.push(rotateDirClockwise45(dir,i));
+    return arr;
+  }
+  function aiShoretsuhaDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.shoretsuha>0)||p.specialCooldown>0)return null;
+    if(aiSpecialRecent(p,'shoretsuha',tnow(),panic>=4?520:1450))return null;
+    let lv=Math.max(1,p.specials.shoretsuha|0),base=cell(p.x,p.y),dist=shoretsuhaPushCells(lv),best=null,bs=-Infinity;
+    let frontDirs=[snapThrowDir(p.lastDirX||1,p.lastDirY||0),{x:1,y:0},{x:0,y:1},{x:-1,y:0},{x:0,y:-1}];
+    frontDirs.forEach(fd=>{
+      if(!fd||(!fd.x&&!fd.y))return;
+      let hit=0,score=0;
+      aiShoretsuhaDirsFromDir(fd,lv).forEach(d=>{
+        let c=base.c+d.x,r=base.r+d.y;
+        if(!inside(c,r))return;
+        let ent=null,kind='';
+        for(const e of enemies||[]){if(e&&e.alive&&e.c===c&&e.r===r){ent=e;kind='enemy';break;}}
+        if(!ent){for(const q of Object.values(players||{})){if(q&&q!==p&&q.alive&&q.c===c&&q.r===r&&hostilePlayer(p,q)){ent=q;kind='player';break;}}}
+        if(!ent){for(const b of bombs||[]){if(b&&!b.carriedBy&&b.c===c&&b.r===r){ent=b;kind='bomb';break;}}}
+        if(!ent)return;
+        if(!shoretsuhaPathFree(c,r,d,dist,ent))return;
+        hit++;
+        if(kind==='enemy')score+=target&&target.id===ent.id?1250:760;
+        else if(kind==='player')score+=950;
+        else if(kind==='bomb')score+=(ownBombBlastThreatAt(p,c,r)||ownRemoteBlastThreatAt(p,c,r))?820:300;
+        let dc=shoretsuhaDestCell(c,r,d,dist),before=aiDangerScoreAtCellForUse(p,level,c,r,target),after=aiDangerScoreAtCellForUse(p,level,dc.c,dc.r,target);
+        score+=Math.max(0,before-after)*.12;
+      });
+      if(hit<=0)return;
+      let targetLine=target&&aiShoretsuhaDirsFromDir(fd,lv).some(d=>target.c===base.c+d.x&&target.r===base.r+d.y);
+      if(targetLine)score+=520;
+      score+=hit*180;
+      if(score>bs){bs=score;best={type:'shoretsuha',dir:fd,score,reason:'smartShoretsuha'};}
+    });
+    if(!best)return null;
+    if(panic>=3||best.score>=760)return best;
+    return null;
+  }
+  function aiOverdriveDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.overdrive>0)||p.specialCooldown>0)return null;
+    if(aiSpecialRecent(p,'overdrive',tnow(),2200))return null;
+    let c=cell(p.x,p.y),near=enemyDangerAtPoint(p.x,p.y,level,p),score=0;
+    if(panic>=4)score+=900;
+    if(near>=120)score+=520;
+    if(target&&target.dist<T*4.5)score+=560;
+    for(const e of enemies||[]){if(e&&e.alive&&Math.hypot(e.x-p.x,e.y-p.y)<T*4.5)score+=e.boss?720:180;}
+    for(const f of falling||[])if(f&&Math.abs(f.c-c.c)+Math.abs(f.r-c.r)<=2)score+=220;
+    return score>=560?{type:'overdrive',dir:null,score,reason:'smartOverdrive'}:null;
+  }
+  function aiHomingDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.homing>0)||p.specialCooldown>0)return null;
+    if(currentHomingBombCount(p.id)>=homingBombLimit(p))return null;
+    let c=cell(p.x,p.y);if(!inside(c.c,c.r)||gridAt(c.c,c.r)!==EMPTY||bombAt(c.c,c.r))return null;
+    if(aiDangerScoreAtCellForUse(p,level,c.c,c.r,target)>=9000)return null;
+    let score=0;if(target)score+=Math.max(0,900-(target.dist||999));
+    if(panic>=3)score+=240;
+    if(target&&target.dist<T*7)score+=420;
+    return score>=420?{type:'homing',dir:null,score,reason:'smartHoming'}:null;
+  }
+  function aiLineBombDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.packunga>0)||p.specialCooldown>0)return null;
+    syncAiPlacedCount(p);
+    let rest=Math.max(0,(p.bombMax|0)-(p.placed|0));if(rest<=0)return null;
+    let base=cell(p.x,p.y),lv=Math.max(1,p.specials.packunga|0),maxLine=Math.max(1,lv+1),best=null,bs=-Infinity;
+    [{x:p.lastDirX||1,y:p.lastDirY||0},{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].forEach(d0=>{
+      let d=snapThrowDir(d0.x,d0.y);if(!d||(!d.x&&!d.y))return;
+      let cells=[],soft=0,targetHit=false;
+      for(let i=0;i<maxLine&&cells.length<rest;i++){
+        let c=base.c+d.x*i,r=base.r+d.y*i;
+        if(!inside(c,r)||c<=0||r<=0||c>=C-1||r>=R-1)break;
+        if(gridAt(c,r)!==EMPTY)break;
+        if(bombAt(c,r))break;
+        cells.push({c,r});
+        if(target&&target.c===c&&target.r===r)targetHit=true;
+      }
+      if(!cells.length)return;
+      for(let i=1;i<=maxLine+1;i++){let c=base.c+d.x*i,r=base.r+d.y*i;if(!inside(c,r))break;let g=gridAt(c,r);if(g===HARD)break;if(g===SOFT){soft++;break;}}
+      let esc=escapeAfterBombFromCell(p,level,base.c,base.r,base.c,base.r,p.range||2);
+      if(!esc)return;
+      let score=cells.length*120+soft*360+(targetHit?900:0)+(target&&Math.abs(target.c-base.c)+Math.abs(target.r-base.r)<=maxLine+1?180:0);
+      if(score>bs){bs=score;best={type:'packunga',dir:d,score,reason:'smartLineBomb'};}
+    });
+    return best&&best.score>=360?best:null;
+  }
+  function aiLaunchDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.launchbomb>0)||p.specialCooldown>0)return null;
+    syncAiPlacedCount(p);if((p.placed||0)>=(p.bombMax||1))return null;
+    let c=cell(p.x,p.y);if(!inside(c.c,c.r)||gridAt(c.c,c.r)!==EMPTY||bombAt(c.c,c.r))return null;
+    let esc=escapeAfterBombFromCell(p,level,c.c,c.r,c.c,c.r,1);if(!esc&&panic<4)return null;
+    let val=bombBreakValueFrom(c.c,c.r,target,Math.max(1,p.range||2));
+    let score=val.soft*420+(val.targetHit?900:0)+(panic>=4?260:0);
+    return score>=420?{type:'launchbomb',dir:null,score,reason:'smartLaunch'}:null;
+  }
+  function aiSummonBlockDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.summonblock>0)||p.specialCooldown>0)return null;
+    if(Math.floor(p.gold||0)<BLOCK_SUMMON_USE_COST)return null;
+    let dirs=[snapThrowDir(p.lastDirX||1,p.lastDirY||0),{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}],base=cell(p.x,p.y),best=null,bs=-Infinity;
+    dirs.forEach(d=>{
+      if(!d||(!d.x&&!d.y))return;let c=base.c+d.x,r=base.r+d.y;if(!inside(c,r)||gridAt(c,r)!==EMPTY||bombAt(c,r))return;
+      let score=0;
+      if(target){let before=Math.abs((target.c|0)-base.c)+Math.abs((target.r|0)-base.r),after=Math.abs((target.c|0)-c)+Math.abs((target.r|0)-r);if(before<=3&&after<before)score+=520;}
+      if(panic>=4)score+=240;
+      score-=cellDanger(c,r,level,p)*.1;
+      if(score>bs){bs=score;best={type:'summonblock',dir:d,score,reason:'smartBlock'};}
+    });
+    return best&&best.score>=420?best:null;
+  }
+  function aiCarDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.car>0)||p.specialCooldown>0||!canUseCarSpecial(p))return null;
+    let d=aiBestEmergencyDir(p,level,target,'move')||snapThrowDir((target&&target.x-p.x)||p.lastDirX||1,(target&&target.y-p.y)||p.lastDirY||0);
+    let score=(panic>=4?760:0)+(target&&target.dist>T*2&&target.dist<T*7?360:0);
+    return score>=520?{type:'car',dir:d,score,reason:'smartCar'}:null;
+  }
+  function aiSwordDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.mastersword>0)||p.specialCooldown>0||!target)return null;
+    let dx=(target.c|0)-cell(p.x,p.y).c,dy=(target.r|0)-cell(p.x,p.y).r,aligned=(dx===0||dy===0),dist=Math.abs(dx)+Math.abs(dy);
+    if(!aligned||dist<2||dist>4)return null;
+    let d=snapThrowDir(dx,dy);return {type:'mastersword',dir:d,score:980-dist*60,reason:'smartSword'};
+  }
+  function aiBestTacticalSpecial(p,level,st,target,panic,mode){
+    if(!p||!p.alive||!p.specials)return null;
+    let list=[];
+    let add=x=>{if(x&&x.type&&p.specials[x.type]>0)list.push(x);};
+    add(aiJumpDecision(p,level,st,target,panic));
+    add(aiOverdriveDecision(p,level,st,target,panic));
+    add(aiShoretsuhaDecision(p,level,st,target,panic));
+    add(aiCarDecision(p,level,st,target,panic));
+    add(aiSwordDecision(p,level,st,target,panic));
+    add(aiHomingDecision(p,level,st,target,panic));
+    add(aiLineBombDecision(p,level,st,target,panic));
+    add(aiLaunchDecision(p,level,st,target,panic));
+    add(aiSummonBlockDecision(p,level,st,target,panic));
+    if(!list.length)return null;
+    list.sort((a,b)=>(b.score||0)-(a.score||0));
+    let best=list[0];
+    if(mode==='panic')return best;
+    return best.score>=520?best:null;
+  }
+  function aiUseBestTacticalSpecial(p,level,st,target,t,inp,mode){
+    let panic=mode==='panic'?aiPanicLevel(p,level,st,target):0;
+    let best=aiBestTacticalSpecial(p,level,st,target,panic,mode||'normal');
+    if(!best)return false;
+    if(aiSetSpecialAndFire(p,st,inp,t,best.type,best.dir,best.reason)){aiMarkSpecialUse(p,best.type,t);return true;}
+    return false;
+  }
+
   function aiPanicSpecialUse(p,level,st,target,t,inp){
     if(!p||!inp)return false;
     try{ensureSpecialBag(p)}catch(e){}
@@ -5336,20 +5521,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let wait=Math.max(150,520-level*32);
     if(t-(p.aiLastSpecial||0)<wait)return aiPanicHandUse(p,level,st,target,t,inp,panic);
     if(aiPanicHandUse(p,level,st,target,t,inp,panic))return true;
-    let bag=p.specials||{};
-    let jumpDir=aiBestEmergencyDir(p,level,target,'jump');
-    if(bag.jump>0&&jumpDir&&panic>=4)return aiSetSpecialAndFire(p,st,inp,t,'jump',jumpDir,'panicJump');
-    if(bag.overdrive>0&&(panic>=4||enemyDangerAtPoint(p.x,p.y,level,p)>=120))return aiSetSpecialAndFire(p,st,inp,t,'overdrive',null,'panicOverdrive');
-    let pushDir=aiAdjacentThreatDir(p,target);
-    if(bag.shoretsuha>0&&pushDir&&panic>=3)return aiSetSpecialAndFire(p,st,inp,t,'shoretsuha',pushDir,'panicShoretsuha');
-    let carDir=aiBestEmergencyDir(p,level,target,'move');
-    if(bag.car>0&&carDir&&canUseCarSpecial(p)&&panic>=4)return aiSetSpecialAndFire(p,st,inp,t,'car',carDir,'panicCar');
-    if(bag.homing>0&&currentHomingBombCount(p.id)<homingBombLimit(p)&&panic>=3)return aiSetSpecialAndFire(p,st,inp,t,'homing',null,'panicHoming');
-    if(bag.launchbomb>0&&panic>=4)return aiSetSpecialAndFire(p,st,inp,t,'launchbomb',null,'panicLaunch');
-    if(bag.packunga>0&&target){let d=snapThrowDir((target.x||p.x)-p.x,(target.y||p.y)-p.y);if(d.x||d.y)return aiSetSpecialAndFire(p,st,inp,t,'packunga',d,'panicLineBomb');}
-    if(bag.summonblock>0&&pushDir&&Math.floor(p.gold||0)>=BLOCK_SUMMON_USE_COST)return aiSetSpecialAndFire(p,st,inp,t,'summonblock',pushDir,'panicBlock');
-    if(bag.mastersword>0&&target&&Math.hypot((target.x||p.x)-p.x,(target.y||p.y)-p.y)<T*3.8){let d=snapThrowDir((target.x||p.x)-p.x,(target.y||p.y)-p.y);return aiSetSpecialAndFire(p,st,inp,t,'mastersword',d,'panicSword');}
-    return false;
+    return aiUseBestTacticalSpecial(p,level,st,target,t,inp,'panic');
   }
 
   function shouldUseSpecial(p,level,target,t){
@@ -5414,7 +5586,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     mv=safeMoveVector(p,mv,level,target);inp.dx=mv.dx||0;inp.dy=mv.dy||0;
     if(Math.hypot(inp.dx,inp.dy)>.12){let d=snapThrowDir(inp.dx,inp.dy);p.lastDirX=d.x;p.lastDirY=d.y;inp.lastDirX=d.x;inp.lastDirY=d.y;}
     if(target)aimAt(p,target);
-    if(shouldUseSpecial(p,level,target,t)){inp.dx=0;inp.dy=0;inp.specialSeq=(inp.specialSeq||0)+1;p.aiLastSpecial=t;st.lastSpecial=t;st.plan=null;return;}
+    if(aiUseBestTacticalSpecial(p,level,st,target,t,inp,'normal'))return;
+    if(shouldUseSpecial(p,level,target,t)){
+      let active=fallbackActiveSpecial(p);
+      if(active==='shoretsuha'&&!aiShoretsuhaDecision(p,level,st,target,0))return;
+      inp.dx=0;inp.dy=0;inp.specialSeq=(inp.specialSeq||0)+1;p.aiLastSpecial=t;st.lastSpecial=t;st.plan=null;return;
+    }
     if(p.carryBombId&&aiHandleCarriedBomb(p,level,st,target,t,inp))return;
     let wait=Math.max(320,900-level*62);
     if(plan.action==='bomb'&&t-(p.aiLastBomb||0)>wait){
