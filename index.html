@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V3-AI-SHADOWBOMB-FIX-20260609',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V3-AI-SPECIAL-BUY-FIX-20260609',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -4430,7 +4430,25 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function distanceObj(p,t){return Math.hypot((t.x||p.x)-p.x,(t.y||p.y)-p.y)}
   function chooseTarget(p){let list=liveEnemies().concat(hostilePlayers(p));list.forEach(t=>{t.dist=distanceObj(p,t);if(t.kind==='player')t.score=(p&&p.isShadowEnemy)?-140:-80;});list.sort((a,b)=>((a.dist+(a.score||0))-(b.dist+(b.score||0))));return list[0]||null}
   function softTargets(p){let arr=[];for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){if(!empty(c,r)||bombAt(c,r))continue;let near=false;for(const d of D4){let x=c+d[0],y=r+d[1];if(inside(x,y)&&gridAt(x,y)===SOFT)near=true;}if(near&&passable(p,c,r,false))arr.push({kind:'soft',c,r,x:center(c,r).x,y:center(c,r).y});}return arr}
-  function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(!passable(p,it.c,it.r,false))continue;if(it.special){try{if(!canBuySpecial(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,score:it.special?-60:-25});}return arr}
+  function aiSpecialPrice(it){return Math.floor((it&&it.price)||specialPrice(it&&it.type)||0)}
+  function aiCurrentSpecialPrice(p){try{ensureSpecialBag(p)}catch(e){}let active=fallbackActiveSpecial(p);return active&&p&&p.specials&&p.specials[active]>0?Math.floor(specialPrice(active)||0):0}
+  function aiCanBuySpecialItem(p,it){if(!p||!it||!it.special)return false;if(it.type==='remote')return false;let price=aiSpecialPrice(it);if(Math.floor(p.gold||0)<price)return false;return price>=aiCurrentSpecialPrice(p)}
+  function aiBestBuyTarget(p,level){
+    if(!p||!p.alive)return null;
+    let map=bfs(p,level,{allowDanger:false,allowEnemyNear:false,maxSteps:80}),best=null,bs=-Infinity;
+    for(const it of items||[]){
+      if(!it||!it.special)continue;
+      if(!aiCanBuySpecialItem(p,it))continue;
+      if(!passable(p,it.c,it.r,false))continue;
+      let n=map.get(key(it.c,it.r));if(!n)continue;
+      let dg=cellDanger(it.c,it.r,level,p);if(dg>=160)continue;
+      let o=center(it.c,it.r),price=aiSpecialPrice(it);
+      let score=price*1000-n.dist*12-dg*.25;
+      if(score>bs){bs=score;best={kind:'buy',c:it.c,r:it.r,x:o.x,y:o.y,it,node:n,price,score,reason:'bestBuy'}}
+    }
+    return best;
+  }
+  function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(!passable(p,it.c,it.r,false))continue;if(it.special){try{if(!aiCanBuySpecialItem(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;let price=it.special?aiSpecialPrice(it):0;arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,price,score:it.special?(-60-price*2):-25});}return arr}
   function goalTarget(){if(goalGate&&!goalGate.hidden&&!battle.on){let g=cell(goalGate.x,goalGate.y);if(aiDamageGimmickAt(g.c,g.r))return null;return{kind:'goal',c:g.c,r:g.r,x:goalGate.x,y:goalGate.y,score:-80}}return null}
   function reviveTargets(p){let arr=[];for(const q of Object.values(players||{})){if(!q||q.alive||!friendPlayer(p,q))continue;let qc=cell(q.x,q.y);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)arr.push({kind:'revive',c:qc.c+dx,r:qc.r+dy,x:q.x,y:q.y,friend:q,score:-90});}return arr}
 
@@ -5074,6 +5092,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
        退避は ownBombEscapePlan で先に判断し、攻撃・開通より安全を優先する。 */
     let rev=nearestByPath(p,reviveTargets(p),level,{allowDanger:false,allowEnemyNear:false});if(rev)return{action:'move',node:rev.node,reason:'revive',target:rev};
     let gt=goalTarget();if(gt&&(!target||(enemies||[]).filter(e=>e&&e.alive).length===0)){let g=nearestByPath(p,[gt],level,{allowDanger:false,allowEnemyNear:false});if(g)return{action:'move',node:g.node,reason:'goal',target:g};}
+    let bestBuy=aiBestBuyTarget(p,level);if(bestBuy)return{action:'move',node:bestBuy.node,reason:'bestBuy',target:bestBuy};
     let items=itemTargets(p,level),it=nearestByPath(p,items,level,{allowDanger:false,allowEnemyNear:false});if(it&&it.node.dist<=5)return{action:'move',node:it.node,reason:it.kind,target:it};
     if(target){
       if(targetIsTeamMonster(target)&&canBombPressureHere(p,level,target))return{action:'bomb',reason:(p&&p.isShadowEnemy)?'shadowBomb':'teamBomb',target};
@@ -5171,7 +5190,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
   function shouldUseSpecial(p,level,target,t){
     if(t-(p.aiLastSpecial||0)<Math.max(400,1200-level*60))return false;
-    try{let it=specialItemUnderPlayer(p);if(it&&canBuySpecial(p,it))return true}catch(e){}
+    try{let it=specialItemUnderPlayer(p);if(it&&aiCanBuySpecialItem(p,it))return true}catch(e){}
     if(!target)return false;try{ensureSpecialBag(p)}catch(e){}
     let active=fallbackActiveSpecial(p);if(!active||!p.specials||p.specials[active]<=0||p.specialCooldown>0)return false;
     if(enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;
