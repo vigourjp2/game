@@ -4130,9 +4130,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V33-REMOTE-FULL-SUPPRESS-20260609: リモコン爆弾の起爆待ちで狭所に固まる経路を、連鎖爆風外への事前退避ルートで解除する。 */
+/* AI-OMAKASE-PLAYER-V34-PANIC-SPECIAL-USE-20260609: リモコン爆弾の起爆待ちで狭所に固まる経路を、連鎖爆風外への事前退避ルートで解除する。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V33-REMOTE-FULL-SUPPRESS-20260609';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V34-PANIC-SPECIAL-USE-20260609';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -5188,13 +5188,112 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return true;
   }
 
+  function aiPanicLevel(p,level,st,target){
+    if(!p||!p.alive)return 0;
+    let c=cell(p.x,p.y),fd=flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(c.c,c.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p);
+    let own=ownBombBlastThreatAt(p,c.c,c.r)||ownRemoteBlastThreatAt(p,c.c,c.r),nearFuse=ownBombMinTimer(p);
+    let noEscape=false;try{noEscape=!safestNode(p,level,target)}catch(e){noEscape=false}
+    let panic=0;
+    if(fd>=900||aiDamageGimmickAt(c.c,c.r,p))panic=Math.max(panic,5);
+    if(dg>=9000)panic=Math.max(panic,5);
+    if(own&&nearFuse<950)panic=Math.max(panic,4);
+    if(ed>=260)panic=Math.max(panic,4);
+    else if(ed>=120)panic=Math.max(panic,3);
+    if(st&&(st.stuckMs||0)>650)panic=Math.max(panic,3);
+    if(noEscape&&(fd>=900||dg>=1200||ed>=120||own))panic=Math.max(panic,5);
+    return panic;
+  }
+  function aiDirScoreForEmergency(p,level,target,d,mode){
+    let base=cell(p.x,p.y),c=base.c+d.x,r=base.r+d.y,o=center(c,r),score=0;
+    if(!inside(c,r)||c<=0||r<=0||c>=C-1||r>=R-1)return -1e9;
+    if(mode==='jump'){
+      let n=jumpNextCell(base.c,base.r,d.x,d.y);c=n.c;r=n.r;o=center(c,r);
+      if(!jumpLandingFree(c,r,p.id))return -1e9;
+    }else{
+      if(gridAt(c,r)!==EMPTY)return -1e9;
+      if(bombAt(c,r))score-=1800;
+    }
+    if(aiDamageGimmickAt(c,r,p))score-=5000;
+    score-=flameCellDanger(c,r,p)*8;
+    score-=flamePointDanger(o.x,o.y,p)*8;
+    score-=cellDanger(c,r,level,p)*2;
+    score-=enemyDangerAtPoint(o.x,o.y,level,p)*3;
+    if(target)score+=Math.hypot(o.x-target.x,o.y-target.y)*.08;
+    return score;
+  }
+  function aiBestEmergencyDir(p,level,target,mode){
+    let dirs=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}],best=dirs[0],bs=-1e18;
+    dirs.forEach(d=>{let s=aiDirScoreForEmergency(p,level,target,d,mode);if(s>bs){bs=s;best=d;}});
+    return bs>-1e8?best:null;
+  }
+  function aiSetSpecialAndFire(p,st,inp,t,type,dir,reason){
+    if(!p||!inp||!type)return false;
+    ensureSpecialBag(p);
+    if(!(p.specials&&p.specials[type]>0))return false;
+    if(type==='remote')return false;
+    if(p.specialCooldown>0&&type!=='jump'&&type!=='overdrive')return false;
+    p.activeSpecial=type;
+    if(dir){p.lastDirX=dir.x;p.lastDirY=dir.y;inp.dx=dir.x;inp.dy=dir.y;inp.lastDirX=dir.x;inp.lastDirY=dir.y;}else{inp.dx=0;inp.dy=0;}
+    inp.specialSeq=(inp.specialSeq||0)+1;
+    p.aiLastSpecial=t;if(st){st.lastSpecial=t;st.plan=null;st.lastPlanAt=0;st.aiLastPanicSpecial=t;st.aiLastPanicReason=reason||type;}
+    try{msg='AI PANIC '+specialName(type)}catch(e){}
+    return true;
+  }
+  function aiPanicHandUse(p,level,st,target,t,inp,panic){
+    if(!p||!inp||!(handPower(p)>0))return false;
+    if(t-(p.aiLastHand||0)<Math.max(170,420-level*24))return false;
+    if(p.carryBombId)return aiHandleCarriedBomb(p,level,st,target,t,inp);
+    if(bombUnderPlayer(p)&&(panic>=4||(st&&st.stuckMs>520))){
+      inp.dx=0;inp.dy=0;inp.handSeq=(inp.handSeq||0)+1;
+      p.aiLastHand=t;if(st){st.lastHand=t;st.plan=null;st.lastPlanAt=0;}
+      try{msg='AI PANIC HAND LIFT'}catch(e){}
+      return true;
+    }
+    return false;
+  }
+  function aiAdjacentThreatDir(p,target){
+    let pc=cell(p.x,p.y),best=null,bd=999;
+    if(target){let dx=Math.sign((target.c|0)-pc.c),dy=Math.sign((target.r|0)-pc.r);if(Math.abs((target.c|0)-pc.c)+Math.abs((target.r|0)-pc.r)<=2)return{x:dx||Math.sign((target.x||p.x)-p.x)||1,y:dy||0};}
+    for(const b of bombs||[]){if(!b||b.carriedBy)continue;let bc=bombCell(b),d=Math.abs(bc.c-pc.c)+Math.abs(bc.r-pc.r);if(d<bd&&d<=2){bd=d;best={x:Math.sign(bc.c-pc.c)||1,y:Math.sign(bc.r-pc.r)||0};}}
+    for(const e of enemies||[]){if(!e||!e.alive)continue;let d=Math.abs((e.c|0)-pc.c)+Math.abs((e.r|0)-pc.r);if(d<bd&&d<=2){bd=d;best={x:Math.sign((e.c|0)-pc.c)||1,y:Math.sign((e.r|0)-pc.r)||0};}}
+    return best;
+  }
+  function aiPanicSpecialUse(p,level,st,target,t,inp){
+    if(!p||!inp)return false;
+    try{ensureSpecialBag(p)}catch(e){}
+    let panic=aiPanicLevel(p,level,st,target);
+    if(panic<3)return false;
+    let wait=Math.max(150,520-level*32);
+    if(t-(p.aiLastSpecial||0)<wait)return aiPanicHandUse(p,level,st,target,t,inp,panic);
+    if(aiPanicHandUse(p,level,st,target,t,inp,panic))return true;
+    let bag=p.specials||{};
+    let jumpDir=aiBestEmergencyDir(p,level,target,'jump');
+    if(bag.jump>0&&jumpDir&&panic>=4)return aiSetSpecialAndFire(p,st,inp,t,'jump',jumpDir,'panicJump');
+    if(bag.overdrive>0&&(panic>=4||enemyDangerAtPoint(p.x,p.y,level,p)>=120))return aiSetSpecialAndFire(p,st,inp,t,'overdrive',null,'panicOverdrive');
+    let pushDir=aiAdjacentThreatDir(p,target);
+    if(bag.shoretsuha>0&&pushDir&&panic>=3)return aiSetSpecialAndFire(p,st,inp,t,'shoretsuha',pushDir,'panicShoretsuha');
+    let carDir=aiBestEmergencyDir(p,level,target,'move');
+    if(bag.car>0&&carDir&&canUseCarSpecial(p)&&panic>=4)return aiSetSpecialAndFire(p,st,inp,t,'car',carDir,'panicCar');
+    if(bag.homing>0&&currentHomingBombCount(p.id)<homingBombLimit(p)&&panic>=3)return aiSetSpecialAndFire(p,st,inp,t,'homing',null,'panicHoming');
+    if(bag.launchbomb>0&&panic>=4)return aiSetSpecialAndFire(p,st,inp,t,'launchbomb',null,'panicLaunch');
+    if(bag.packunga>0&&target){let d=snapThrowDir((target.x||p.x)-p.x,(target.y||p.y)-p.y);if(d.x||d.y)return aiSetSpecialAndFire(p,st,inp,t,'packunga',d,'panicLineBomb');}
+    if(bag.summonblock>0&&pushDir&&Math.floor(p.gold||0)>=BLOCK_SUMMON_USE_COST)return aiSetSpecialAndFire(p,st,inp,t,'summonblock',pushDir,'panicBlock');
+    if(bag.mastersword>0&&target&&Math.hypot((target.x||p.x)-p.x,(target.y||p.y)-p.y)<T*3.8){let d=snapThrowDir((target.x||p.x)-p.x,(target.y||p.y)-p.y);return aiSetSpecialAndFire(p,st,inp,t,'mastersword',d,'panicSword');}
+    return false;
+  }
+
   function shouldUseSpecial(p,level,target,t){
     if(t-(p.aiLastSpecial||0)<Math.max(400,1200-level*60))return false;
     try{let it=specialItemUnderPlayer(p);if(it&&aiCanBuySpecialItem(p,it))return true}catch(e){}
     if(!target)return false;try{ensureSpecialBag(p)}catch(e){}
     let active=fallbackActiveSpecial(p);if(!active||!p.specials||p.specials[active]<=0||p.specialCooldown>0)return false;
-    if(enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;
-    if(active==='overdrive')return target.dist<T*4.5;
+    /* AI PANIC SPECIAL USE FIX:
+       以前は enemyDanger>=120 で即 false にしていたため、ピンチ時ほどスペシャルを使わない。
+       危険時は overdrive / jump / shoretsuha などの防衛用途を許可する。 */
+    let nearDanger=enemyDangerAtPoint(p.x,p.y,level,p);
+    if(active==='overdrive')return target.dist<T*4.5||nearDanger>=120;
+    if(active==='jump')return nearDanger>=120||target.dist<T*2.4;
+    if(active==='shoretsuha')return nearDanger>=120||target.dist<T*1.7;
     if(active==='mastersword')return target.dist>T*1.25&&target.dist<T*3.8;
     if(active==='remote'){
       let list=(bombs||[]).filter(b=>b&&b.owner===p.id&&b.remoteBomb&&!b.carriedBy&&b.armed!==false);if(!list.length)return false;list.sort((a,b)=>((a.remotePlaceSeq||0)-(b.remotePlaceSeq||0))||((a.localMadeAt||0)-(b.localMadeAt||0)));let b=list[0],bc=bombCell(b),pc=cell(p.x,p.y);if(!aiRemoteChainDetonateSafe(p,level,b,target))return false;return blastHits(bc.c,bc.r,target.c,target.r,b.range||p.range||2);
@@ -5206,9 +5305,13 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     inp.local=true;inp.name=p.name||inp.name||'AI';inp.last=now();
     if(!p.alive||p.jumpState){inp.dx=0;inp.dy=0;return;}
     let hereCell=cell(p.x,p.y),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p),hereGimmick=aiDamageGimmickAt(hereCell.c,hereCell.r,p);
-    if(hereGimmick||hereFlame>=900){st.plan=null;let esc=safestNode(p,level,chooseTarget(p));let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
     let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
     let earlyTarget=chooseTarget(p);
+    /* AI PANIC SPECIAL USE:
+       ピンチ時ほど shouldUseSpecial の通常攻撃条件に入れず、静かに死を待つ逆転挙動を潰す。
+       危険セル・爆風・敵接近・詰まりでは、移動計画より先にJUMP/HAND/OVERDRIVE等を割り込ませる。 */
+    if(aiPanicSpecialUse(p,level,st,earlyTarget,t,inp))return;
+    if(hereGimmick||hereFlame>=900){st.plan=null;let esc=safestNode(p,level,earlyTarget);let mv0=esc?vecToNode(p,esc):{dx:0,dy:0};inp.dx=mv0.dx||0;inp.dy=mv0.dy||0;return;}
     syncAiPlacedCount(p);
     /* AI REMOTE FULL SUPPRESS:
        狭所かどうか、stuckMsが溜まったかどうかを待たない。
