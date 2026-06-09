@@ -2157,7 +2157,8 @@ function shadowHandAction(p){let acted=false;shadowServantStates(p).forEach(sh=>
 function consumeShadowServantRevive(p){ensureSpecialBag(p);if(!(p.specials.shadowservant>0))return false;p.specials.shadowservant=0;if(p.activeSpecial==='shadowservant')p.activeSpecial=null;p.shadowTrail=[];p.shadowTrailT=0;Object.keys(p).forEach(k=>{if(k.startsWith('shadowCarry_')){let b=bombs.find(q=>q.id===p[k]||q.carriedBy===p.id+':shadow:'+k.split('_')[1]);if(b){b.carriedBy=null;b.fusePaused=false;b.armed=true;b.landed=true}p[k]=null;}});p.alive=true;p.invuln=Math.max(p.invuln||0,REVIVE_INVULN_MS+1200);p.shield=0;p.revive=0;p.reviveBy=null;p.vx=0;p.vy=0;partsBurst(p.x,p.y,'#d8b4fe',42);shockwave(p.x,p.y,82,'#d8b4fe');sfx('item',1.8);msg=`${p.name} SHADOW SERVANT SACRIFICE - REVIVE`;return true;}
 function remoteBombLimit(p){ensureSpecialBag(p);return Math.max(0,Math.min(p.bombMax|0,p.specials.remote|0))}
 function currentRemoteBombCount(owner){return bombs.filter(b=>b&&b.owner===owner&&b.remoteBomb&&!b.enemyBomb&&!b.bossBomb).length}
-function shouldMakeRemoteBomb(p){ensureSpecialBag(p);if(p.activeSpecial!=='remote')return false;let limit=remoteBombLimit(p);return limit>0&&currentRemoteBombCount(p.id)<limit}
+function aiOmakaseActiveForPlayer(id){try{let bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{};return !!(id&&bag[id]&&bag[id].on)}catch(e){return false}}
+function shouldMakeRemoteBomb(p){ensureSpecialBag(p);if(aiOmakaseActiveForPlayer(p&&p.id))return false;if(p.activeSpecial!=='remote')return false;let limit=remoteBombLimit(p);return limit>0&&currentRemoteBombCount(p.id)<limit}
 
 function homingBombLimit(p){ensureSpecialBag(p);return Math.max(0,p.specials.homing|0)}
 function currentHomingBombCount(owner){return bombs.filter(b=>b&&b.owner===owner&&b.homingBomb&&!b.enemyBomb&&!b.bossBomb).length}
@@ -4129,9 +4130,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V30-REMOTE-BOMB-NO-FREEZE-20260609: リモコン爆弾設置後にAIが固まる経路を潰し、退避・安全起爆・再行動へ復帰させる。 */
+/* AI-OMAKASE-PLAYER-V33-REMOTE-FULL-SUPPRESS-20260609: リモコン爆弾の起爆待ちで狭所に固まる経路を、連鎖爆風外への事前退避ルートで解除する。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V30-REMOTE-BOMB-NO-FREEZE-20260609';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V33-REMOTE-FULL-SUPPRESS-20260609';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -4556,6 +4557,11 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return reason.includes('attack')||reason.includes('shadow')||reason.includes('team');
   }
   function queueAiBombInput(p,st,inp,t,level,target){
+    /* AI REMOTE FULL SUPPRESS:
+       おまかせAI中はリモコン爆弾を新規設置しない。
+       p.activeSpecial が remote のまま爆弾入力を出すと placeBomb 側でリモコン化し、
+       WAIT状態の爆弾で通常ルート判断が詰まるため、爆弾入力前に必ず通常爆弾扱いへ逃がす。 */
+    try{if(p&&p.activeSpecial==='remote')p.activeSpecial=aiPickNonRemoteActiveSpecial(p);}catch(e){}
     inp.dx=0;inp.dy=0;
     inp.bombSeq=(inp.bombSeq||0)+1;
     inp.seq=inp.bombSeq;
@@ -4575,6 +4581,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(!inside(c.c,c.r)||gridAt(c.c,c.r)!==EMPTY||bombAt(c.c,c.r))return false;
     if(flameCellDanger(c.c,c.r,p)+flamePointDanger(p.x,p.y,p)>=900)return false;
     let seq='shadow_ai_'+(lockFrame||0)+'_'+(p.aiDirectBombSeq=(p.aiDirectBombSeq||0)+1);
+    try{if(p&&p.activeSpecial==='remote')p.activeSpecial=aiPickNonRemoteActiveSpecial(p);}catch(e){}
     let acted=false;
     try{acted=placeBomb(p,seq)}catch(e){acted=false}
     if(acted){
@@ -4634,6 +4641,59 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(!p||!p.id)return[];
     return (bombs||[]).filter(b=>b&&b.owner===p.id&&b.remoteBomb&&!b.carriedBy&&b.armed!==false);
   }
+  function aiPickNonRemoteActiveSpecial(p){
+    try{ensureSpecialBag(p)}catch(e){}
+    const order=['mastersword','car','shoretsuha','homing','overdrive','packunga','shadowservant','summonblock','launchbomb','jump'];
+    if(p&&p.activeSpecial&&p.activeSpecial!=='remote'&&p.specials&&p.specials[p.activeSpecial]>0)return p.activeSpecial;
+    for(const k of order){if(p&&p.specials&&p.specials[k]>0)return k;}
+    return 'jump';
+  }
+  function aiSuppressRemoteForOmakase(p,st,t,reason){
+    if(!p||!p.id)return false;
+    let changed=false;
+    try{ensureSpecialBag(p)}catch(e){}
+    if(p.activeSpecial==='remote'){
+      p.activeSpecial=aiPickNonRemoteActiveSpecial(p);
+      changed=true;
+    }
+    let list=ownRemoteBombs(p);
+    if(!list.length)return changed;
+    list.sort((a,b)=>((a.remotePlaceSeq||0)-(b.remotePlaceSeq||0))||((a.localMadeAt||0)-(b.localMadeAt||0)));
+    let first=list[0],bc=bombCell(first),range=first.range||p.range||2;
+    let converted=0;
+    try{converted=convertRemoteBombsToNormal(p.id)}catch(e){converted=0;}
+    if(converted){
+      changed=true;
+      try{
+        let esc=aiBuildForcedEscapeCell(p,aiLevel(p.id),bc.c,bc.r,range,t||tnow(),reason||'remoteFullSuppress');
+        rememberAiOwnBlastHold(p,st,bc.c,bc.r,range,t||tnow());
+        if(st&&esc){
+          st.aiForcedEscapeCell=esc;
+          st.plan={action:'move',node:{c:esc.c,r:esc.r,first:(esc.path&&esc.path[0])||{c:esc.c,r:esc.r},dist:1},reason:reason||'remoteFullSuppress'};
+          st.lastPlanAt=t||tnow();
+        }
+      }catch(e){}
+      try{msg='AI REMOTE -> NORMAL ESCAPE'}catch(e){}
+    }
+    return changed;
+  }
+  function aiConvertRemoteBombsToTimedEscape(p,st,t,reason){
+    if(!p||!p.id)return false;
+    let list=ownRemoteBombs(p);
+    if(!list.length)return false;
+    list.sort((a,b)=>((a.remotePlaceSeq||0)-(b.remotePlaceSeq||0))||((a.localMadeAt||0)-(b.localMadeAt||0)));
+    let first=list[0],bc=bombCell(first),range=first.range||p.range||2;
+    let converted=0;
+    try{converted=convertRemoteBombsToNormal(p.id)}catch(e){converted=0}
+    if(!converted)return false;
+    try{
+      let esc=aiBuildForcedEscapeCell(p,aiLevel(p.id),bc.c,bc.r,range,t||tnow(),reason||'remoteDeadlockToTimed');
+      rememberAiOwnBlastHold(p,st,bc.c,bc.r,range,t||tnow());
+      if(st&&esc){st.aiForcedEscapeCell=esc;st.plan={action:'move',node:{c:esc.c,r:esc.r,first:(esc.path&&esc.path[0])||{c:esc.c,r:esc.r},dist:1},reason:reason||'remoteDeadlockToTimed'};st.lastPlanAt=t||tnow();}
+    }catch(e){}
+    try{msg='AI REMOTE DEADLOCK -> TIMED BOMB'}catch(e){}
+    return true;
+  }
   function ownRemoteBlastThreatAt(p,c,r){
     for(const b of ownRemoteBombs(p)){let bc=bombCell(b),range=b.range||p.range||2;if(blastHits(bc.c,bc.r,c,r,range))return true;}
     return false;
@@ -4650,6 +4710,92 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       }
     }
     return false;
+  }
+  function aiProjectedExplosionCellsForBomb(b){
+    if(!b)return[];
+    let bc=bombCell(b),range=Math.max(1,(b.range||2)+Math.floor((b.power||0)/3)),out=[[bc.c,bc.r]];
+    for(const d of D4){
+      for(let i=1;i<=range;i++){
+        let c=bc.c+d[0]*i,r=bc.r+d[1]*i;if(!inside(c,r)||gridAt(c,r)===HARD)break;
+        out.push([c,r]);
+        if(gridAt(c,r)===SOFT)break;
+      }
+    }
+    return out;
+  }
+  function aiRemoteChainExplosionCells(startBomb){
+    let cells=new Map(),seenBombs=new Set(),queue=[];
+    if(startBomb)queue.push(startBomb);
+    for(let qi=0;qi<queue.length;qi++){
+      let b=queue[qi];if(!b)continue;
+      let bid=b.id||('anon_'+qi+'_'+bombCell(b).c+'_'+bombCell(b).r);
+      if(seenBombs.has(bid))continue;
+      seenBombs.add(bid);
+      for(const cr of aiProjectedExplosionCellsForBomb(b))cells.set(key(cr[0],cr[1]),{c:cr[0],r:cr[1]});
+      for(const ob of bombs||[]){
+        if(!ob||ob===b||ob.carriedBy||ob.armed===false)continue;
+        let oc=bombCell(ob);
+        if(cells.has(key(oc.c,oc.r))){
+          let oid=ob.id||('ob_'+oc.c+'_'+oc.r+'_'+(ob.localMadeAt||0));
+          if(!seenBombs.has(oid))queue.push(ob);
+        }
+      }
+    }
+    return Array.from(cells.values());
+  }
+  function aiCellSetHas(cells,c,r){return (cells||[]).some(q=>q&&q.c===c&&q.r===r)}
+  function aiRememberBlastCellsHold(p,st,cells,t){
+    if(!p||!cells||!cells.length)return;
+    let baseT=t||tnow();
+    let hold={cells:cells.map(q=>({c:q.c|0,r:q.r|0})),createdAt:baseT,until:baseT+AI_OWN_BLAST_HOLD_EXTRA_MS+760,seenFlameAt:0};
+    let arr=aiOwnBlastHolds(p);arr.push(hold);if(arr.length>10)arr.splice(0,arr.length-10);
+    p.aiOwnBlastHold=hold;p.aiOwnBlastHolds=arr;if(st){st.aiOwnBlastHold=hold;st.aiOwnBlastHolds=arr;}
+  }
+  function aiRemoteChainDetonateSafe(p,level,b,target){
+    if(!p||!b)return false;
+    let chain=aiRemoteChainExplosionCells(b),pc=cell(p.x,p.y);
+    if(aiCellSetHas(chain,pc.c,pc.r))return false;
+    let pointCell=cell(p.x,p.y);
+    if(aiCellSetHas(chain,pointCell.c,pointCell.r))return false;
+    let hereDanger=enemyDangerAtPoint(p.x,p.y,level,p)+flameCellDanger(pc.c,pc.r,p)+flamePointDanger(p.x,p.y,p);
+    if(hereDanger>=900||aiDamageGimmickAt(pc.c,pc.r,p))return false;
+    let n=safestNode(p,level,target);
+    if(!n)return true;
+    if(aiCellSetHas(chain,n.c,n.r)){
+      let map=bfs(p,level,{allowDanger:false,allowEnemyNear:false,maxSteps:36});
+      let ok=false;
+      for(const q of map.values()){
+        if(q.dist<1)continue;
+        if(aiCellSetHas(chain,q.c,q.r))continue;
+        let o=center(q.c,q.r),dg=cellDanger(q.c,q.r,level,p),ed=enemyDangerAtPoint(o.x,o.y,level,p),fd=flameCellDanger(q.c,q.r,p)+flamePointDanger(o.x,o.y,p);
+        if(dg<160&&ed<180&&fd<900){ok=true;break;}
+      }
+      if(!ok)return false;
+    }
+    return chain;
+  }
+
+  function aiRemoteChainEscapeNode(p,level,target,chain){
+    if(!p||!chain||!chain.length)return null;
+    let pc=cell(p.x,p.y),map=bfs(p,level,{allowDanger:true,allowEnemyNear:false,maxSteps:78}),best=null,bs=Infinity;
+    for(const n of map.values()){
+      if(n.dist<1)continue;
+      if(aiCellSetHas(chain,n.c,n.r))continue;
+      let o=center(n.c,n.r),fd=flameCellDanger(n.c,n.r,p)+flamePointDanger(o.x,o.y,p),dg=cellDanger(n.c,n.r,level,p),ed=enemyDangerAtPoint(o.x,o.y,level,p);
+      if(fd>=900||dg>=9000||ed>=10000||aiDamageGimmickAt(n.c,n.r,p))continue;
+      let nearChain=999;
+      for(const q of chain)nearChain=Math.min(nearChain,Math.abs(n.c-q.c)+Math.abs(n.r-q.r));
+      let s=n.dist*9+dg*.05+ed*.1+fd*.22-Math.min(nearChain,6)*18;
+      if(target)s+=Math.hypot(o.x-(target.x||o.x),o.y-(target.y||o.y))*-.003;
+      if(s<bs){bs=s;best=n;}
+    }
+    return best;
+  }
+  function aiSetRemoteChainEscape(p,st,node,t,chain){
+    if(!p||!st||!node)return null;
+    let path=aiPathFromNode(node),pc=cell(p.x,p.y);
+    st.aiForcedEscapeCell={c:node.c,r:node.r,path:path,pathIndex:0,until:(t||tnow())+3200,reason:'remoteChainPreEscape',lastReplan:t||tnow(),startedAt:t||tnow(),lastProgressAt:t||tnow(),lastCell:key(pc.c,pc.r),remoteChainCells:(chain||[]).map(q=>({c:q.c|0,r:q.r|0}))};
+    return st.aiForcedEscapeCell;
   }
   function ownActiveFlames(p){
     if(!p||!p.id)return[];
@@ -4734,6 +4880,15 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function ownBombBlastThreatAt(p,c,r){
     for(const b of ownActiveBombs(p)){let bc=bombCell(b),range=b.range||p.range||2;if(blastHits(bc.c,bc.r,c,r,range))return true;}
+    return false;
+  }
+
+  function ownTimedBombBlastThreatAt(p,c,r){
+    for(const b of ownActiveBombs(p)){
+      if(b&&b.remoteBomb)continue;
+      let bc=bombCell(b),range=b.range||p.range||2;
+      if(blastHits(bc.c,bc.r,c,r,range))return true;
+    }
     return false;
   }
   function ownBombMinTimerAt(p,c,r){
@@ -4821,8 +4976,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       }
     }
 
-    if(aiDamageGimmickAt(f.c,f.r,p)||flameCellDanger(f.c,f.r,p)>=900||ownBombBlastThreatAt(p,f.c,f.r)||ownRemoteBlastThreatAt(p,f.c,f.r)){
-      let nf=replanForcedEscapeCell(p,level,st,target,t,'forcedOwnBombReEscape');
+    let remotePreEscape=String(f.reason||'').indexOf('remoteChainPreEscape')>=0;
+    let fRemoteChain=Array.isArray(f.remoteChainCells)?f.remoteChainCells:null;
+    let fRemoteUnsafe=remotePreEscape&&fRemoteChain?aiCellSetHas(fRemoteChain,f.c,f.r):ownRemoteBlastThreatAt(p,f.c,f.r);
+    let fTimedUnsafe=remotePreEscape?ownTimedBombBlastThreatAt(p,f.c,f.r):ownBombBlastThreatAt(p,f.c,f.r);
+    if(aiDamageGimmickAt(f.c,f.r,p)||flameCellDanger(f.c,f.r,p)>=900||fTimedUnsafe||fRemoteUnsafe){
+      let nf=remotePreEscape&&fRemoteChain?aiSetRemoteChainEscape(p,st,aiRemoteChainEscapeNode(p,level,target,fRemoteChain),t,fRemoteChain):replanForcedEscapeCell(p,level,st,target,t,'forcedOwnBombReEscape');
       if(nf)return{action:'move',node:{c:nf.c,r:nf.r,first:(nf.path&&nf.path[0])||{c:nf.c,r:nf.r},dist:1},forced:true,reason:'forcedOwnBombReEscape',target};
       return{action:'idle',reason:'forcedOwnBombNoRoute',target};
     }
@@ -4974,17 +5133,39 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let list=ownRemoteBombs(p);
     if(!list.length)return false;
     let pc=cell(p.x,p.y);
-    if(ownRemoteBlastThreatAt(p,pc.c,pc.r))return false;
-    if(t-(p.aiLastSpecial||0)<Math.max(360,900-level*55))return false;
     list.sort((a,b)=>((a.remotePlaceSeq||0)-(b.remotePlaceSeq||0))||((a.localMadeAt||0)-(b.localMadeAt||0)));
     let b=list[0],should=false;
     if(remoteBombHitsSoftOrTarget(p,b,target))should=true;
-    if(!should&&st.stuckMs>720)should=true;
-    if(!should&&(p.placed||0)>=(p.bombMax||1)&&t-(p.aiLastBomb||0)>950)should=true;
+    if(!should&&st.stuckMs>520)should=true;
+    if(!should&&(p.placed||0)>=(p.bombMax||1)&&t-(p.aiLastBomb||0)>760)should=true;
     if(!should)return false;
+    let chain=aiRemoteChainDetonateSafe(p,level,b,target);
+    if(!chain){
+      let projected=aiRemoteChainExplosionCells(b);
+      let esc=aiRemoteChainEscapeNode(p,level,target,projected);
+      if(esc){
+        let f=aiSetRemoteChainEscape(p,st,esc,t,projected);
+        let mv=forcedEscapeMoveVector(p,f);
+        inp.dx=mv.dx||0;inp.dy=mv.dy||0;
+        st.plan={action:'move',node:esc,reason:'remoteChainPreEscape',target};st.lastPlanAt=t;
+      }else{
+        /* AI REMOTE DEADLOCK FIX:
+           リモコン爆弾で狭所に蓋をした場合、危険起爆もしない・退避先も無い、で停止する。
+           その場合はAI限定でリモコン状態を解除して通常時限爆弾へ戻し、既存の自爆回避ルートへ渡す。 */
+        if(st.stuckMs>520||ownRemoteBlastThreatAt(p,pc.c,pc.r)||(p.placed||0)>=(p.bombMax||1)){
+          aiConvertRemoteBombsToTimedEscape(p,st,t,'remoteDeadlockToTimed');
+          inp.dx=0;inp.dy=0;
+          return true;
+        }
+        let fallback=safestNode(p,level,target),mv=fallback?vecToNode(p,fallback):{dx:0,dy:0};
+        inp.dx=mv.dx||0;inp.dy=mv.dy||0;
+      }
+      return true;
+    }
+    aiRememberBlastCellsHold(p,st,chain,t);
     inp.dx=0;inp.dy=0;inp.specialSeq=(inp.specialSeq||0)+1;
     p.aiLastSpecial=t;st.lastSpecial=t;st.plan=null;st.lastPlanAt=0;st.aiForcedEscapeCell=null;
-    try{msg='AI REMOTE DETONATE'}catch(e){}
+    try{msg='AI REMOTE SAFE DETONATE'}catch(e){}
     return true;
   }
 
@@ -4997,7 +5178,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(active==='overdrive')return target.dist<T*4.5;
     if(active==='mastersword')return target.dist>T*1.25&&target.dist<T*3.8;
     if(active==='remote'){
-      let list=(bombs||[]).filter(b=>b&&b.owner===p.id&&b.remoteBomb&&!b.carriedBy&&b.armed!==false);if(!list.length)return false;let b=list[0],bc=bombCell(b),pc=cell(p.x,p.y);if(blastHits(bc.c,bc.r,pc.c,pc.r,b.range||p.range||2))return false;return blastHits(bc.c,bc.r,target.c,target.r,b.range||p.range||2);
+      let list=(bombs||[]).filter(b=>b&&b.owner===p.id&&b.remoteBomb&&!b.carriedBy&&b.armed!==false);if(!list.length)return false;list.sort((a,b)=>((a.remotePlaceSeq||0)-(b.remotePlaceSeq||0))||((a.localMadeAt||0)-(b.localMadeAt||0)));let b=list[0],bc=bombCell(b),pc=cell(p.x,p.y);if(!aiRemoteChainDetonateSafe(p,level,b,target))return false;return blastHits(bc.c,bc.r,target.c,target.r,b.range||p.range||2);
     }
     return false;
   }
@@ -5010,6 +5191,13 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let moved=Math.hypot((p.x||0)-(st.lastX||p.x),(p.y||0)-(st.lastY||p.y));st.stuckMs=moved<1.4?(st.stuckMs||0)+dt*1000:0;st.lastX=p.x;st.lastY=p.y;
     let earlyTarget=chooseTarget(p);
     syncAiPlacedCount(p);
+    /* AI REMOTE FULL SUPPRESS:
+       狭所かどうか、stuckMsが溜まったかどうかを待たない。
+       AI操作中に残っているリモコン爆弾は即通常時限爆弾へ戻し、既存の自爆回避へ渡す。 */
+    if(aiSuppressRemoteForOmakase(p,st,t,'remoteFullSuppress')){syncAiPlacedCount(p);}
+    if(fallbackActiveSpecial(p)==='remote'&&ownRemoteBombs(p).length&&(st.stuckMs>850||((p.placed||0)>=(p.bombMax||1)&&t-(p.aiLastBomb||0)>900))){
+      if(aiConvertRemoteBombsToTimedEscape(p,st,t,'remoteDeadlockPreRelease')){syncAiPlacedCount(p);}
+    }
     if(aiRemoteBombControl(p,level,st,earlyTarget,t,inp))return;
     let forcedEsc=forcedOwnBombEscapePlan(p,level,st,earlyTarget,t);
     if(forcedEsc){st.plan=forcedEsc;st.lastPlanAt=t;let mvForced=forcedEsc.action==='move'?forcedEscapeMoveVector(p,st.aiForcedEscapeCell):{dx:0,dy:0};inp.dx=mvForced.dx||0;inp.dy=mvForced.dy||0;return;}
