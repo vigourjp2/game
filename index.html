@@ -1920,12 +1920,19 @@ function applyInputActiveSpecial(p,inp){if(!p||!inp||!inp.activeSpecial)return;e
 function masterSwordDamage(lv){return 1+Math.floor(Math.max(0,lv-1)/2)}
 function masterSwordHitCell(owner,c,r,dmg,tag){
   if(!inside(c,r)||grid[r][c]===HARD)return false;
-  let worked=false;
+  let worked=false,o=cc(c,r);
+  const inCell=(ent)=>{
+    if(!ent)return false;
+    if(ent.c===c&&ent.r===r)return true;
+    let t=tc(ent.x,ent.y);
+    if(t.c===c&&t.r===r)return true;
+    return Math.hypot((ent.x||0)-o.x,(ent.y||0)-o.y)<((ent.rad||14)+T*.46);
+  };
   if(grid[r][c]===SOFT){damageSoftBlock(c,r,owner.id);worked=true;}
-  enemies.forEach(e=>{if(e&&e.alive&&e.c===c&&e.r===r){damageEnemy(e,dmg,owner.id);worked=true;}});
-  Object.values(players).forEach(q=>{if(q&&q.alive&&q.id!==owner.id&&q.c===c&&q.r===r){damagePlayer(q,'local');worked=true;}});
-  bombs.slice().forEach(b=>{if(b&&!b.carriedBy&&b.c===c&&b.r===r){explode(b);worked=true;}});
-  if(worked){let o=cc(c,r);partsBurst(o.x,o.y,'#93c5fd',10+Math.floor(dmg*3));}
+  enemies.slice().forEach(e=>{if(e&&e.alive&&inCell(e)){damageEnemy(e,dmg,owner.id);worked=true;}});
+  Object.values(players).forEach(q=>{if(q&&q.alive&&q.id!==owner.id&&inCell(q)){damagePlayer(q,'local');worked=true;}});
+  bombs.slice().forEach(b=>{if(b&&!b.carriedBy&&inCell(b)){explode(b);worked=true;}});
+  if(worked){partsBurst(o.x,o.y,'#93c5fd',10+Math.floor(dmg*3));}
   return !worked;
 }
 function pushMasterSwordFx(f){
@@ -1938,9 +1945,26 @@ function setMasterSwordAnim(p,type,total,extra={}){
   p.masterSwordAnim={type,t:total,total,...extra};
 }
 function masterSwordBeamRange(lv){return Math.max(3,Math.min(12,Math.floor(lv||1)+2))}
-function spawnMasterSwordBeam(p,d,lv,dmg){
+function masterSwordSlashMeleeCells(d){
+  let dx=Math.sign(d&&d.x||0),dy=Math.sign(d&&d.y||0);
+  if(!dx&&!dy)dx=1;
+  if(dx&&dy)return [[dx,dy],[dx,0],[0,dy]];
+  if(dx)return [[dx,0],[dx,1],[dx,-1]];
+  return [[0,dy],[1,dy],[-1,dy]];
+}
+function masterSwordSlashMelee(p,d,lv,dmg){
+  let base=tc(p.x,p.y),hitCells={};
+  masterSwordSlashMeleeCells(d).forEach(([ox,oy])=>{
+    let c=base.c+ox,r=base.r+oy,key=c+','+r;
+    if(hitCells[key])return;
+    hitCells[key]=1;
+    masterSwordHitCell(p,c,r,dmg,'slashMelee');
+  });
+  return hitCells;
+}
+function spawnMasterSwordBeam(p,d,lv,dmg,hitCells={}){
   let startX=p.x+d.x*(p.rad+18),startY=p.y+d.y*(p.rad+18),range=masterSwordBeamRange(lv),total=900+range*55;
-  pushMasterSwordFx({type:'beamProjectile',owner:p.id,x:startX,y:startY,px:startX,py:startY,dx:d.x,dy:d.y,lv,dmg,speed:360+Math.min(220,lv*22),range,travel:0,hitCells:{},t:total,total});
+  pushMasterSwordFx({type:'beamProjectile',owner:p.id,x:startX,y:startY,px:startX,py:startY,dx:d.x,dy:d.y,lv,dmg,speed:360+Math.min(220,lv*22),range,travel:0,hitCells:{...(hitCells||{})},t:total,total});
 }
 function updateMasterSwordBeamProjectiles(dt){
   swordFx.forEach(f=>{
@@ -1958,7 +1982,8 @@ function masterSwordSlash(p,inp={}){
   ensureSpecialBag(p);let lv=Math.max(1,p.specials.mastersword|0);if(!p.alive||lv<=0)return false;if(p.specialCooldown>0){msg='SPECIAL COOLING';return false;}
   let d=currentPlayerArrowDir(p,inp),dmg=masterSwordDamage(lv);p.lastDirX=d.x;p.lastDirY=d.y;p.specialCooldown=420;
   setMasterSwordAnim(p,'slash',300,{dx:d.x,dy:d.y});
-  spawnMasterSwordBeam(p,d,lv,dmg);
+  let meleeHitCells=masterSwordSlashMelee(p,d,lv,dmg);
+  spawnMasterSwordBeam(p,d,lv,dmg,meleeHitCells);
   sfx('msSlash',1.35+Math.min(.55,lv*.04));shake=Math.max(shake,6+Math.min(12,lv));partsBurst(p.x+d.x*30,p.y+d.y*30,'#bfdbfe',20);msg=`${p.name} MASTER SWORD BEAM Lv${lv}`;return true;
 }
 function startMasterSwordCharge(p){ensureSpecialBag(p);let lv=Math.max(1,p.specials.mastersword|0);if(!p.alive||lv<=0)return false;if(specialItemUnderPlayer(p))return false;if(p.specialCooldown>0)return false;if(p.masterSwordCharge&&p.masterSwordCharge.holding)return true;p.masterSwordCharge={holding:true,pct:0,ready:false,lv,t:0};msg=`${p.name} MASTER SWORD CHARGE`;return true;}
