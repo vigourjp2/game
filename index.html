@@ -4259,9 +4259,9 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 
 
-/* AI-OMAKASE-PLAYER-V36-BLAST-NOSTEP-20260610: 勝利目的ベース。生成ブロックで自分を閉じ込める行動を禁止し、antiIdleは最終手段に固定。 */
+/* AI-OMAKASE-PLAYER-V37-PERF-SAME-MOVE-20260610: 勝利目的ベース。生成ブロックで自分を閉じ込める行動を禁止し、antiIdleは最終手段に固定。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V36-BLAST-NOSTEP-20260610';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V37-PERF-SAME-MOVE-20260610';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -4275,9 +4275,15 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   const AI_PERF={stamp:-1,bombCells:new Set(),gimmickCells:new Set(),danger:new Map(),enemy:new Map(),flameCell:new Map(),flamePoint:new Map(),route:new Map()};
   const AI_RECENT_FLAME_GIMMICK_MS=650;
   const AI_RECENT_FLAME_CELLS=new Map();
+  let AI_RECENT_FLAME_SCAN_STAMP='',AI_RECENT_FLAME_SCAN_AT=0;
   function aiNowMs(){return (typeof performance!=='undefined'&&performance.now)?performance.now():now()}
   function aiMarkRecentFlames(){
     const t=aiNowMs();
+    /* AI PERF SAME-MOVE: aiDamageGimmickAt はBFS中に大量に呼ばれる。
+       炎セルのスキャンは同一AI_PERFスタンプ中1回だけにして、残り炎の扱いは変えない。 */
+    const st=String(AI_PERF&&AI_PERF.stamp||'')+'|'+((flames&&flames.length)||0);
+    if(AI_RECENT_FLAME_SCAN_STAMP===st&&t-(AI_RECENT_FLAME_SCAN_AT||0)<80)return;
+    AI_RECENT_FLAME_SCAN_STAMP=st;AI_RECENT_FLAME_SCAN_AT=t;
     for(const f of flames||[]){
       if(!f)continue;
       const c=Number.isFinite(+f.c)?(+f.c|0):-999,r=Number.isFinite(+f.r)?(+f.r|0):-999;
@@ -5939,8 +5945,28 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(!best||best.score<560)return false;
     return aiSetSpecialAndFire(p,st,inp,t,'jump',best.dir,'missionJump');
   }
+  function aiFrameStampForInput(id,p){
+    return (typeof lockFrame!=='undefined'?lockFrame:0)+'|'+(id||'')+'|'+Math.round((p&&p.x)||0)+','+Math.round((p&&p.y)||0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|'+((enemies&&enemies.length)||0)+'|'+((falling&&falling.length)||0)+'|'+((gimmicks&&gimmicks.length)||0);
+  }
+  function aiCopyCachedInput(st,inp){
+    let c=st&&st.aiInputCache;if(!c)return false;
+    inp.dx=c.dx||0;inp.dy=c.dy||0;
+    if(c.bombSeq!=null)inp.bombSeq=c.bombSeq;
+    if(c.specialSeq!=null)inp.specialSeq=c.specialSeq;
+    if(c.handSeq!=null)inp.handSeq=c.handSeq;
+    if(c.lastDirX!=null)inp.lastDirX=c.lastDirX;
+    if(c.lastDirY!=null)inp.lastDirY=c.lastDirY;
+    return true;
+  }
+  function aiStoreCachedInput(st,stamp,inp){
+    if(!st||!inp)return;
+    st.aiInputCache={stamp,dx:inp.dx||0,dy:inp.dy||0,bombSeq:inp.bombSeq,specialSeq:inp.specialSeq,handSeq:inp.handSeq,lastDirX:inp.lastDirX,lastDirY:inp.lastDirY};
+  }
+
   function applyAiToInput(id,inp,dt){
     let p=players&&players[id];if(!p||!inp||!aiOn(id))return;let st=ai.players[id],level=aiLevel(id),t=tnow();
+    const aiInputStamp=aiFrameStampForInput(id,p);
+    if(st.aiInputCache&&st.aiInputCache.stamp===aiInputStamp){inp.local=true;inp.name=p.name||inp.name||'AI';inp.last=now();aiCopyCachedInput(st,inp);return;}
     inp.local=true;inp.name=p.name||inp.name||'AI';inp.last=now();
     if(!p.alive||p.jumpState){inp.dx=0;inp.dy=0;return;}
     let hereCell=cell(p.x,p.y),hereCountdown=aiCountdownBlockAt(hereCell.c,hereCell.r),hereFlame=flameCellDanger(hereCell.c,hereCell.r,p)+flamePointDanger(p.x,p.y,p),hereGimmick=aiDamageGimmickAt(hereCell.c,hereCell.r,p);
@@ -6036,9 +6062,10 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       let ok=canBombHere(p,level,kind,target);
       if(!ok&&p&&p.isShadowEnemy&&kind==='attack'&&targetIsTeamMonster(target))ok=canBombPressureHere(p,level,target);
       if(ok||plan.escape){
-        if(fireAiBomb(p,st,inp,t,plan.reason,target))return;
+        if(fireAiBomb(p,st,inp,t,plan.reason,target)){aiStoreCachedInput(st,aiInputStamp,inp);return;}
       }
     }
+    aiStoreCachedInput(st,aiInputStamp,inp);
   }
 
   window.__aiOmakaseShouldIgnoreOwnFlame=function(p){return false;};
@@ -6049,7 +6076,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   const oldReadLocalInput=readLocalInput;
   readLocalInput=function(){oldReadLocalInput();button();let bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{};if(started&&bag[myId]&&bag[myId].on){applyAiToInput(myId,localInput,LOCK_DT);if(mode==='join')writeInput(true)}let lp=window.__pbomberLocalPad;if(started&&lp&&lp.enabled&&inputs){(lp.ids||Object.keys(inputs)).forEach(id=>{if(inputs[id]&&bag[id]&&bag[id].on)applyAiToInput(id,inputs[id],LOCK_DT)});checkLocalPadAiCombo(lp)}};
   const oldUpdateHost=updateHost;
-  updateHost=function(dt){try{ensureShadowEnemyPlayerForWave(wave)}catch(e){}let bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{};if(started&&inputs){Object.keys(inputs).forEach(id=>{if(bag[id]&&bag[id].on&&players&&players[id])applyAiToInput(id,inputs[id],dt)});if(bag[myId]&&bag[myId].on&&players&&players[myId])applyAiToInput(myId,localInput,dt)}oldUpdateHost(dt)};
+  updateHost=function(dt){try{ensureShadowEnemyPlayerForWave(wave)}catch(e){}let bag=window.__pbomberAiOmakaseApi&&window.__pbomberAiOmakaseApi.ai&&window.__pbomberAiOmakaseApi.ai.players||{};if(started&&inputs){Object.keys(inputs).forEach(id=>{if(id===myId)return;if(bag[id]&&bag[id].on&&players&&players[id])applyAiToInput(id,inputs[id],dt)});if(bag[myId]&&bag[myId].on&&players&&players[myId])applyAiToInput(myId,localInput,dt)}oldUpdateHost(dt)};
   const oldBootGame=bootGame;
   bootGame=function(preserveMembers){let api=window.__pbomberAiOmakaseApi;if(api&&api.ai)api.ai.players=Object.create(null);return oldBootGame(preserveMembers)};
   const oldDraw=draw;
