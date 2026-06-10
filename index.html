@@ -5833,11 +5833,41 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     dirs.forEach(d=>{let s=aiDirScoreForEmergency(p,level,target,d,mode);if(s>bs){bs=s;best=d;}});
     return bs>-1e8?best:null;
   }
-  function aiSetSpecialAndFire(p,st,inp,t,type,dir,reason){
+  function aiChargedSpecialReady(p,type){
+    if(!p||!type)return false;
+    ensureSpecialBag(p);
+    if(!(p.specials&&p.specials[type]>0))return false;
+    if(type==='mastersword')return p.specialCooldown<=0;
+    if(type==='launchbomb')return p.specialCooldown<=0;
+    if(type==='chili')return p.specialCooldown<=0;
+    return false;
+  }
+  function aiFireChargedSpecialNow(p,st,inp,t,type,dir,reason){
+    if(!p||!inp||!type)return false;
+    if(!aiChargedSpecialReady(p,type))return false;
+    cancelChargeableSpecial(p);
+    p.activeSpecial=type;
+    if(dir){p.lastDirX=dir.x;p.lastDirY=dir.y;inp.dx=dir.x;inp.dy=dir.y;inp.lastDirX=dir.x;inp.lastDirY=dir.y;}else{inp.dx=0;inp.dy=0;}
+    let lv=Math.max(1,(p.specials&&p.specials[type])|0),acted=false;
+    try{
+      if(type==='mastersword')acted=masterSwordSpin(p,inp,lv);
+      else if(type==='launchbomb')acted=createChargedLaunchRocketTrap(p,inp,lv);
+      else if(type==='chili')acted=chiliChargedBreath(p,inp,lv);
+    }catch(e){acted=false;}
+    if(!acted)return false;
+    p.aiLastSpecial=t;
+    if(st){st.lastSpecial=t;st.plan=null;st.lastPlanAt=0;st.aiLastPanicSpecial=t;st.aiLastPanicReason=reason||('charged_'+type);}
+    try{msg='AI CHARGED '+specialName(type)}catch(e){}
+    return true;
+  }
+  function aiSetSpecialAndFire(p,st,inp,t,type,dir,reason,opt={}){
     if(!p||!inp||!type)return false;
     ensureSpecialBag(p);
     if(!(p.specials&&p.specials[type]>0))return false;
     if(type==='remote')return false;
+    if(opt&&opt.charged){
+      return aiFireChargedSpecialNow(p,st,inp,t,type,dir,reason);
+    }
     if(p.specialCooldown>0&&type!=='jump'&&type!=='overdrive')return false;
     p.activeSpecial=type;
     if(dir){p.lastDirX=dir.x;p.lastDirY=dir.y;inp.dx=dir.x;inp.dy=dir.y;inp.lastDirX=dir.x;inp.lastDirY=dir.y;}else{inp.dx=0;inp.dy=0;}
@@ -6082,6 +6112,32 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return best&&best.score>=360?best:null;
   }
 
+  function aiChiliChargedDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.chili>0)||p.specialCooldown>0)return null;
+    if(!target||!(target.kind==='enemy'||target.kind==='player'))return null;
+    if(target.obj&&target.obj.alive===false)return null;
+    if(aiSpecialRecent(p,'chili',tnow(),panic>=4?900:2600))return null;
+    let base=cell(p.x,p.y),lv=Math.max(1,p.specials.chili|0),best=null,bs=-Infinity;
+    [{x:p.lastDirX||1,y:p.lastDirY||0},{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1},{x:1,y:1},{x:1,y:-1},{x:-1,y:1},{x:-1,y:-1}].forEach(d0=>{
+      let d=snapThrowDir(d0.x,d0.y);if(!d||(!d.x&&!d.y))return;
+      let cells=0,targetHit=false,enemyHit=0,blocked=false;
+      for(let i=1;i<=lv;i++){
+        let c=base.c+d.x*i,r=base.r+d.y*i;
+        if(!inside(c,r)||c<=0||r<=0||c>=C-1||r>=R-1){blocked=true;break;}
+        let g=gridAt(c,r);if(g===HARD){blocked=true;break;}
+        cells++;
+        if(target&&target.c===c&&target.r===r)targetHit=true;
+        for(const e of enemies||[])if(e&&e.alive&&e.c===c&&e.r===r)enemyHit++;
+      }
+      if(!cells||(!targetHit&&enemyHit<=0))return;
+      let cur=aiDangerScoreAtCellForUse(p,level,base.c,base.r,target);
+      if(cur>=9000&&panic<5)return;
+      let score=cells*90+enemyHit*760+(targetHit?1220:0)+(panic>=3?260:0)+(blocked?-80:0);
+      if(score>bs){bs=score;best={type:'chili',dir:d,score,reason:'smartChiliCharged',charged:true};}
+    });
+    return best&&best.score>=980?best:null;
+  }
+
   function aiLaunchDecision(p,level,st,target,panic){
     if(!p||!(p.specials&&p.specials.launchbomb>0)||p.specialCooldown>0)return null;
     syncAiPlacedCount(p);if((p.placed||0)>=(p.bombMax||1))return null;
@@ -6090,6 +6146,22 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let val=bombBreakValueFrom(c.c,c.r,target,Math.max(1,p.range||2));
     let score=val.soft*420+(val.targetHit?900:0)+(panic>=4?260:0);
     return score>=420?{type:'launchbomb',dir:null,score,reason:'smartLaunch'}:null;
+  }
+  function aiLaunchChargedDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.launchbomb>0)||p.specialCooldown>0)return null;
+    syncAiPlacedCount(p);
+    let c=cell(p.x,p.y);
+    if(!inside(c.c,c.r)||gridAt(c.c,c.r)!==EMPTY||bombAt(c.c,c.r)||launchBombCellBlocked(c.c,c.r))return null;
+    let cur=aiDangerScoreAtCellForUse(p,level,c.c,c.r,target);
+    if(cur>=9000)return null;
+    let exits=aiCountFreeNeighborsForCell(p,c.c,c.r,level);
+    if(exits<=0&&panic<4)return null;
+    let targetNear=target&&(Math.abs((target.c|0)-c.c)+Math.abs((target.r|0)-c.r)<=3);
+    let choke=false;
+    try{choke=exits<=2&&aiReachableAreaFrom(p,level,c.c,c.r)>=4;}catch(e){choke=false;}
+    if(!targetNear&&!choke&&panic<4)return null;
+    let score=(targetNear?780:0)+(choke?360:0)+(panic>=4?260:0);
+    return score>=760?{type:'launchbomb',dir:null,score,reason:'smartLaunchCharged',charged:true}:null;
   }
   function aiSummonBlockDecision(p,level,st,target,panic){
     if(!p||!(p.specials&&p.specials.summonblock>0)||p.specialCooldown>0)return null;
@@ -6134,6 +6206,24 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(!aligned||dist<2||dist>4)return null;
     let d=snapThrowDir(dx,dy);return {type:'mastersword',dir:d,score:980-dist*60,reason:'smartSword'};
   }
+  function aiSwordChargedDecision(p,level,st,target,panic){
+    if(!p||!(p.specials&&p.specials.mastersword>0)||p.specialCooldown>0)return null;
+    let base=cell(p.x,p.y),near=0,bossNear=false,hostileNear=0;
+    for(const e of enemies||[]){
+      if(!e||!e.alive)continue;
+      let d=Math.abs((e.c|0)-base.c)+Math.abs((e.r|0)-base.r);
+      if(d<=2){near++;if(e.boss)bossNear=true;}
+    }
+    for(const q of Object.values(players||{})){
+      if(q&&q!==p&&q.alive&&hostilePlayer(p,q)){let qc=cell(q.x,q.y),d=Math.abs(qc.c-base.c)+Math.abs(qc.r-base.r);if(d<=2)hostileNear++;}
+    }
+    let targetClose=target&&Math.abs((target.c|0)-base.c)+Math.abs((target.r|0)-base.r)<=2;
+    if(!targetClose&&near+hostileNear<=0&&panic<4)return null;
+    let cur=aiDangerScoreAtCellForUse(p,level,base.c,base.r,target);
+    if(cur>=9000&&panic<5)return null;
+    let score=(targetClose?1020:0)+near*520+hostileNear*620+(bossNear?760:0)+(panic>=4?520:0);
+    return score>=900?{type:'mastersword',dir:null,score,reason:'smartSwordCharged',charged:true}:null;
+  }
   function aiBestTacticalSpecial(p,level,st,target,panic,mode){
     if(!p||!p.alive||!p.specials)return null;
     let list=[];
@@ -6142,9 +6232,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     add(aiOverdriveDecision(p,level,st,target,panic));
     add(aiShoretsuhaDecision(p,level,st,target,panic));
     add(aiCarDecision(p,level,st,target,panic));
+    add(aiSwordChargedDecision(p,level,st,target,panic));
     add(aiSwordDecision(p,level,st,target,panic));
     add(aiHomingDecision(p,level,st,target,panic));
+    add(aiChiliChargedDecision(p,level,st,target,panic));
     add(aiChiliDecision(p,level,st,target,panic));
+    add(aiLaunchChargedDecision(p,level,st,target,panic));
     add(aiLaunchDecision(p,level,st,target,panic));
     add(aiSummonBlockDecision(p,level,st,target,panic));
     if(!list.length)return null;
@@ -6157,7 +6250,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let panic=mode==='panic'?aiPanicLevel(p,level,st,target):0;
     let best=aiBestTacticalSpecial(p,level,st,target,panic,mode||'normal');
     if(!best)return false;
-    if(aiSetSpecialAndFire(p,st,inp,t,best.type,best.dir,best.reason)){aiMarkSpecialUse(p,best.type,t);return true;}
+    if(aiSetSpecialAndFire(p,st,inp,t,best.type,best.dir,best.reason,{charged:!!best.charged})){aiMarkSpecialUse(p,best.type,t);return true;}
     return false;
   }
 
