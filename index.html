@@ -100,7 +100,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V4-AI-MISSION-LIFEFIRST-GAUGEFILTER-CHILI-CHARGE-STREAM-20260610',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='3D-HOST-JOIN-CAMERA-FACE-V4-AI-GOAL-OPEN-CACHE-FIX-20260611',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -2379,7 +2379,7 @@ function chiliChargedBreath(p,inp={},lv0=1){
   if(p.specialCooldown>0){msg='CHILI BURNING';return false;}
   let d=chiliFacingDir(p,inp),base=tc(p.x,p.y),lv=Math.max(1,lv0||p.specials.chili|0),expId='chili_charge_'+p.id+'_'+lockFrame+'_'+(++specialSeq),burnMs=CHILI_CHARGED_BURN_MS;
   for(let i=1;i<=lv;i++){let o=cc(base.c+d.x*i,base.r+d.y*i);flames.push({c:base.c+d.x*i,r:base.r+d.y*i,x:o.x,y:o.y,t:burnMs,total:burnMs,owner:p.id,expId,flameStyle:'chili',enemyFlame:false,chiliFlame:true,attachedChili:true,attachedOwner:p.id,step:i,maxStep:lv,lv,dx:d.ux,dy:d.uy,cellDx:d.x,cellDy:d.y,mouthX:p.x+d.ux*(p.rad+6),mouthY:p.y+d.uy*(p.rad+6),tailX:p.x+d.ux*(p.rad+6+T*(lv-.5)),tailY:p.y+d.uy*(p.rad+6+T*(lv-.5)),baseC:base.c,baseR:base.r});}
-  p.lastDirX=d.ux;p.lastDirY=d.uy;p.specialCooldown=burnMs;refreshAttachedChiliFlames(true);
+  p.lastDirX=d.ux;p.lastDirY=d.uy;p.specialCooldown=burnMs;p.aiChiliNoBombUntil=now()+burnMs+260;refreshAttachedChiliFlames(true);
   shockwave(p.x+d.ux*T*.8,p.y+d.uy*T*.8,88+lv*14,'#ff5a12');partsBurst(p.x+d.ux*28,p.y+d.uy*28,'#ff5a12',42+lv*5);shake=Math.max(shake,10+lv*1.7);sfx('chili',1.35+Math.min(.45,lv*.07));msg=`${p.name} CHILI CHARGE Lv${lv} 追従火炎 4秒`;return true;
 }
 function refreshAttachedChiliFlames(applyHits=false){
@@ -2435,7 +2435,7 @@ function chiliBreath(p,inp={}){
   });
   bombs.slice().forEach(ob=>{if(ob&&!ob.carriedBy&&cells.some(cell=>ob.c===cell.c&&ob.r===cell.r))explode(ob)});
   p.lastDirX=d.ux;p.lastDirY=d.uy;
-  p.specialCooldown=burnMs+lastDelay;
+  p.specialCooldown=burnMs+lastDelay;p.aiChiliNoBombUntil=now()+burnMs+lastDelay+260;
   let head=cc(cells[0].c,cells[0].r),tail=cc(cells[cells.length-1].c,cells[cells.length-1].r);
   shockwave((head.x+tail.x)/2,(head.y+tail.y)/2,58+cells.length*12,'#ff5a12');
   shake=Math.max(shake,5+cells.length*1.1);
@@ -5044,8 +5044,14 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     out.sort((a,b)=>(a.score||0)-(b.score||0));
     return out.slice(0,Math.max(3,limit|0));
   }
+  function aiGoalSearchOpenAllowedAfterChili(){
+    if(battle&&battle.on)return false;
+    if(waveIsBoss)return false;
+    return !(enemies||[]).some(e=>e&&e.alive)&&!(waveQueue&&waveQueue.length);
+  }
   function canOpenBombHereLite(p,level,target){
     if(!p||!p.alive||p.carryBombId)return false;
+    if(aiChiliBombLocked(p,tnow(),{allowGoalOpen:true}))return false;
     syncAiPlacedCount(p);
     if((p.placed||0)>=(p.bombMax||1))return false;
     let c=cell(p.x,p.y),range=p.range||2;
@@ -5099,6 +5105,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function targetIsTeamMonster(target){return !!(target&&target.kind==='player'&&target.obj)}
   function canBombPressureHere(p,level,target){
     if(!p||!p.alive||p.carryBombId||!targetIsTeamMonster(target))return false;
+    if(aiChiliBombLocked(p,tnow()))return false;
     if((p.placed||0)>=(p.bombMax||1))return false;
     let c=cell(p.x,p.y),range=p.range||2;
     if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;
@@ -5122,7 +5129,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     reason=String(reason||'').toLowerCase();
     return reason.includes('attack')||reason.includes('shadow')||reason.includes('team');
   }
-  function queueAiBombInput(p,st,inp,t,level,target){
+  function queueAiBombInput(p,st,inp,t,level,target,opt={}){
+    if(aiChiliBombLocked(p,t,opt)){if(st){st.plan=null;st.lastPlanAt=0;}return false;}
     /* AI REMOTE FULL SUPPRESS:
        おまかせAI中はリモコン爆弾を新規設置しない。
        p.activeSpecial が remote のまま爆弾入力を出すと placeBomb 側でリモコン化し、
@@ -5141,6 +5149,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function directShadowBombNow(p,st,inp,t,reason){
     if(!p||!p.isShadowEnemy||!p.alive||p.carryBombId)return false;
+    if(aiChiliBombLocked(p,t))return false;
     syncAiPlacedCount(p);
     if((p.placed||0)>=(p.bombMax||1))return false;
     let c=cell(p.x,p.y);
@@ -5165,16 +5174,18 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return false;
   }
   function fireAiBomb(p,st,inp,t,reason,target){
+    let allowGoalOpen=String(reason||'').toLowerCase().includes('open')&&aiGoalSearchOpenAllowedAfterChili();
+    if(aiChiliBombLocked(p,t,{allowGoalOpen})){if(st){st.plan=null;st.lastPlanAt=0;}return false;}
     if(p&&p.isShadowEnemy&&isAttackBombReason(reason)&&(targetIsTeamMonster(target)||String(reason||'').toLowerCase().includes('shadow'))){
       if(directShadowBombNow(p,st,inp,t,reason))return true;
       /* 直接配置できない時だけ従来入力へ落とす。表示だけちらつく状態を避けるため、ここではlastBombを更新しない。 */
       return false;
     }
-    queueAiBombInput(p,st,inp,t,aiLevel(p&&p.id),target);
+    queueAiBombInput(p,st,inp,t,aiLevel(p&&p.id),target,{allowGoalOpen});
     return true;
   }
   function canBombHere(p,level,kind,target){
-    if(!p||!p.alive||p.carryBombId)return false;syncAiPlacedCount(p);if((p.placed||0)>=(p.bombMax||1))return false;let c=cell(p.x,p.y);if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;let shadowAttack=!!(p&&p.isShadowEnemy&&kind==='attack'&&target&&target.kind==='player'),hereDanger=cellDanger(c.c,c.r,level,p);if(hereDanger>=(shadowAttack?620:120))return false;if(!(p&&p.isShadowEnemy&&kind==='attack')&&enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;let esc=escapeAfterBomb(p,level,c.c,c.r,p.range||2);if(!esc)return false;if(kind==='attack'&&target)return blastHits(c.c,c.r,target.c,target.r,p.range||2)||canBombPressureHere(p,level,target);if(kind==='open'){let val=bombBreakValueFrom(c.c,c.r,target,p.range||2);return val.soft>0||!!val.targetHit;}return false;
+    if(!p||!p.alive||p.carryBombId)return false;if(aiChiliBombLocked(p,tnow(),{allowGoalOpen:kind==='open'}))return false;syncAiPlacedCount(p);if((p.placed||0)>=(p.bombMax||1))return false;let c=cell(p.x,p.y);if(bombAt(c.c,c.r)||!empty(c.c,c.r))return false;let shadowAttack=!!(p&&p.isShadowEnemy&&kind==='attack'&&target&&target.kind==='player'),hereDanger=cellDanger(c.c,c.r,level,p);if(hereDanger>=(shadowAttack?620:120))return false;if(!(p&&p.isShadowEnemy&&kind==='attack')&&enemyDangerAtPoint(p.x,p.y,level,p)>=120)return false;let esc=escapeAfterBomb(p,level,c.c,c.r,p.range||2);if(!esc)return false;if(kind==='attack'&&target)return blastHits(c.c,c.r,target.c,target.r,p.range||2)||canBombPressureHere(p,level,target);if(kind==='open'){let val=bombBreakValueFrom(c.c,c.r,target,p.range||2);return val.soft>0||!!val.targetHit;}return false;
   }
   function shadowDirectAttack(p,level,st,target,t,inp){
     if(!p||!p.isShadowEnemy||!target||target.kind!=='player'||!target.obj||!target.obj.alive)return false;
@@ -5671,6 +5682,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
        退避は ownBombEscapePlan で先に判断し、攻撃・開通より安全を優先する。 */
     let rev=nearestByPath(p,reviveTargets(p),level,{allowDanger:false,allowEnemyNear:false});if(rev)return{action:'move',node:rev.node,reason:'revive',target:rev};
     let gt=goalTarget();if(gt&&(!target||(enemies||[]).filter(e=>e&&e.alive).length===0)){let g=nearestByPath(p,[gt],level,{allowDanger:false,allowEnemyNear:false});if(g)return{action:'move',node:g.node,reason:'goal',target:g};}
+    let noCombat2=false;try{noCombat2=!(enemies||[]).some(e=>e&&e.alive)&&hostilePlayers(p).length===0;}catch(e){noCombat2=!target;}
+    if(noCombat2&&!gt){let rb0=reachableBombBreakPlan(p,level,null);if(rb0){rb0.reason='goalOpenBomb';rb0.target=null;return rb0;}let open0=nearestByPath(p,openPlantCells(p,null,level),level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});if(open0)return open0.node.dist===0&&canBombHere(p,level,'open',null)?{action:'bomb',reason:'goalOpenBomb',target:null}:{action:'move',node:open0.node,reason:'goalOpenRoute',target:open0};}
     let bestBuy=aiBestBuyTarget(p,level);if(bestBuy)return{action:'move',node:bestBuy.node,reason:'bestBuy',target:bestBuy};
     let items=itemTargets(p,level),it=nearestByPath(p,items,level,{allowDanger:false,allowEnemyNear:false});if(it&&it.node.dist<=5)return{action:'move',node:it.node,reason:it.kind,target:it};
     if(target){
@@ -5862,6 +5875,26 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let m=p.aiSpecialUseAt||(p.aiSpecialUseAt=Object.create(null));
     m[type]=t||tnow();
   }
+  function aiChiliBombLocked(p,t,opt={}){
+    if(!p)return false;
+    t=t||tnow();
+    /* AI CHILI/BOMB MIX FIX:
+       前版は唐辛子火炎が残っている間、爆弾を全面禁止していた。
+       そのせいで敵へ届かない/ブロックに遮られた場面で、AIが開通爆弾も攻撃爆弾も置けず固まる。
+       ここでは「同一瞬間の誤爆入力」だけを短く止める。
+       実際に爆弾を置けるかは canBombHere / escapeAfterBomb / flameDanger が判定するので、
+       唐辛子火炎中でも逃げ道がある爆弾は許可し、唐辛子と爆弾を併用できるようにする。 */
+    let allowGoalOpen=!!(opt&&opt.allowGoalOpen&&aiGoalSearchOpenAllowedAfterChili());
+    if(allowGoalOpen)return false;
+    let until=+p.aiChiliNoBombUntil||0;
+    if(until>t){
+      // 旧データで burnMs+数秒が入っていても全面停止しない。直後の入力連打だけ止める。
+      let last=(p.aiSpecialUseAt&&p.aiSpecialUseAt.chili)||0;
+      if(last&&t-last<260)return true;
+      if(!last&&until-t<300)return true;
+    }
+    return false;
+  }
   function aiDangerScoreAtCellForUse(p,level,c,r,target){
     if(!inside(c,r))return 999999;
     let o=center(c,r);
@@ -6015,6 +6048,12 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function aiChiliDecision(p,level,st,target,panic){
     if(!p||!(p.specials&&p.specials.chili>0)||p.specialCooldown>0)return null;
+    /* AI CHILI TARGET FIX:
+       唐辛子は攻撃用スペシャル。敵殲滅後のゴール/開通/安全確認ターゲットへ撃つと、
+       specialCooldownが切れるたび同じ方向へ火炎を吐き続けてゴール探しを止める。
+       そのため、AIは生きている敵/敵プレイヤーが実在する時だけ唐辛子を使う。 */
+    if(!target||!(target.kind==='enemy'||target.kind==='player'))return null;
+    if(target.obj&&target.obj.alive===false)return null;
     if(aiSpecialRecent(p,'chili',tnow(),panic>=4?650:1300))return null;
     let base=cell(p.x,p.y),lv=Math.max(1,p.specials.chili|0),best=null,bs=-Infinity;
     [{x:p.lastDirX||1,y:p.lastDirY||0},{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].forEach(d0=>{
@@ -6032,8 +6071,13 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
       if(!cells.length)return;
       let danger=aiDangerScoreAtCellForUse(p,level,base.c,base.r,target);
       if(danger>=9000&&panic<4)return;
-      let score=cells.length*90+soft*420+enemyHit*620+(targetHit?960:0)+(panic>=3?160:0);
-      if(score>bs){bs=score;best={type:'chili',dir:d,score,reason:'smartChili'};}
+      /* AI CHILI FINITE FIX:
+         唐辛子をブロック破壊/接近補助として評価すると、敵が遠くにいるだけで
+         手前のSOFTや目的方向へクールダウンごとに吐き続ける。
+         AI唐辛子は「この一発で敵/敵プレイヤーへ届く」時だけ許可する。 */
+      if(!targetHit&&enemyHit<=0)return;
+      let score=cells.length*70+enemyHit*820+(targetHit?1280:0)+(panic>=3?160:0);
+      if(score>bs){bs=score;best={type:'chili',dir:d,score,reason:'smartChiliHit'};}
     });
     return best&&best.score>=360?best:null;
   }
@@ -6140,7 +6184,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(active==='overdrive')return target.dist<T*4.5||nearDanger>=120;
     if(active==='jump')return nearDanger>=120||target.dist<T*2.4;
     if(active==='shoretsuha')return nearDanger>=120||target.dist<T*1.7;
-    if(active==='chili')return target.dist<T*Math.max(1.4,((p.specials&&p.specials.chili)||1)+.4);
+    if(active==='chili')return false; // 唐辛子は aiChiliDecision の命中判定を通った時だけ使う
     if(active==='mastersword')return target.dist>T*1.25&&target.dist<T*3.8;
     if(active==='remote'){
       let list=(bombs||[]).filter(b=>b&&b.owner===p.id&&b.remoteBomb&&!b.carriedBy&&b.armed!==false);if(!list.length)return false;list.sort((a,b)=>((a.remotePlaceSeq||0)-(b.remotePlaceSeq||0))||((a.localMadeAt||0)-(b.localMadeAt||0)));let b=list[0],bc=bombCell(b),pc=cell(p.x,p.y);if(!aiRemoteChainDetonateSafe(p,level,b,target))return false;return blastHits(bc.c,bc.r,target.c,target.r,b.range||p.range||2);
@@ -6155,6 +6199,15 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let forced=forcedOwnBombEscapePlan(p,level,st,target,t);if(forced)return forced;
     let own=ownBombEscapePlan(p,level,target);if(own)return own;
     let em=emergencyEscape(p,level,target);if(em)return em;
+    /* AI POST-KILL GOAL SEARCH FIX:
+       敵殲滅後は唐辛子/攻撃目的を完全に捨て、ゴール未出現ならブロック破壊を最優先に戻す。
+       target が古いキャッシュで残っていても null 扱いの開通計画を先に作る。 */
+    let noCombat=false;try{noCombat=!(enemies||[]).some(e=>e&&e.alive)&&hostilePlayers(p).length===0;}catch(e){noCombat=!target;}
+    if(noCombat&&!(goalGate&&!goalGate.hidden)){
+      let rb0=reachableBombBreakPlan(p,level,null);if(rb0){rb0.reason='missionGoalOpenBomb';rb0.objective=obj;rb0.target=null;return rb0;}
+      let open0=nearestByPath(p,openPlantCells(p,null,level),level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});
+      if(open0&&open0.node)return open0.node.dist===0&&canBombHere(p,level,'open',null)?{action:'bomb',reason:'missionGoalOpenBomb',target:null,objective:obj}:{action:'move',node:open0.node,reason:'missionGoalOpenRoute',target:open0,objective:obj};
+    }
     if(obj&&obj.kind==='goal'&&obj.target){let g=nearestByPath(p,[obj.target],level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});if(g&&g.node)return {action:'move',node:g.node,reason:'missionGoal',target:g,objective:obj};}
     if(target){
       if(targetIsTeamMonster(target)&&canBombPressureHere(p,level,target))return{action:'bomb',reason:'missionKillBomb',target,objective:obj};
@@ -6181,7 +6234,17 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     return aiSetSpecialAndFire(p,st,inp,t,'jump',best.dir,'missionJump');
   }
   function aiFrameStampForInput(id,p){
-    return (typeof lockFrame!=='undefined'?lockFrame:0)+'|'+(id||'')+'|'+Math.round((p&&p.x)||0)+','+Math.round((p&&p.y)||0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|'+((enemies&&enemies.length)||0)+'|'+((falling&&falling.length)||0)+'|'+((gimmicks&&gimmicks.length)||0);
+    /* AI GOAL OPEN CACHE FIX:
+       入力キャッシュの判定が enemies.length だけだったため、敵オブジェクトが配列に残ったまま alive=false になった瞬間を検知できず、
+       敵殲滅後も直前の idle/追跡入力を再利用してゴール探し用のブロック破壊へ移れないことがあった。
+       生存敵数・敵プレイヤー数・ゴール状態・SOFT数をstampへ入れて、殲滅/開通/ゴール出現で必ず再思考させる。 */
+    let live=0,hostile=0,soft=0;
+    try{live=(enemies||[]).filter(e=>e&&e.alive).length;}catch(e){live=0;}
+    try{hostile=hostilePlayers(p).length;}catch(e){hostile=0;}
+    try{for(let rr=1;rr<R-1;rr++)for(let cc=1;cc<C-1;cc++)if(gridAt(cc,rr)===SOFT)soft++;}catch(e){soft=0;}
+    let goalState='none';
+    try{goalState=goalGate?(goalGate.hidden?'hidden':('open:'+cell(goalGate.x,goalGate.y).c+','+cell(goalGate.x,goalGate.y).r)):'none';}catch(e){goalState='none';}
+    return (typeof lockFrame!=='undefined'?lockFrame:0)+'|'+(id||'')+'|'+Math.round((p&&p.x)||0)+','+Math.round((p&&p.y)||0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|E'+((enemies&&enemies.length)||0)+'/'+live+'|H'+hostile+'|S'+soft+'|G'+goalState+'|'+((falling&&falling.length)||0)+'|'+((gimmicks&&gimmicks.length)||0);
   }
   function aiCopyCachedInput(st,inp){
     let c=st&&st.aiInputCache;if(!c)return false;
