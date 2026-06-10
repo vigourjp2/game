@@ -3393,18 +3393,25 @@ function drawTimeStopOverlay(){
   if(!isTimeStopped())return;
   let rem=Math.max(0,timeStop.timer||0),total=Math.max(1,timeStop.total||rem||1),ratio=clamp(rem/total,0,1),sec=Math.ceil(rem/1000),pulse=Math.sin(performance.now()/95);
   ctx.save();
-  ctx.fillStyle='rgba(4,12,28,.34)';ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='rgba(103,232,249,.38)';ctx.lineWidth=2;
-  for(let i=0;i<9;i++){let y=(performance.now()/18+i*86)%H;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y-42);ctx.stroke();}
-  ctx.fillStyle='rgba(0,0,0,.72)';round(W/2-180,58,360,86,20);
-  ctx.strokeStyle='rgba(103,232,249,.95)';ctx.lineWidth=4;round(W/2-180,58,360,86,20);ctx.stroke();
-  ctx.fillStyle='#e0fbff';ctx.font='900 28px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('OVERDRIVE TIME STOP',W/2,84);
-  ctx.fillStyle='#67e8f9';ctx.font='900 32px system-ui';ctx.fillText(sec+'s',W/2,118);
-  ctx.fillStyle='rgba(255,255,255,.22)';round(W/2-142,132,284,8,4);
-  ctx.fillStyle='#67e8f9';round(W/2-142,132,284*ratio,8,4);
-  ctx.font='900 13px system-ui';ctx.fillStyle='#fff';ctx.fillText((timeStop.ownerName||'PLAYER')+' Lv'+(timeStop.level||1),W/2,154);
-  ctx.strokeStyle='rgba(103,232,249,.60)';ctx.lineWidth=5;
-  ctx.beginPath();ctx.arc(W/2,H/2,82+20*pulse,0,Math.PI*2);ctx.stroke();
+  // 邪魔だった上部の大型残り時間パネルを廃止し、画面右下の小型HUDへ退避。
+  // 時間停止中であることは外周エフェクトで分かるようにして、プレイ視界は塞がない。
+  ctx.fillStyle='rgba(4,12,28,.14)';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(103,232,249,.30)';ctx.lineWidth=3;
+  ctx.strokeRect(5.5,5.5,W-11,H-11);
+  ctx.strokeStyle='rgba(103,232,249,.20)';ctx.lineWidth=2;
+  for(let i=0;i<4;i++){let y=(performance.now()/28+i*176)%H;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y-36);ctx.stroke();}
+  let bx=W-154,by=H-82,bw=142,bh=58;
+  ctx.fillStyle='rgba(0,0,0,.66)';round(bx,by,bw,bh,15);
+  ctx.strokeStyle='rgba(103,232,249,.90)';ctx.lineWidth=3;round(bx,by,bw,bh,15);ctx.stroke();
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  ctx.fillStyle='#e0fbff';ctx.font='900 12px system-ui';ctx.fillText('OVERDRIVE',bx+13,by+17);
+  ctx.textAlign='right';ctx.fillStyle='#67e8f9';ctx.font='900 26px system-ui';ctx.fillText(sec+'s',bx+bw-12,by+25);
+  ctx.fillStyle='rgba(255,255,255,.20)';round(bx+12,by+42,bw-24,7,4);
+  ctx.fillStyle='#67e8f9';round(bx+12,by+42,(bw-24)*ratio,7,4);
+  ctx.textAlign='left';ctx.fillStyle='rgba(255,255,255,.82)';ctx.font='900 10px system-ui';
+  ctx.fillText((timeStop.ownerName||'PLAYER')+' Lv'+(timeStop.level||1),bx+13,by+55);
+  ctx.strokeStyle='rgba(103,232,249,.38)';ctx.lineWidth=4;
+  ctx.beginPath();ctx.arc(W/2,H/2,82+14*pulse,0,Math.PI*2);ctx.stroke();
   ctx.restore();
 }
 
