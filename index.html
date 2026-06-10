@@ -1920,12 +1920,13 @@ function applyInputActiveSpecial(p,inp){if(!p||!inp||!inp.activeSpecial)return;e
 function masterSwordDamage(lv){return 1+Math.floor(Math.max(0,lv-1)/2)}
 function masterSwordHitCell(owner,c,r,dmg,tag){
   if(!inside(c,r)||grid[r][c]===HARD)return false;
-  if(grid[r][c]===SOFT)damageSoftBlock(c,r,owner.id);
-  enemies.forEach(e=>{if(e&&e.alive&&e.c===c&&e.r===r)damageEnemy(e,dmg,owner.id)});
-  Object.values(players).forEach(q=>{if(q&&q.alive&&q.id!==owner.id&&q.c===c&&q.r===r)damagePlayer(q,'local')});
-  bombs.slice().forEach(b=>{if(b&&!b.carriedBy&&b.c===c&&b.r===r)explode(b)});
-  let o=cc(c,r);partsBurst(o.x,o.y,'#93c5fd',10+Math.floor(dmg*3));
-  return grid[r][c]!==SOFT;
+  let worked=false;
+  if(grid[r][c]===SOFT){damageSoftBlock(c,r,owner.id);worked=true;}
+  enemies.forEach(e=>{if(e&&e.alive&&e.c===c&&e.r===r){damageEnemy(e,dmg,owner.id);worked=true;}});
+  Object.values(players).forEach(q=>{if(q&&q.alive&&q.id!==owner.id&&q.c===c&&q.r===r){damagePlayer(q,'local');worked=true;}});
+  bombs.slice().forEach(b=>{if(b&&!b.carriedBy&&b.c===c&&b.r===r){explode(b);worked=true;}});
+  if(worked){let o=cc(c,r);partsBurst(o.x,o.y,'#93c5fd',10+Math.floor(dmg*3));}
+  return !worked;
 }
 function pushMasterSwordFx(f){
   const total=Math.max(120,Number(f.total)||360);
