@@ -2477,8 +2477,21 @@ function shoretsuhaPathFree(c,r,d,dist,self=null){
   for(let i=1;i<=dist;i++){if(!shoretsuhaCellFree(c+d.x*i,r+d.y*i,self))return false;}
   return true;
 }
-function shoretsuhaBomb(b,d,dist,p){
-  if(!b||b.carriedBy)return false;
+function shoretsuhaAirBombCell(b){
+  if(!b||!b.hop||b.carriedBy||isAirborneLaunchTrap(b))return null;
+  let h=b.hop,den=Math.max(1,h.dur||1),a=clamp((h.t||0)/den,0,1),fo=cc(h.fromC,h.fromR),to=cc(h.toC,h.toR);
+  return tc(fo.x+(to.x-fo.x)*a,fo.y+(to.y-fo.y)*a);
+}
+function shoretsuhaBombTargetCell(b){
+  let ac=shoretsuhaAirBombCell(b);
+  return ac||{c:b.c,r:b.r};
+}
+function shoretsuhaBomb(b,d,dist,p,originCell=null){
+  if(!b||b.carriedBy||isAirborneLaunchTrap(b))return false;
+  if(originCell&&inside(originCell.c,originCell.r)){
+    b.c=originCell.c;b.r=originCell.r;
+    let o=cc(b.c,b.r);b.x=o.x;b.y=o.y;
+  }
   let dest=shoretsuhaDestCell(b.c,b.r,d,dist);
   if(!shoretsuhaPathFree(b.c,b.r,d,dist,b))return false;
   b.passOwner=null;b.carriedBy=null;b.vx=0;b.vy=0;b.slideT=0;b.thrownBy=p.id;b.power=Math.max(b.power||0,dist+1);b.armed=false;b.fusePaused=true;b.landed=false;b.spin=(b.spin||0)+18+dist*4;
@@ -2508,11 +2521,15 @@ function shoretsuhaBurst(p,inp={}){
     if(!inside(c,r))return;
     let targets=[];
     Object.values(players).forEach(q=>{if(q&&q!==p&&q.alive&&q.c===c&&q.r===r)targets.push({kind:'player',obj:q});});
-    bombs.forEach(b=>{if(b&&!b.carriedBy&&b.c===c&&b.r===r)targets.push({kind:'bomb',obj:b});});
+    bombs.forEach(b=>{
+      if(!b||b.carriedBy||isAirborneLaunchTrap(b))return;
+      let bc=shoretsuhaBombTargetCell(b);
+      if(bc&&bc.c===c&&bc.r===r)targets.push({kind:'bomb',obj:b,cell:bc});
+    });
     enemies.forEach(e=>{if(e&&e.alive&&e.c===c&&e.r===r)targets.push({kind:'enemy',obj:e});});
     let t=targets[0];
     if(!t)return;
-    if(t.kind==='bomb'?shoretsuhaBomb(t.obj,d,dist,p):shoretsuhaEntity(t.obj,d,dist,p)){hit++;effectHits.add(c+','+r);}
+    if(t.kind==='bomb'?shoretsuhaBomb(t.obj,d,dist,p,t.cell):shoretsuhaEntity(t.obj,d,dist,p)){hit++;effectHits.add(c+','+r);}
   });
   dirs.forEach((d,i)=>{
     let c=base.c+d.x,r=base.r+d.y;if(!inside(c,r))return;
