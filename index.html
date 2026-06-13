@@ -215,7 +215,7 @@
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='LANDSCAPE-FIELD-FIRST-V1-20260613',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='AI-COOP-REVIVE-V1-20260613',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=1920,RENDER_MIN_HEIGHT=1080,RENDER_MAX_PIXELS=4200000,RENDER_MAX_SCALE=3;
 let renderScale=1,renderW=W,renderH=H,renderResizeTimer=0,renderLastCssW=0,renderLastCssH=0;
@@ -2791,7 +2791,7 @@ function collectItemsForPlayer(p,emit=true){if(!p||!p.alive)return;for(let i=ite
 function flameActive(f){return !!f&&!f.blocked&&(!Number.isFinite(f.appearIn)||f.appearIn<=0)&&f.t>0}
 function flameHit(c,r,ownerFilter=null){return flames.some(f=>flameActive(f)&&f.c===c&&f.r===r&&(!ownerFilter||f.owner===ownerFilter||f.localOwner===ownerFilter))}
 function flameHitExcept(c,r,ignoreExpId=null,ownerFilter=null){return flames.some(f=>flameActive(f)&&f.c===c&&f.r===r&&(!ignoreExpId||f.expId!==ignoreExpId)&&(!ownerFilter||f.owner===ownerFilter||f.localOwner===ownerFilter))}
-function nearestReviverFor(p){if(!p||p.isShadowEnemy)return null;if(battle.on&&!battle.team)return null;let best=null,bd=Infinity;for(const q of Object.values(players)){if(!q||q.isShadowEnemy||!q.alive||q.id===p.id)continue;if(battle.on&&battle.team&&battleTeamKey(q)!==battleTeamKey(p))continue;let d=Math.hypot((q.x||0)-(p.x||0),(q.y||0)-(p.y||0));if(d<REVIVE_RADIUS&&d<bd){best=q;bd=d}}return best}
+function nearestReviverFor(p){if(!p||p.isShadowEnemy)return null;let best=null,bd=Infinity;for(const q of Object.values(players)){if(!q||q.isShadowEnemy||!q.alive||q.id===p.id)continue;/* COOP REVIVE FIX: WAVE0-49 は協力プレイ。個人(I)同士も別チーム扱いにせず復活可能にする。 */if(!(wave<50)){if(battle.on&&!battle.team)return null;if(battle.on&&battle.team&&battleTeamKey(q)!==battleTeamKey(p))continue;}let d=Math.hypot((q.x||0)-(p.x||0),(q.y||0)-(p.y||0));if(d<REVIVE_RADIUS&&d<bd){best=q;bd=d}}return best}
 function revivePlayer(p,by=null){if(!p)return;p.alive=true;p.revive=0;p.reviveBy=null;p.invuln=Math.max(p.invuln||0,REVIVE_INVULN_MS);p.shield=Math.max(p.shield||0,900);p.vx=0;p.vy=0;partsBurst(p.x,p.y,p.color,34);shockwave(p.x,p.y,58,p.color);sfx('item');msg=`${p.name} REVIVED${by?' BY '+by.name:''}`}
 function updateRevives(dt){for(const p of Object.values(players)){if(!p||p.alive)continue;let by=nearestReviverFor(p);if(by){p.reviveBy=by.id;p.revive=Math.min(1,(p.revive||0)+REVIVE_GAIN_PER_SEC*dt);if(p.revive>=1)revivePlayer(p,by)}else{p.reviveBy=null;p.revive=Math.max(0,(p.revive||0)-REVIVE_DECAY_PER_SEC*dt)}}}
 function damagePlayer(p,src='local'){if(!p||!p.alive||p.shield>0||p.invuln>0||playerJumpApexInvuln(p))return;if(mode==='join'&&p.id===myId&&src==='remote')return;if(consumeShadowServantRevive(p))return;halveMoneyOnDeath(p);releasePlayerItems(p);p.alive=false;p.revive=0;p.reviveBy=null;p.vx=0;p.vy=0;if(p.carryBombId){let b=bombs.find(q=>q.id===p.carryBombId);if(b){b.carriedBy=null;b.fusePaused=false;b.armed=true;b.landed=true}p.carryBombId=null}sfx('down');partsBurst(p.x,p.y,p.color,30);msg=`${p.name} DOWN${battle.on&&!battle.team?'': ' - 近くで復活可能'}`;if(mode==='join'&&p.id===myId&&src==='local')reportLocalDeath(p,'local')}
@@ -4828,7 +4828,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 /* AI-OMAKASE-PLAYER-V37-PERF-SAME-MOVE-20260610: 勝利目的ベース。生成ブロックで自分を閉じ込める行動を禁止し、antiIdleは最終手段に固定。 */
 (function installAiOmakasePlayer(){
-  const AI_BUILD='AI-OMAKASE-PLAYER-V37-PERF-SAME-MOVE-20260610';
+  const AI_BUILD='AI-OMAKASE-PLAYER-V38-COOP-REVIVE-20260613';
   const prevApi=window.__pbomberAiOmakaseApi;
   const ai=prevApi&&prevApi.ai?prevApi.ai:{players:Object.create(null),targetId:'',targetName:'PLAYER',comboPrev:Object.create(null),selectedLevel:5};
   window.__pbomberAiOmakaseApi={build:AI_BUILD,ai};
@@ -5111,6 +5111,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     if(!me||!q||me===q||!q.alive)return false;
     if(me.isShadowEnemy)return !q.isShadowEnemy;
     if(q.isShadowEnemy)return !me.isShadowEnemy;
+    /* COOP REVIVE FIX: WAVE0-49 は協力プレイ扱い。個人(I)同士を敵にしない。 */
+    if(wave<50)return false;
     let mt=explicitTeamKey(me),qt=explicitTeamKey(q);
     if(mt&&qt)return mt!==qt;
     if(battle&&battle.team)return !sameTeam(me,q);
@@ -5120,6 +5122,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function friendPlayer(me,q){
     if(!me||!q||me===q)return false;
     if(me.isShadowEnemy||q.isShadowEnemy)return !!(me.isShadowEnemy&&q.isShadowEnemy);
+    /* COOP REVIVE FIX: WAVE0-49 は全通常プレイヤーを救助対象にする。 */
+    if(wave<50)return true;
     let mt=explicitTeamKey(me),qt=explicitTeamKey(q);
     if(mt&&qt)return mt===qt;
     if(battle&&battle.team)return sameTeam(me,q);
@@ -5331,7 +5335,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   }
   function itemTargets(p,level){let arr=[];for(const it of items||[]){if(!it)continue;if(!passable(p,it.c,it.r,false))continue;if(it.special){try{if(!aiCanBuySpecialItem(p,it))continue}catch(e){continue}}if(cellDanger(it.c,it.r,level,p)>=160)continue;let price=it.special?aiSpecialPrice(it):0,prio=it.special?aiSpecialBuyPriority(p,it):{unset:0,price:0};arr.push({kind:it.special?'buy':'item',c:it.c,r:it.r,x:center(it.c,it.r).x,y:center(it.c,it.r).y,it,price,score:it.special?(-10000-prio.unset*5000-price*2):-25});}return arr}
   function goalTarget(){if(goalGate&&!goalGate.hidden&&!battle.on){let g=cell(goalGate.x,goalGate.y);if(aiDamageGimmickAt(g.c,g.r))return null;return{kind:'goal',c:g.c,r:g.r,x:goalGate.x,y:goalGate.y,score:-80}}return null}
-  function reviveTargets(p){let arr=[];for(const q of Object.values(players||{})){if(!q||q.alive||!friendPlayer(p,q))continue;let qc=cell(q.x,q.y);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)arr.push({kind:'revive',c:qc.c+dx,r:qc.r+dy,x:q.x,y:q.y,friend:q,score:-90});}return arr}
+  function reviveTargets(p){let arr=[];for(const q of Object.values(players||{})){if(!q||q.alive||!friendPlayer(p,q))continue;let qc=cell(q.x,q.y);for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){let c=qc.c+dx,r=qc.r+dy;if(!inside(c,r))continue;let o=center(c,r);if(Math.hypot(o.x-q.x,o.y-q.y)>REVIVE_RADIUS-10)continue;arr.push({kind:'revive',c,r,x:q.x,y:q.y,friend:q,score:-220+Math.abs(dx)+Math.abs(dy)});}}return arr}
+  function aiRevivePlan(p,level){let targets=reviveTargets(p);if(!targets.length)return null;let rev=nearestByPath(p,targets,level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});if(!rev)return null;return{action:'move',node:rev.node,reason:'coopRevive',target:rev};}
 
   function attackPlantCells(p,target,level){
     if(!target)return[];let range=p.range||2,out=[];
@@ -6013,7 +6018,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let c=cell(p.x,p.y),own=(bombs||[]).filter(b=>b&&b.owner===p.id&&!b.carriedBy&&!b.fusePaused&&b.armed!==false).sort((a,b)=>(a.timer||9999)-(b.timer||9999))[0];
     /* AI OWN-BOMB FAIR FIX: 自爆無効のズルをやめ、爆弾を置いた本人が予定爆風外へ退避する。
        退避は ownBombEscapePlan で先に判断し、攻撃・開通より安全を優先する。 */
-    let rev=nearestByPath(p,reviveTargets(p),level,{allowDanger:false,allowEnemyNear:false});if(rev)return{action:'move',node:rev.node,reason:'revive',target:rev};
+    let revPlan=aiRevivePlan(p,level);if(revPlan)return revPlan;
     let gt=goalTarget();if(gt&&(!target||(enemies||[]).filter(e=>e&&e.alive).length===0)){let g=nearestByPath(p,[gt],level,{allowDanger:false,allowEnemyNear:false});if(g)return{action:'move',node:g.node,reason:'goal',target:g};}
     let noCombat2=false;try{noCombat2=!(enemies||[]).some(e=>e&&e.alive)&&hostilePlayers(p).length===0;}catch(e){noCombat2=!target;}
     if(noCombat2&&!gt){let rb0=reachableBombBreakPlan(p,level,null);if(rb0){rb0.reason='goalOpenBomb';rb0.target=null;return rb0;}let open0=nearestByPath(p,openPlantCells(p,null,level),level,{allowDanger:false,allowEnemyNear:false,maxSteps:90});if(open0)return open0.node.dist===0&&canBombHere(p,level,'open',null)?{action:'bomb',reason:'goalOpenBomb',target:null}:{action:'move',node:open0.node,reason:'goalOpenRoute',target:open0};}
@@ -6277,6 +6282,8 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
   function aiObjectiveFor(p,level,st,target){
     let pc=cell(p.x,p.y),fd=flameCellDanger(pc.c,pc.r,p)+flamePointDanger(p.x,p.y,p),dg=cellDanger(pc.c,pc.r,level,p),ed=enemyDangerAtPoint(p.x,p.y,level,p),own=ownBombBlastThreatAt(p,pc.c,pc.r)||ownRemoteBlastThreatAt(p,pc.c,pc.r);
     if(fd>=900||dg>=9000||ed>=180||own)return{kind:'survive',target:null,priority:100000,reason:'survive'};
+    let revive=null;try{revive=reviveTargets(p)[0]||null}catch(e){revive=null}
+    if(revive)return{kind:'revive',target:revive,priority:95000,reason:'coopRevive'};
     if(target){let boss=!!(target.obj&&target.obj.boss);return{kind:battle&&battle.on?'killPlayer':(boss?'killBoss':'killEnemy'),target,priority:boss?90000:80000,reason:boss?'boss':'enemy'};}
     let gt=goalTarget();if(gt)return{kind:'goal',target:gt,priority:70000,reason:'goal'};
     /* パワーアップ/購入はミッション目的にしない。
@@ -6625,6 +6632,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let forced=forcedOwnBombEscapePlan(p,level,st,target,t);if(forced)return forced;
     let own=ownBombEscapePlan(p,level,target);if(own)return own;
     let em=emergencyEscape(p,level,target);if(em)return em;
+    let revivePlan=aiRevivePlan(p,level);if(revivePlan){revivePlan.objective=obj;return revivePlan;}
     /* AI POST-KILL GOAL SEARCH FIX:
        敵殲滅後は唐辛子/攻撃目的を完全に捨て、ゴール未出現ならブロック破壊を最優先に戻す。
        target が古いキャッシュで残っていても null 扱いの開通計画を先に作る。 */
@@ -6667,10 +6675,11 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
     let live=0,hostile=0,soft=0;
     try{live=(enemies||[]).filter(e=>e&&e.alive).length;}catch(e){live=0;}
     try{hostile=hostilePlayers(p).length;}catch(e){hostile=0;}
+    let reviveSig='R0';try{let dead=reviveTargets(p).map(t=>t.friend&&t.friend.id).filter(Boolean).sort();reviveSig='R'+dead.join(',');}catch(e){reviveSig='R?';}
     try{for(let rr=1;rr<R-1;rr++)for(let cc=1;cc<C-1;cc++)if(gridAt(cc,rr)===SOFT)soft++;}catch(e){soft=0;}
     let goalState='none';
     try{goalState=goalGate?(goalGate.hidden?'hidden':('open:'+cell(goalGate.x,goalGate.y).c+','+cell(goalGate.x,goalGate.y).r)):'none';}catch(e){goalState='none';}
-    return (typeof lockFrame!=='undefined'?lockFrame:0)+'|'+(id||'')+'|'+Math.round((p&&p.x)||0)+','+Math.round((p&&p.y)||0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|E'+((enemies&&enemies.length)||0)+'/'+live+'|H'+hostile+'|S'+soft+'|G'+goalState+'|'+((falling&&falling.length)||0)+'|'+((gimmicks&&gimmicks.length)||0);
+    return (typeof lockFrame!=='undefined'?lockFrame:0)+'|'+(id||'')+'|'+Math.round((p&&p.x)||0)+','+Math.round((p&&p.y)||0)+'|'+((bombs&&bombs.length)||0)+'|'+((flames&&flames.length)||0)+'|E'+((enemies&&enemies.length)||0)+'/'+live+'|H'+hostile+'|'+reviveSig+'|S'+soft+'|G'+goalState+'|'+((falling&&falling.length)||0)+'|'+((gimmicks&&gimmicks.length)||0);
   }
   function aiCopyCachedInput(st,inp){
     let c=st&&st.aiInputCache;if(!c)return false;
