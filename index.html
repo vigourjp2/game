@@ -1370,7 +1370,7 @@ function setupDebugStage(){
   const normalTypes=['fire','bomb','speed','shield','kick','hand'];
   const specialTypes=Object.keys(SPECIALS||{});
   const allTypes=[...normalTypes,...specialTypes];
-  msg='DEBUG STAGE / MONEY x10 / ALL ITEMS x2';
+  msg='DEBUG STAGE / MONEY x10 / ALL ITEMS x3';
   setupStageForWave(1);
   enemies=[];bombs=[];flames=[];falling=[];items=[];goalGate=null;waveQueue=[];waveIsBoss=false;dropTimer=999999;cleanupShadowEnemiesForWave(0);
   for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++)if(!(c%2===0&&r%2===0))grid[r][c]=EMPTY;
@@ -1381,7 +1381,7 @@ function setupDebugStage(){
     p.gold=Math.max(p.gold||0,5000);
   });
   const wanted=[];
-  allTypes.forEach(t=>{wanted.push(t,t)});
+  allTypes.forEach(t=>{wanted.push(t,t,t)});
   let cells=[];
   for(let r=1;r<R-1;r++)for(let c=1;c<C-1;c++){
     if((c<=2&&r<=2)||(c>=C-3&&r>=R-3)||(c>=C-3&&r<=2)||(c<=2&&r>=R-3))continue;
@@ -1400,7 +1400,7 @@ function setupDebugStage(){
     });
   });
   ensureShadowEnemyPlayerForWave(0);
-  msg='DEBUG STAGE / SHADOW Lv9 / MONEY x10 / ALL ITEMS x2';
+  msg='DEBUG STAGE / SHADOW Lv9 / MONEY x10 / ALL ITEMS x3';
 }
 function applyStartWave(){let w=chosenStartWave();if(w>=51&&w<=83){initBattle(w,chosenBattleTeam());setupBattleRound(w);return;}resetBattleState();if(w===0){setupDebugStage();return;}if(w<=1)return;wave=w;msg='WAVE '+wave+' DEBUG START';setupStageForWave(wave);spawnWave();if(wave===FINAL_BOSS_WAVE)playBgm('bomb10.flac');}
 async function startHost(){beginGameBgmFromUserGesture();if(!initFirebase())return;roomId=safeRoom($('room').value)||randRoom();$('room').value=roomId;roomSeed=hashSeed(roomId);mode='host';isHost=true;rtcPeers={};rtcChannels={};rtcStateChannels={};rtcInputChannel=null;rtcStateChannel=null;rtcConnected=false;rtcHostListenerOff=false;startCamera();roomRef=db.ref('pbomber_rooms/'+roomId);await roomRef.set({created:now(),host:myId,roomSeed,bgm:currentBgmSyncPayload(),members:{},inputs:{},rtc:{offers:{},answers:{},hostCandidates:{},joinCandidates:{}},state:null});roomRef.child('inputs').on('value',s=>{inputs=s.val()||{}});roomRef.child('members').on('value',s=>{members=s.val()||{}});roomRef.child('events').on('child_added',s=>{applyGameEvent(s.val())});setupRtcHost();bootGame();await registerMember();members[myId]={id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());await roomRef.child('state').set(serialize());$('panel').classList.add('hidden');updateHud();setPanel('HOST開始 ROOM '+roomId)}
