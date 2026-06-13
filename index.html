@@ -6818,11 +6818,96 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 
 <script>
 (function(){
+  /* PWA install / cache refresh guard
+     index.htmlだけ更新しても古いPWAキャッシュに引っ張られないよう、
+     index.htmlの更新検知で physics-bomber 系キャッシュだけ掃除する。 */
+  const PWA_CACHE_PREFIX='physics-bomber-pwa-';
+  const PWA_INDEX_SEEN_KEY='pbomber:last-index-build-seen';
+  const PWA_INSTALL_DISMISSED_KEY='pbomber:pwa-install-dismissed-at';
+  const PWA_INDEX_BUILD=(document.lastModified||'').trim()||String(Date.now());
+
+  function isStandalone(){
+    return !!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||!!window.navigator.standalone;
+  }
+  function pwaLog(){try{console.log.apply(console,arguments)}catch(e){}}
+  async function purgePbomberCaches(reason){
+    if(!('caches' in window))return;
+    try{
+      const keys=await caches.keys();
+      await Promise.all(keys.filter(k=>String(k).indexOf(PWA_CACHE_PREFIX)===0).map(k=>caches.delete(k)));
+      pwaLog('[PWA] cache purge',reason,keys);
+    }catch(e){try{console.warn('[PWA] cache purge failed',e)}catch(_){} }
+  }
+  async function refreshPwaCacheIfIndexChanged(){
+    try{
+      const prev=localStorage.getItem(PWA_INDEX_SEEN_KEY)||'';
+      if(prev!==PWA_INDEX_BUILD){
+        localStorage.setItem(PWA_INDEX_SEEN_KEY,PWA_INDEX_BUILD);
+        await purgePbomberCaches('index-updated:'+PWA_INDEX_BUILD);
+      }
+    }catch(e){}
+  }
+  function createInstallButton(){
+    let btn=document.getElementById('pwaInstallBtn');
+    if(btn)return btn;
+    btn=document.createElement('button');
+    btn.id='pwaInstallBtn';
+    btn.type='button';
+    btn.textContent='アプリをインストール';
+    btn.setAttribute('aria-label','アプリをインストール');
+    btn.style.cssText=[
+      'position:fixed','right:calc(12px + env(safe-area-inset-right,0px))','bottom:calc(12px + env(safe-area-inset-bottom,0px))',
+      'z-index:2147483647','display:none','padding:10px 14px','border:0','border-radius:999px',
+      'background:linear-gradient(135deg,#facc15,#fb923c)','color:#111827','font:900 13px system-ui,-apple-system,BlinkMacSystemFont,sans-serif',
+      'box-shadow:0 10px 30px rgba(0,0,0,.42),0 0 0 2px rgba(255,255,255,.22) inset',
+      'letter-spacing:.02em','touch-action:manipulation'
+    ].join(';');
+    document.body.appendChild(btn);
+    return btn;
+  }
+
+  let deferredInstallPrompt=null;
+  window.addEventListener('beforeinstallprompt',function(ev){
+    if(isStandalone())return;
+    ev.preventDefault();
+    deferredInstallPrompt=ev;
+    const dismissedAt=Number(localStorage.getItem(PWA_INSTALL_DISMISSED_KEY)||0);
+    if(Date.now()-dismissedAt<6*60*60*1000)return;
+    const btn=createInstallButton();
+    btn.style.display='block';
+    btn.onclick=async function(){
+      if(!deferredInstallPrompt)return;
+      btn.disabled=true;
+      btn.textContent='インストール確認中…';
+      try{
+        deferredInstallPrompt.prompt();
+        const choice=await deferredInstallPrompt.userChoice.catch(()=>null);
+        if(choice&&choice.outcome==='dismissed')localStorage.setItem(PWA_INSTALL_DISMISSED_KEY,String(Date.now()));
+      }catch(e){try{console.warn('[PWA] install prompt failed',e)}catch(_){} }
+      deferredInstallPrompt=null;
+      btn.style.display='none';
+      btn.disabled=false;
+      btn.textContent='アプリをインストール';
+    };
+  });
+  window.addEventListener('appinstalled',function(){
+    deferredInstallPrompt=null;
+    const btn=document.getElementById('pwaInstallBtn');
+    if(btn)btn.style.display='none';
+    try{localStorage.removeItem(PWA_INSTALL_DISMISSED_KEY)}catch(e){}
+    pwaLog('[PWA] installed');
+  });
+
   if(!('serviceWorker' in navigator))return;
-  window.addEventListener('load',function(){
-    navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(function(err){
+  window.addEventListener('load',async function(){
+    await refreshPwaCacheIfIndexChanged();
+    try{
+      const reg=await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'});
+      try{await reg.update()}catch(e){}
+      pwaLog('[PWA] service worker ready',reg.scope);
+    }catch(err){
       try{console.warn('PWA service worker registration failed',err)}catch(e){}
-    });
+    }
   });
 })();
 </script>
