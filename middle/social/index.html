@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>社会4択ゲーム｜添付画像ワーク最優先版</title>
+<style>
+:root{--bg:#07111f;--card:#101c31;--card2:#0b1526;--txt:#f6f8ff;--muted:#aab6cc;--line:#29405f;--a:#64e7ff;--b:#9b7cff;--ok:#30e28a;--ng:#ff5575;--warn:#ffd166}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#1a3c70 0,#07111f 45%,#030713 100%);color:var(--txt);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100svh}.wrap{max-width:1080px;margin:auto;padding:12px}.hero{display:flex;justify-content:space-between;gap:10px;align-items:end;flex-wrap:wrap}.title{font-size:clamp(24px,5vw,44px);font-weight:1000;letter-spacing:.02em}.sub{color:var(--muted);font-weight:700;line-height:1.6}.pill{border:1px solid var(--line);border-radius:999px;padding:8px 12px;background:#ffffff12;font-weight:900}.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;margin-top:12px}@media(max-width:860px){.grid{grid-template-columns:1fr}}.panel{background:linear-gradient(180deg,#ffffff10,#ffffff05);border:1px solid var(--line);border-radius:22px;padding:16px;box-shadow:0 18px 50px #0008}.meta{display:flex;justify-content:space-between;gap:8px;align-items:center;color:var(--muted);font-weight:900}.tag{background:linear-gradient(135deg,var(--a),var(--b));color:#04101a;border-radius:999px;padding:5px 10px;font-size:12px}.q{font-size:clamp(21px,4vw,32px);font-weight:1000;line-height:1.35;margin:16px 0}.choices{display:grid;gap:10px}.choice{border:1px solid var(--line);background:#182944;color:var(--txt);padding:14px;border-radius:16px;text-align:left;font-weight:900;font-size:18px;cursor:pointer}.choice:hover{border-color:var(--a);transform:translateY(-1px)}.choice:disabled{cursor:default;transform:none}.choice.correct{border-color:var(--ok);background:#113824}.choice.wrong{border-color:var(--ng);background:#3b1723}.exp{display:none;margin-top:14px;padding:13px;border-radius:14px;background:#071a2dcc;border-left:5px solid var(--a);line-height:1.7;font-weight:700}.exp.show{display:block}.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.btn{border:1px solid var(--line);background:#162641;color:var(--txt);border-radius:14px;padding:11px 14px;font-weight:1000;cursor:pointer}.btn.primary{border:0;background:linear-gradient(135deg,#18c6dd,#7a5cff)}.btn.good{background:#103520;border-color:#278957}.btn.danger{background:#3b1723;border-color:#8b3148}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.stat{background:#071325;border:1px solid var(--line);border-radius:16px;text-align:center;padding:12px}.num{font-size:28px;font-weight:1000}.lab{font-size:12px;color:var(--muted);font-weight:800}.bar{height:12px;border:1px solid var(--line);background:#050b14;border-radius:999px;overflow:hidden;margin:12px 0}.bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--ng),var(--warn),var(--ok));transition:.25s}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}@media(max-width:560px){.row{grid-template-columns:1fr}.choice{font-size:16px}.panel{padding:12px}}select{width:100%;border:1px solid var(--line);background:#081426;color:var(--txt);border-radius:12px;padding:10px;font-weight:900}.small{color:var(--muted);font-size:13px;line-height:1.65}.miss{max-height:260px;overflow:auto;background:#0003;border:1px solid var(--line);border-radius:14px;padding:8px}.miss div{padding:8px;border-bottom:1px solid #ffffff14}.miss div:last-child{border:0}.result{font-size:20px;font-weight:1000;margin-top:10px}.ok{color:var(--ok)}.ng{color:var(--ng)}.warn{color:var(--warn)}.footer{text-align:center;color:#ffffff70;font-size:12px;margin:18px}</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div><div class="title">社会4択ゲーム</div><div class="sub">添付画像に写っているワーク内容だけで作成｜中1前期中間対策</div></div>
+    <div class="pill" id="countPill">0問</div>
+  </div>
+  <div class="grid">
+    <section class="panel">
+      <div class="meta"><span id="qpos">第1問</span><span class="tag" id="cat">カテゴリ</span></div>
+      <div class="q" id="q">開始してね</div>
+      <div class="choices" id="choices"></div>
+      <div class="exp" id="exp"></div>
+      <div class="controls">
+        <button class="btn primary" id="nextBtn">次の問題</button>
+        <button class="btn" id="shuffleBtn">シャッフル</button>
+        <button class="btn good" id="missBtn">間違いだけ</button>
+        <button class="btn danger" id="resetBtn">最初から</button>
+      </div>
+    </section>
+    <aside class="panel">
+      <div class="stats">
+        <div class="stat"><div class="num" id="done">0</div><div class="lab">回答</div></div>
+        <div class="stat"><div class="num ok" id="ok">0</div><div class="lab">正解</div></div>
+        <div class="stat"><div class="num ng" id="ng">0</div><div class="lab">ミス</div></div>
+      </div>
+      <div class="bar"><div id="bar"></div></div>
+      <div class="result" id="result">正答率 0%</div>
+      <div class="row">
+        <select id="mode"><option value="all">全カテゴリ</option></select>
+        <select id="order"><option value="shuffle">ランダム</option><option value="seq">順番</option></select>
+      </div>
+      <p class="small">※今回は、前に作った一般問題をやめて、添付画像で読める語句・数字・答えだけに寄せた版。画像の細かい地図記号は、読める範囲だけ問題化。</p>
+      <h3>間違えた問題</h3>
+      <div class="miss" id="missList"><div class="small">まだミスなし。</div></div>
+    </aside>
+  </div>
+  <div class="footer">1ファイル完結 index.html</div>
+</div>
+<script>
+const QUESTIONS = [
+// 世界の国を知ろう
+{c:'世界の国あて',q:'ギョウザが代表的な料理で、漢字がもともとこの国の文字。巨大な人口を抱える国は？',a:'中国',o:['中国','韓国','インド','ロシア'],e:'添付画像の国あて①。ギョウザ・漢字・巨大な人口＝中国。'},
+{c:'世界の国あて',q:'ハングルという文字があり、民族衣装はチョゴリ。日本のとなりの国は？',a:'韓国',o:['韓国','中国','イギリス','フランス'],e:'国あて②。ハングル・チョゴリ・日本のとなり＝韓国。'},
+{c:'世界の国あて',q:'スパイス料理が伝統的で、人口の約80%がヒンドゥー教を信仰し、数学教育がさかんな国は？',a:'インド',o:['インド','エジプト','ブラジル','カナダ'],e:'国あて③。スパイス料理・ヒンドゥー教・数学教育＝インド。'},
+{c:'世界の国あて',q:'ラグビーの生まれた国で、紅茶を飲むのが習慣、国旗はユニオンジャック。どこの国？',a:'イギリス',o:['イギリス','フランス','アメリカ','カナダ'],e:'国あて④。ラグビー・紅茶・ユニオンジャック＝イギリス。'},
+{c:'世界の国あて',q:'外側がかたくて細長いパンが有名。エッフェル塔が人気の観光地。ヨーロッパ最大の農業国は？',a:'フランス',o:['フランス','イギリス','イタリア','ロシア'],e:'国あて⑤。パン・エッフェル塔・ヨーロッパ最大の農業国＝フランス。'},
+{c:'世界の国あて',q:'伝統料理は赤いビーツを使ったボルシチ。世界一長いシベリア鉄道が走る国は？',a:'ロシア',o:['ロシア','カナダ','中国','ブラジル'],e:'国あて⑥。ボルシチ・シベリア鉄道＝ロシア。'},
+{c:'世界の国あて',q:'雨がほとんど降らない気候で、ピラミッドは古代文明の遺跡。世界最長のナイル川が流れる国は？',a:'エジプト',o:['エジプト','インド','オーストラリア','アルゼンチン'],e:'国あて⑦。ピラミッド・ナイル川＝エジプト。'},
+{c:'世界の国あて',q:'自由の女神は自由と独立のシンボル。国語は英語で、世界経済をリードする超大国は？',a:'アメリカ',o:['アメリカ','イギリス','カナダ','ブラジル'],e:'国あて⑧。自由の女神・英語・超大国＝アメリカ。'},
+{c:'世界の国あて',q:'メープルシロップが特産品。広大な森林が広がり、北部は寒く雪と氷の世界。どこの国？',a:'カナダ',o:['カナダ','ロシア','アメリカ','フランス'],e:'国あて⑨。メープルシロップ・森林・北部の雪と氷＝カナダ。'},
+{c:'世界の国あて',q:'サッカーは国民的スポーツ。リオのカーニバルが有名。人口・面積とも南アメリカ州最大の国は？',a:'ブラジル',o:['ブラジル','アルゼンチン','メキシコ','カナダ'],e:'国あて⑩。サッカー・リオのカーニバル・南アメリカ最大＝ブラジル。'},
+{c:'世界の国あて',q:'タンゴが有名。アサードという焼いた牛肉は伝統料理。首都はブエノスアイレス。どこの国？',a:'アルゼンチン',o:['アルゼンチン','ブラジル','イタリア','エジプト'],e:'国あて⑪。タンゴ・アサード・ブエノスアイレス＝アルゼンチン。'},
+{c:'世界の国あて',q:'コアラが生息。先住民の聖地ウルルは巨大な一枚岩。3つの大陸に1つの国。どこの国？',a:'オーストラリア',o:['オーストラリア','ニュージーランド','インド','カナダ'],e:'国あて⑫。コアラ・ウルル・大陸に1つの国＝オーストラリア。'},
+
+// 世界の姿
+{c:'六大陸・三大洋',q:'六大陸のうち、ヨーロッパとアジアを合わせた大陸は？',a:'ユーラシア大陸',o:['ユーラシア大陸','アフリカ大陸','北アメリカ大陸','南極大陸'],e:'ワークの大陸名。ヨーロッパ＋アジア＝ユーラシア大陸。'},
+{c:'六大陸・三大洋',q:'六大陸に入るものはどれ？',a:'アフリカ大陸',o:['アフリカ大陸','太平洋','大西洋','インド洋'],e:'アフリカ大陸は六大陸。太平洋・大西洋・インド洋は三大洋。'},
+{c:'六大陸・三大洋',q:'三大洋に入るものはどれ？',a:'太平洋',o:['太平洋','南極大陸','北アメリカ大陸','ユーラシア大陸'],e:'ワークでは太平洋・大西洋・インド洋が三大洋として出ている。'},
+{c:'六大陸・三大洋',q:'赤道より北側の半球を何という？',a:'北半球',o:['北半球','南半球','東半球','西半球'],e:'赤道で北半球と南半球に分ける。'},
+{c:'六大陸・三大洋',q:'赤道より南側の半球を何という？',a:'南半球',o:['南半球','北半球','東半球','西半球'],e:'赤道より南側は南半球。'},
+{c:'緯度・経度',q:'地球を南北にそれぞれ90度まで分けた角度は？',a:'緯度',o:['緯度','経度','本初子午線','日付変更線'],e:'ワーク「地球を南北にそれぞれ90度まで分けた角度」＝緯度。'},
+{c:'緯度・経度',q:'地球を東西にそれぞれ180度まで分けた角度は？',a:'経度',o:['経度','緯度','赤道','北緯'],e:'ワーク「地球を東西にそれぞれ180度まで分けた角度」＝経度。'},
+{c:'緯度・経度',q:'緯度0度の線を何という？',a:'赤道',o:['赤道','本初子午線','日付変更線','子午線'],e:'ワークの空欄。緯度0度の線＝赤道。'},
+{c:'緯度・経度',q:'経度0度の線を何という？',a:'本初子午線',o:['本初子午線','赤道','北回帰線','日付変更線'],e:'ワークの空欄。経度0度の線＝本初子午線。'},
+{c:'緯度・経度',q:'同じ緯度を結んだ線を何という？',a:'緯線',o:['緯線','経線','本初子午線','日付変更線'],e:'同じ緯度を結ぶ線＝緯線。'},
+{c:'緯度・経度',q:'同じ経度を結んだ線を何という？',a:'経線',o:['経線','緯線','赤道','北緯'],e:'同じ経度を結ぶ線＝経線。'},
+{c:'世界地図',q:'世界地図について、ワークにある説明として正しいものは？',a:'目的別にさまざまな種類が考えられてきた',o:['目的別にさまざまな種類が考えられてきた','どの地図も面積と距離を完全に正しく表す','赤道がない','日本だけを正しく表す'],e:'資料読み取りの記述問題に「世界地図は地球儀と異なり、目的別にさまざまな種類が考えられてきた」とある。'},
+{c:'世界地図',q:'ワークの世界地図の特徴で、赤道から離れるほどどうなると書かれている？',a:'実際の面積より大きくなる',o:['実際の面積より大きくなる','実際の面積より小さくなる','経線が消える','国境がなくなる'],e:'右ページの記述欄に「赤道から離れるほど実際の面積より大きくなる」とある。'},
+
+// 日本の位置・時差
+{c:'日本の位置',q:'日本は、ユーラシア大陸のどちら側に位置する？',a:'東側',o:['東側','西側','北側','南側'],e:'ワーク「日本は、ユーラシア大陸の東に位置し…」の内容。'},
+{c:'日本の位置',q:'日本から見て、アメリカ合衆国が位置する方位は？',a:'東',o:['東','西','南','北'],e:'ワークの「日本から見るとアメリカ合衆国は東に位置している」。'},
+{c:'日本の位置',q:'日本から見て、ロシアやアメリカ合衆国などの国の位置を表すときに使うものは？',a:'緯度と経度',o:['緯度と経度','人口密度','国旗の色','面積の順位'],e:'日本と世界各地との時差のページで、緯度・経度で位置を表す。'},
+{c:'日本の位置',q:'日本の標準時子午線は東経何度？',a:'東経135度',o:['東経135度','東経0度','西経135度','北緯35度'],e:'ワークに「東経135度」と記入されている。'},
+{c:'日本の位置',q:'日本の標準時子午線が通る都市としてワークに出ているのは？',a:'明石市',o:['明石市','東京','ロンドン','ニューヨーク'],e:'画像では兵庫県明石市付近を標準時子午線が通る内容。'},
+{c:'時差',q:'地球は1日で何度回転する？',a:'360度',o:['360度','180度','135度','15度'],e:'時差ページの確認問題。「地球は1時間で何度回転？」の前提として1日24時間で360度。'},
+{c:'時差',q:'地球が1時間で回転する角度は？',a:'15度',o:['15度','24度','135度','360度'],e:'360度÷24時間＝15度。ワークにも15度と記入。'},
+{c:'時差',q:'経度15度の差は、時差で何時間？',a:'1時間',o:['1時間','4分','9時間','13時間'],e:'時差ページの黄色枠「経度15度の差は、1時間の時差に相当」。'},
+{c:'時差',q:'経度1度の差は、時差で何分？',a:'4分',o:['4分','1分','15分','60分'],e:'ワークに「1度＝4分」とある。'},
+{c:'時差',q:'東京が正午のとき、同じ日付のニューヨークは何時？',a:'前日の午後10時',o:['前日の午後10時','同日の午前9時','同日の午後9時','翌日の午前10時'],e:'時差ページの時計に、東京12時／ニューヨーク午後10時（前日）が出ている。'},
+{c:'時差',q:'東京からニューヨークへ行くとき、日付はどうなる？',a:'1日戻す',o:['1日戻す','1日進める','変えない','2日進める'],e:'時差ページ「日付変更線」の問題で、東京→ニューヨークは1日戻す内容。'},
+{c:'時差',q:'日付変更線は、およそどの経線に沿っている？',a:'180度の経線',o:['180度の経線','0度の経線','東経135度','北緯35度'],e:'時差ページの図で、日付変更線は180度付近にある。'},
+
+// 日本の領域
+{c:'日本の領域',q:'1つの国の範囲を何という？',a:'領域',o:['領域','領海','領空','領土'],e:'日本の姿②「領域…1つの国の範囲」。'},
+{c:'日本の領域',q:'陸地の範囲を何という？',a:'領土',o:['領土','領海','領空','排他的経済水域'],e:'日本の領域のまとめ。領土＝陸地の範囲。'},
+{c:'日本の領域',q:'沿岸から12海里までの海の範囲を何という？',a:'領海',o:['領海','領土','領空','接続水域'],e:'ワークに「領海…沿岸から12海里」とある。'},
+{c:'日本の領域',q:'領土と領海の上空を何という？',a:'領空',o:['領空','領海','領土','公海'],e:'日本の領域のまとめ。領空＝領土と領海の上空。'},
+{c:'日本の領域',q:'沿岸から200海里以内で、沿岸国が水産資源や鉱産資源を利用する権利をもつ海域は？',a:'排他的経済水域',o:['排他的経済水域','領空','北方領土','本初子午線'],e:'ワークに「排他的経済水域…沿岸から200海里以内」とある。'},
+{c:'日本の領域',q:'日本の国土面積は約何万km²？',a:'約38万km²',o:['約38万km²','約5万km²','約200万km²','約769万km²'],e:'日本の姿②のまとめに「日本の国土面積は約38万km²」とある。'},
+{c:'日本の領域',q:'日本は周囲を海に囲まれているため、何国といえる？',a:'島国',o:['島国','内陸国','大陸国','砂漠国'],e:'資料読み取りにも「島国であること」と書かれている。'},
+{c:'日本の領域',q:'日本の北端としてワークに出ている島は？',a:'択捉島',o:['択捉島','与那国島','南鳥島','沖ノ鳥島'],e:'日本の範囲の地図に、北端＝択捉島。'},
+{c:'日本の領域',q:'日本の西端としてワークに出ている島は？',a:'与那国島',o:['与那国島','択捉島','南鳥島','沖ノ鳥島'],e:'日本の範囲の地図に、西端＝与那国島。'},
+{c:'日本の領域',q:'日本の東端としてワークに出ている島は？',a:'南鳥島',o:['南鳥島','沖ノ鳥島','択捉島','与那国島'],e:'日本の範囲の地図に、東端＝南鳥島。'},
+{c:'日本の領域',q:'日本の南端としてワークに出ている島は？',a:'沖ノ鳥島',o:['沖ノ鳥島','南鳥島','与那国島','竹島'],e:'日本の範囲の地図に、南端＝沖ノ鳥島。'},
+{c:'日本の領域',q:'日本の領土で、ロシアに返還を求めている島々は？',a:'北方領土',o:['北方領土','竹島','尖閣諸島','小笠原諸島'],e:'日本の領土のまとめに「北方領土…ロシアに返還を求めている」とある。'},
+{c:'日本の領域',q:'韓国が不法に占拠している、とワークに書かれている日本固有の領土は？',a:'竹島',o:['竹島','北方領土','尖閣諸島','与那国島'],e:'ワークの記述「竹島…韓国が不法に占拠している」。'},
+{c:'日本の領域',q:'中国などが領有権を主張している、とワークに書かれている日本固有の領土は？',a:'尖閣諸島',o:['尖閣諸島','北方領土','竹島','択捉島'],e:'ワークの記述「尖閣諸島…中国などが領有権を主張している」。'},
+{c:'日本の領域',q:'沖ノ鳥島で護岸工事が行われた理由として、ワークの答えに近いものは？',a:'排他的経済水域を失わないようにするため',o:['排他的経済水域を失わないようにするため','国旗を変えるため','時差をなくすため','山を高くするため'],e:'資料読み取りの記述に「広大な排他的経済水域を失わないようにするため」とある。'},
+
+// 都道府県
+{c:'都道府県',q:'都道府県は全部でいくつ？',a:'47',o:['47','43','38','12'],e:'都道府県をおさえようのページ。日本の都道府県は47。'},
+{c:'都道府県',q:'日本の都道府県のうち、「都」はどれ？',a:'東京都',o:['東京都','大阪府','京都府','北海道'],e:'ワークの都道府県一覧に東京都がある。'},
+{c:'都道府県',q:'日本の都道府県のうち、「道」はどれ？',a:'北海道',o:['北海道','東京都','大阪府','京都府'],e:'ワークの地図に北海道地方が出ている。'},
+{c:'都道府県',q:'「府」にあたるものとして正しい組み合わせは？',a:'大阪府と京都府',o:['大阪府と京都府','東京都と北海道','香川県と愛媛県','沖縄県と鹿児島県'],e:'都道府県名のページに大阪府・京都府が見える。'},
+{c:'都道府県',q:'香川県の県庁所在地として、総合問題の答えに出ている市は？',a:'高松市',o:['高松市','松山市','さいたま市','金沢市'],e:'総合問題の記入欄に「香川県／高松市」。'},
+{c:'都道府県',q:'添付画像の県庁所在地確認で、埼玉県の県庁所在地として書かれているのは？',a:'さいたま市',o:['さいたま市','横浜市','千葉市','前橋市'],e:'都道府県庁所在地の確認欄に「さいたま市」。'},
+{c:'都道府県',q:'添付画像の県庁所在地確認で、神奈川県の県庁所在地として書かれているのは？',a:'横浜市',o:['横浜市','金沢市','大津市','松山市'],e:'県庁所在地確認欄に「横浜市」。'},
+{c:'都道府県',q:'添付画像の県庁所在地確認で、石川県の県庁所在地として書かれているのは？',a:'金沢市',o:['金沢市','松山市','神戸市','津市'],e:'県庁所在地確認欄に「金沢市」。'},
+{c:'都道府県',q:'添付画像の県庁所在地確認で、三重県の県庁所在地として書かれているのは？',a:'津市',o:['津市','大津市','松江市','山口市'],e:'県庁所在地確認欄に「津市」。'},
+{c:'都道府県',q:'添付画像の県庁所在地確認で、滋賀県の県庁所在地として書かれているのは？',a:'大津市',o:['大津市','津市','松山市','高松市'],e:'県庁所在地確認欄に「大津市」。'},
+{c:'都道府県',q:'添付画像の県庁所在地確認で、兵庫県の県庁所在地として書かれているのは？',a:'神戸市',o:['神戸市','大阪市','京都市','奈良市'],e:'県庁所在地確認欄に「神戸市」。'},
+{c:'都道府県',q:'添付画像の県庁所在地確認で、愛媛県の県庁所在地として書かれているのは？',a:'松山市',o:['松山市','高松市','徳島市','高知市'],e:'県庁所在地確認欄に「松山市」。'},
+
+// 統計・資料読み取り
+{c:'資料読み取り',q:'表で、日本と最も面積の近い国として答えられている国は？',a:'ドイツ',o:['ドイツ','シンガポール','ロシア','カナダ'],e:'統計表の問題で「日本と最も面積の近い国」＝ドイツ。'},
+{c:'資料読み取り',q:'表で、日本より面積の小さい国として答えられている国は？',a:'シンガポール',o:['シンガポール','ロシア','カナダ','オーストラリア'],e:'統計表ではシンガポール0.07万km²で日本より小さい。'},
+{c:'資料読み取り',q:'表で、日本の約20倍の面積をもつ国として答えられている国は？',a:'オーストラリア',o:['オーストラリア','ドイツ','ニュージーランド','シンガポール'],e:'統計表の問題③の答えにオーストラリア。'},
+{c:'資料読み取り',q:'表を見て、ロシアは日本の約何倍の面積と書かれている？',a:'約45倍',o:['約45倍','約2倍','約12倍','約5倍'],e:'資料読み取りの記述欄に「日本の約45倍の面積をもつ国」とある。'},
+{c:'資料読み取り',q:'排他的経済水域の円グラフで、日本の領土面積は約何万km²として出ている？',a:'38万km²',o:['38万km²','447万km²','701万km²','769万km²'],e:'資料読み取りのグラフで日本の領土面積は38。'},
+{c:'資料読み取り',q:'排他的経済水域の円グラフで、日本の排他的経済水域面積は約何万km²として出ている？',a:'447万km²',o:['447万km²','38万km²','317万km²','701万km²'],e:'グラフに日本の排他的経済水域447とある。'},
+{c:'資料読み取り',q:'排他的経済水域のグラフで、日本と比べる国として出ているものは？',a:'インドネシア・ニュージーランド・オーストラリア',o:['インドネシア・ニュージーランド・オーストラリア','中国・韓国・ロシア','フランス・イギリス・イタリア','ブラジル・カナダ・アルゼンチン'],e:'資料の円グラフにインドネシア、ニュージーランド、オーストラリア、日本が出ている。'}
+];
+
+let pool=[], idx=0, current=null, answered=false;
+let stats={done:0,ok:0,ng:0,misses:[]};
+const $=id=>document.getElementById(id);
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function setupCats(){const cats=[...new Set(QUESTIONS.map(x=>x.c))]; for(const c of cats){const op=document.createElement('option');op.value=c;op.textContent=c; $('mode').appendChild(op)} $('countPill').textContent=QUESTIONS.length+'問'}
+function makePool(){const mode=$('mode').value; pool=QUESTIONS.filter(x=>mode==='all'||x.c===mode); if($('order').value==='shuffle') shuffle(pool); idx=0;}
+function resetStats(){stats={done:0,ok:0,ng:0,misses:[]}; updateStats()}
+function showQuestion(){if(pool.length===0){$('q').textContent='問題がない';return} if(idx>=pool.length) idx=0; current=pool[idx]; answered=false; $('qpos').textContent=`第${idx+1}問 / ${pool.length}`; $('cat').textContent=current.c; $('q').textContent=current.q; $('exp').className='exp'; $('exp').textContent=''; const choices=shuffle([...current.o]); $('choices').innerHTML=''; choices.forEach(ch=>{const b=document.createElement('button'); b.className='choice'; b.textContent=ch; b.onclick=()=>answer(b,ch); $('choices').appendChild(b);});}
+function answer(btn,ch){if(answered)return; answered=true; stats.done++; const buttons=[...document.querySelectorAll('.choice')]; buttons.forEach(b=>{b.disabled=true; if(b.textContent===current.a)b.classList.add('correct')}); if(ch===current.a){stats.ok++; btn.classList.add('correct'); $('exp').innerHTML='<b class="ok">正解！</b><br>'+current.e;}else{stats.ng++; btn.classList.add('wrong'); stats.misses.push(current); $('exp').innerHTML='<b class="ng">不正解。</b> 正解は <b>'+current.a+'</b><br>'+current.e;} $('exp').classList.add('show'); updateStats();}
+function updateStats(){ $('done').textContent=stats.done; $('ok').textContent=stats.ok; $('ng').textContent=stats.ng; const rate=stats.done?Math.round(stats.ok/stats.done*100):0; $('bar').style.width=rate+'%'; $('result').innerHTML=`正答率 <span class="${rate>=80?'ok':rate>=50?'warn':'ng'}">${rate}%</span>`; const box=$('missList'); if(!stats.misses.length){box.innerHTML='<div class="small">まだミスなし。</div>'} else {box.innerHTML=stats.misses.slice().reverse().map(m=>`<div><b>${m.c}</b><br>${m.q}<br><span class="ok">答え：${m.a}</span></div>`).join('')}}
+$('nextBtn').onclick=()=>{idx++; showQuestion()};
+$('shuffleBtn').onclick=()=>{makePool(); showQuestion()};
+$('resetBtn').onclick=()=>{makePool(); resetStats(); showQuestion()};
+$('missBtn').onclick=()=>{const unique=[]; const seen=new Set(); for(const m of stats.misses){if(!seen.has(m.q)){seen.add(m.q); unique.push(m)}} if(!unique.length){alert('まだ間違い問題がない！');return} pool=shuffle(unique); idx=0; showQuestion()};
+$('mode').onchange=()=>{makePool(); showQuestion()}; $('order').onchange=()=>{makePool(); showQuestion()};
+setupCats(); makePool(); showQuestion(); updateStats();
+</script>
+</body>
+</html>
