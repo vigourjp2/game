@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>中1英語 4択テストゲーム Unit1-2</title>
+<style>
+:root{--bg:#071426;--card:#10223d;--card2:#162b4b;--line:#2b4b78;--txt:#eef6ff;--muted:#a9c1df;--ok:#34d399;--ng:#fb7185;--acc:#60a5fa;--warn:#fbbf24;--purple:#c084fc}*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at top,#183b66 0,#071426 45%,#04101f 100%);color:var(--txt);min-height:100svh}.app{max-width:1100px;margin:0 auto;padding:16px}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}.title{font-weight:900;font-size:clamp(22px,4vw,40px);letter-spacing:.03em}.badge{display:inline-flex;align-items:center;gap:6px;background:#0b1c33;border:1px solid var(--line);border-radius:999px;padding:8px 12px;color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}.card{background:linear-gradient(180deg,rgba(16,34,61,.95),rgba(7,20,38,.96));border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 18px 40px rgba(0,0,0,.25)}.panel{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.btn{border:0;border-radius:14px;padding:12px 14px;background:#1d3b63;color:var(--txt);font-weight:800;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);touch-action:manipulation}.btn:hover{filter:brightness(1.12)}.btn.primary{background:linear-gradient(135deg,#2563eb,#7c3aed)}.btn.ok{background:#065f46}.btn.warn{background:#92400e}.btn.danger{background:#881337}.btn.ghost{background:#0b1c33}.btn.small{padding:8px 10px;font-size:13px;border-radius:10px}.select,input{background:#0b1c33;color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:10px}.progress{height:12px;background:#071426;border:1px solid var(--line);border-radius:999px;overflow:hidden}.bar{height:100%;width:0%;background:linear-gradient(90deg,#38bdf8,#a78bfa,#f472b6);transition:.25s}.qmeta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.tag{font-size:12px;padding:6px 9px;border-radius:999px;background:#17345a;color:#cde3ff;border:1px solid #315b91}.tag.hot{background:#3b2205;color:#fde68a;border-color:#b45309}.qno{color:var(--muted);font-weight:700}.question{font-size:clamp(22px,4.6vw,42px);line-height:1.25;font-weight:900;margin:14px 0 8px}.sub{color:var(--muted);font-size:14px;line-height:1.6}.choices{display:grid;gap:10px;margin-top:14px}.choice{width:100%;text-align:left;border:1px solid var(--line);background:#0b1c33;color:var(--txt);border-radius:16px;padding:14px 16px;font-size:18px;font-weight:850;cursor:pointer;display:flex;gap:12px;align-items:center;justify-content:space-between}.choice .letter{display:inline-grid;place-items:center;min-width:30px;height:30px;border-radius:50%;background:#1d3b63;color:#dbeafe}.choice.correct{border-color:var(--ok);background:rgba(16,185,129,.18)}.choice.wrong{border-color:var(--ng);background:rgba(251,113,133,.18)}.result{margin-top:12px;border-radius:14px;padding:12px;background:#0b1c33;border:1px solid var(--line);display:none}.result.ok{display:block;border-color:var(--ok)}.result.ng{display:block;border-color:var(--ng)}.big{font-size:28px;font-weight:950}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.stat{background:#0b1c33;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}.stat b{display:block;font-size:22px}.list{max-height:360px;overflow:auto;display:grid;gap:8px;padding-right:4px}.mini{background:#0b1c33;border:1px solid var(--line);border-radius:12px;padding:10px}.mini b{color:#dbeafe}.footer{margin-top:14px;color:var(--muted);font-size:12px;line-height:1.6}.speakrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}.toggle{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:13px}.toggle input{width:18px;height:18px}.typing{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#bfdbfe}.screen{display:none}.screen.active{display:block}.homeGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.mode{padding:16px;border-radius:16px;background:#0b1c33;border:1px solid var(--line);cursor:pointer}.mode h3{margin:0 0 8px;font-size:20px}.mode p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}.mode:hover{border-color:#60a5fa}.shake{animation:shake .25s}@keyframes shake{25%{transform:translateX(-5px)}50%{transform:translateX(5px)}75%{transform:translateX(-3px)}}@media(max-width:850px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.homeGrid{grid-template-columns:1fr}.app{padding:10px}.card{padding:13px}.choice{font-size:16px}.question{font-size:25px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div><div class="title">📘 中1英語 4択テストゲーム</div><div class="badge">添付画像ベース：Unit1 Part1〜3 / まとめ / Unit2 Part1〜2</div></div>
+    <div class="panel"><button class="btn ghost small" onclick="showHome()">🏠 ホーム</button><button class="btn ghost small" onclick="resetStats()">記録リセット</button></div>
+  </div>
+
+  <div id="home" class="screen active">
+    <div class="card">
+      <div class="big">モード選べ‼️ 全部4択や。</div>
+      <p class="sub">問題文と正解時に英語を読み上げる。端末の <b>SpeechSynthesis</b> を使うから、Chrome/Androidならだいたい鳴る。初回はボタン押してから音が出る仕様。</p>
+      <div class="speakrow">
+        <label class="toggle"><input type="checkbox" id="autoSpeak" checked>問題表示時に発音</label>
+        <label class="toggle"><input type="checkbox" id="speakAnswer" checked>正解判定時に発音</label>
+        <button class="btn small" onclick="speak('I am from Japan.')">🔊 発音テスト</button>
+      </div>
+      <div class="homeGrid" id="modeGrid"></div>
+    </div>
+    <div class="footer">※音声はブラウザ内蔵の英語音声。完全な人間音声ファイルではないけど、ネイティブ寄りの発音練習には使える。</div>
+  </div>
+
+  <div id="quiz" class="screen">
+    <div class="grid">
+      <main class="card" id="quizCard">
+        <div class="qmeta"><span class="tag" id="catTag"></span><span class="tag hot" id="typeTag"></span><span class="qno" id="qNo"></span></div>
+        <div class="progress"><div class="bar" id="bar"></div></div>
+        <div class="question" id="question"></div>
+        <div class="sub" id="hint"></div>
+        <div class="speakrow"><button class="btn small" onclick="speakCurrent()">🔊 もう一回聞く</button><button class="btn small ghost" onclick="skipQuestion()">スキップ</button></div>
+        <div class="choices" id="choices"></div>
+        <div class="result" id="result"></div>
+        <div class="panel" style="margin-top:12px"><button class="btn primary" id="nextBtn" onclick="nextQuestion()" style="display:none">次へ ▶</button><button class="btn warn" onclick="startWrongOnly()">間違いだけ復習</button></div>
+      </main>
+      <aside class="card">
+        <div class="big">成績</div>
+        <div class="stats"><div class="stat"><b id="stTotal">0</b>出題</div><div class="stat"><b id="stOk">0</b>正解</div><div class="stat"><b id="stRate">0%</b>正答率</div><div class="stat"><b id="stWrong">0</b>弱点</div></div>
+        <div class="panel" style="margin-bottom:10px"><select class="select" id="categoryFilter" onchange="reloadMode()"></select><button class="btn small" onclick="shuffleQueue()">シャッフル</button></div>
+        <div class="sub">弱点リスト</div><div class="list" id="wrongList"></div>
+      </aside>
+    </div>
+  </div>
+</div>
+<script>
+const QUESTIONS = [
+// Unit 1 Part 1
+{cat:'Unit1 Part1',type:'基本文',ask:'「私はエリです。」を英語で言うと？',speak:'I\'m Eri.',choices:['I\'m Eri.','I\'m from Eri.','I\'m a Eri.','Are you Eri?'],ans:0,ex:'I am の短縮形が I\'m。'},
+{cat:'Unit1 Part1',type:'基本文',ask:'「私はそこの生徒です。」を英語で言うと？',speak:'I\'m a student there.',choices:['I\'m a student there.','I\'m student there.','I\'m from student.','I am there student.'],ans:0},
+{cat:'Unit1 Part1',type:'基本文',ask:'「私は日本出身です。」を英語で言うと？',speak:'I\'m from Japan.',choices:['I\'m from Japan.','I\'m Japan from.','I\'m in Japan.','I\'m a Japan.'],ans:0},
+{cat:'Unit1 Part1',type:'短縮形',ask:'I am の短縮形は？',speak:'I\'m',choices:['I\'m','I amn\'t','I\'re','I is'],ans:0},
+{cat:'Unit1 Part1',type:'人物',ask:'絵を見て「私はケントです。」',speak:'I\'m Kento.',choices:['I\'m Kento.','I\'m Mio.','I\'m Nick.','I\'m Shiori.'],ans:0},
+{cat:'Unit1 Part1',type:'人物',ask:'絵を見て「私はミオです。」',speak:'I\'m Mio.',choices:['I\'m Mio.','I\'m Kento.','I\'m Nick.','I\'m Shiori.'],ans:0},
+{cat:'Unit1 Part1',type:'人物',ask:'絵を見て「私はニックです。」',speak:'I\'m Nick.',choices:['I\'m Nick.','I\'m Mio.','I\'m Kento.','I\'m Shiori.'],ans:0},
+{cat:'Unit1 Part1',type:'人物',ask:'絵を見て「私はしおりです。」',speak:'I\'m Shiori.',choices:['I\'m Shiori.','I\'m Mio.','I\'m Nick.','I\'m Kento.'],ans:0},
+{cat:'Unit1 Part1',type:'日本語→英語',ask:'「私はここにいる生徒です。」に近い英文は？',speak:'I\'m a student here.',choices:['I\'m a student here.','I\'m student a here.','I\'m from here student.','I\'m a here student.'],ans:0},
+{cat:'Unit1 Part1',type:'日本語→英語',ask:'「私はカナダ出身です。」',speak:'I\'m from Canada.',choices:['I\'m from Canada.','I\'m Canada from.','I\'m in Canada from.','I from Canada.'],ans:0},
+{cat:'Unit1 Part1',type:'日本語→英語',ask:'「私は道に迷っています。」',speak:'I\'m lost.',choices:['I\'m lost.','I\'m lose.','I lost am.','I\'m from lost.'],ans:0},
+{cat:'Unit1 Part1',type:'語句',ask:'fall の意味は？',speak:'fall',choices:['秋','住む','日本','季節'],ans:0},
+{cat:'Unit1 Part1',type:'語句',ask:'live の意味は？',speak:'live',choices:['住む','秋','日本','先生'],ans:0},
+{cat:'Unit1 Part1',type:'語句',ask:'Japan の意味は？',speak:'Japan',choices:['日本','秋','季節','さん・先生'],ans:0},
+{cat:'Unit1 Part1',type:'語句',ask:'season の意味は？',speak:'season',choices:['季節','住む','ありがとう','日本'],ans:0},
+{cat:'Unit1 Part1',type:'語句',ask:'Thanks. の意味は？',speak:'Thanks.',choices:['ありがとう。','私は〜です。','見る','どうして'],ans:0},
+{cat:'Unit1 Part1',type:'語句',ask:'Ms. の意味は？',speak:'Ms.',choices:['〜さん、〜先生','ありがとう','季節','新しい'],ans:0},
+
+// Unit1 Part2
+{cat:'Unit1 Part2',type:'基本文',ask:'「私は春が好きです。」',speak:'I like spring.',choices:['I like spring.','I don\'t like spring.','I am spring.','I can spring.'],ans:0},
+{cat:'Unit1 Part2',type:'基本文',ask:'「私は春が好きではありません。」',speak:'I don\'t like spring.',choices:['I don\'t like spring.','I like spring.','I can\'t spring.','I am not spring.'],ans:0},
+{cat:'Unit1 Part2',type:'文法',ask:'「好きではありません」はどれ？',speak:'I don\'t like.',choices:['don\'t like','can\'t like','am like','not can'],ans:0},
+{cat:'Unit1 Part2',type:'基本ワーク',ask:'「私は水泳が好きです。」',speak:'I like swimming.',choices:['I like swimming.','I like baseball.','I like karate.','I like soccer.'],ans:0},
+{cat:'Unit1 Part2',type:'基本ワーク',ask:'「私は野球が好きです。」',speak:'I like baseball.',choices:['I like baseball.','I like swimming.','I like karate.','I like soccer.'],ans:0},
+{cat:'Unit1 Part2',type:'基本ワーク',ask:'「私は空手が好きです。」',speak:'I like karate.',choices:['I like karate.','I like baseball.','I like soccer.','I like swimming.'],ans:0},
+{cat:'Unit1 Part2',type:'基本ワーク',ask:'「私はサッカーが好きです。」',speak:'I like soccer.',choices:['I like soccer.','I like karate.','I like baseball.','I like swimming.'],ans:0},
+{cat:'Unit1 Part2',type:'否定文',ask:'I like math. を否定文にすると？',speak:'I don\'t like math.',choices:['I don\'t like math.','I can\'t like math.','I\'m not like math.','I like don\'t math.'],ans:0},
+{cat:'Unit1 Part2',type:'否定文',ask:'I like blue. を否定文にすると？',speak:'I don\'t like blue.',choices:['I don\'t like blue.','I don\'t blue like.','I no like blue.','I\'m not blue.'],ans:0},
+{cat:'Unit1 Part2',type:'書き換え',ask:'「私はバナナが好きではありません。」',speak:'I don\'t like bananas.',choices:['I don\'t like bananas.','I don\'t bananas like.','I like don\'t bananas.','I am not bananas.'],ans:0},
+{cat:'Unit1 Part2',type:'書き換え',ask:'「私は秋も好きです。」',speak:'I like fall, too.',choices:['I like fall, too.','I too like fall.','I fall like, too.','I don\'t like fall, too.'],ans:0},
+{cat:'Unit1 Part2',type:'並べ替え',ask:'「私はあなたのイヌが好きです。」',speak:'I like your dog.',choices:['I like your dog.','I your dog like.','Your dog I like.','I like dog your.'],ans:0},
+{cat:'Unit1 Part2',type:'並べ替え',ask:'「私は牛乳があまり好きではありません。」',speak:'I don\'t like milk very much.',choices:['I don\'t like milk very much.','I like milk don\'t very much.','I don\'t milk like very much.','I am not milk very much.'],ans:0},
+{cat:'Unit1 Part2',type:'英作文',ask:'場面に合う英文「私は赤が好きです。」',speak:'I like red.',choices:['I like red.','I like rainbow colors.','I don\'t like red.','I am red.'],ans:0},
+{cat:'Unit1 Part2',type:'英作文',ask:'「私は黒がそんなに好きじゃないんだ。」',speak:'I don\'t like black very much.',choices:['I don\'t like black very much.','I like black very much.','I can\'t black very much.','I don\'t black like.'],ans:0},
+{cat:'Unit1 Part2',type:'語句',ask:'beautiful の意味は？',speak:'beautiful',choices:['美しい','冬','夏','見る'],ans:0},
+{cat:'Unit1 Part2',type:'語句',ask:'winter の意味は？',speak:'winter',choices:['冬','夏','美しい','どうして'],ans:0},
+{cat:'Unit1 Part2',type:'語句',ask:'summer の意味は？',speak:'summer',choices:['夏','冬','見る','〜はどうですか'],ans:0},
+{cat:'Unit1 Part2',type:'語句',ask:'look の意味は？',speak:'look',choices:['見る','夏','冬','美しい'],ans:0},
+{cat:'Unit1 Part2',type:'語句',ask:'How about ～? の意味は？',speak:'How about you?',choices:['〜はどうですか','どうして','見る','少し'],ans:0},
+{cat:'Unit1 Part2',type:'語句',ask:'Why? の意味は？',speak:'Why?',choices:['どうして','〜はどうですか','見る','ありがとう'],ans:0},
+
+// Unit1 Part3
+{cat:'Unit1 Part3',type:'基本文',ask:'「私はドラムを演奏できます。」',speak:'I can play the drums.',choices:['I can play the drums.','I can\'t play the drums.','I am play the drums.','I play can the drums.'],ans:0},
+{cat:'Unit1 Part3',type:'基本文',ask:'「私はドラムを演奏できません。」',speak:'I can\'t play the drums.',choices:['I can\'t play the drums.','I don\'t play the drums.','I am not drums.','I can play the drums.'],ans:0},
+{cat:'Unit1 Part3',type:'文法',ask:'「できる」はどの形？',speak:'can plus verb',choices:['can＋動詞','can＋to＋動詞','can＋動詞ing','am＋動詞'],ans:0},
+{cat:'Unit1 Part3',type:'文法',ask:'「できない」はどの形？',speak:'can\'t plus verb',choices:['can\'t＋動詞','don\'t＋名詞','am not＋名詞','can＋not＋to'],ans:0},
+{cat:'Unit1 Part3',type:'楽器',ask:'「私はギターを演奏できます。」',speak:'I can play the guitar.',choices:['I can play the guitar.','I can play guitar.','I can do the guitar.','I can the guitar play.'],ans:0},
+{cat:'Unit1 Part3',type:'楽器',ask:'「私はトランペットを演奏できます。」',speak:'I can play the trumpet.',choices:['I can play the trumpet.','I can play trumpet.','I can do trumpet.','I play can the trumpet.'],ans:0},
+{cat:'Unit1 Part3',type:'楽器',ask:'「私はピアノを演奏できます。」',speak:'I can play the piano.',choices:['I can play the piano.','I\'m play the piano.','I can play piano the.','I can do the piano.'],ans:0},
+{cat:'Unit1 Part3',type:'否定文',ask:'I can make spaghetti. を否定文にすると？',speak:'I can\'t make spaghetti.',choices:['I can\'t make spaghetti.','I don\'t can make spaghetti.','I can not to make spaghetti.','I am not make spaghetti.'],ans:0},
+{cat:'Unit1 Part3',type:'否定文',ask:'I can play soccer. を否定文にすると？',speak:'I can\'t play soccer.','choices':['I can\'t play soccer.','I don\'t play soccer.','I can\'t soccer play.','I am not soccer.'],ans:0},
+{cat:'Unit1 Part3',type:'書き換え',ask:'You draw pictures. →「できる」という文に',speak:'I can draw pictures.',choices:['I can draw pictures.','I can draws pictures.','I draw can pictures.','I am draw pictures.'],ans:0},
+{cat:'Unit1 Part3',type:'書き換え',ask:'I do karate. →「できない」という文に',speak:'I can\'t do karate.',choices:['I can\'t do karate.','I don\'t can do karate.','I can\'t karate do.','I am not karate.'],ans:0},
+{cat:'Unit1 Part3',type:'並べ替え',ask:'「リコは歌うことと踊ることができます。」',speak:'Riko can sing and dance.',choices:['Riko can sing and dance.','Riko sing can and dance.','Can Riko sing and dance.','Riko can singing and dancing.'],ans:0},
+{cat:'Unit1 Part3',type:'並べ替え',ask:'「私はギターは演奏できませんが、ドラムは演奏できます。」',speak:'I can\'t play the guitar, but I can play the drums.',choices:['I can\'t play the guitar, but I can play the drums.','I don\'t play guitar, but I can drums.','I can\'t the guitar play, but I can the drums play.','I can play the guitar, but I can\'t play the drums.'],ans:0},
+{cat:'Unit1 Part3',type:'英作文',ask:'「私は速く走れます。」',speak:'I can run fast.',choices:['I can run fast.','I can fast run.','I run can fast.','I can swim fast.'],ans:0},
+{cat:'Unit1 Part3',type:'英作文',ask:'「ぼくはうまくゲームできないよ。」',speak:'I can\'t play games.',choices:['I can\'t play games.','I don\'t play games.','I can\'t do game.','I am not games.'],ans:0},
+{cat:'Unit1 Part3',type:'語句',ask:'class の意味は？',speak:'class',choices:['授業、授業時間','泳ぐ','バット','フルート'],ans:0},
+{cat:'Unit1 Part3',type:'語句',ask:'swim の意味は？',speak:'swim',choices:['泳ぐ、水泳をする','授業','かっこいい','ラグビー'],ans:0},
+{cat:'Unit1 Part3',type:'語句',ask:'bat の意味は？',speak:'bat',choices:['バット','泳ぐ','授業','フルート'],ans:0},
+{cat:'Unit1 Part3',type:'語句',ask:'cool の意味は？',speak:'cool',choices:['かっこいい','泳ぐ','授業','月曜日'],ans:0},
+{cat:'Unit1 Part3',type:'語句',ask:'flute の意味は？',speak:'flute',choices:['フルート','ラグビー','バット','泳ぐ'],ans:0},
+{cat:'Unit1 Part3',type:'語句',ask:'rugby の意味は？',speak:'rugby',choices:['ラグビー','フルート','授業','バット'],ans:0},
+
+// Unit1 summary
+{cat:'Unit1 まとめ',type:'語句復習',ask:'I live in Japan. の Japan に入る日本語は？',speak:'Japan',choices:['日本','冬','生徒','秋'],ans:0},
+{cat:'Unit1 まとめ',type:'語句復習',ask:'I can\'t dance, but I can play the piano. の but の意味は？',speak:'but',choices:['しかし、けれども','日本','年齢','泳ぐ'],ans:0},
+{cat:'Unit1 まとめ',type:'語句復習',ask:'I can swim fast. の swim の意味は？',speak:'swim',choices:['泳ぐ','呼ぶ','年をとった','〜について'],ans:0},
+{cat:'Unit1 まとめ',type:'語句復習',ask:'How about you? の about の意味は？',speak:'about',choices:['〜について','冬','生徒','呼ぶ'],ans:0},
+{cat:'Unit1 まとめ',type:'語句復習',ask:'I like winter. の winter の意味は？',speak:'winter',choices:['冬','秋','泳ぐ','日本'],ans:0},
+{cat:'Unit1 まとめ',type:'語句復習',ask:'I am 12 years old. の old の意味は？',speak:'old',choices:['年齢が〜の','呼ぶ','生徒','けれども'],ans:0},
+{cat:'Unit1 まとめ',type:'語句復習',ask:'Call me Haru. の call の意味は？',speak:'call',choices:['〜を…と呼ぶ','泳ぐ','住む','見る'],ans:0},
+{cat:'Unit1 まとめ',type:'語句復習',ask:'I\'m a student. の student の意味は？',speak:'student',choices:['生徒、学生','先生','季節','楽器'],ans:0},
+{cat:'Unit1 まとめ',type:'表現確認',ask:'「私はバナナが好きではありません。」',speak:'I don\'t like bananas very much.',choices:['I don\'t like bananas very much.','I can\'t like bananas.','I am not bananas.','I don\'t bananas very much.'],ans:0},
+{cat:'Unit1 まとめ',type:'表現確認',ask:'「私はアメリカ合衆国出身です。」',speak:'I\'m from the U.S.',choices:['I\'m from the U.S.','I\'m the U.S. from.','I live from the U.S.','I can from the U.S.'],ans:0},
+{cat:'Unit1 まとめ',type:'文法確認',ask:'「私は冬があまり好きではありません。」',speak:'I don\'t like winter very much.',choices:['I don\'t like winter very much.','I can\'t like winter very much.','I\'m not like winter very much.','I don\'t winter like very much.'],ans:0},
+{cat:'Unit1 まとめ',type:'文法確認',ask:'「私は北海道出身です。」',speak:'I am from Hokkaido.',choices:['I am from Hokkaido.','I from am Hokkaido.','I am Hokkaido from.','I live Hokkaido from.'],ans:0},
+{cat:'Unit1 まとめ',type:'文法確認',ask:'「私は剣道はできませんが、空手はできます。」',speak:'I can\'t do kendo, but I can do karate.',choices:['I can\'t do kendo, but I can do karate.','I don\'t do kendo, but I can karate.','I can\'t kendo, but I can do karate.','I can do kendo, but I can\'t do karate.'],ans:0},
+
+// Unit2 Part1
+{cat:'Unit2 Part1',type:'基本文',ask:'「あなたは新入生です。」',speak:'You are a new student.',choices:['You are a new student.','Are you a new student?','You is a new student.','You new are student.'],ans:0},
+{cat:'Unit2 Part1',type:'疑問文',ask:'「あなたは新入生ですか。」',speak:'Are you a new student?',choices:['Are you a new student?','You are a new student?','Do you a new student?','Can you a new student?'],ans:0},
+{cat:'Unit2 Part1',type:'答え方',ask:'Are you a new student? に「はい、そうです。」',speak:'Yes, I am.',choices:['Yes, I am.','Yes, I do.','Yes, you are.','No, I\'m not.'],ans:0},
+{cat:'Unit2 Part1',type:'答え方',ask:'Are you a new student? に「いいえ、違います。」',speak:'No, I\'m not.',choices:['No, I\'m not.','No, I don\'t.','No, you aren\'t.','Yes, I am.'],ans:0},
+{cat:'Unit2 Part1',type:'基本ワーク',ask:'「あなたは剣道ファンですか。― はい、そうです。」',speak:'Are you a kendo fan? Yes, I am.',choices:['Are you a kendo fan? — Yes, I am.','Do you a kendo fan? — Yes, I do.','Can you a kendo fan? — Yes, I can.','Are you a kendo fan? — Yes, I do.'],ans:0},
+{cat:'Unit2 Part1',type:'基本ワーク',ask:'「あなたはサッカーファンですか。― いいえ、違います。」',speak:'Are you a soccer fan? No, I\'m not.',choices:['Are you a soccer fan? — No, I\'m not.','Do you a soccer fan? — No, I don\'t.','Are you a soccer fan? — No, I don\'t.','You are a soccer fan? — No, I\'m not.'],ans:0},
+{cat:'Unit2 Part1',type:'基本ワーク',ask:'「あなたはラグビーファンですか。― はい、そうです。」',speak:'Are you a rugby fan? Yes, I am.',choices:['Are you a rugby fan? — Yes, I am.','Do you a rugby fan? — Yes, I do.','Are you rugby? — Yes, I am.','Can you rugby fan? — Yes, I can.'],ans:0},
+{cat:'Unit2 Part1',type:'並べ替え',ask:'「あなたは私の友達です。」',speak:'You are my friend.',choices:['You are my friend.','Are you my friend.','You my are friend.','You are friend my.'],ans:0},
+{cat:'Unit2 Part1',type:'並べ替え',ask:'「あなたたちは新入生ですか。」',speak:'Are you new students?',choices:['Are you new students?','You are new students?','Do you new students?','Are new students you?'],ans:0},
+{cat:'Unit2 Part1',type:'書き換え',ask:'I am 13 years old. を You にかえた文は？',speak:'You are 13 years old.',choices:['You are 13 years old.','You am 13 years old.','Are you 13 years old.','You is 13 years old.'],ans:0},
+{cat:'Unit2 Part1',type:'書き換え',ask:'You are from Canada. を疑問文にして No で答える',speak:'Are you from Canada? No, I\'m not.',choices:['Are you from Canada? — No, I\'m not.','Do you from Canada? — No, I don\'t.','Are you Canada from? — No, I\'m not.','You are from Canada? — No, I\'m not.'],ans:0},
+{cat:'Unit2 Part1',type:'並べ替え',ask:'「あなたは音楽に興味がありますか。」',speak:'Are you interested in music?',choices:['Are you interested in music?','You are interested in music?','Are interested you in music?','Do you interested in music?'],ans:0},
+{cat:'Unit2 Part1',type:'並べ替え',ask:'「私は柔道の大ファンです。」',speak:'I\'m a big fan of judo.',choices:['I\'m a big fan of judo.','I\'m a fan big of judo.','I\'m big fan judo of.','I\'m a judo of big fan.'],ans:0},
+{cat:'Unit2 Part1',type:'英作文',ask:'fan を使って「あなたは野球ファンですか。」',speak:'Are you a baseball fan?',choices:['Are you a baseball fan?','Do you baseball fan?','Are you baseball fan?','You are a baseball fan.'],ans:0},
+{cat:'Unit2 Part1',type:'英作文',ask:'「あなたはとってもかわいいね。」',speak:'You are very cute.',choices:['You are very cute.','You very are cute.','You are cute very.','Are you very cute.'],ans:0},
+{cat:'Unit2 Part1',type:'語句',ask:'school の意味は？',speak:'school',choices:['学校','新しい','吹奏楽部','来る'],ans:0},
+{cat:'Unit2 Part1',type:'語句',ask:'new の意味は？',speak:'new',choices:['新しい、新入りの','学校','とても','来る'],ans:0},
+{cat:'Unit2 Part1',type:'語句',ask:'very much の意味は？',speak:'very much',choices:['とても','学校','〜の後に','少し'],ans:0},
+{cat:'Unit2 Part1',type:'語句',ask:'after の意味は？',speak:'after',choices:['〜の後に','学校','とても','よく、しばしば'],ans:0},
+{cat:'Unit2 Part1',type:'語句',ask:'brass band の意味は？',speak:'brass band',choices:['吹奏楽部','学校','新しい','来る'],ans:0},
+{cat:'Unit2 Part1',type:'語句',ask:'come の意味は？',speak:'come',choices:['来る','学校','とても','少し'],ans:0},
+
+// Unit2 Part2
+{cat:'Unit2 Part2',type:'基本文',ask:'「あなたは楽器を演奏しますか。」',speak:'Do you play an instrument?',choices:['Do you play an instrument?','Are you play an instrument?','Can you an instrument?','Do play you an instrument?'],ans:0},
+{cat:'Unit2 Part2',type:'答え方',ask:'Do you play an instrument? に「はい、します。」',speak:'Yes, I do.',choices:['Yes, I do.','Yes, I am.','Yes, I can.','No, I\'m not.'],ans:0},
+{cat:'Unit2 Part2',type:'答え方',ask:'Do you play an instrument? に「いいえ、しません。」',speak:'No, I don\'t.',choices:['No, I don\'t.','No, I\'m not.','No, I can\'t.','Yes, I do.'],ans:0},
+{cat:'Unit2 Part2',type:'基本ワーク',ask:'「あなたはトランペットを演奏しますか。― はい、します。」',speak:'Do you play the trumpet? Yes, I do.',choices:['Do you play the trumpet? — Yes, I do.','Are you play the trumpet? — Yes, I am.','Can you play the trumpet? — Yes, I do.','Do you play trumpet? — Yes, I am.'],ans:0},
+{cat:'Unit2 Part2',type:'基本ワーク',ask:'「あなたはピアノを演奏しますか。― はい、します。」',speak:'Do you play the piano? Yes, I do.',choices:['Do you play the piano? — Yes, I do.','Are you play the piano? — Yes, I am.','Do you piano play? — Yes, I do.','Can you play the piano? — Yes, I do.'],ans:0},
+{cat:'Unit2 Part2',type:'基本ワーク',ask:'「あなたはドラムを演奏しますか。― いいえ、しません。」',speak:'Do you play the drums? No, I don\'t.',choices:['Do you play the drums? — No, I don\'t.','Are you play the drums? — No, I\'m not.','Can you play the drums? — No, I don\'t.','Do you play drums? — No, I\'m not.'],ans:0},
+{cat:'Unit2 Part2',type:'基本ワーク',ask:'「あなたはギターを演奏しますか。― はい、します。」',speak:'Do you play the guitar? Yes, I do.',choices:['Do you play the guitar? — Yes, I do.','Are you play the guitar? — Yes, I am.','Do you guitar play? — Yes, I do.','Can you play the guitar? — Yes, I do.'],ans:0},
+{cat:'Unit2 Part2',type:'並べ替え',ask:'「あなたは春が好きですか。」',speak:'Do you like spring?',choices:['Do you like spring?','Are you like spring?','Do like you spring?','You do like spring?'],ans:0},
+{cat:'Unit2 Part2',type:'並べ替え',ask:'「あなたは雑誌を読みますか。」',speak:'Do you read magazines?',choices:['Do you read magazines?','Are you read magazines?','Do read you magazines?','You do read magazines?'],ans:0},
+{cat:'Unit2 Part2',type:'書き換え',ask:'You do karate. を疑問文にして Yes で答える',speak:'Do you do karate? Yes, I do.',choices:['Do you do karate? — Yes, I do.','Are you do karate? — Yes, I am.','Can you do karate? — Yes, I do.','Do you karate? — Yes, I am.'],ans:0},
+{cat:'Unit2 Part2',type:'書き換え',ask:'You like history. を疑問文にして No で答える',speak:'Do you like history? No, I don\'t.',choices:['Do you like history? — No, I don\'t.','Are you like history? — No, I\'m not.','Do like you history? — No, I don\'t.','Can you like history? — No, I can\'t.'],ans:0},
+{cat:'Unit2 Part2',type:'並べ替え',ask:'「私はときどき水曜日に走ります。」',speak:'I sometimes run on Wednesdays.',choices:['I sometimes run on Wednesdays.','I run sometimes on Wednesdays.','On Wednesdays sometimes run I.','I sometimes on Wednesdays run.'],ans:0},
+{cat:'Unit2 Part2',type:'並べ替え',ask:'「あなたは金曜日に音楽を聞きますか。」',speak:'Do you listen to music on Fridays?',choices:['Do you listen to music on Fridays?','Do you on Fridays listen to music?','Are you listen to music on Fridays?','Do listen you to music on Fridays?'],ans:0},
+{cat:'Unit2 Part2',type:'英作文',ask:'「あなたは野球をしますか。」',speak:'Do you play baseball?',choices:['Do you play baseball?','Are you play baseball?','Can you baseball?','Do you play the baseball?'],ans:0},
+{cat:'Unit2 Part2',type:'英作文',ask:'「ぼくは普段は日曜日に練習するよ。」',speak:'I usually practice on Sundays.',choices:['I usually practice on Sundays.','I practice usually on Sundays.','I usually on Sundays practice.','I often practice on Mondays.'],ans:0},
+{cat:'Unit2 Part2',type:'語句',ask:'Monday の意味は？',speak:'Monday',choices:['月曜日','夜','いつも','少し'],ans:0},
+{cat:'Unit2 Part2',type:'語句',ask:'always の意味は？',speak:'always',choices:['いつも、常に','夜','月曜日','手が空いている'],ans:0},
+{cat:'Unit2 Part2',type:'語句',ask:'night の意味は？',speak:'night',choices:['夜','月曜日','よく、しばしば','少し'],ans:0},
+{cat:'Unit2 Part2',type:'語句',ask:'often の意味は？',speak:'often',choices:['よく、しばしば','いつも','夜','月曜日'],ans:0},
+{cat:'Unit2 Part2',type:'語句',ask:'free の意味は？',speak:'free',choices:['手が空いている、ひまな','夜','少し','いつも'],ans:0},
+{cat:'Unit2 Part2',type:'語句',ask:'a little の意味は？',speak:'a little',choices:['少し、多少','よく、しばしば','月曜日','新しい'],ans:0}
+];
+
+let mode='all', queue=[], idx=0, current=null, locked=false;
+let stats = JSON.parse(localStorage.getItem('engQuizStats')||'{"total":0,"ok":0,"wrong":{}}');
+function save(){localStorage.setItem('engQuizStats',JSON.stringify(stats));}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function shuffledChoices(q){const arr=q.choices.map((c,i)=>({c,i})); shuffle(arr); return arr;}
+function categories(){return ['全部',...Array.from(new Set(QUESTIONS.map(q=>q.cat)))];}
+function init(){
+ const modes=[['all','全部シャッフル','Unit1〜Unit2を全部まぜる。'],['vocab','語句だけ','画像右ページの語句確認を4択。'],['grammar','文法・並べ替え','I\'m / like / can / Are you / Do you を確認。'],['wrong','間違いだけ','弱点だけを再出題。']];
+ const grid=document.getElementById('modeGrid'); grid.innerHTML='';
+ modes.forEach(m=>{const d=document.createElement('div');d.className='mode';d.onclick=()=>startMode(m[0]);d.innerHTML=`<h3>${m[1]}</h3><p>${m[2]}</p>`;grid.appendChild(d)});
+ const sel=document.getElementById('categoryFilter'); sel.innerHTML=''; categories().forEach(c=>{let o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o)}); updateStats();
+}
+function showHome(){document.getElementById('home').classList.add('active');document.getElementById('quiz').classList.remove('active');}
+function showQuiz(){document.getElementById('home').classList.remove('active');document.getElementById('quiz').classList.add('active');}
+function startMode(m){mode=m; if(m==='wrong') return startWrongOnly(); buildQueue(); showQuiz(); render();}
+function buildQueue(){let list=[...QUESTIONS]; const cf=document.getElementById('categoryFilter').value; if(cf&&cf!=='全部') list=list.filter(q=>q.cat===cf); if(mode==='vocab') list=list.filter(q=>q.type.includes('語句')); if(mode==='grammar') list=list.filter(q=>!q.type.includes('語句')); queue=shuffle(list.map(q=>QUESTIONS.indexOf(q))); idx=0;}
+function reloadMode(){buildQueue(); render();}
+function shuffleQueue(){queue=shuffle(queue); idx=0; render();}
+function startWrongOnly(){const ids=Object.keys(stats.wrong||{}).map(Number).filter(i=>QUESTIONS[i]); if(!ids.length){alert('まだ弱点なし。まず通常問題やれ‼️');return} queue=shuffle(ids); idx=0; mode='wrong'; showQuiz(); render();}
+function render(){ if(!queue.length){document.getElementById('question').textContent='問題がない‼️';return} locked=false; current=QUESTIONS[queue[idx%queue.length]]; current._id=queue[idx%queue.length]; current._mix=shuffledChoices(current); document.getElementById('catTag').textContent=current.cat; document.getElementById('typeTag').textContent=current.type; document.getElementById('qNo').textContent=`${idx+1} / ${queue.length}`; document.getElementById('bar').style.width=`${Math.round((idx)/queue.length*100)}%`; document.getElementById('question').innerHTML=escapeHtml(current.ask); document.getElementById('hint').innerHTML=current.ex?`ヒント：${escapeHtml(current.ex)}`:'4択から選べ。英語は音で覚えろ。'; const cbox=document.getElementById('choices'); cbox.innerHTML=''; current._mix.forEach((o,n)=>{const b=document.createElement('button');b.className='choice';b.innerHTML=`<span><span class="letter">${'ABCD'[n]}</span> ${escapeHtml(o.c)}</span><span>›</span>`;b.onclick=()=>answer(o.i,b);cbox.appendChild(b)}); document.getElementById('result').className='result'; document.getElementById('result').style.display='none'; document.getElementById('nextBtn').style.display='none'; if(document.getElementById('autoSpeak').checked) setTimeout(()=>speakCurrent(),250); updateStats();}
+function answer(choiceIdx,btn){ if(locked)return; locked=true; const ok=choiceIdx===current.ans; stats.total++; if(ok){stats.ok++; delete stats.wrong[current._id];}else{stats.wrong[current._id]=(stats.wrong[current._id]||0)+1; document.getElementById('quizCard').classList.add('shake'); setTimeout(()=>document.getElementById('quizCard').classList.remove('shake'),280);} save(); [...document.querySelectorAll('.choice')].forEach(b=>b.disabled=true); [...document.querySelectorAll('.choice')].forEach((b,i)=>{const oi=current._mix[i].i;if(oi===current.ans)b.classList.add('correct'); if(b===btn&&!ok)b.classList.add('wrong')}); const res=document.getElementById('result'); res.style.display='block'; res.className='result '+(ok?'ok':'ng'); const correct=current.choices[current.ans]; res.innerHTML= ok?`✅ 正解！<div class="typing">${escapeHtml(correct)}</div>`:`❌ 違う。正解は <div class="typing">${escapeHtml(correct)}</div>`; document.getElementById('nextBtn').style.display='inline-block'; if(document.getElementById('speakAnswer').checked) speak(correct); updateStats();}
+function nextQuestion(){idx++; if(idx>=queue.length){document.getElementById('bar').style.width='100%'; idx=0; queue=shuffle(queue); alert('1周終わり。もう1周シャッフルするぞ‼️');} render();}
+function skipQuestion(){idx=(idx+1)%queue.length; render();}
+function speakCurrent(){ if(!current)return; speak(current.speak||current.choices[current.ans]);}
+function speak(text){ try{ if(!('speechSynthesis' in window)) return alert('このブラウザは音声読み上げ非対応っぽい'); window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang='en-US'; u.rate=.86; u.pitch=1.0; const voices=window.speechSynthesis.getVoices(); const v=voices.find(v=>/en[-_]US/i.test(v.lang)&&/Google|Microsoft|Samantha|English/i.test(v.name))||voices.find(v=>/^en/i.test(v.lang)); if(v)u.voice=v; window.speechSynthesis.speak(u);}catch(e){console.log(e)} }
+function updateStats(){document.getElementById('stTotal').textContent=stats.total||0;document.getElementById('stOk').textContent=stats.ok||0;document.getElementById('stRate').textContent=stats.total?Math.round(stats.ok/stats.total*100)+'%':'0%';const wrongIds=Object.keys(stats.wrong||{}).filter(i=>QUESTIONS[i]);document.getElementById('stWrong').textContent=wrongIds.length;const wl=document.getElementById('wrongList'); if(!wl)return; wl.innerHTML=wrongIds.length?'':'<div class="mini">弱点なし。今だけは褒めたる。</div>'; wrongIds.sort((a,b)=>stats.wrong[b]-stats.wrong[a]).forEach(id=>{const q=QUESTIONS[id]; const d=document.createElement('div');d.className='mini';d.innerHTML=`<b>${escapeHtml(q.cat)}</b> ×${stats.wrong[id]}<br>${escapeHtml(q.ask)}<br><span class="typing">${escapeHtml(q.choices[q.ans])}</span>`;wl.appendChild(d)})}
+function resetStats(){if(confirm('成績と弱点を消す？')){stats={total:0,ok:0,wrong:{}};save();updateStats();}}
+function escapeHtml(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+window.speechSynthesis&&window.speechSynthesis.getVoices(); init();
+</script>
+</body>
+</html>
