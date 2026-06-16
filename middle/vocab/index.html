@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>中学 英単語ストーリー4択ゲーム</title>
+<style>
+:root{--bg:#eef7ff;--card:#fff;--ink:#102033;--muted:#64748b;--line:#dbe7f7;--pri:#2563eb;--ok:#16a34a;--ng:#dc2626;--warn:#f59e0b;--r:22px;--shadow:0 14px 34px rgba(15,23,42,.12)}*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,#e0f2fe,#f8fafc 50%,#fff7ed);color:var(--ink)}button{font:inherit}.wrap{max-width:980px;margin:auto;padding:14px 12px 80px}.hero{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:28px;padding:18px;box-shadow:var(--shadow);margin-bottom:12px}h1{margin:0;font-size:clamp(25px,6vw,42px);line-height:1.1}.lead{margin:10px 0 0;color:var(--muted);font-weight:800;line-height:1.6}.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.btn{border:0;border-radius:999px;padding:11px 15px;font-weight:1000;background:#e0f2fe;color:#075985;box-shadow:0 8px 18px rgba(14,116,144,.12);cursor:pointer}.btn.primary{background:linear-gradient(135deg,#2563eb,#06b6d4);color:white}.btn.danger{background:#fee2e2;color:#991b1b}.btn.ghost{background:#f8fafc;color:#334155;border:1px solid var(--line)}.card{background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:24px;padding:16px;box-shadow:var(--shadow);margin-top:12px}.meta{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.pill{display:inline-flex;align-items:center;border-radius:999px;padding:7px 10px;background:#eff6ff;color:#1d4ed8;font-weight:1000;font-size:13px}.score{font-weight:1000;color:#334155}.q{font-size:clamp(20px,5vw,30px);font-weight:1000;line-height:1.35;margin:16px 0 12px}.hint{color:var(--muted);font-weight:800;line-height:1.6}.choices{display:grid;gap:10px;margin-top:12px}.choice{border:2px solid var(--line);background:white;border-radius:18px;padding:14px 15px;text-align:left;font-weight:1000;font-size:18px;cursor:pointer}.choice:hover{border-color:#93c5fd;background:#eff6ff}.choice.correct{border-color:#22c55e;background:#dcfce7;color:#14532d}.choice.wrong{border-color:#ef4444;background:#fee2e2;color:#7f1d1d}.explain{display:none;margin-top:12px;border-radius:18px;padding:13px;background:#f8fafc;border:1px solid var(--line);font-weight:800;line-height:1.65}.explain.show{display:block}.weak{margin-top:14px}.weak textarea{width:100%;min-height:70px;border-radius:18px;border:1px solid var(--line);padding:12px;font:inherit;font-weight:800}.storyText{white-space:pre-wrap;line-height:1.85;font-size:17px;font-weight:750}.storyText b{background:#fef3c7;border-radius:6px;padding:0 4px;color:#92400e}.modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(15,23,42,.62);z-index:20;padding:14px}.modal.show{display:grid}.modalBox{max-width:880px;width:100%;max-height:86vh;overflow:auto;background:#fff;border-radius:26px;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.28)}.modalHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;position:sticky;top:0;background:white;padding-bottom:10px}.modalHead h2{margin:0;font-size:24px}.close{border:0;border-radius:999px;background:#e0f2fe;color:#075985;font-weight:1000;padding:12px 16px}.list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.word{border:1px solid var(--line);border-radius:14px;padding:8px 10px;background:#f8fafc;font-weight:900}.word small{display:block;color:#64748b;font-weight:800}@media(max-width:650px){.list{grid-template-columns:repeat(2,minmax(0,1fr))}.q{font-size:22px}.choice{font-size:16px}.wrap{padding:10px 8px 64px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <h1>中学 英単語<br>ストーリー4択ゲーム</h1>
+    <p class="lead">添付画像の Unit1〜Unit2 付近の英単語をまとめて、1本の変なストーリーにした。問題は本文中の意味・穴あき・言い換えを中心に出る。</p>
+    <div class="bar">
+      <button class="btn primary" onclick="start('all')">全問スタート</button>
+      <button class="btn" onclick="start('mock')">50問100点モード</button>
+      <button class="btn ghost" onclick="openStory()">📖 ストーリー参照</button>
+      <button class="btn ghost" onclick="speakStory()">🔊 ストーリー読み上げ</button>
+      <button class="btn danger" onclick="resetProgress()">成績リセット</button>
+    </div>
+  </section>
+  <section class="card">
+    <div class="meta"><span class="pill" id="cat">準備OK</span><span class="score" id="score">0 / 0</span></div>
+    <div class="q" id="question">スタートを押せ。まずは「📖 ストーリー参照」で本文を見るのが強い。</div>
+    <div class="hint" id="hint">画像に無い単語はなるべく少なく、どうしても必要な語は中1レベルの簡単語に寄せている。</div>
+    <div class="choices" id="choices"></div>
+    <div class="explain" id="explain"></div>
+    <div class="bar"><button class="btn primary" onclick="nextQ()">次へ</button><button class="btn ghost" onclick="speakCurrent()">問題読み上げ</button><button class="btn ghost" onclick="openStory()">本文参照</button></div>
+    <div class="weak"><b>弱点メモ</b><textarea id="memo" placeholder="間違えた単語を書いておく"></textarea></div>
+  </section>
+</div>
+<div class="modal" id="storyModal" onclick="if(event.target.id==='storyModal')closeStory()">
+  <div class="modalBox">
+    <div class="modalHead"><h2>📖 The Funny Day at My School</h2><button class="close" onclick="closeStory()">閉じる</button></div>
+    <div class="bar"><button class="btn primary" onclick="speakStory()">🔊 本文読み上げ</button><button class="btn ghost" onclick="stopSpeak()">停止</button></div>
+    <div class="storyText" id="storyText"></div>
+    <h3>使った英単語</h3><div class="list" id="wordList"></div>
+  </div>
+</div>
+<script>
+const targets=[
+['here','ここに、ここで'],['all','すべて、みんな'],['about','〜について'],['hello','こんにちは'],['this','これ'],['rice ball','おにぎり'],['year','年'],['old','年齢が〜歳の'],['live','住む'],['season','季節'],['fall','秋'],['thing','もの、こと'],['firework','花火'],['trumpet','トランペット'],['Here we go!','さあ行こう'],['lost','道に迷った'],['a','1つの、ある'],['student','生徒、学生'],['there','そこで、そこに'],['meet','会う'],['call','呼ぶ'],['am','である、いる'],['Thanks.','ありがとう'],['Call me ~.','私を〜と呼んでください'],['Nice to meet you.','初めまして'],["I'm",'I am の短縮形'],['Ms.','女性の先生・姓の前の敬称'],['Japan','日本'],['South Africa','南アフリカ'],['from','〜出身で、〜から'],["I'm from ~.",'私は〜出身です'],
+['look','見る'],['beautiful','美しい'],['why','なぜ'],['not','〜ではない'],['achoo','ハクション'],['Why?','どうして？'],['Why not?','どうしてだめなの？'],["don't",'do not の短縮形'],['very','とても'],['much','非常に、とても'],['winter','冬'],['How about ~?','〜はどうですか'],['not ~ very much','そんなに〜ない'],['class','授業、授業時間'],['New York','ニューヨーク'],['swim','泳ぐ、水泳をする'],['drum','ドラム、太鼓'],['but','しかし、けれども'],['cool','かっこいい、すごい'],['cannot','can not の形、できない'],['Cool!','すごいね'],["can't",'cannot の短縮形'],['flute','フルート'],['rugby','ラグビー'],['sax','サックス'],
+['school','学校'],['brass band','ブラスバンド、吹奏楽部'],['new','新しい、新入りの'],['yes','はい、そうです'],['come','来る'],['come in','入ってくる'],["Here's ~.",'ここに〜がある、これが〜だ'],['no','いいえ、いや'],['K-pop','韓国のポップ音楽'],['of','〜の'],['anime','日本のアニメ'],['be interested in ~','〜に興味をもっている'],['very much','とても'],['instrument','楽器'],['usually','普通は、いつもは'],['an','母音で始まる名詞の前の1つの'],['practice','練習する'],['on','〜に、〜で'],['Monday','月曜日'],['Wednesday','水曜日'],['Friday','金曜日'],['a little','少し、少しは'],['listen','聞く'],['radio','ラジオ'],['read','読む'],['magazine','雑誌'],['always','いつも、常に'],['often','よく、しばしば'],['night','夜'],['listen to ~','〜を聞く']
+];
+const story=`Hello, everyone. I am Aoki Riko, but call me Riko. Nice to meet you. I am a new student from Japan. I live here, near this school. I am 13 years old, and I like fall. Fall is my favorite season.
+
+On Monday morning, Ms. Green said, "Here we go!" and took all students to class. There was a rice ball on my desk. "Whose rice ball is this?" I asked. Tom said, "It is about me. I am from South Africa, and I love rice balls very much." That was a strange thing.
+
+After class, I wanted to meet Ken in the brass band room. Ken can play the trumpet, the flute, the sax, and the drum. He is cool. I cannot play an instrument. I can't even swim well, but I practice rugby on Wednesday and Friday. I usually listen to the radio at night, and I often read a magazine about anime, K-pop, and New York.
+
+Then a big firework sound came from the park. "Achoo!" said Ken. "Why?" I asked. "Why not?" he said. He was lost in the school, not in the park. "How about going there?" I said. "No," he said, "I don't like winter very much, but I like fall very much. It is beautiful."
+
+At the end, we found a little cat. Here's the cat. It was interested in my magazine. I said, "Thanks, cat." The cat said nothing, but it looked at me. Now I am interested in cats, school, and every funny thing here.`;
+function markedStory(){let s=story; const esc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); [...targets].sort((a,b)=>b[0].length-a[0].length).forEach(([w])=>{const plain=w.replace('~','').trim(); if(!plain||plain.length<2)return; const rx=new RegExp('(^|[^A-Za-z])('+esc(plain)+')(?=[^A-Za-z]|$)','gi'); s=s.replace(rx,(m,p,q)=>`${p}<b>${q}</b>`);}); return s;}
+document.getElementById('storyText').innerHTML=markedStory();
+document.getElementById('wordList').innerHTML=targets.map(([w,j])=>`<div class="word">${w}<small>${j}</small></div>`).join('');
+const baseQuestions=[];
+function add(q,a,opts,cat='単語'){baseQuestions.push({q,a,opts:shuffle([a,...opts]).slice(0,4),cat,ex:`正解は「${a}」。`});}
+function addBlank(sentence,a,opts){add(sentence.replace('____','____'),a,opts,'穴あき');}
+// meaning questions
+for(const [w,j] of targets){
+  const wrong=shuffle(targets.filter(x=>x[0]!==w).map(x=>x[1])).slice(0,3);
+  add(`本文中の “${w}” の意味として最も近いものは？`,j,wrong,'意味');
+}
+// focused blank questions based on story
+add('I live ____.','here',['there','from','old'],'穴あき');
+add('This is ____ my guitar.','about',['season','hello','student'],'穴あき');
+add('____, everyone.','Hello',['Old','Year','Much'],'穴あき');
+add('____ is my guitar.','This',['There','Very','From'],'穴あき');
+add('I am 13 years ____.','old',['year','live','season'],'穴あき');
+add('Fall is my favorite ____.','season',['student','instrument','radio'],'穴あき');
+add('Ken can play the ____.','trumpet',['magazine','season','rice ball'],'穴あき');
+add('____ we go!','Here',['There','From','About'],'穴あき');
+add('I am ____ new student.','a',['an','the','no'],'穴あき');
+add('I want to ____ Ken.','meet',['read','lost','cannot'],'穴あき');
+add('____ me Riko.','Call',['Come','Read','Listen'],'穴あき');
+add('I am ____ Japan.','from',['of','on','about'],'穴あき');
+add('I ____ like winter very much.','don\'t',['am','cannot','often'],'穴あき');
+add('The park is ____.','beautiful',['lost','old','not'],'穴あき');
+add('I ____ swim well.','cannot',['about','all','class'],'穴あき');
+add('I am interested ____ anime.','in',['on','of','from'],'穴あき');
+add('I practice rugby ____ Wednesday.','on',['of','in','from'],'穴あき');
+add('I often ____ a magazine.','read',['radio','rice ball','year'],'穴あき');
+add('I listen ____ the radio.','to',['in','of','on'],'穴あき');
+add('I usually listen to the radio at ____.','night',['fall','school','hello'],'穴あき');
+add('____ is my school.','Here\'s',['How about','Why not','Thanks'],'穴あき');
+add('I can play ____ instrument.','an',['a','am','no'],'穴あき');
+add('____ to meet you.','Nice',['New','No','Not'],'穴あき');
+add('____, I am.','Yes',['No','Not','Why'],'穴あき');
+add('____, I am not.','No',['Yes','All','This'],'穴あき');
+add('He is ____ in music.','interested',['cannot','there','lost'],'穴あき');
+add('I like fall very ____.','much',['old','school','class'],'穴あき');
+add('I play the drum, ____ I cannot play the sax.','but',['of','from','on'],'穴あき');
+// story content questions
+add('本文で、Rikoはどこ出身？','Japan',['South Africa','New York','the park'],'内容');
+add('本文で、Tomはどこ出身？','South Africa',['Japan','New York','school'],'内容');
+add('本文で、Rikoが好きな季節は？','fall',['winter','Monday','Friday'],'内容');
+add('本文で、Kenが演奏できるものに入っているのは？','trumpet',['rice ball','magazine','anime'],'内容');
+add('本文で、Rikoが夜によく聞くものは？','radio',['firework','rice ball','sax'],'内容');
+add('本文で、最後に見つけたものは？','a little cat',['a winter flower','a big dog','a new desk'],'内容');
+let pool=[],idx=0,score=0,answered=false,current=null,mode='all';
+function shuffle(a){return [...a].sort(()=>Math.random()-0.5)}
+function start(m){mode=m;score=0;idx=0;answered=false; pool=shuffle(baseQuestions); if(m==='mock')pool=pool.slice(0,50); showQ();}
+function showQ(){answered=false;current=pool[idx]; if(!current){document.getElementById('cat').textContent='終了';document.getElementById('question').textContent=`終了！ ${score} / ${pool.length} 正解`;document.getElementById('hint').textContent='ストーリーを見直して、間違えた単語を弱点メモへ。';document.getElementById('choices').innerHTML='';return;} document.getElementById('cat').textContent=current.cat;document.getElementById('score').textContent=`${idx+1} / ${pool.length}　正解 ${score}`;document.getElementById('question').textContent=current.q;document.getElementById('hint').textContent='必要なら「本文参照」を押して、ストーリー内での使われ方を確認。';document.getElementById('choices').innerHTML=current.opts.map(o=>`<button class="choice" onclick="answer(this,'${String(o).replace(/'/g,"\\'")}')">${o}</button>`).join('');document.getElementById('explain').className='explain';document.getElementById('explain').textContent='';}
+function answer(btn,val){if(answered)return;answered=true;const ok=val===current.a; if(ok)score++; [...document.querySelectorAll('.choice')].forEach(b=>{if(b.textContent===current.a)b.classList.add('correct'); else if(b===btn)b.classList.add('wrong');}); const ex=document.getElementById('explain');ex.className='explain show';ex.textContent=(ok?'正解！ ':'違う。 ')+current.ex; speak(current.a); document.getElementById('score').textContent=`${idx+1} / ${pool.length}　正解 ${score}`;}
+function nextQ(){if(!pool.length)start('all');else{idx++;showQ();}}
+function openStory(){document.getElementById('storyModal').classList.add('show')}
+function closeStory(){document.getElementById('storyModal').classList.remove('show')}
+function speak(text){if(!('speechSynthesis'in window))return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.lang='en-US'; u.rate=.88; speechSynthesis.speak(u)}
+function speakCurrent(){if(current)speak(current.q.replace(/本文中の|の意味として最も近いものは？|____/g,' blank '))}
+function speakStory(){speak(story)}
+function stopSpeak(){if('speechSynthesis'in window)speechSynthesis.cancel()}
+function resetProgress(){localStorage.removeItem('vocabMemo');document.getElementById('memo').value=''}
+const memo=document.getElementById('memo');memo.value=localStorage.getItem('vocabMemo')||'';memo.addEventListener('input',()=>localStorage.setItem('vocabMemo',memo.value));
+</script>
+</body></html>
