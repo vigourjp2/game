@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>高校 歴史｜4択テストゲーム</title>
+<style>
+:root{--bg:#fff7ed;--card:#fff;--ink:#1f2937;--muted:#64748b;--line:#fed7aa;--pri:#b45309;--pri2:#ef4444;--ok:#16a34a;--ng:#dc2626;--shadow:0 18px 45px rgba(120,53,15,.16);--r:24px}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,#fff7ed,#fefce8 45%,#eef6ff);color:var(--ink)}
+.wrap{max-width:980px;margin:0 auto;padding:18px 14px 80px}header{background:rgba(255,255,255,.88);border:1px solid var(--line);border-radius:28px;padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
+h1{margin:0 0 8px;font-size:clamp(26px,5vw,46px);line-height:1.05}.lead{margin:0;color:var(--muted);font-weight:700;line-height:1.7}.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.badge{background:#ffedd5;border:1px solid #fed7aa;border-radius:999px;padding:8px 11px;font-weight:900;color:#7c2d12}
+.panel{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);padding:14px;margin:12px 0}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}button,a.btn{border:0;border-radius:16px;padding:12px 16px;font-weight:900;font-size:15px;background:var(--pri);color:#fff;box-shadow:0 8px 18px rgba(180,83,9,.22);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}button.secondary,a.secondary{background:#fff;color:var(--ink);border:1px solid var(--line);box-shadow:none}button.good{background:var(--ok)}button.warn{background:#f97316}button:disabled{opacity:.55;cursor:not-allowed}select{padding:12px;border-radius:14px;border:1px solid var(--line);font-weight:800;background:#fff}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{background:#fff7ed;border:1px solid #fed7aa;border-radius:18px;padding:12px}.stat b{display:block;font-size:24px}.qhead{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px}.tag{display:inline-block;background:#ffedd5;color:#9a3412;border-radius:999px;padding:7px 10px;font-weight:900}.qno{font-weight:900;color:var(--muted)}.question{font-size:clamp(20px,4vw,30px);font-weight:900;line-height:1.45;margin:14px 0}.choices{display:grid;gap:10px}.choice{text-align:left;background:#fff;border:2px solid #fed7aa;color:var(--ink);box-shadow:none;border-radius:18px;padding:14px 16px;font-size:18px;justify-content:flex-start}.choice.correct{border-color:#16a34a;background:#dcfce7}.choice.wrong{border-color:#dc2626;background:#fee2e2}.result{font-weight:900;font-size:18px;line-height:1.6}.result.ok{color:#15803d}.result.ng{color:#b91c1c}.explain{color:#475569;font-weight:700;line-height:1.7;margin-top:8px}.hidden{display:none!important}.memo{width:100%;min-height:80px;border-radius:16px;border:1px solid var(--line);padding:12px;font-weight:700}.foot{color:#64748b;font-size:13px;line-height:1.7}.modal{position:fixed;inset:0;background:rgba(15,23,42,.62);display:none;align-items:center;justify-content:center;padding:18px;z-index:50}.modal.open{display:flex}.modalCard{width:min(920px,100%);max-height:88vh;overflow:auto;background:#fff;border-radius:28px;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.25)}.modalTop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}.modalTop h2{margin:0;font-size:24px}.refsvg{width:100%;height:auto;border:1px solid #e2e8f0;border-radius:20px;background:#fff}.caption{font-weight:800;color:#475569;line-height:1.6}.pillbox{display:flex;gap:8px;flex-wrap:wrap}.pill{background:#f8fafc;border:1px solid #e2e8f0;border-radius:999px;padding:6px 9px;font-weight:800;color:#475569}@media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}.choice{font-size:16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+ <h1>高校 歴史 4択テスト</h1>
+ <p class="lead">添付画像の範囲を中心に、イギリス革命・アメリカ独立革命・フランス革命・ナポレオン・ウィーン体制・1848年革命・ドイツ／イタリア統一までを演習。図問題は参照ポップアップつき。</p>
+ <div class="badges"><span class="badge">全100問</span><span class="badge">50問100点モード</span><span class="badge">図参照つき</span><span class="badge">弱点復習</span></div>
+</header>
+
+<section class="panel">
+ <div class="stats">
+  <div class="stat"><span>問題数</span><b id="total">0</b></div>
+  <div class="stat"><span>正解</span><b id="ok">0</b></div>
+  <div class="stat"><span>得点</span><b id="score">0</b></div>
+  <div class="stat"><span>正答率</span><b id="rate">0%</b></div>
+ </div>
+ <div class="row" style="margin-top:12px">
+  <select id="mode">
+   <option value="all">全問シャッフル</option>
+   <option value="exam">本番 50問100点</option>
+   <option value="wrong">間違いだけ復習</option>
+  </select>
+  <select id="cat"><option value="">全カテゴリ</option></select>
+  <button onclick="start()">開始／やり直し</button>
+  <button class="secondary" onclick="speak(current?.prompt||'')">問題読み上げ</button>
+  <a class="btn secondary" href="../../index.html">TOPへ</a>
+ </div>
+</section>
+
+<section class="panel" id="quiz">
+ <div class="qhead"><span class="tag" id="qcat">カテゴリ</span><span class="qno" id="qno">0 / 0</span></div>
+ <div id="figBtnArea" class="row"></div>
+ <div class="question" id="prompt">開始を押してね。</div>
+ <div class="choices" id="choices"></div>
+ <div id="res" class="result"></div>
+ <div id="exp" class="explain"></div>
+ <div class="row" style="margin-top:14px">
+  <button id="nextBtn" class="good hidden" onclick="next()">次へ</button>
+  <button class="secondary" onclick="showAnswer()">答えを見る</button>
+ </div>
+</section>
+
+<section class="panel">
+ <h2>弱点メモ</h2>
+ <textarea id="memo" class="memo" placeholder="まだなし"></textarea>
+ <div class="row" style="margin-top:10px"><button class="secondary" onclick="saveMemo()">保存</button><button class="secondary" onclick="clearProgress()">成績リセット</button></div>
+</section>
+
+<p class="foot">※図は学習用に作った簡略図。正確な国境図ではなく、歴史事項の位置関係・構造理解用。</p>
+</div>
+
+<div id="modal" class="modal" onclick="if(event.target.id==='modal')closeModal()">
+ <div class="modalCard">
+  <div class="modalTop"><h2 id="modalTitle">参照</h2><button class="secondary" onclick="closeModal()">閉じる</button></div>
+  <div id="modalBody"></div>
+ </div>
+</div>
+
+<script>
+const QUESTIONS=[{"cat": "イギリス革命", "prompt": "1642年に始まり、国王派と議会派が対立したイギリスの内戦を何という？", "choices": ["ピューリタン革命", "名誉革命", "フランス革命", "二月革命"], "answer": "ピューリタン革命", "exp": "国王チャールズ1世と議会派が対立し、クロムウェルらが中心となった。", "fig": null}, {"cat": "イギリス革命", "prompt": "ピューリタン革命で議会派を率い、のちに護国卿となった人物は？", "choices": ["ワシントン", "クロムウェル", "ルイ16世", "メッテルニヒ"], "answer": "クロムウェル", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "クロムウェルの死後に復活した政治体制として正しいものは？", "choices": ["共和政の継続", "王政復古", "帝政", "連邦制"], "answer": "王政復古", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "1688年、流血をほとんどともなわずに王を交代させた革命は？", "choices": ["名誉革命", "産業革命", "三月革命", "独立革命"], "answer": "名誉革命", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "名誉革命後、1689年に議会の権利を国王が認めた文書は？", "choices": ["権利章典", "独立宣言", "人権宣言", "ナポレオン法典"], "answer": "権利章典", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "イギリスで、国王の権限が憲法や議会によって制限される政治体制は？", "choices": ["絶対王政", "立憲君主制", "恐怖政治", "三部会"], "answer": "立憲君主制", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "イギリスの議会政治が発達した理由として最も適切なものは？", "choices": ["国王がすべてを決めたから", "議会が課税や法律に強い影響力を持ったから", "植民地がなくなったから", "身分制度が強まったから"], "answer": "議会が課税や法律に強い影響力を持ったから", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "カトリック以外のプロテスタント諸派に信仰の自由を認めた法律は？", "choices": ["寛容法", "航海法", "選挙法", "独占禁止法"], "answer": "寛容法", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "『国王の権力は神から授けられた』とする考え方は？", "choices": ["社会契約説", "王権神授説", "啓蒙思想", "三権分立"], "answer": "王権神授説", "exp": "", "fig": null}, {"cat": "イギリス革命", "prompt": "名誉革命後のイギリスについて正しい説明は？", "choices": ["国王が議会を完全に廃止した", "議会を中心とする政治が進んだ", "共和政が永久に続いた", "フランスに征服された"], "answer": "議会を中心とする政治が進んだ", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "北アメリカ東岸にあったイギリスの植民地は一般に何と呼ばれる？", "choices": ["13植民地", "三部会", "五大湖連邦", "ウィーン体制"], "answer": "13植民地", "exp": "", "fig": "northamerica"}, {"cat": "アメリカ独立革命", "prompt": "フランスとイギリスが北米植民地をめぐって争った戦争は？", "choices": ["七年戦争", "ワーテルローの戦い", "三十年戦争", "クリミア戦争"], "answer": "七年戦争", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "七年戦争後、イギリスが植民地に課税を強めた主な理由は？", "choices": ["戦費で財政が苦しくなったから", "植民地に金鉱が見つかったから", "議会をなくしたかったから", "フランスを助けるため"], "answer": "戦費で財政が苦しくなったから", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "『代表なくして課税なし』という主張の意味として正しいものは？", "choices": ["植民地代表がいない議会で決めた税には反対", "国王に税を払うのは当然", "代表者は課税してはいけない", "税はすべてフランスが払う"], "answer": "植民地代表がいない議会で決めた税には反対", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "1773年、茶への課税に抗議して起こった事件は？", "choices": ["ボストン茶会事件", "ヴァレンヌ逃亡事件", "バスティーユ牢獄襲撃", "二月革命"], "answer": "ボストン茶会事件", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "アメリカ独立戦争が始まった年は？", "choices": ["1775年", "1776年", "1783年", "1787年"], "answer": "1775年", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "1776年に発表され、『すべての人は平等につくられた』などを掲げた文書は？", "choices": ["独立宣言", "権利章典", "人権宣言", "ウィーン議定書"], "answer": "独立宣言", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "アメリカ独立軍の総司令官となり、のちに初代大統領となった人物は？", "choices": ["ワシントン", "クロムウェル", "ナポレオン", "ビスマルク"], "answer": "ワシントン", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "アメリカ独立戦争でアメリカ側を支援した国として代表的なものは？", "choices": ["フランス", "プロイセン", "オーストリア", "ロシア"], "answer": "フランス", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "イギリスがアメリカ合衆国の独立を認めた1783年の条約は？", "choices": ["パリ条約", "ベルサイユ条約", "ウィーン議定書", "南京条約"], "answer": "パリ条約", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "1787年に制定されたアメリカ合衆国憲法の特徴として正しいものは？", "choices": ["三権分立を取り入れた", "絶対王政を定めた", "身分制度を強めた", "教皇を国家元首にした"], "answer": "三権分立を取り入れた", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "アメリカ合衆国の政治体制として最も適切なものは？", "choices": ["共和政", "絶対王政", "封建制", "摂政政治"], "answer": "共和政", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "図の赤い東岸部分は、独立革命の中心になった何を示す？", "choices": ["イギリス領13植民地", "フランス本国", "スペイン本国", "ウィーン体制"], "answer": "イギリス領13植民地", "exp": "", "fig": "northamerica"}, {"cat": "アメリカ独立革命", "prompt": "アメリカ独立革命の影響として最も適切なものは？", "choices": ["フランス革命などにも影響を与えた", "ヨーロッパの王政をすべて強化した", "産業革命を完全に止めた", "ローマ帝国を復活させた"], "answer": "フランス革命などにも影響を与えた", "exp": "", "fig": null}, {"cat": "アメリカ独立革命", "prompt": "アメリカ独立宣言の考え方に近いものは？", "choices": ["人民主権や自然権", "王権神授説", "身分による特権", "鎖国政策"], "answer": "人民主権や自然権", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "革命前のフランスで、聖職者・貴族が特権をもち、平民が重税を負った体制を何という？", "choices": ["アンシャン＝レジーム", "ウィーン体制", "連邦制", "議院内閣制"], "answer": "アンシャン＝レジーム", "exp": "", "fig": "estates"}, {"cat": "フランス革命", "prompt": "フランス革命前の第一身分は？", "choices": ["聖職者", "貴族", "平民", "商工業者"], "answer": "聖職者", "exp": "", "fig": "estates"}, {"cat": "フランス革命", "prompt": "フランス革命前の第二身分は？", "choices": ["貴族", "聖職者", "平民", "農奴"], "answer": "貴族", "exp": "", "fig": "estates"}, {"cat": "フランス革命", "prompt": "フランス革命前の第三身分は？", "choices": ["平民", "貴族", "聖職者", "国王"], "answer": "平民", "exp": "", "fig": "estates"}, {"cat": "フランス革命", "prompt": "身分制議会として、第一・第二・第三身分の代表が集まった会議は？", "choices": ["三部会", "国民公会", "連邦議会", "帝国議会"], "answer": "三部会", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "第三身分の代表が中心となり、自分たちこそ国民の代表だとして結成した議会は？", "choices": ["国民議会", "ウィーン会議", "大陸会議", "三部会"], "answer": "国民議会", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "1789年7月14日に民衆が襲撃した、絶対王政の象徴とされた施設は？", "choices": ["バスティーユ牢獄", "ベルサイユ宮殿", "ワーテルロー", "ボストン港"], "answer": "バスティーユ牢獄", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "1789年に出され、自由・平等・人民主権をうたった宣言は？", "choices": ["人権宣言", "独立宣言", "権利章典", "寛容法"], "answer": "人権宣言", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "人権宣言に含まれる考え方として適切なものは？", "choices": ["自由・平等・人民主権", "王権神授説・身分特権", "鎖国・封建制", "重商主義のみ"], "answer": "自由・平等・人民主権", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "フランス革命で廃止が進められた、貴族や聖職者の特別な権利は？", "choices": ["封建的特権", "三権分立", "議会政治", "共和政"], "answer": "封建的特権", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "1791年、ルイ16世一家が国外逃亡を図った事件は？", "choices": ["ヴァレンヌ逃亡事件", "ボストン茶会事件", "ワーテルローの戦い", "名誉革命"], "answer": "ヴァレンヌ逃亡事件", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "フランス革命の進展で成立した、国王を置かない政治体制は？", "choices": ["共和政", "絶対王政", "立憲君主制だけ", "封建制"], "answer": "共和政", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "フランス革命中に処刑された国王は？", "choices": ["ルイ16世", "ルイ14世", "ナポレオン3世", "ジョージ3世"], "answer": "ルイ16世", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "ジャコバン派が中心となり、反革命派を厳しく取り締まった政治は？", "choices": ["恐怖政治", "寛容政治", "ウィーン体制", "啓蒙専制"], "answer": "恐怖政治", "exp": "", "fig": null}, {"cat": "フランス革命", "prompt": "フランス革命期の身分構造を最もよく表す図はどれ？", "choices": ["第一・第二身分が上、第三身分が大部分を占める図", "すべての身分が完全に同じ人数の図", "国王だけが税を払う図", "植民地だけを示す図"], "answer": "第一・第二身分が上、第三身分が大部分を占める図", "exp": "", "fig": "estates"}, {"cat": "フランス革命", "prompt": "フランス革命がヨーロッパに広めた考えとして最も適切なものは？", "choices": ["自由・平等・国民主権", "身分特権の固定", "王権神授説の強化", "封建領主の復活"], "answer": "自由・平等・国民主権", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "フランス革命後に台頭し、皇帝となった人物は？", "choices": ["ナポレオン", "ワシントン", "クロムウェル", "メッテルニヒ"], "answer": "ナポレオン", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "ナポレオンが整備した、近代的な民法典は？", "choices": ["ナポレオン法典", "権利章典", "独立宣言", "寛容法"], "answer": "ナポレオン法典", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "ナポレオン法典の特徴として適切なものは？", "choices": ["法の下の平等や私有財産を重視した", "身分特権を完全に復活させた", "議会を永遠に禁止した", "植民地独立だけを定めた"], "answer": "法の下の平等や私有財産を重視した", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "ナポレオンがヨーロッパ征服を進めた結果、各地で高まった意識は？", "choices": ["民族意識", "王権神授説だけ", "鎖国意識", "封建領主への忠誠"], "answer": "民族意識", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "1815年、ナポレオンが敗れた戦いは？", "choices": ["ワーテルローの戦い", "ボストン茶会事件", "バスティーユ襲撃", "七年戦争"], "answer": "ワーテルローの戦い", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "ナポレオン失脚後、ヨーロッパの秩序を話し合った会議は？", "choices": ["ウィーン会議", "三部会", "大陸会議", "国民議会"], "answer": "ウィーン会議", "exp": "", "fig": "europe"}, {"cat": "ナポレオン", "prompt": "ウィーン会議で中心的な役割を果たしたオーストリア外相は？", "choices": ["メッテルニヒ", "ビスマルク", "カヴール", "ガリバルディ"], "answer": "メッテルニヒ", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "ウィーン会議後の保守的な国際秩序を何という？", "choices": ["ウィーン体制", "共和政", "三権分立", "モンロー主義"], "answer": "ウィーン体制", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "ウィーン体制が目指したものとして最も適切なものは？", "choices": ["革命前の秩序や王政の復活・維持", "すべての植民地独立", "身分制の完全廃止のみ", "アメリカ合衆国の拡大"], "answer": "革命前の秩序や王政の復活・維持", "exp": "", "fig": null}, {"cat": "ナポレオン", "prompt": "ナポレオンの支配に抵抗する中で、ドイツやイタリアで強まったものは？", "choices": ["統一を求める民族意識", "鎖国政策", "仏教改革", "絶対王政への無条件支持"], "answer": "統一を求める民族意識", "exp": "", "fig": null}, {"cat": "ラテンアメリカ", "prompt": "19世紀前半、ラテンアメリカで独立運動が広がった背景として最も適切なものは？", "choices": ["ヨーロッパ本国の混乱と啓蒙思想の影響", "日本の鎖国政策", "ウィーン会議で全植民地独立が決定したから", "イギリスが全地域を直轄化したから"], "answer": "ヨーロッパ本国の混乱と啓蒙思想の影響", "exp": "", "fig": null}, {"cat": "ラテンアメリカ", "prompt": "南アメリカ北部の独立運動で活躍し、『解放者』と呼ばれた人物は？", "choices": ["シモン＝ボリバル", "ビスマルク", "ルイ16世", "クロムウェル"], "answer": "シモン＝ボリバル", "exp": "", "fig": null}, {"cat": "ラテンアメリカ", "prompt": "アメリカ大陸とヨーロッパの相互不干渉を唱えたアメリカ合衆国の外交方針は？", "choices": ["モンロー主義", "ウィーン体制", "大陸封鎖令", "三権分立"], "answer": "モンロー主義", "exp": "", "fig": null}, {"cat": "ラテンアメリカ", "prompt": "モンロー主義が出された国は？", "choices": ["アメリカ合衆国", "フランス", "オーストリア", "プロイセン"], "answer": "アメリカ合衆国", "exp": "", "fig": null}, {"cat": "ラテンアメリカ", "prompt": "ラテンアメリカ独立に関係の深い地域はどこ？", "choices": ["中南米", "北欧", "東アジア", "西アジア"], "answer": "中南米", "exp": "", "fig": "latinamerica"}, {"cat": "ラテンアメリカ", "prompt": "アメリカ合衆国が西へ領土を拡大していく動きの説明として適切なものは？", "choices": ["先住民の土地を奪いながら西部へ進出した", "東岸13植民地だけにとどまった", "ヨーロッパへ領土を広げた", "王政を復活させた"], "answer": "先住民の土地を奪いながら西部へ進出した", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "1848年、フランスで起こり、ルイ＝フィリップの王政を倒した革命は？", "choices": ["二月革命", "七月革命", "三月革命", "名誉革命"], "answer": "二月革命", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "二月革命で成立した政治体制は？", "choices": ["第二共和政", "第一帝政", "絶対王政", "ウィーン体制"], "answer": "第二共和政", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "1848年革命がヨーロッパ各地に広がった背景として正しいものは？", "choices": ["自由主義・民族主義の高まり", "王権神授説の拡大だけ", "植民地の完全消滅", "産業革命の禁止"], "answer": "自由主義・民族主義の高まり", "exp": "", "fig": "europe"}, {"cat": "ヨーロッパ近代社会", "prompt": "1848年、ドイツ統一をめざして開かれた議会は？", "choices": ["フランクフルト国民議会", "三部会", "ウィーン会議", "大陸会議"], "answer": "フランクフルト国民議会", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "フランスの七月革命で王となり、二月革命で退位した人物は？", "choices": ["ルイ＝フィリップ", "ルイ16世", "ナポレオン", "ワシントン"], "answer": "ルイ＝フィリップ", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "二月革命後に大統領となり、のちに皇帝ナポレオン3世となった人物は？", "choices": ["ルイ＝ナポレオン", "ビスマルク", "ガリバルディ", "メッテルニヒ"], "answer": "ルイ＝ナポレオン", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "ナポレオン3世の時代のフランスの政治体制は？", "choices": ["第二帝政", "第二共和政のまま", "絶対王政", "ウィーン体制"], "answer": "第二帝政", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "普仏戦争でフランスが敗れた後に成立した政治体制は？", "choices": ["第三共和政", "第一帝政", "三部会", "王政復古のみ"], "answer": "第三共和政", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "『自由主義』の説明として最も適切なものは？", "choices": ["憲法や議会を重視し、個人の自由を求める考え", "国王の絶対権力を強める考え", "身分制を固定する考え", "海外貿易を禁止する考え"], "answer": "憲法や議会を重視し、個人の自由を求める考え", "exp": "", "fig": null}, {"cat": "ヨーロッパ近代社会", "prompt": "『民族主義』の説明として最も適切なものは？", "choices": ["共通の言語や文化をもつ民族がまとまり独立や統一をめざす考え", "身分による支配を守る考え", "宗教だけで国家を決める考え", "王だけが国家を所有する考え"], "answer": "共通の言語や文化をもつ民族がまとまり独立や統一をめざす考え", "exp": "", "fig": null}, {"cat": "ドイツ統一", "prompt": "ドイツ統一を主導した国は？", "choices": ["プロイセン", "フランス", "スペイン", "ロシア"], "answer": "プロイセン", "exp": "", "fig": null}, {"cat": "ドイツ統一", "prompt": "プロイセン首相として『鉄血政策』を進めた人物は？", "choices": ["ビスマルク", "カヴール", "ガリバルディ", "ナポレオン3世"], "answer": "ビスマルク", "exp": "", "fig": null}, {"cat": "ドイツ統一", "prompt": "ビスマルクの『鉄血政策』が重視したものは？", "choices": ["軍事力と現実的外交", "完全な非武装", "封建領主の復活", "植民地の放棄"], "answer": "軍事力と現実的外交", "exp": "", "fig": null}, {"cat": "ドイツ統一", "prompt": "1871年、普仏戦争後に成立した国は？", "choices": ["ドイツ帝国", "イタリア王国", "オーストリア帝国", "アメリカ合衆国"], "answer": "ドイツ帝国", "exp": "", "fig": null}, {"cat": "ドイツ統一", "prompt": "ドイツ統一に関係の深い戦争は？", "choices": ["普仏戦争", "七年戦争", "アメリカ独立戦争", "ワーテルローの戦い"], "answer": "普仏戦争", "exp": "", "fig": null}, {"cat": "イタリア統一", "prompt": "イタリア統一を外交面で進めたサルデーニャ王国の首相は？", "choices": ["カヴール", "ビスマルク", "クロムウェル", "メッテルニヒ"], "answer": "カヴール", "exp": "", "fig": null}, {"cat": "イタリア統一", "prompt": "南イタリアを解放し、イタリア統一に貢献した義勇軍の指導者は？", "choices": ["ガリバルディ", "ワシントン", "ルイ16世", "ロベスピエール"], "answer": "ガリバルディ", "exp": "", "fig": null}, {"cat": "イタリア統一", "prompt": "イタリア統一の中心となった王国は？", "choices": ["サルデーニャ王国", "プロイセン王国", "スペイン王国", "ロシア帝国"], "answer": "サルデーニャ王国", "exp": "", "fig": null}, {"cat": "イタリア統一", "prompt": "ドイツ統一とイタリア統一に共通する背景は？", "choices": ["民族主義の高まり", "鎖国政策の拡大", "王権神授説の強化のみ", "全植民地の放棄"], "answer": "民族主義の高まり", "exp": "", "fig": null}, {"cat": "イタリア統一", "prompt": "図で中央ヨーロッパに示した統一運動と関係が深い国の組み合わせは？", "choices": ["ドイツとイタリア", "日本と中国", "アメリカとカナダ", "インドとタイ"], "answer": "ドイツとイタリア", "exp": "", "fig": "europe"}, {"cat": "流れ確認", "prompt": "できごとを古い順に並べたものとして正しいものは？", "choices": ["ピューリタン革命→名誉革命→アメリカ独立宣言→フランス革命", "フランス革命→名誉革命→ピューリタン革命→アメリカ独立宣言", "アメリカ独立宣言→ピューリタン革命→名誉革命→フランス革命", "名誉革命→フランス革命→ピューリタン革命→アメリカ独立宣言"], "answer": "ピューリタン革命→名誉革命→アメリカ独立宣言→フランス革命", "exp": "", "fig": "timeline"}, {"cat": "流れ確認", "prompt": "できごとを古い順に並べたものとして正しいものは？", "choices": ["フランス革命→ナポレオン法典→ワーテルローの戦い→ウィーン会議", "ウィーン会議→フランス革命→ナポレオン法典→ワーテルローの戦い", "ナポレオン法典→フランス革命→ウィーン会議→ワーテルローの戦い", "ワーテルローの戦い→フランス革命→ウィーン会議→ナポレオン法典"], "answer": "フランス革命→ナポレオン法典→ワーテルローの戦い→ウィーン会議", "exp": "", "fig": null}, {"cat": "流れ確認", "prompt": "1776年、1783年、1787年に関係する組み合わせとして正しいものは？", "choices": ["独立宣言・パリ条約・合衆国憲法", "パリ条約・独立宣言・人権宣言", "合衆国憲法・独立宣言・パリ条約", "人権宣言・権利章典・三部会"], "answer": "独立宣言・パリ条約・合衆国憲法", "exp": "", "fig": null}, {"cat": "流れ確認", "prompt": "1789年に起こったできごととして適切なものは？", "choices": ["フランス革命が始まり、人権宣言が出された", "アメリカ独立宣言が出された", "ワーテルローの戦いが起きた", "ドイツ帝国が成立した"], "answer": "フランス革命が始まり、人権宣言が出された", "exp": "", "fig": null}, {"cat": "流れ確認", "prompt": "1871年に成立した国として正しいものは？", "choices": ["ドイツ帝国", "アメリカ合衆国", "フランス第一共和政", "イギリス共和国"], "answer": "ドイツ帝国", "exp": "", "fig": null}, {"cat": "比較", "prompt": "アメリカ独立革命とフランス革命に共通する考えとして最も適切なものは？", "choices": ["自由・平等・人民主権", "王権神授説", "封建的特権の強化", "身分制の固定"], "answer": "自由・平等・人民主権", "exp": "", "fig": null}, {"cat": "比較", "prompt": "イギリスの名誉革命とフランス革命の違いとして適切なものは？", "choices": ["名誉革命は議会政治を進め、フランス革命は身分制社会を大きく変えた", "名誉革命はフランスで起きた", "フランス革命は国王権力を絶対化した", "どちらも植民地独立のみを目的とした"], "answer": "名誉革命は議会政治を進め、フランス革命は身分制社会を大きく変えた", "exp": "", "fig": null}, {"cat": "比較", "prompt": "『三権分立』の三権として正しいものは？", "choices": ["立法・行政・司法", "国王・貴族・聖職者", "陸軍・海軍・空軍", "税・貿易・植民地"], "answer": "立法・行政・司法", "exp": "", "fig": null}, {"cat": "比較", "prompt": "啓蒙思想の説明として最も適切なものは？", "choices": ["理性によって社会を改善しようとする考え", "国王の権力は神から来るという考え", "教会だけが政治を行う考え", "身分制を永遠に守る考え"], "answer": "理性によって社会を改善しようとする考え", "exp": "", "fig": null}, {"cat": "比較", "prompt": "ロックやルソーらの思想が影響を与えたものとして適切なものは？", "choices": ["アメリカ独立革命やフランス革命", "鎖国政策だけ", "封建制の完成", "ウィーン体制だけ"], "answer": "アメリカ独立革命やフランス革命", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「1642年に始まったイギリスの内戦」", "choices": ["二月革命", "ボストン茶会事件", "ピューリタン革命", "カヴール"], "answer": "ピューリタン革命", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「1688年に起きた、ほぼ無血の革命」", "choices": ["バスティーユ牢獄", "権利章典", "独立宣言", "名誉革命"], "answer": "名誉革命", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「議会の権利を国王に認めさせた1689年の文書」", "choices": ["ピューリタン革命", "権利章典", "名誉革命", "人権宣言"], "answer": "権利章典", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「茶への課税に抗議した1773年の事件」", "choices": ["ピューリタン革命", "ボストン茶会事件", "バスティーユ牢獄", "独立宣言"], "answer": "ボストン茶会事件", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「1776年に出されたアメリカの文書」", "choices": ["人権宣言", "ガリバルディ", "ワシントン", "独立宣言"], "answer": "独立宣言", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「1789年にフランスで出された宣言」", "choices": ["カヴール", "人権宣言", "名誉革命", "バスティーユ牢獄"], "answer": "人権宣言", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「1789年7月14日に襲撃された施設」", "choices": ["モンロー主義", "名誉革命", "バスティーユ牢獄", "二月革命"], "answer": "バスティーユ牢獄", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「法の下の平等を示す近代民法典」", "choices": ["人権宣言", "独立宣言", "二月革命", "ナポレオン法典"], "answer": "ナポレオン法典", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「ナポレオン後の保守的な国際秩序」", "choices": ["独立宣言", "ナポレオン法典", "ウィーン体制", "名誉革命"], "answer": "ウィーン体制", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「1848年にフランスで起きた革命」", "choices": ["二月革命", "メッテルニヒ", "ビスマルク", "名誉革命"], "answer": "二月革命", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「ドイツ統一を進めたプロイセン首相」", "choices": ["人権宣言", "ビスマルク", "独立宣言", "クロムウェル"], "answer": "ビスマルク", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「イタリア南部解放に活躍した人物」", "choices": ["ナポレオン法典", "ピューリタン革命", "バスティーユ牢獄", "ガリバルディ"], "answer": "ガリバルディ", "exp": "", "fig": null}, {"cat": "語句確認", "prompt": "次の説明にあてはまる語句は？「アメリカ大陸とヨーロッパの相互不干渉を唱えた考え」", "choices": ["ウィーン体制", "モンロー主義", "ナポレオン法典", "ワシントン"], "answer": "モンロー主義", "exp": "", "fig": null}];
+
+const FIGURES={
+timeline:{
+ title:'近代革命・統一の流れ',
+ html:`<svg class="refsvg" viewBox="0 0 900 360" role="img" aria-label="年表">
+ <defs><marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+ <rect width="900" height="360" rx="24" fill="#f8fafc"/>
+ <line x1="70" y1="190" x2="830" y2="190" stroke="#334155" stroke-width="5" marker-end="url(#arr)"/>
+ ${[
+  ['1642','ピューリタン革命',110,115],['1688','名誉革命',220,245],['1776','独立宣言',380,115],['1789','フランス革命',490,245],['1815','ウィーン会議',610,115],['1848','二月革命',710,245],['1871','ドイツ帝国',800,115]
+ ].map(([y,t,x,ty])=>`<circle cx="${x}" cy="190" r="9" fill="#2563eb"/><text x="${x-32}" y="${ty}" font-size="24" font-weight="800">${y}</text><text x="${x-68}" y="${ty+32}" font-size="21">${t}</text><line x1="${x}" y1="190" x2="${x}" y2="${ty+40<190?ty+45:ty-20}" stroke="#94a3b8" stroke-width="3"/>`).join('')}
+ </svg><p class="caption">革命・独立・統一の流れ。年号とできごとの前後関係を確認する。</p>`
+},
+northamerica:{
+ title:'北アメリカの13植民地と独立革命',
+ html:`<svg class="refsvg" viewBox="0 0 900 480" role="img" aria-label="北アメリカ簡略図">
+ <rect width="900" height="480" rx="24" fill="#e0f2fe"/>
+ <path d="M150,80 C110,160 110,250 170,340 C250,440 430,420 520,350 C600,285 595,195 520,125 C420,40 260,25 150,80Z" fill="#e5e7eb" stroke="#64748b" stroke-width="3"/>
+ <path d="M560,95 C610,130 640,210 625,300 C615,360 650,405 710,430 L795,430 C760,365 750,320 775,250 C800,180 745,115 660,85 C625,72 590,72 560,95Z" fill="#d1d5db" stroke="#64748b" stroke-width="3"/>
+ <path d="M660,110 C700,150 715,220 695,300 C685,345 695,390 735,425" fill="none" stroke="#ef4444" stroke-width="12" stroke-linecap="round"/>
+ <path d="M635,95 C660,155 650,240 620,330" fill="none" stroke="#334155" stroke-width="4" stroke-dasharray="10 8"/>
+ <text x="55" y="50" font-size="28" font-weight="800">北アメリカ簡略図</text>
+ <text x="682" y="210" font-size="25" font-weight="800" fill="#991b1b">13植民地</text>
+ <text x="560" y="356" font-size="21">アパラチア山脈</text>
+ <text x="150" y="435" font-size="21">西方の領土</text>
+ <text x="80" y="455" font-size="18" fill="#475569">※形は学習用の簡略図。赤線の東岸部が独立革命の中心となった13植民地。</text>
+ </svg>`
+},
+estates:{
+ title:'フランス革命前の身分制',
+ html:`<svg class="refsvg" viewBox="0 0 900 520" role="img" aria-label="フランス革命前の身分制">
+ <rect width="900" height="520" rx="24" fill="#fff7ed"/>
+ <polygon points="450,55 220,430 680,430" fill="#fed7aa" stroke="#9a3412" stroke-width="4"/>
+ <line x1="350" y1="220" x2="550" y2="220" stroke="#9a3412" stroke-width="4"/>
+ <line x1="275" y1="340" x2="625" y2="340" stroke="#9a3412" stroke-width="4"/>
+ <text x="395" y="135" font-size="32" font-weight="900">第一身分</text><text x="400" y="172" font-size="25">聖職者</text>
+ <text x="395" y="285" font-size="32" font-weight="900">第二身分</text><text x="420" y="320" font-size="25">貴族</text>
+ <text x="365" y="390" font-size="32" font-weight="900">第三身分</text><text x="335" y="425" font-size="25">平民・農民・市民</text>
+ <text x="70" y="480" font-size="22" fill="#7c2d12">特権を持つ第一・第二身分に対し、第三身分が重い税を負った。</text>
+ </svg>`
+},
+europe:{
+ title:'ヨーロッパの革命と統一運動',
+ html:`<svg class="refsvg" viewBox="0 0 900 500" role="img" aria-label="ヨーロッパ簡略図">
+ <rect width="900" height="500" rx="24" fill="#e0f2fe"/>
+ <path d="M210,120 C260,70 350,80 395,130 C450,95 520,115 560,170 C635,150 720,190 730,275 C680,320 590,320 550,360 C490,425 380,390 350,320 C280,335 190,295 175,220 C160,175 175,145 210,120Z" fill="#e5e7eb" stroke="#64748b" stroke-width="3"/>
+ <circle cx="345" cy="245" r="34" fill="none" stroke="#ef4444" stroke-width="4"/><text x="292" y="308" font-size="24" font-weight="800">フランス</text>
+ <circle cx="465" cy="210" r="34" fill="none" stroke="#2563eb" stroke-width="4"/><text x="425" y="172" font-size="24" font-weight="800">ドイツ</text>
+ <circle cx="510" cy="310" r="32" fill="none" stroke="#16a34a" stroke-width="4"/><text x="530" y="355" font-size="24" font-weight="800">イタリア</text>
+ <text x="70" y="455" font-size="21" fill="#475569">1848年革命、ドイツ・イタリア統一などを位置関係で確認する簡略図。</text>
+ </svg>`
+},
+latinamerica:{
+ title:'ラテンアメリカ独立運動の範囲',
+ html:`<svg class="refsvg" viewBox="0 0 900 500" role="img" aria-label="ラテンアメリカ簡略図">
+ <rect width="900" height="500" rx="24" fill="#e0f2fe"/>
+ <path d="M395,55 C345,110 345,170 405,205 C455,235 455,285 420,335 C395,372 405,425 450,465 C525,425 560,360 545,300 C535,260 565,220 545,175 C520,105 470,65 395,55Z" fill="#fef3c7" stroke="#92400e" stroke-width="4"/>
+ <path d="M310,75 C285,105 285,140 320,165 C350,185 375,175 395,150 C370,105 350,82 310,75Z" fill="#fef3c7" stroke="#92400e" stroke-width="4"/>
+ <circle cx="430" cy="245" r="95" fill="none" stroke="#ef4444" stroke-width="4"/>
+ <text x="355" y="42" font-size="24" font-weight="800">中南米</text>
+ <text x="515" y="250" font-size="24" font-weight="800">ラテンアメリカ</text>
+ <text x="70" y="455" font-size="21" fill="#475569">スペイン・ポルトガル支配からの独立運動が広がった地域を確認する簡略図。</text>
+ </svg>`
+}
+};
+
+let order=[],idx=0,ok=0,answered=false,current=null,wrongIds=JSON.parse(localStorage.getItem('highHistoryWrong')||'[]');
+const $=id=>document.getElementById(id);
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function init(){
+ $('total').textContent=QUESTIONS.length;
+ const cats=[...new Set(QUESTIONS.map(q=>q.cat))];
+ $('cat').innerHTML='<option value="">全カテゴリ</option>'+cats.map(c=>`<option>${c}</option>`).join('');
+ $('memo').value=localStorage.getItem('highHistoryMemo')||'';
+ start();
+}
+function start(){
+ const mode=$('mode').value, cat=$('cat').value;
+ let pool=QUESTIONS.map((q,i)=>({...q,id:i}));
+ if(cat) pool=pool.filter(q=>q.cat===cat);
+ if(mode==='wrong') pool=pool.filter(q=>wrongIds.includes(q.id));
+ pool=shuffle(pool);
+ if(mode==='exam') pool=pool.slice(0,50);
+ if(pool.length===0){$('prompt').textContent='対象問題がない。全問モードでやり直して。';$('choices').innerHTML='';return;}
+ order=pool; idx=0; ok=0; answered=false; render();
+}
+function render(){
+ current=order[idx]; answered=false;
+ $('qcat').textContent=current.cat;
+ $('qno').textContent=`${idx+1} / ${order.length}`;
+ $('prompt').textContent=current.prompt;
+ $('res').textContent=''; $('res').className='result';
+ $('exp').textContent='';
+ $('nextBtn').classList.add('hidden');
+ $('figBtnArea').innerHTML=current.fig?`<button class="secondary" onclick="openFigure('${current.fig}')">📖 図を見る</button>`:'';
+ const choices=shuffle(current.choices);
+ $('choices').innerHTML=choices.map(c=>`<button class="choice" onclick="choose(this, '${escapeJs(c)}')">${c}</button>`).join('');
+ updateStats();
+}
+function escapeJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ')}
+function choose(btn,val){
+ if(answered)return; answered=true;
+ const buttons=[...document.querySelectorAll('.choice')];
+ buttons.forEach(b=>{if(b.textContent===current.answer)b.classList.add('correct');});
+ if(val===current.answer){ok++; $('res').textContent='正解！'; $('res').classList.add('ok'); wrongIds=wrongIds.filter(id=>id!==current.id);}
+ else{btn.classList.add('wrong'); $('res').textContent=`不正解。正解は「${current.answer}」。`; $('res').classList.add('ng'); if(!wrongIds.includes(current.id))wrongIds.push(current.id);}
+ localStorage.setItem('highHistoryWrong',JSON.stringify(wrongIds));
+ $('exp').textContent=current.exp||'';
+ $('nextBtn').classList.remove('hidden');
+ updateStats();
+}
+function showAnswer(){
+ if(answered)return;
+ const buttons=[...document.querySelectorAll('.choice')];
+ buttons.forEach(b=>{if(b.textContent===current.answer)b.classList.add('correct');});
+ $('res').textContent=`正解は「${current.answer}」。`;
+ $('res').className='result ok';
+ $('exp').textContent=current.exp||'';
+ answered=true; $('nextBtn').classList.remove('hidden');
+}
+function next(){
+ idx++;
+ if(idx>=order.length){
+   $('prompt').textContent=`終了！ 得点は ${Math.round(ok/order.length*100)}点相当。`;
+   $('choices').innerHTML=''; $('figBtnArea').innerHTML='';
+   $('qno').textContent=`${order.length} / ${order.length}`;
+   $('res').textContent=`正解 ${ok} / ${order.length}`;
+   $('exp').textContent='間違いだけ復習モードで弱点をつぶそう。';
+   $('nextBtn').classList.add('hidden'); updateStats(); return;
+ }
+ render();
+}
+function updateStats(){
+ $('ok').textContent=ok;
+ const done=answered?idx+1:idx;
+ const denom=order.length||1;
+ const score=order.length?Math.round(ok/denom*100):0;
+ $('score').textContent=score;
+ $('rate').textContent=done?Math.round(ok/done*100)+'%':'0%';
+}
+function openFigure(key){
+ const f=FIGURES[key]; if(!f)return;
+ $('modalTitle').textContent=f.title; $('modalBody').innerHTML=f.html; $('modal').classList.add('open');
+}
+function closeModal(){$('modal').classList.remove('open')}
+function speak(text){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';speechSynthesis.speak(u)}catch(e){}}
+function saveMemo(){localStorage.setItem('highHistoryMemo',$('memo').value);alert('保存した')}
+function clearProgress(){localStorage.removeItem('highHistoryWrong');wrongIds=[];alert('リセットした')}
+init();
+</script>
+</body></html>
