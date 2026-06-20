@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>高校 漢字｜手書き自動認識テスト</title>
+<style>
+:root{--bg:#0f172a;--ink:#f8fafc;--muted:#cbd5e1;--line:#334155;--pri:#2563eb;--ok:#16a34a;--ng:#dc2626;--warn:#f97316}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+.app{height:100dvh;display:grid;grid-template-rows:auto 1fr auto}
+.top{padding:8px 10px calc(8px + env(safe-area-inset-top));background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(15,23,42,.82));border-bottom:1px solid var(--line)}
+.row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.title{font-weight:900;font-size:14px;color:#93c5fd}.badge{border:1px solid var(--line);background:#1e293b;border-radius:999px;padding:5px 8px;font-size:12px;font-weight:900;color:#dbeafe}
+.q{font-weight:900;font-size:clamp(18px,4.8vw,30px);line-height:1.28;margin-top:6px}.sub{font-size:12px;color:var(--muted);font-weight:800;margin-top:4px;line-height:1.35}.score{margin-left:auto;color:#cbd5e1;font-weight:900;font-size:13px}
+.canvasWrap{position:relative;min-height:0;background:#fff;touch-action:none}
+#kanjiCanvas{display:block;width:100%;height:100%;background:#fff;touch-action:none;cursor:crosshair}
+.guide{pointer-events:none;position:absolute;inset:0;background:
+linear-gradient(to right,transparent calc(50% - .5px),rgba(148,163,184,.45) calc(50% - .5px),rgba(148,163,184,.45) calc(50% + .5px),transparent calc(50% + .5px)),
+linear-gradient(to bottom,transparent calc(50% - .5px),rgba(148,163,184,.45) calc(50% - .5px),rgba(148,163,184,.45) calc(50% + .5px),transparent calc(50% + .5px))}
+.guide:before{content:"";position:absolute;inset:10px;border:2px dashed rgba(148,163,184,.45);border-radius:18px}
+.ghost{pointer-events:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:min(62vw,62vh);font-weight:900;color:rgba(15,23,42,.055);line-height:1}
+.resultBox{display:none;position:absolute;left:10px;right:10px;bottom:10px;max-height:78vh;overflow:auto;background:rgba(15,23,42,.94);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.28)}
+.resultBox.open{display:block}.resultMain{font-size:clamp(24px,6.5vw,36px);font-weight:900}.okTxt{color:#86efac}.ngTxt{color:#fca5a5}.maybeTxt{color:#fde68a}.ans{font-size:clamp(48px,13vw,78px);font-weight:900;letter-spacing:.08em;line-height:1.05;margin-top:4px}.mean{color:#cbd5e1;font-weight:800;line-height:1.45;margin-top:4px}.cands{color:#bfdbfe;font-weight:900;line-height:1.5;margin-top:7px}
+.strokeVisualWrap{margin-top:10px;padding:10px 10px 12px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:rgba(255,255,255,.05)}
+.strokeVisualHead{color:#fde68a;font-weight:900;font-size:clamp(16px,4.2vw,21px);margin-bottom:8px}
+.strokeVisualBox{display:flex;justify-content:center;align-items:center;min-height:220px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.18);border-radius:14px;overflow:hidden}
+#strokeVisual{width:220px;height:220px;display:flex;justify-content:center;align-items:center}
+.strokeVisualNote{margin-top:8px;color:#dbeafe;font-size:clamp(13px,3.4vw,17px);font-weight:800;line-height:1.45}
+.strokeCharFallback{font-size:148px;line-height:1;color:#fff;font-weight:900;font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif}
+.replayBtn{margin-top:8px;min-height:40px;padding:8px 14px;border:0;border-radius:12px;background:#1d4ed8;color:#fff;font-weight:900}
+.bottom{padding:7px 8px calc(7px + env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(15,23,42,.98),rgba(15,23,42,.84));border-top:1px solid var(--line)}
+button,select{border:0;border-radius:13px;padding:10px 10px;font-weight:900;color:#fff;background:#334155;font-size:13px;min-height:42px}select{background:#1e293b;border:1px solid #334155;max-width:150px}
+button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{background:var(--ng)}button.warn{background:var(--warn)}button:active{transform:translateY(1px)}
+.small{font-size:11px;color:#94a3b8;font-weight:700;line-height:1.25;margin-top:4px}.toggle{display:flex;gap:6px;align-items:center;color:#cbd5e1;font-size:12px;font-weight:800}input[type=checkbox]{width:18px;height:18px}
+#candidateList{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
+@media (orientation:landscape){.top{padding-top:5px}.q{font-size:20px}.sub,.small{display:none}.bottom{padding-top:5px}button,select{min-height:36px;padding:7px 9px}}
+</style>
+<script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/kanji-canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/ref-patterns.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.7/dist/hanzi-writer.min.js"></script>
+</head>
+<body>
+<div class="app">
+<header class="top">
+  <div class="row"><span class="title">高校 漢字 手書き自動認識</span><span class="badge">漢検5級1026字</span><span class="badge">添付画像語</span><span class="score" id="score">0問中 0問正解</span></div>
+  <div class="q" id="question">開始を押してね</div>
+  <div class="sub" id="status">GitHub PagesなどHTTPS環境推奨。画面いっぱいに一文字を書いて「自動判定」。</div>
+</header>
+
+<main class="canvasWrap">
+  <canvas id="kanjiCanvas" data-candidate-list="candidateList"></canvas>
+  <div class="guide"></div>
+  <div class="ghost" id="ghost"></div>
+  <div class="resultBox" id="resultBox">
+    <div class="resultMain" id="resultMain">---</div>
+    <div class="ans" id="answerText">---</div>
+    <div class="mean" id="meaning">---</div>
+    <div class="strokeVisualWrap">
+      <div class="strokeVisualHead">正しい漢字の画像（書き順つき）</div>
+      <div class="strokeVisualBox"><div id="strokeVisual"></div></div>
+      <div class="strokeVisualNote" id="strokeVisualNote">---</div>
+      <button class="replayBtn" type="button" onclick="replayStrokeVisual()">もう一回再生</button>
+    </div>
+    <div class="cands" id="candidates">---</div>
+  </div>
+  <div id="candidateList"></div>
+</main>
+
+<footer class="bottom">
+  <div class="row">
+    <button class="primary" onclick="start()">開始</button>
+    <select id="mode" onchange="start()">
+      <option value="all">全部</option>
+      <option value="image">添付画像だけ</option>
+      <option value="kanken">5級むずかしめ</option>
+      <option value="wrong">間違い復習</option>
+    </select>
+    <button onclick="undo()">一画戻す</button>
+    <button onclick="clearPad()">消す</button>
+    <button class="warn" onclick="recognizeNow()">自動判定</button>
+    <button class="primary" onclick="next()">次</button>
+    <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
+  </div>
+  <div class="small">判定：添付画像の語＋漢検5級のむずかしめ問題のみ。結果には漢字画像と一画ずつの書き順アニメを表示。</div>
+</footer>
+</div>
+<canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
+<canvas id="fallbackTmp" width="320" height="320" style="display:none"></canvas>
+
+<script>
+const QUESTIONS=[{"char": "依", "source": "添付画像語", "word": "依存", "reading": "いぞん", "meaning": "たよって存在すること。", "index": 0, "mode": "word"}, {"char": "存", "source": "添付画像語", "word": "依存", "reading": "いぞん", "meaning": "たよって存在すること。", "index": 1, "mode": "word"}, {"char": "風", "source": "添付画像語", "word": "風俗", "reading": "ふうぞく", "meaning": "生活上のしきたりやならわし。", "index": 0, "mode": "word"}, {"char": "俗", "source": "添付画像語", "word": "風俗", "reading": "ふうぞく", "meaning": "生活上のしきたりやならわし。", "index": 1, "mode": "word"}, {"char": "候", "source": "添付画像語", "word": "候補", "reading": "こうほ", "meaning": "選ばれる対象になるもの。", "index": 0, "mode": "word"}, {"char": "補", "source": "添付画像語", "word": "候補", "reading": "こうほ", "meaning": "選ばれる対象になるもの。", "index": 1, "mode": "word"}, {"char": "到", "source": "添付画像語", "word": "到着", "reading": "とうちゃく", "meaning": "目的地に着くこと。", "index": 0, "mode": "word"}, {"char": "着", "source": "添付画像語", "word": "到着", "reading": "とうちゃく", "meaning": "目的地に着くこと。", "index": 1, "mode": "word"}, {"char": "傾", "source": "添付画像語", "word": "傾向", "reading": "けいこう", "meaning": "物事の方向・性質。", "index": 0, "mode": "word"}, {"char": "向", "source": "添付画像語", "word": "傾向", "reading": "けいこう", "meaning": "物事の方向・性質。", "index": 1, "mode": "word"}, {"char": "儀", "source": "添付画像語", "word": "儀式", "reading": "ぎしき", "meaning": "決まった形式で行う行事。", "index": 0, "mode": "word"}, {"char": "式", "source": "添付画像語", "word": "儀式", "reading": "ぎしき", "meaning": "決まった形式で行う行事。", "index": 1, "mode": "word"}, {"char": "妙", "source": "添付画像語", "word": "妙", "reading": "みょう", "meaning": "ふしぎ・すぐれていること。", "index": 0, "mode": "word"}, {"char": "介", "source": "添付画像語", "word": "介入", "reading": "かいにゅう", "meaning": "間に入ること。", "index": 0, "mode": "word"}, {"char": "入", "source": "添付画像語", "word": "介入", "reading": "かいにゅう", "meaning": "間に入ること。", "index": 1, "mode": "word"}, {"char": "仰", "source": "添付画像語", "word": "仰天", "reading": "ぎょうてん", "meaning": "非常におどろくこと。", "index": 0, "mode": "word"}, {"char": "天", "source": "添付画像語", "word": "仰天", "reading": "ぎょうてん", "meaning": "非常におどろくこと。", "index": 1, "mode": "word"}, {"char": "婚", "source": "添付画像語", "word": "婚姻", "reading": "こんいん", "meaning": "結婚すること。", "index": 0, "mode": "word"}, {"char": "姻", "source": "添付画像語", "word": "婚姻", "reading": "こんいん", "meaning": "結婚すること。", "index": 1, "mode": "word"}, {"char": "娘", "source": "添付画像語", "word": "娘", "reading": "むすめ", "meaning": "女の子。", "index": 0, "mode": "word"}, {"char": "姓", "source": "添付画像語", "word": "姓", "reading": "せい", "meaning": "名字。", "index": 0, "mode": "word"}, {"char": "奴", "source": "添付画像語", "word": "奴隷", "reading": "どれい", "meaning": "自由をうばわれ使われる人。", "index": 0, "mode": "word"}, {"char": "隷", "source": "添付画像語", "word": "奴隷", "reading": "どれい", "meaning": "自由をうばわれ使われる人。", "index": 1, "mode": "word"}, {"char": "威", "source": "添付画像語", "word": "威圧", "reading": "いあつ", "meaning": "力でおさえつけること。", "index": 0, "mode": "word"}, {"char": "圧", "source": "添付画像語", "word": "威圧", "reading": "いあつ", "meaning": "力でおさえつけること。", "index": 1, "mode": "word"}, {"char": "宿", "source": "添付画像語", "word": "宿泊", "reading": "しゅくはく", "meaning": "泊まること。", "index": 0, "mode": "word"}, {"char": "泊", "source": "添付画像語", "word": "宿泊", "reading": "しゅくはく", "meaning": "泊まること。", "index": 1, "mode": "word"}, {"char": "偉", "source": "添付画像語", "word": "偉人", "reading": "いじん", "meaning": "すぐれた人。", "index": 0, "mode": "word"}, {"char": "人", "source": "添付画像語", "word": "偉人", "reading": "いじん", "meaning": "すぐれた人。", "index": 1, "mode": "word"}, {"char": "侵", "source": "添付画像語", "word": "侵入", "reading": "しんにゅう", "meaning": "入りこむこと。", "index": 0, "mode": "word"}, {"char": "入", "source": "添付画像語", "word": "侵入", "reading": "しんにゅう", "meaning": "入りこむこと。", "index": 1, "mode": "word"}, {"char": "伺", "source": "添付画像語", "word": "伺う", "reading": "うかがう", "meaning": "たずねる・聞くの謙譲語。", "index": 0, "mode": "word"}, {"char": "暇", "source": "添付画像語", "word": "暇", "reading": "ひま", "meaning": "時間のゆとり。", "index": 0, "mode": "word"}, {"char": "記", "source": "添付画像語", "word": "記憶", "reading": "きおく", "meaning": "覚えていること。", "index": 0, "mode": "word"}, {"char": "憶", "source": "添付画像語", "word": "記憶", "reading": "きおく", "meaning": "覚えていること。", "index": 1, "mode": "word"}, {"char": "慎", "source": "添付画像語", "word": "慎重", "reading": "しんちょう", "meaning": "注意深いこと。", "index": 0, "mode": "word"}, {"char": "重", "source": "添付画像語", "word": "慎重", "reading": "しんちょう", "meaning": "注意深いこと。", "index": 1, "mode": "word"}, {"char": "惨", "source": "添付画像語", "word": "惨事", "reading": "さんじ", "meaning": "いたましいできごと。", "index": 0, "mode": "word"}, {"char": "事", "source": "添付画像語", "word": "惨事", "reading": "さんじ", "meaning": "いたましいできごと。", "index": 1, "mode": "word"}, {"char": "悩", "source": "添付画像語", "word": "悩む", "reading": "なやむ", "meaning": "苦しんで考えること。", "index": 0, "mode": "word"}, {"char": "恒", "source": "添付画像語", "word": "恒例", "reading": "こうれい", "meaning": "いつも決まって行うこと。", "index": 0, "mode": "word"}, {"char": "例", "source": "添付画像語", "word": "恒例", "reading": "こうれい", "meaning": "いつも決まって行うこと。", "index": 1, "mode": "word"}, {"char": "感", "source": "添付画像語", "word": "感謝", "reading": "かんしゃ", "meaning": "ありがたく思うこと。", "index": 0, "mode": "word"}, {"char": "謝", "source": "添付画像語", "word": "感謝", "reading": "かんしゃ", "meaning": "ありがたく思うこと。", "index": 1, "mode": "word"}, {"char": "恋", "source": "添付画像語", "word": "恋愛", "reading": "れんあい", "meaning": "人を恋しく思うこと。", "index": 0, "mode": "word"}, {"char": "愛", "source": "添付画像語", "word": "恋愛", "reading": "れんあい", "meaning": "人を恋しく思うこと。", "index": 1, "mode": "word"}, {"char": "恥", "source": "添付画像語", "word": "恥", "reading": "はじ", "meaning": "はずかしいこと。", "index": 0, "mode": "word"}, {"char": "恵", "source": "添付画像語", "word": "恵み", "reading": "めぐみ", "meaning": "めぐみ・恩恵。", "index": 0, "mode": "word"}, {"char": "恐", "source": "添付画像語", "word": "恐怖", "reading": "きょうふ", "meaning": "おそれること。", "index": 0, "mode": "word"}, {"char": "怖", "source": "添付画像語", "word": "恐怖", "reading": "きょうふ", "meaning": "おそれること。", "index": 1, "mode": "word"}, {"char": "怒", "source": "添付画像語", "word": "怒り", "reading": "いかり", "meaning": "腹を立てること。", "index": 0, "mode": "word"}, {"char": "奥", "source": "添付画像語", "word": "奥", "reading": "おく", "meaning": "内側の深いところ。", "index": 0, "mode": "word"}, {"char": "端", "source": "添付画像語", "word": "端", "reading": "たん", "meaning": "はし。", "index": 0, "mode": "word"}, {"char": "慢", "source": "添付画像語", "word": "慢心", "reading": "まんしん", "meaning": "うぬぼれること。", "index": 0, "mode": "word"}, {"char": "心", "source": "添付画像語", "word": "慢心", "reading": "まんしん", "meaning": "うぬぼれること。", "index": 1, "mode": "word"}, {"char": "補", "source": "添付画像語", "word": "補助", "reading": "ほじょ", "meaning": "助けること。", "index": 0, "mode": "word"}, {"char": "助", "source": "添付画像語", "word": "補助", "reading": "ほじょ", "meaning": "助けること。", "index": 1, "mode": "word"}, {"char": "忙", "source": "添付画像語", "word": "忙しい", "reading": "いそがしい", "meaning": "用事が多いこと。", "index": 0, "mode": "word"}, {"char": "創", "source": "添付画像語", "word": "創作", "reading": "そうさく", "meaning": "新しく作ること。", "index": 0, "mode": "word"}, {"char": "作", "source": "添付画像語", "word": "創作", "reading": "そうさく", "meaning": "新しく作ること。", "index": 1, "mode": "word"}, {"char": "踏", "source": "添付画像語", "word": "踏む", "reading": "とう", "meaning": "足でふむ。", "index": 0, "mode": "word"}, {"char": "釈", "source": "添付画像語", "word": "釈放", "reading": "しゃくほう", "meaning": "ときはなつこと。", "index": 0, "mode": "word"}, {"char": "放", "source": "添付画像語", "word": "釈放", "reading": "しゃくほう", "meaning": "ときはなつこと。", "index": 1, "mode": "word"}, {"char": "謝", "source": "添付画像語", "word": "謝罪", "reading": "しゃざい", "meaning": "あやまること。", "index": 0, "mode": "word"}, {"char": "罪", "source": "添付画像語", "word": "謝罪", "reading": "しゃざい", "meaning": "あやまること。", "index": 1, "mode": "word"}, {"char": "招", "source": "添付画像語", "word": "招待", "reading": "しょうたい", "meaning": "人を招くこと。", "index": 0, "mode": "word"}, {"char": "待", "source": "添付画像語", "word": "招待", "reading": "しょうたい", "meaning": "人を招くこと。", "index": 1, "mode": "word"}, {"char": "紹", "source": "添付画像語", "word": "紹介", "reading": "しょうかい", "meaning": "人や物を知らせること。", "index": 0, "mode": "word"}, {"char": "介", "source": "添付画像語", "word": "紹介", "reading": "しょうかい", "meaning": "人や物を知らせること。", "index": 1, "mode": "word"}, {"char": "訪", "source": "添付画像語", "word": "訪問", "reading": "ほうもん", "meaning": "たずねて行くこと。", "index": 0, "mode": "word"}, {"char": "問", "source": "添付画像語", "word": "訪問", "reading": "ほうもん", "meaning": "たずねて行くこと。", "index": 1, "mode": "word"}, {"char": "迅", "source": "添付画像語", "word": "迅速", "reading": "じんそく", "meaning": "とても速いこと。", "index": 0, "mode": "word"}, {"char": "速", "source": "添付画像語", "word": "迅速", "reading": "じんそく", "meaning": "とても速いこと。", "index": 1, "mode": "word"}, {"char": "却", "source": "添付画像語", "word": "却下", "reading": "きゃっか", "meaning": "退けること。", "index": 0, "mode": "word"}, {"char": "下", "source": "添付画像語", "word": "却下", "reading": "きゃっか", "meaning": "退けること。", "index": 1, "mode": "word"}, {"char": "払", "source": "添付画像語", "word": "払う", "reading": "はらう", "meaning": "お金などを支払う。", "index": 0, "mode": "word"}, {"char": "攻", "source": "添付画像語", "word": "攻撃", "reading": "こうげき", "meaning": "相手を攻めること。", "index": 0, "mode": "word"}, {"char": "撃", "source": "添付画像語", "word": "攻撃", "reading": "こうげき", "meaning": "相手を攻めること。", "index": 1, "mode": "word"}, {"char": "救", "source": "添付画像語", "word": "救助", "reading": "きゅうじょ", "meaning": "助けること。", "index": 0, "mode": "word"}, {"char": "助", "source": "添付画像語", "word": "救助", "reading": "きゅうじょ", "meaning": "助けること。", "index": 1, "mode": "word"}, {"char": "防", "source": "添付画像語", "word": "防災", "reading": "ぼうさい", "meaning": "災害を防ぐこと。", "index": 0, "mode": "word"}, {"char": "災", "source": "添付画像語", "word": "防災", "reading": "ぼうさい", "meaning": "災害を防ぐこと。", "index": 1, "mode": "word"}, {"char": "粘", "source": "添付画像語", "word": "粘る", "reading": "ねばる", "meaning": "あきらめず続けること。", "index": 0, "mode": "word"}, {"char": "群", "source": "添付画像語", "word": "群", "reading": "ぐん", "meaning": "むれ。", "index": 0, "mode": "word"}, {"char": "抜", "source": "添付画像語", "word": "抜粋", "reading": "ばっすい", "meaning": "一部を抜き出すこと。", "index": 0, "mode": "word"}, {"char": "粋", "source": "添付画像語", "word": "抜粋", "reading": "ばっすい", "meaning": "一部を抜き出すこと。", "index": 1, "mode": "word"}, {"char": "押", "source": "添付画像語", "word": "押印", "reading": "おういん", "meaning": "印を押すこと。", "index": 0, "mode": "word"}, {"char": "印", "source": "添付画像語", "word": "押印", "reading": "おういん", "meaning": "印を押すこと。", "index": 1, "mode": "word"}, {"char": "捕", "source": "添付画像語", "word": "捕獲", "reading": "ほかく", "meaning": "つかまえること。", "index": 0, "mode": "word"}, {"char": "獲", "source": "添付画像語", "word": "捕獲", "reading": "ほかく", "meaning": "つかまえること。", "index": 1, "mode": "word"}, {"char": "振", "source": "添付画像語", "word": "振興", "reading": "しんこう", "meaning": "盛んにすること。", "index": 0, "mode": "word"}, {"char": "興", "source": "添付画像語", "word": "振興", "reading": "しんこう", "meaning": "盛んにすること。", "index": 1, "mode": "word"}, {"char": "解", "source": "添付画像語", "word": "解放", "reading": "かいほう", "meaning": "自由にすること。", "index": 0, "mode": "word"}, {"char": "放", "source": "添付画像語", "word": "解放", "reading": "かいほう", "meaning": "自由にすること。", "index": 1, "mode": "word"}, {"char": "摘", "source": "添付画像語", "word": "摘発", "reading": "てきはつ", "meaning": "悪事をあばくこと。", "index": 0, "mode": "word"}, {"char": "発", "source": "添付画像語", "word": "摘発", "reading": "てきはつ", "meaning": "悪事をあばくこと。", "index": 1, "mode": "word"}, {"char": "搬", "source": "添付画像語", "word": "搬送", "reading": "はんそう", "meaning": "運んで送ること。", "index": 0, "mode": "word"}, {"char": "送", "source": "添付画像語", "word": "搬送", "reading": "はんそう", "meaning": "運んで送ること。", "index": 1, "mode": "word"}, {"char": "描", "source": "添付画像語", "word": "描写", "reading": "びょうしゃ", "meaning": "様子を表すこと。", "index": 0, "mode": "word"}, {"char": "写", "source": "添付画像語", "word": "描写", "reading": "びょうしゃ", "meaning": "様子を表すこと。", "index": 1, "mode": "word"}, {"char": "掘", "source": "添付画像語", "word": "掘削", "reading": "くっさく", "meaning": "地面などを掘ること。", "index": 0, "mode": "word"}, {"char": "削", "source": "添付画像語", "word": "掘削", "reading": "くっさく", "meaning": "地面などを掘ること。", "index": 1, "mode": "word"}, {"char": "捕", "source": "添付画像語", "word": "捕虜", "reading": "ほりょ", "meaning": "捕まえられた兵。", "index": 0, "mode": "word"}, {"char": "虜", "source": "添付画像語", "word": "捕虜", "reading": "ほりょ", "meaning": "捕まえられた兵。", "index": 1, "mode": "word"}, {"char": "振", "source": "添付画像語", "word": "振舞う", "reading": "ふるまう", "meaning": "行動する。もてなす。", "index": 0, "mode": "word"}, {"char": "舞", "source": "添付画像語", "word": "振舞う", "reading": "ふるまう", "meaning": "行動する。もてなす。", "index": 1, "mode": "word"}, {"char": "抱", "source": "添付画像語", "word": "抱く", "reading": "だく", "meaning": "腕でかかえる。", "index": 0, "mode": "word"}, {"char": "拍", "source": "添付画像語", "word": "拍手", "reading": "はくしゅ", "meaning": "手を打ってほめること。", "index": 0, "mode": "word"}, {"char": "手", "source": "添付画像語", "word": "拍手", "reading": "はくしゅ", "meaning": "手を打ってほめること。", "index": 1, "mode": "word"}, {"char": "拓", "source": "添付画像語", "word": "拓本", "reading": "たくほん", "meaning": "石碑などの文字を紙に写し取ること。", "index": 0, "mode": "word"}, {"char": "本", "source": "添付画像語", "word": "拓本", "reading": "たくほん", "meaning": "石碑などの文字を紙に写し取ること。", "index": 1, "mode": "word"}, {"char": "認", "source": "添付画像語", "word": "認識", "reading": "にんしき", "meaning": "物事を知り理解すること。", "index": 0, "mode": "word"}, {"char": "識", "source": "添付画像語", "word": "認識", "reading": "にんしき", "meaning": "物事を知り理解すること。", "index": 1, "mode": "word"}, {"char": "圧", "source": "漢検5級むずかしめ", "word": "圧力", "reading": "あつりょく", "meaning": "上から押さえつける力。", "index": 0, "mode": "word"}, {"char": "移", "source": "漢検5級むずかしめ", "word": "移動", "reading": "いどう", "meaning": "場所を変えて動くこと。", "index": 0, "mode": "word"}, {"char": "永", "source": "漢検5級むずかしめ", "word": "永遠", "reading": "えいえん", "meaning": "いつまでも続くこと。", "index": 0, "mode": "word"}, {"char": "営", "source": "漢検5級むずかしめ", "word": "営む", "reading": "いとなむ", "meaning": "仕事や生活を続けて行う。", "index": 0, "mode": "word"}, {"char": "衛", "source": "漢検5級むずかしめ", "word": "衛星", "reading": "えいせい", "meaning": "惑星のまわりを回る天体。", "index": 0, "mode": "word"}, {"char": "演", "source": "漢検5級むずかしめ", "word": "演説", "reading": "えんぜつ", "meaning": "人前で意見を述べること。", "index": 0, "mode": "word"}, {"char": "援", "source": "漢検5級むずかしめ", "word": "応援", "reading": "おうえん", "meaning": "力を貸して助けること。", "index": 1, "mode": "word"}, {"char": "恩", "source": "漢検5級むずかしめ", "word": "恩人", "reading": "おんじん", "meaning": "恩を受けた人。", "index": 0, "mode": "word"}, {"char": "仮", "source": "漢検5級むずかしめ", "word": "仮説", "reading": "かせつ", "meaning": "まだ証明されていない考え。", "index": 0, "mode": "word"}, {"char": "賀", "source": "漢検5級むずかしめ", "word": "賀状", "reading": "がじょう", "meaning": "お祝いの手紙。", "index": 0, "mode": "word"}, {"char": "快", "source": "漢検5級むずかしめ", "word": "快適", "reading": "かいてき", "meaning": "気持ちよく過ごせること。", "index": 0, "mode": "word"}, {"char": "幹", "source": "漢検5級むずかしめ", "word": "幹部", "reading": "かんぶ", "meaning": "中心となる役目の人たち。", "index": 0, "mode": "word"}, {"char": "寄", "source": "漢検5級むずかしめ", "word": "寄付", "reading": "きふ", "meaning": "金品を差し出すこと。", "index": 0, "mode": "word"}, {"char": "規", "source": "漢検5級むずかしめ", "word": "規則", "reading": "きそく", "meaning": "守るべき決まり。", "index": 0, "mode": "word"}, {"char": "術", "source": "漢検5級むずかしめ", "word": "技術", "reading": "ぎじゅつ", "meaning": "物事をうまく行うわざ。", "index": 1, "mode": "word"}, {"char": "義", "source": "漢検5級むずかしめ", "word": "義務", "reading": "ぎむ", "meaning": "しなければならない務め。", "index": 0, "mode": "word"}, {"char": "助", "source": "漢検5級むずかしめ", "word": "救助", "reading": "きゅうじょ", "meaning": "助け出すこと。", "index": 1, "mode": "word"}, {"char": "漁", "source": "漢検5級むずかしめ", "word": "漁港", "reading": "ぎょこう", "meaning": "漁船が集まる港。", "index": 0, "mode": "word"}, {"char": "均", "source": "漢検5級むずかしめ", "word": "均等", "reading": "きんとう", "meaning": "かたよりなく等しいこと。", "index": 0, "mode": "word"}, {"char": "禁", "source": "漢検5級むずかしめ", "word": "禁煙", "reading": "きんえん", "meaning": "たばこを吸わないこと。", "index": 0, "mode": "word"}, {"char": "点", "source": "漢検5級むずかしめ", "word": "句読点", "reading": "くとうてん", "meaning": "文の区切りに打つしるし。", "index": 2, "mode": "word"}, {"char": "群", "source": "漢検5級むずかしめ", "word": "群集", "reading": "ぐんしゅう", "meaning": "人が多く集まること。", "index": 0, "mode": "word"}, {"char": "敬", "source": "漢検5級むずかしめ", "word": "敬語", "reading": "けいご", "meaning": "相手をうやまう言い方。", "index": 0, "mode": "word"}, {"char": "劇", "source": "漢検5級むずかしめ", "word": "劇場", "reading": "げきじょう", "meaning": "芝居などを上演する場所。", "index": 0, "mode": "word"}, {"char": "激", "source": "漢検5級むずかしめ", "word": "激戦", "reading": "げきせん", "meaning": "はげしい戦い。", "index": 0, "mode": "word"}, {"char": "居", "source": "漢検5級むずかしめ", "word": "穴居", "reading": "けっきょ", "meaning": "穴の中に住むこと。", "index": 1, "mode": "word"}, {"char": "健", "source": "漢検5級むずかしめ", "word": "健康", "reading": "けんこう", "meaning": "体がすこやかなこと。", "index": 0, "mode": "word"}, {"char": "険", "source": "漢検5級むずかしめ", "word": "険しい", "reading": "けわしい", "meaning": "傾斜が急で厳しいようす。", "index": 0, "mode": "word"}, {"char": "鉱", "source": "漢検5級むずかしめ", "word": "鉱物", "reading": "こうぶつ", "meaning": "地中からとれる物質。", "index": 0, "mode": "word"}, {"char": "構", "source": "漢検5級むずかしめ", "word": "構造", "reading": "こうぞう", "meaning": "組み立てられたつくり。", "index": 0, "mode": "word"}, {"char": "興", "source": "漢検5級むずかしめ", "word": "興奮", "reading": "こうふん", "meaning": "気持ちが高ぶること。", "index": 0, "mode": "word"}, {"char": "雑", "source": "漢検5級むずかしめ", "word": "混雑", "reading": "こんざつ", "meaning": "こみ合っていること。", "index": 1, "mode": "word"}, {"char": "査", "source": "漢検5級むずかしめ", "word": "査定", "reading": "さてい", "meaning": "調べて決めること。", "index": 0, "mode": "word"}, {"char": "際", "source": "漢検5級むずかしめ", "word": "際立つ", "reading": "きわだつ", "meaning": "特に目立つ。", "index": 0, "mode": "word"}, {"char": "雑", "source": "漢検5級むずかしめ", "word": "雑誌", "reading": "ざっし", "meaning": "記事をまとめた定期刊行物。", "index": 0, "mode": "word"}, {"char": "酸", "source": "漢検5級むずかしめ", "word": "酸素", "reading": "さんそ", "meaning": "空気中にある気体の一つ。", "index": 0, "mode": "word"}, {"char": "資", "source": "漢検5級むずかしめ", "word": "資源", "reading": "しげん", "meaning": "役に立つ材料や力のもと。", "index": 0, "mode": "word"}, {"char": "飼", "source": "漢検5級むずかしめ", "word": "飼育", "reading": "しいく", "meaning": "動物を育てること。", "index": 0, "mode": "word"}, {"char": "磁", "source": "漢検5級むずかしめ", "word": "磁石", "reading": "じしゃく", "meaning": "鉄を引きつけるもの。", "index": 0, "mode": "word"}, {"char": "謝", "source": "漢検5級むずかしめ", "word": "謝礼", "reading": "しゃれい", "meaning": "お礼として渡す金品。", "index": 0, "mode": "word"}, {"char": "授", "source": "漢検5級むずかしめ", "word": "授業", "reading": "じゅぎょう", "meaning": "学校で学ぶ時間。", "index": 0, "mode": "word"}, {"char": "繕", "source": "漢検5級むずかしめ", "word": "修繕", "reading": "しゅうぜん", "meaning": "こわれた所を直すこと。", "index": 1, "mode": "word"}, {"char": "述", "source": "漢検5級むずかしめ", "word": "述語", "reading": "じゅつご", "meaning": "文の中で動作や状態を表す語。", "index": 0, "mode": "word"}, {"char": "招", "source": "漢検5級むずかしめ", "word": "招待", "reading": "しょうたい", "meaning": "人をまねくこと。", "index": 0, "mode": "word"}, {"char": "証", "source": "漢検5級むずかしめ", "word": "証拠", "reading": "しょうこ", "meaning": "確かだと示す手がかり。", "index": 0, "mode": "word"}, {"char": "承", "source": "漢検5級むずかしめ", "word": "承認", "reading": "しょうにん", "meaning": "認めて受け入れること。", "index": 0, "mode": "word"}, {"char": "条", "source": "漢検5級むずかしめ", "word": "条約", "reading": "じょうやく", "meaning": "国どうしの約束。", "index": 0, "mode": "word"}, {"char": "状", "source": "漢検5級むずかしめ", "word": "状況", "reading": "じょうきょう", "meaning": "その場のありさま。", "index": 0, "mode": "word"}, {"char": "識", "source": "漢検5級むずかしめ", "word": "常識", "reading": "じょうしき", "meaning": "ふつうだと考えられる知識。", "index": 1, "mode": "word"}, {"char": "職", "source": "漢検5級むずかしめ", "word": "職場", "reading": "しょくば", "meaning": "仕事をする場所。", "index": 0, "mode": "word"}, {"char": "限", "source": "漢検5級むずかしめ", "word": "制限", "reading": "せいげん", "meaning": "限りをつけること。", "index": 1, "mode": "word"}, {"char": "責", "source": "漢検5級むずかしめ", "word": "責任", "reading": "せきにん", "meaning": "引き受けるべき務め。", "index": 0, "mode": "word"}, {"char": "接", "source": "漢検5級むずかしめ", "word": "接続", "reading": "せつぞく", "meaning": "つなぎ合わせること。", "index": 0, "mode": "word"}, {"char": "舌", "source": "漢検5級むずかしめ", "word": "舌戦", "reading": "ぜっせん", "meaning": "言い争い。", "index": 0, "mode": "word"}, {"char": "絶", "source": "漢検5級むずかしめ", "word": "絶景", "reading": "ぜっけい", "meaning": "すばらしい景色。", "index": 0, "mode": "word"}, {"char": "銭", "source": "漢検5級むずかしめ", "word": "銭湯", "reading": "せんとう", "meaning": "入浴できる公衆浴場。", "index": 0, "mode": "word"}, {"char": "祖", "source": "漢検5級むずかしめ", "word": "祖先", "reading": "そせん", "meaning": "先の代の人々。", "index": 0, "mode": "word"}, {"char": "敵", "source": "漢検5級むずかしめ", "word": "素敵", "reading": "すてき", "meaning": "とてもよいと感じること。", "index": 1, "mode": "word"}, {"char": "造", "source": "漢検5級むずかしめ", "word": "造船", "reading": "ぞうせん", "meaning": "船を造ること。", "index": 0, "mode": "word"}, {"char": "貸", "source": "漢検5級むずかしめ", "word": "貸与", "reading": "たいよ", "meaning": "貸して与えること。", "index": 0, "mode": "word"}, {"char": "退", "source": "漢検5級むずかしめ", "word": "退職", "reading": "たいしょく", "meaning": "仕事をやめること。", "index": 0, "mode": "word"}, {"char": "結", "source": "漢検5級むずかしめ", "word": "団結", "reading": "だんけつ", "meaning": "心を一つにしてまとまること。", "index": 1, "mode": "word"}, {"char": "提", "source": "漢検5級むずかしめ", "word": "提案", "reading": "ていあん", "meaning": "考えを出してすすめること。", "index": 0, "mode": "word"}, {"char": "敵", "source": "漢検5級むずかしめ", "word": "敵対", "reading": "てきたい", "meaning": "対立して張り合うこと。", "index": 0, "mode": "word"}, {"char": "統", "source": "漢検5級むずかしめ", "word": "統計", "reading": "とうけい", "meaning": "数をまとめて調べること。", "index": 0, "mode": "word"}, {"char": "導", "source": "漢検5級むずかしめ", "word": "導入", "reading": "どうにゅう", "meaning": "新しいものを取り入れること。", "index": 0, "mode": "word"}, {"char": "独", "source": "漢検5級むずかしめ", "word": "独創", "reading": "どくそう", "meaning": "他にまねのない新しい工夫。", "index": 0, "mode": "word"}, {"char": "任", "source": "漢検5級むずかしめ", "word": "任務", "reading": "にんむ", "meaning": "受け持ったつとめ。", "index": 0, "mode": "word"}, {"char": "燃", "source": "漢検5級むずかしめ", "word": "燃焼", "reading": "ねんしょう", "meaning": "燃えること。", "index": 0, "mode": "word"}, {"char": "俵", "source": "漢検5級むずかしめ", "word": "俵型", "reading": "たわらがた", "meaning": "俵のような形。", "index": 0, "mode": "word"}, {"char": "破", "source": "漢検5級むずかしめ", "word": "破損", "reading": "はそん", "meaning": "こわれたり傷ついたりすること。", "index": 0, "mode": "word"}, {"char": "犯", "source": "漢検5級むずかしめ", "word": "犯人", "reading": "はんにん", "meaning": "罪を犯した人。", "index": 0, "mode": "word"}, {"char": "較", "source": "漢検5級むずかしめ", "word": "比較", "reading": "ひかく", "meaning": "くらべ合わせること。", "index": 1, "mode": "word"}, {"char": "肥", "source": "漢検5級むずかしめ", "word": "肥料", "reading": "ひりょう", "meaning": "植物を育てるための養分。", "index": 0, "mode": "word"}, {"char": "非", "source": "漢検5級むずかしめ", "word": "非難", "reading": "ひなん", "meaning": "悪い点を責めること。", "index": 0, "mode": "word"}, {"char": "備", "source": "漢検5級むずかしめ", "word": "備蓄", "reading": "びちく", "meaning": "非常時にそなえてたくわえること。", "index": 0, "mode": "word"}, {"char": "評", "source": "漢検5級むずかしめ", "word": "評判", "reading": "ひょうばん", "meaning": "世間でのうわさや評価。", "index": 0, "mode": "word"}, {"char": "復", "source": "漢検5級むずかしめ", "word": "復旧", "reading": "ふっきゅう", "meaning": "もとどおりに直すこと。", "index": 0, "mode": "word"}, {"char": "仏", "source": "漢検5級むずかしめ", "word": "仏像", "reading": "ぶつぞう", "meaning": "仏の姿をかたどった像。", "index": 0, "mode": "word"}, {"char": "編", "source": "漢検5級むずかしめ", "word": "編入", "reading": "へんにゅう", "meaning": "途中から仲間に入ること。", "index": 0, "mode": "word"}, {"char": "弁", "source": "漢検5級むずかしめ", "word": "弁当", "reading": "べんとう", "meaning": "持ち運ぶ食事。", "index": 0, "mode": "word"}, {"char": "険", "source": "漢検5級むずかしめ", "word": "保険", "reading": "ほけん", "meaning": "万一に備える仕組み。", "index": 1, "mode": "word"}, {"char": "墓", "source": "漢検5級むずかしめ", "word": "墓石", "reading": "はかいし", "meaning": "墓に立てる石。", "index": 0, "mode": "word"}, {"char": "豊", "source": "漢検5級むずかしめ", "word": "豊作", "reading": "ほうさく", "meaning": "作物がたくさんとれること。", "index": 0, "mode": "word"}, {"char": "防", "source": "漢検5級むずかしめ", "word": "防災", "reading": "ぼうさい", "meaning": "災害を防ぐための備え。", "index": 0, "mode": "word"}, {"char": "測", "source": "漢検5級むずかしめ", "word": "未測定", "reading": "みそくてい", "meaning": "まだ測っていないこと。", "index": 1, "mode": "word"}, {"char": "罪", "source": "漢検5級むずかしめ", "word": "無罪", "reading": "むざい", "meaning": "罪がないこと。", "index": 1, "mode": "word"}, {"char": "輸", "source": "漢検5級むずかしめ", "word": "輸送", "reading": "ゆそう", "meaning": "運んで送ること。", "index": 0, "mode": "word"}, {"char": "裕", "source": "漢検5級むずかしめ", "word": "余裕", "reading": "よゆう", "meaning": "ゆとりがあること。", "index": 1, "mode": "word"}, {"char": "容", "source": "漢検5級むずかしめ", "word": "容器", "reading": "ようき", "meaning": "物を入れるうつわ。", "index": 0, "mode": "word"}, {"char": "略", "source": "漢検5級むずかしめ", "word": "略図", "reading": "りゃくず", "meaning": "大まかに描いた図。", "index": 0, "mode": "word"}, {"char": "留", "source": "漢検5級むずかしめ", "word": "留守", "reading": "るす", "meaning": "家に人がいないこと。", "index": 0, "mode": "word"}, {"char": "領", "source": "漢検5級むずかしめ", "word": "領土", "reading": "りょうど", "meaning": "国の土地。", "index": 0, "mode": "word"}, {"char": "歴", "source": "漢検5級むずかしめ", "word": "歴史", "reading": "れきし", "meaning": "これまでの出来事の積み重ね。", "index": 0, "mode": "word"}];
+const KANKEN_CHARS=["依", "存", "風", "俗", "候", "補", "到", "着", "傾", "向", "儀", "式", "妙", "介", "入", "仰", "天", "婚", "姻", "娘", "姓", "奴", "隷", "威", "圧", "宿", "泊", "偉", "人", "侵", "伺", "暇", "記", "憶", "慎", "重", "惨", "事", "悩", "恒", "例", "感", "謝", "恋", "愛", "恥", "恵", "恐", "怖", "怒", "奥", "端", "慢", "心", "助", "忙", "創", "作", "踏", "釈", "放", "罪", "招", "待", "紹", "訪", "問", "迅", "速", "却", "下", "払", "攻", "撃", "救", "防", "災", "粘", "群", "抜", "粋", "押", "印", "捕", "獲", "振", "興", "解", "摘", "発", "搬", "送", "描", "写", "掘", "削", "虜", "舞", "抱", "拍", "手", "拓", "本", "認", "識", "移", "永", "営", "衛", "演", "援", "恩", "仮", "賀", "快", "幹", "寄", "規", "術", "義", "漁", "均", "禁", "点", "敬", "劇", "激", "居", "健", "険", "鉱", "構", "雑", "査", "際", "酸", "資", "飼", "磁", "授", "繕", "述", "証", "承", "条", "状", "職", "限", "責", "接", "舌", "絶", "銭", "祖", "敵", "造", "貸", "退", "結", "提", "統", "導", "独", "任", "燃", "俵", "破", "犯", "較", "肥", "非", "備", "評", "復", "仏", "編", "弁", "墓", "豊", "測", "輸", "裕", "容", "略", "留", "領", "歴"];
+let order=[],idx=0,ok=0,done=0,engineReady=false;
+let canvas,canvasWrap,strokes=[],curStroke=null,drawing=false;
+let currentStrokeWriter=null;
+function safeGet(key, fallback='[]'){
+  try { return localStorage.getItem(key) || fallback; }
+  catch(e) { return fallback; }
+}
+function safeSet(key, val){
+  try { localStorage.setItem(key, val); }
+  catch(e) {}
+}
+let wrongIds=[];
+try { wrongIds=JSON.parse(safeGet('highKanjiWrong','[]')); }
+catch(e) { wrongIds=[]; }
+
+function $(id){return document.getElementById(id)}
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function start(){
+  let mode=$('mode').value;
+  let pool=QUESTIONS.map((q,i)=>({...q,id:i}));
+  if(mode==='image') pool=pool.filter(q=>q.source==='添付画像語');
+  if(mode==='kanken') pool=pool.filter(q=>q.source==='漢検5級むずかしめ');
+  if(mode==='wrong') pool=pool.filter(q=>wrongIds.includes(q.id));
+  if(!pool.length) pool=QUESTIONS.map((q,i)=>({...q,id:i}));
+  order=shuffle(pool);idx=0;ok=0;done=0;showQ();
+}
+function maskedWord(q){return [...q.word].map((c,i)=>i===q.index?'□':c).join('')}
+function showQ(){
+  if(!order.length) start();
+  const cur=order[idx];
+  const masked = maskedWord(cur);
+  const isSingle = [...cur.word].length <= 1;
+  const qText = isSingle
+    ? `Q${idx+1}. 「${cur.reading}」＝「${cur.meaning}」を表す漢字を書け`
+    : `Q${idx+1}. 「${cur.reading}」＝${masked}（${cur.meaning}）の □ に入る漢字を書け`;
+  $('question').textContent = qText;
+  $('answerText').textContent=`正解：${cur.char}`;
+  $('meaning').textContent=`${cur.word}　${cur.meaning}`;
+  $('resultBox').classList.remove('open');
+  if($('strokeVisual')) $('strokeVisual').innerHTML='';
+  if($('strokeVisualNote')) $('strokeVisualNote').textContent='判定後に正しい漢字画像を表示';
+  clearPad(false);drawGhost();updateScore();
+}
+function next(){idx=(idx+1)%order.length;showQ()}
+function updateScore(){$('score').textContent=`${done}問中 ${ok}問正解`}
+function drawGhost(){if(!order.length){$('ghost').textContent='';return}$('ghost').textContent=$('ghostToggle').checked ? order[idx].char : ''}
+function pos(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}}
+function clearPad(hide=true){strokes=[];curStroke=null;if(window.KanjiCanvas && engineReady) KanjiCanvas.erase('kanjiCanvas'); else fallbackRedraw();if(hide)$('resultBox').classList.remove('open')}
+function undo(){if(strokes.length)strokes.pop();if(window.KanjiCanvas && engineReady) KanjiCanvas.deleteLast('kanjiCanvas'); else fallbackRedraw();$('resultBox').classList.remove('open')}
+function resizeCanvas(){
+  canvas=$('kanjiCanvas');
+  if(!canvas) return;
+  canvasWrap=canvas.parentElement;
+  const r=canvasWrap.getBoundingClientRect();
+  canvas.width=Math.max(1,Math.floor(r.width));
+  canvas.height=Math.max(1,Math.floor(r.height));
+}
+function initEngine(){
+  try{
+    resizeCanvas();
+    if(window.KanjiCanvas && KanjiCanvas.init){
+      try{ KanjiCanvas.init('kanjiCanvas'); engineReady=true; }
+      catch(e){ engineReady=false; attachFallbackDrawing(); }
+    }else{
+      engineReady=false; attachFallbackDrawing();
+    }
+    $('status').textContent = engineReady
+      ? '認識エンジンOK。語の中に入る一文字を書いて「自動判定」。一文字語のときは意味も問題文に表示。'
+      : '認識エンジン未読込。形比較で動作中。';
+    start();
+  }catch(e){
+    const q=$('question'); if(q) q.textContent='読み込みエラー：ページを再読込してください';
+    console.error(e);
+  }
+}
+function normalizeCandidates(raw){if(!raw)return [];if(Array.isArray(raw))return raw.map(x=>String(x)).filter(Boolean);return String(raw).replace(/候補|認識候補|Candidates|candidate/gi,'').replace(/[\s,、|｜/／・]+/g,'').split('').filter(Boolean)}
+function getCandidateList(){const el=$('candidateList');const txt=el?(el.textContent||el.innerText||''):'';return normalizeCandidates(txt)}
+function recognizeNow(){
+  if(!order.length)return;
+  const ans=order[idx].char;
+  let cands=[];
+  if(window.KanjiCanvas && engineReady){
+    try{
+      const raw=KanjiCanvas.recognize('kanjiCanvas');
+      cands=normalizeCandidates(raw);
+      setTimeout(()=>{let domCands=getCandidateList(); if(!cands.length && domCands.length)cands=domCands; judgeCandidates(ans,cands);},80);
+      return;
+    }catch(e){cands=[]}
+  }
+  judgeCandidates(ans,cands);
+}
+function judgeCandidates(ans,cands){
+  cands=[...new Set(cands)];
+  const pos=cands.indexOf(ans);
+  const shape=fallbackScore(ans);
+  let msg,isOk=false,level='ng';
+  if(pos===0){isOk=true;level='ok';msg=`○ 正解！ 認識1位・形${shape}点`;}
+  else if(pos>0 && pos<5){isOk=true;level='ok';msg=`○ 正解扱い！ 候補${pos+1}位・形${shape}点`;}
+  else if(pos>=5 && pos<10 && shape>=25){isOk=true;level='ok';msg=`○ 手書きOK！ 候補${pos+1}位・形${shape}点`;}
+  else if(shape>=60){isOk=true;level='ok';msg=`○ 見た目OK！ 形${shape}点`;}
+  else if(pos>=0 && pos<10){level='maybe';msg=`△ 正解候補あり（${pos+1}位）・形${shape}点`;}
+  else if(shape>=35){level='maybe';msg=`△ 見た目は近い（形${shape}点）`;}
+  else {level='ng';msg=`× たぶん違う（形${shape}点）`;}
+  finishJudge(isOk,msg,cands,level);
+}
+function finishJudge(isOk,msg,cands,level=''){ 
+  const cur=order[idx];
+  done++; if(isOk)ok++;
+  if(isOk) wrongIds=wrongIds.filter(id=>id!==cur.id); else if(!wrongIds.includes(cur.id)) wrongIds.push(cur.id);
+  safeSet('highKanjiWrong',JSON.stringify(wrongIds));
+  updateScore();
+  const cls=isOk?'okTxt':(level==='maybe'||msg.startsWith('△'))?'maybeTxt':'ngTxt';
+  $('resultMain').className='resultMain '+cls;
+  $('resultMain').textContent=msg;
+  $('candidates').textContent=cands.length ? `認識候補：${cands.slice(0,10).join('、')}` : '認識候補：なし';
+  showStrokeVisual(cur.char);
+  $('resultBox').classList.add('open');
+}
+function loadHanziWriterData(char,onComplete){ 
+  const urls=[
+    `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${encodeURIComponent(char)}.json`,
+    `https://unpkg.com/hanzi-writer-data@2.0/${encodeURIComponent(char)}.json`
+  ];
+  (function tryNext(i){if(i>=urls.length){onComplete(null);return}fetch(urls[i]).then(r=>{if(!r.ok)throw new Error('fetch failed');return r.json()}).then(data=>onComplete(data)).catch(()=>tryNext(i+1));})(0);
+}
+function showStrokeVisual(ch){ 
+  const el=$('strokeVisual'),note=$('strokeVisualNote'); if(!el||!note)return;
+  el.innerHTML=''; note.textContent=`「${ch}」の正しい字形と書き順を表示中…`; currentStrokeWriter=null;
+  if(window.HanziWriter){ 
+    try{ 
+      currentStrokeWriter=HanziWriter.create('strokeVisual',ch,{width:220,height:220,padding:10,showOutline:true,showCharacter:false,strokeAnimationSpeed:.85,delayBetweenStrokes:180,outlineColor:'rgba(255,255,255,0.25)',strokeColor:'#ffffff',radicalColor:'#60a5fa',charDataLoader:(char,onComplete)=>loadHanziWriterData(char,onComplete)});
+      note.textContent=`「${ch}」の正しい漢字画像。上で一画ずつ再生する。`;
+      setTimeout(()=>{try{currentStrokeWriter.animateCharacter()}catch(e){}},80); return;
+    }catch(e){}
+  }
+  el.innerHTML=`<div class="strokeCharFallback">${ch}</div>`;
+  note.textContent=`ネット読込できないため「${ch}」の字だけ表示。`;
+}
+function replayStrokeVisual(){if(currentStrokeWriter && currentStrokeWriter.animateCharacter){try{currentStrokeWriter.animateCharacter();return}catch(e){}} const cur=order[idx]; if(cur)showStrokeVisual(cur.char)}
+
+/* fallback drawing / shape score */
+function attachFallbackDrawing(){const ctx=canvas.getContext('2d');canvas.addEventListener('pointerdown',e=>{e.preventDefault();drawing=true;canvas.setPointerCapture(e.pointerId);curStroke=[pos(e)];strokes.push(curStroke);});canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();curStroke.push(pos(e));fallbackRedraw();});function end(e){if(!drawing)return;drawing=false;e.preventDefault();}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end)}
+function fallbackRedraw(){if(!canvas)return;const ctx=canvas.getContext('2d'),r=canvas.getBoundingClientRect();ctx.clearRect(0,0,r.width,r.height);strokes.forEach(s=>{if(s.length<2)return;ctx.beginPath();ctx.moveTo(s[0].x,s[0].y);for(let i=1;i<s.length;i++){const p=s[i],pr=s[i-1],mx=(p.x+pr.x)/2,my=(p.y+pr.y)/2;ctx.quadraticCurveTo(pr.x,pr.y,mx,my)}ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#0f172a';ctx.lineWidth=11;ctx.stroke()})}
+function fallbackScore(ch){renderFallbackUser();renderFallbackRef(ch);const ref=$('fallbackRef').getContext('2d').getImageData(0,0,320,320).data;const usr=$('fallbackTmp').getContext('2d').getImageData(0,0,320,320).data;let overlap=0,userInk=0,refInk=0,near=0,W=320,H=320,rm=new Uint8Array(W*H),um=new Uint8Array(W*H);for(let i=0,p=0;i<ref.length;i+=4,p++){rm[p]=ref[i]<180?1:0;um[p]=usr[i]<200?1:0;if(rm[p])refInk++;if(um[p])userInk++;if(rm[p]&&um[p])overlap++}for(let y=3;y<H-3;y++)for(let x=3;x<W-3;x++){const p=y*W+x;if(!um[p])continue;let hit=false;for(let dy=-3;dy<=3&&!hit;dy++)for(let dx=-3;dx<=3;dx++){if(rm[(y+dy)*W+x+dx]){hit=true;break}}if(hit)near++}const precision=userInk?near/userInk:0,recall=refInk?overlap/refInk:0,density=Math.min(userInk,refInk)/Math.max(userInk,refInk||1);return Math.round((precision*.70+recall*.12+density*.18)*100)}
+function renderFallbackRef(ch){const c=$('fallbackRef'),g=c.getContext('2d');g.clearRect(0,0,320,320);g.fillStyle='#fff';g.fillRect(0,0,320,320);g.fillStyle='#000';g.textAlign='center';g.textBaseline='middle';g.font='260px "Yu Mincho","Hiragino Mincho ProN","Noto Serif CJK JP",serif';g.fillText(ch,160,174)}
+function renderFallbackUser(){ 
+  const out=$('fallbackTmp'),g=out.getContext('2d');g.clearRect(0,0,320,320);g.fillStyle='#fff';g.fillRect(0,0,320,320);
+  const srcCanvas=$('kanjiCanvas');const sw=srcCanvas.width,sh=srcCanvas.height;if(!sw||!sh)return;const sctx=srcCanvas.getContext('2d');let img;try{img=sctx.getImageData(0,0,sw,sh)}catch(e){return}
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,ink=0;const data=img.data;
+  for(let y=0;y<sh;y++){for(let x=0;x<sw;x++){const i=(y*sw+x)*4;const r=data[i],gg=data[i+1],b=data[i+2],a=data[i+3];const dark=(r+gg+b)/3<220;const saturated=(Math.max(r,gg,b)-Math.min(r,gg,b))>28;if(a>20&&(dark||saturated)&&!(r>230&&gg>230&&b>230)){const gray=Math.abs(r-gg)<8&&Math.abs(gg-b)<8&&r>145;if(gray)continue;minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);ink++}}}
+  if(!ink)return;const bW=Math.max(1,maxX-minX+1),bH=Math.max(1,maxY-minY+1),margin=30,scale=Math.min((320-margin*2)/bW,(320-margin*2)/bH),dw=bW*scale,dh=bH*scale,dx=(320-dw)/2,dy=(320-dh)/2;g.drawImage(srcCanvas,minX,minY,bW,bH,dx,dy,dw,dh);
+  const outImg=g.getImageData(0,0,320,320),od=outImg.data;for(let i=0;i<od.length;i+=4){const r=od[i],gg=od[i+1],b=od[i+2],a=od[i+3];const dark=(r+gg+b)/3<235;const saturated=(Math.max(r,gg,b)-Math.min(r,gg,b))>25;if(a>20&&(dark||saturated)&&!(r>245&&gg>245&&b>245)){od[i]=0;od[i+1]=0;od[i+2]=0;od[i+3]=255}else{od[i]=255;od[i+1]=255;od[i+2]=255;od[i+3]=255}}g.putImageData(outImg,0,0);
+}
+window.addEventListener('resize',()=>{resizeCanvas();if(!engineReady)fallbackRedraw()});
+window.addEventListener('load',()=>setTimeout(initEngine,500));
+</script>
+</body></html>
