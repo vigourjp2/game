@@ -81,7 +81,7 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
     <button class="primary" onclick="next()">次</button>
     <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
   </div>
-  <div class="small">判定：部首抜けは厳しめ。添付画像語＋5級むずかしめのみ。正解画像と書き順アニメを表示。</div>
+  <div class="small">判定：間違い復習修正版。×/△は保存、○で復習から外す。部首抜けは厳しめ。</div>
 </footer>
 </div>
 <canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
@@ -101,24 +101,56 @@ function safeSet(key, val){
   try { localStorage.setItem(key, val); }
   catch(e) {}
 }
-let wrongIds=[];
-try { wrongIds=JSON.parse(safeGet('highKanjiWrong','[]')); }
-catch(e) { wrongIds=[]; }
+function keyFor(q){
+  return `${q.source}|${q.word}|${q.index}|${q.char}`;
+}
+let wrongKeys=[];
+try {
+  const savedKeys = JSON.parse(safeGet('highKanjiWrongKeys','[]'));
+  const legacyIds = JSON.parse(safeGet('highKanjiWrong','[]'));
+  wrongKeys = Array.isArray(savedKeys) ? savedKeys : [];
+  // 旧版の数字IDも一度だけ救済
+  if(Array.isArray(legacyIds) && legacyIds.length){
+    legacyIds.forEach(id=>{
+      const q=QUESTIONS[id];
+      if(q){
+        const k=keyFor(q);
+        if(!wrongKeys.includes(k)) wrongKeys.push(k);
+      }
+    });
+    safeSet('highKanjiWrongKeys', JSON.stringify(wrongKeys));
+  }
+} catch(e) { wrongKeys=[]; }
 
 function $(id){return document.getElementById(id)}
 function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
 function start(){
   let mode=$('mode').value;
-  let pool=QUESTIONS.map((q,i)=>({...q,id:i}));
+  let pool=QUESTIONS.map((q,i)=>({...q,id:i,key:keyFor(q)}));
   if(mode==='image') pool=pool.filter(q=>q.source==='添付画像語');
   if(mode==='kanken') pool=pool.filter(q=>q.source==='漢検5級むずかしめ');
-  if(mode==='wrong') pool=pool.filter(q=>wrongIds.includes(q.id));
-  if(!pool.length) pool=QUESTIONS.map((q,i)=>({...q,id:i}));
+  if(mode==='wrong') pool=pool.filter(q=>wrongKeys.includes(q.key));
+
+  // ここが不具合ポイント：旧版は間違いが0件でも全部問題に戻していた。
+  // 間違い復習では0件なら0件として表示する。
+  if(!pool.length && mode==='wrong'){
+    order=[];idx=0;ok=0;done=0;showEmptyWrong();updateScore();return;
+  }
+  if(!pool.length) pool=QUESTIONS.map((q,i)=>({...q,id:i,key:keyFor(q)}));
   order=shuffle(pool);idx=0;ok=0;done=0;showQ();
+}
+function showEmptyWrong(){
+  $('question').textContent='間違い復習は現在0件。× または △ になった問題がここに入ります。';
+  $('answerText').textContent='---';
+  $('meaning').textContent='間違えた問題を保存して、正解したら復習リストから外します。';
+  $('resultBox').classList.remove('open');
+  if($('strokeVisual')) $('strokeVisual').innerHTML='';
+  if($('strokeVisualNote')) $('strokeVisualNote').textContent='間違い復習は空です';
+  clearPad(false);drawGhost();
 }
 function maskedWord(q){return [...q.word].map((c,i)=>i===q.index?'□':c).join('')}
 function showQ(){
-  if(!order.length) start();
+  if(!order.length){ showEmptyWrong(); return; }
   const cur=order[idx];
   const masked = maskedWord(cur);
   const isSingle = [...cur.word].length <= 1;
@@ -133,7 +165,7 @@ function showQ(){
   if($('strokeVisualNote')) $('strokeVisualNote').textContent='判定後に正しい漢字画像を表示';
   clearPad(false);drawGhost();updateScore();
 }
-function next(){idx=(idx+1)%order.length;showQ()}
+function next(){if(!order.length){start();return;} idx=(idx+1)%order.length;showQ()}
 function updateScore(){$('score').textContent=`${done}問中 ${ok}問正解`}
 function drawGhost(){if(!order.length){$('ghost').textContent='';return}$('ghost').textContent=$('ghostToggle').checked ? order[idx].char : ''}
 function pos(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}}
@@ -225,8 +257,18 @@ function judgeCandidates(ans,cands){
 function finishJudge(isOk,msg,cands,level=''){ 
   const cur=order[idx];
   done++; if(isOk)ok++;
-  if(isOk) wrongIds=wrongIds.filter(id=>id!==cur.id); else if(!wrongIds.includes(cur.id)) wrongIds.push(cur.id);
-  safeSet('highKanjiWrong',JSON.stringify(wrongIds));
+  const k=cur.key || keyFor(cur);
+  if(isOk) {
+    wrongKeys=wrongKeys.filter(x=>x!==k);
+  } else if(!wrongKeys.includes(k)) {
+    wrongKeys.push(k);
+  }
+  safeSet('highKanjiWrongKeys',JSON.stringify(wrongKeys));
+  // 旧版互換用にも数字IDを残す。ただし主判定はwrongKeys。
+  try {
+    const wrongIds = QUESTIONS.map((q,i)=>wrongKeys.includes(keyFor(q)) ? i : null).filter(x=>x!==null);
+    safeSet('highKanjiWrong',JSON.stringify(wrongIds));
+  } catch(e) {}
   updateScore();
   const cls=isOk?'okTxt':(level==='maybe'||msg.startsWith('△'))?'maybeTxt':'ngTxt';
   $('resultMain').className='resultMain '+cls;
