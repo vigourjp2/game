@@ -24,6 +24,7 @@
     <a class="now" href="./high/info/"><span>💻 情報</span><small>公開中</small></a>
     <a class="now" href="./high/chemistry/"><span>⚗️ 化学</span><small>公開中</small></a>
     <a class="now" href="./high/classics/"><span>🏯 古文</span><small>公開中</small></a>
+    <a class="now" href="./high/kanji/"><span>🖊️ 漢字</span><small>公開中</small></a>
     <a class="now" href="./high/mathA/"><span>📐 数A</span><small>公開中</small></a>
   </div>
 </div></aside></header><nav class="tabs" aria-label="学校区分"><button class="tab active" data-tab="middle">中学</button><button class="tab" data-tab="high">高校</button></nav><main><section id="middle" class="panel active"><div class="sectionHead"><h2>中学メニュー</h2><p>リンク先：各フォルダの index.html</p></div><div class="grid" id="middleGrid"></div></section><section id="high" class="panel"><div class="sectionHead"><h2>高校メニュー</h2><p>作成済み教科は公開中表示</p></div><div class="grid" id="highGrid"></div></section></main><footer class="foot"><b>配置ルール：</b>このトップページをリポジトリ直下の <mark>index.html</mark> に置き、各教科は以下のフォルダに配置。<div class="deploy">repo-root/
@@ -42,6 +43,7 @@
    ├─ info/index.html
    ├─ chemistry/index.html
    ├─ classics/index.html
+   ├─ kanji/index.html
    └─ mathA/index.html</div></footer></div><script>
 const subjects=[
 {key:'japanese',name:'国語',icon:'📚'},
@@ -64,6 +66,7 @@ const highSubjects=[
 {key:'info',name:'情報',icon:'💻',href:'./high/info/',note:'情報・メディア・セキュリティ'},
 {key:'chemistry',name:'化学',icon:'⚗️',href:'./high/chemistry/',note:'物質分類・原子・イオン・周期表'},
 {key:'classics',name:'古文',icon:'🏯',href:'./high/classics/',note:'古文単語ストーリー・音声つき'},
+{key:'kanji',name:'漢字',icon:'🖊️',href:'./high/kanji/',note:'手書き自動認識・書き順アニメつき'},
 {key:'mathA',name:'数A',icon:'📐',href:'./high/mathA/',note:'集合・場合の数・順列・組合せ'},
 {key:'health_pe',name:'保健体育',icon:'🏃'},
 {key:'art_music',name:'芸術',icon:'🎭'},
