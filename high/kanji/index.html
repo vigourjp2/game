@@ -74,7 +74,7 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
       <button class="replayBtn" type="button" onclick="replayStrokeVisual()">もう一回再生</button>
     </div>
     <div class="componentBox" id="componentBox" style="display:none">
-      <div class="componentTitle">要素分解チェック</div>
+      <div class="componentTitle">判定内訳</div>
       <div class="componentLine" id="componentDetails">---</div>
     </div>
     <div class="cands" id="candidates">---</div>
@@ -97,7 +97,7 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
     <button class="primary" onclick="next()">次</button>
     <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
   </div>
-  <div class="small">判定：認識候補＋形比較＋要素分解。形比較・要素分解とも閾値は30点。偏/旁/上下/全体骨格を解析して評価。</div>
+  <div class="small">判定：認識候補に正解があること＋全体字形＋見た目部品。KanjiVG未取得時は補助判定に切替。</div>
 </footer>
 </div>
 <canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
@@ -174,7 +174,7 @@ function initEngine(){
       engineReady=false; attachFallbackDrawing();
     }
     $('status').textContent = engineReady
-      ? '認識エンジンOK。厳格判定中。認識候補＋形＋要素分解で判定。'
+      ? '認識候補＋全体字形＋見た目部品で判定。KanjiVG未取得時は0点扱いしない。'
       : '認識エンジン未読込。形比較で動作中。';
     start();
   }catch(e){
@@ -320,72 +320,657 @@ function gridOverlapScore(user,mask,N){
   const coverage=ref?hit/ref:0;
   return Math.round((recall*0.55+coverage*0.45)*100);
 }
+
+
+function renderReferenceGlyphForParts(ch, scale=1){
+  const src=$('kanjiCanvas');
+  const c=document.createElement('canvas');
+  c.width=src.width;
+  c.height=src.height;
+  const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle='#000';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  // 太すぎると別パーツが接触しやすいので、標準寄りの太さにする
+  const size=Math.floor(Math.min(c.width*0.62,c.height*0.62)*scale);
+  ctx.font=`500 ${size}px "Yu Gothic","Yu Mincho","Noto Sans CJK JP","Noto Serif CJK JP",serif`;
+  ctx.fillText(ch,c.width/2,c.height/2);
+  return c;
+}
+function maskFromRefGlyphCanvas(cnv){
+  const ctx=cnv.getContext('2d');
+  const W=cnv.width,H=cnv.height;
+  const img=ctx.getImageData(0,0,W,H).data;
+  const mask=new Uint8Array(W*H);
+  let count=0;
+  for(let i=0,p=0;p<W*H;p++,i+=4){
+    const a=img[i+3], r=img[i], g=img[i+1], b=img[i+2];
+    if(a>25 && (r+g+b)/3<235){ mask[p]=1; count++; }
+  }
+  return {W,H,mask,count};
+}
+function erodeMask(mask,W,H,rad=1){
+  const out=new Uint8Array(W*H);
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      let ok=true;
+      for(let dy=-rad;dy<=rad && ok;dy++){
+        for(let dx=-rad;dx<=rad;dx++){
+          const xx=x+dx, yy=y+dy;
+          if(xx<0||xx>=W||yy<0||yy>=H||!mask[yy*W+xx]){ok=false;break;}
+        }
+      }
+      if(ok) out[y*W+x]=1;
+    }
+  }
+  return out;
+}
+function visualComponents(mask,W,H){
+  const seen=new Uint8Array(W*H);
+  const comps=[];
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      const start=y*W+x;
+      if(!mask[start]||seen[start]) continue;
+      const q=[start]; seen[start]=1;
+      let pts=[],minX=x,maxX=x,minY=y,maxY=y;
+      while(q.length){
+        const p=q.pop();
+        const px=p%W, py=(p/W)|0;
+        pts.push(p);
+        if(px<minX)minX=px;if(px>maxX)maxX=px;if(py<minY)minY=py;if(py>maxY)maxY=py;
+        for(const [dx,dy] of dirs){
+          const xx=px+dx, yy=py+dy;
+          if(xx<0||xx>=W||yy<0||yy>=H) continue;
+          const np=yy*W+xx;
+          if(mask[np]&&!seen[np]){seen[np]=1;q.push(np);}
+        }
+      }
+      comps.push({pts,minX,maxX,minY,maxY,count:pts.length,w:maxX-minX+1,h:maxY-minY+1});
+    }
+  }
+  return comps;
+}
+function splitLargeComponentByProjection(comp, W, H){
+  // つながってしまった大きな字形パーツを、見た目上の空白谷で縦/横に分割する補助。
+  // これはストロークではなく、画像の濃淡分布からの見た目分割。
+  if(comp.count<1800) return [comp];
+
+  const xs=new Array(comp.w).fill(0), ys=new Array(comp.h).fill(0);
+  for(const p of comp.pts){
+    const x=p%W, y=(p/W)|0;
+    xs[x-comp.minX]++; ys[y-comp.minY]++;
+  }
+  function cuts(arr,offset,totalSpan){
+    const max=Math.max(...arr,1);
+    const res=[];
+    for(let i=2;i<arr.length-2;i++){
+      const v=arr[i]/max;
+      if(v<0.10 && arr[i-1]/max<0.14 && arr[i+1]/max<0.14){
+        res.push(offset+i);
+      }
+    }
+    // 近すぎるcutをまとめる
+    const merged=[];
+    for(const c of res){
+      if(!merged.length || c-merged[merged.length-1]>18) merged.push(c);
+    }
+    return merged;
+  }
+  const xcuts=cuts(xs,comp.minX,comp.w).filter(c=>c-comp.minX>comp.w*.22 && comp.maxX-c>comp.w*.22);
+  const ycuts=cuts(ys,comp.minY,comp.h).filter(c=>c-comp.minY>comp.h*.22 && comp.maxY-c>comp.h*.22);
+
+  let boxes=[{minX:comp.minX,maxX:comp.maxX,minY:comp.minY,maxY:comp.maxY}];
+  for(const c of xcuts.slice(0,2)){
+    const next=[];
+    for(const b of boxes){
+      if(c>b.minX+20 && c<b.maxX-20){ next.push({...b,maxX:c}); next.push({...b,minX:c+1}); }
+      else next.push(b);
+    }
+    boxes=next;
+  }
+  for(const c of ycuts.slice(0,2)){
+    const next=[];
+    for(const b of boxes){
+      if(c>b.minY+20 && c<b.maxY-20){ next.push({...b,maxY:c}); next.push({...b,minY:c+1}); }
+      else next.push(b);
+    }
+    boxes=next;
+  }
+
+  if(boxes.length===1) return [comp];
+  const parts=[];
+  for(const b of boxes){
+    const pts=comp.pts.filter(p=>{
+      const x=p%W,y=(p/W)|0;
+      return x>=b.minX&&x<=b.maxX&&y>=b.minY&&y<=b.maxY;
+    });
+    if(pts.length>120){
+      let minX=99999,maxX=-1,minY=99999,maxY=-1;
+      for(const p of pts){const x=p%W,y=(p/W)|0; if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;}
+      parts.push({pts,minX,maxX,minY,maxY,count:pts.length,w:maxX-minX+1,h:maxY-minY+1});
+    }
+  }
+  return parts.length?parts:[comp];
+}
+function getVisualParts(ch){
+  const refCanvas=renderReferenceGlyphForParts(ch,1);
+  const ref=maskFromRefGlyphCanvas(refCanvas);
+  // 軽く収縮して、接触ノイズを切る
+  const eroded=erodeMask(ref.mask,ref.W,ref.H,1);
+  let comps=visualComponents(eroded,ref.W,ref.H)
+    .filter(c=>c.count>70 && c.w>5 && c.h>5);
+
+  // 大きい塊は投影で追加分割
+  comps=comps.flatMap(c=>splitLargeComponentByProjection(c,ref.W,ref.H));
+
+  // 小さい点・短い払いも残す。大きさ順ではなく上→左順で番号を安定
+  comps.sort((a,b)=>(a.minY-b.minY)||(a.minX-b.minX));
+
+  return {W:ref.W,H:ref.H,parts:comps,refMask:ref.mask};
+}
+function componentPresenceAgainstUser(userGrid,W,H,part){
+  // 見た目パーツ単位で、ユーザー筆跡がその抜粋領域に存在するか。
+  // 同じ解像度のマスク同士で比較する。
+  // 手書きは線位置がズレるため、パーツ周辺を広めに見る。
+  const nearUser=dilateMask(userGrid,W,H,22);
+  let covered=0;
+  for(const p of part.pts){
+    if(nearUser[p]) covered++;
+  }
+  const coverage=covered/Math.max(1,part.count);
+
+  // パーツの外接矩形周辺に筆跡があるかも見る。
+  const pad=26;
+  let boxInk=0;
+  for(let y=Math.max(0,part.minY-pad); y<=Math.min(H-1,part.maxY+pad); y++){
+    for(let x=Math.max(0,part.minX-pad); x<=Math.min(W-1,part.maxX+pad); x++){
+      if(userGrid[y*W+x]) boxInk++;
+    }
+  }
+  const boxPresence=Math.min(1, boxInk/Math.max(1, Math.sqrt(part.count)*1.2));
+
+  return Math.round((coverage*0.68 + boxPresence*0.32)*100);
+}
+
+function maskStatsInBox(mask,W,H,box){
+  const pad=box.pad||0;
+  const minX=Math.max(0,box.minX-pad), maxX=Math.min(W-1,box.maxX+pad);
+  const minY=Math.max(0,box.minY-pad), maxY=Math.min(H-1,box.maxY+pad);
+  let count=0,sx=0,sy=0,minUx=999999,maxUx=-1,minUy=999999,maxUy=-1;
+  for(let y=minY;y<=maxY;y++){
+    for(let x=minX;x<=maxX;x++){
+      const p=y*W+x;
+      if(mask[p]){
+        count++; sx+=x; sy+=y;
+        if(x<minUx)minUx=x;if(x>maxUx)maxUx=x;if(y<minUy)minUy=y;if(y>maxUy)maxUy=y;
+      }
+    }
+  }
+  return {
+    count,
+    cx:count?sx/count:(minX+maxX)/2,
+    cy:count?sy/count:(minY+maxY)/2,
+    minX:minUx,maxX:maxUx,minY:minUy,maxY:maxUy,
+    w:count?maxUx-minUx+1:0,
+    h:count?maxUy-minUy+1:0,
+    boxW:maxX-minX+1,
+    boxH:maxY-minY+1,
+    boxMinX:minX,boxMinY:minY,boxMaxX:maxX,boxMaxY:maxY
+  };
+}
+function localPartShapeScore(userMask, refMask, W, H, part){
+  // 参照パーツの外接矩形周辺だけを見る
+  const box={minX:part.minX,minY:part.minY,maxX:part.maxX,maxY:part.maxY,pad:28};
+
+  const u=maskStatsInBox(userMask,W,H,box);
+  const r=maskStatsInBox(refMask,W,H,box);
+  if(!u.count || !r.count) return {score:0,coverage:0,precision:0,centroid:0,density:0,size:0};
+
+  // 手書きのズレを許すため、互いに太らせて重なりを見る
+  const userNear=dilateMask(userMask,W,H,18);
+  const refNear=dilateMask(refMask,W,H,20);
+
+  let refCovered=0, refCount=0, userOnRef=0, userCount=0;
+  for(let y=box.boxMinY;y<=box.boxMaxY;y++){
+    for(let x=box.boxMinX;x<=box.boxMaxX;x++){
+      const p=y*W+x;
+      if(refMask[p]){
+        refCount++;
+        if(userNear[p]) refCovered++;
+      }
+      if(userMask[p]){
+        userCount++;
+        if(refNear[p]) userOnRef++;
+      }
+    }
+  }
+
+  const coverage = refCovered / Math.max(1,refCount);      // 参照パーツをどれだけ書けているか
+  const precision = userOnRef / Math.max(1,userCount);     // その領域の筆跡が参照パーツに沿っているか
+
+  // 中心位置がズレすぎていないか
+  const maxDist=Math.max(20, Math.hypot(r.boxW,r.boxH)*0.30);
+  const dist=Math.hypot(u.cx-r.cx,u.cy-r.cy);
+  const centroid=Math.max(0,1-dist/maxDist);
+
+  // 筆跡量が極端に多すぎ/少なすぎないか
+  const density=Math.min(u.count,r.count)/Math.max(u.count,r.count,1);
+
+  // 外接サイズが似ているか
+  const wr=Math.min(u.w,r.w)/Math.max(u.w,r.w,1);
+  const hr=Math.min(u.h,r.h)/Math.max(u.h,r.h,1);
+  const size=Math.sqrt(wr*hr);
+
+  const score=Math.round((coverage*0.40 + precision*0.25 + centroid*0.15 + density*0.10 + size*0.10)*100);
+  return {
+    score,
+    coverage:Math.round(coverage*100),
+    precision:Math.round(precision*100),
+    centroid:Math.round(centroid*100),
+    density:Math.round(density*100),
+    size:Math.round(size*100)
+  };
+}
+
+function visualPartsAnalysis(ch){
+  // 見たままパーツ判定。
+  // 参照字形をパーツ分割し、各パーツ領域を切り出してユーザー筆跡と形比較する。
+  const userFull = rasterMaskFromCanvas($('kanjiCanvas'),'user');
+  if(!userFull || !userFull.count) {
+    return {ok:false, unavailable:false, avg:0, details:'筆跡なし', missing:[{no:'?',score:0}], parts:[]};
+  }
+
+  const vp = getVisualParts(ch);
+  const W = vp.W, H = vp.H;
+  let userMask = userFull.mask;
+  if(userFull.W !== W || userFull.H !== H){
+    const scaled = new Uint8Array(W*H);
+    for(let y=0;y<H;y++){
+      for(let x=0;x<W;x++){
+        const ux=Math.min(userFull.W-1, Math.floor(x*userFull.W/W));
+        const uy=Math.min(userFull.H-1, Math.floor(y*userFull.H/H));
+        scaled[y*W+x]=userFull.mask[uy*userFull.W+ux];
+      }
+    }
+    userMask = scaled;
+  }
+
+  const parts = vp.parts.map((p,i)=>{
+    const sc = localPartShapeScore(userMask, vp.refMask, W, H, p);
+    return {
+      no:i+1,
+      score:sc.score,
+      coverage:sc.coverage,
+      precision:sc.precision,
+      centroid:sc.centroid,
+      density:sc.density,
+      size:sc.size,
+      minX:p.minX,minY:p.minY,maxX:p.maxX,maxY:p.maxY,count:p.count
+    };
+  });
+
+  // ここは「各パーツが見たまま成立しているか」なので、単なる存在より厳しめ。
+  // 35未満はそのパーツが形として成立していない扱い。
+  const missing = parts.filter(p=>p.score<35);
+  const avg = Math.round(parts.reduce((a,b)=>a+b.score,0)/Math.max(1,parts.length));
+  const details = parts.map(p=>`P${p.no}:${p.score}(覆${p.coverage}/沿${p.precision}/位${p.centroid})`).join(' / ');
+  return {ok:missing.length===0, avg, details, missing, parts};
+}
+
+function drawRefStrokeGlobalMask(stroke, allStrokes, N){
+  const grid = new Uint8Array(N*N);
+  const allPts = allStrokes.flatMap(pts=>pts);
+  const xs = allPts.map(p=>p[0]), ys = allPts.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  const w=Math.max(1,maxX-minX), h=Math.max(1,maxY-minY);
+
+  function mark(x,y,r=3){
+    for(let dy=-r;dy<=r;dy++){
+      for(let dx=-r;dx<=r;dx++){
+        if(dx*dx+dy*dy>r*r) continue;
+        const xx=x+dx, yy=y+dy;
+        if(xx>=0&&xx<N&&yy>=0&&yy<N) grid[yy*N+xx]=1;
+      }
+    }
+  }
+  function line(x1,y1,x2,y2){
+    const steps=Math.max(Math.abs(x2-x1),Math.abs(y2-y1),1);
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      mark(Math.round(x1+(x2-x1)*t), Math.round(y1+(y2-y1)*t), 3);
+    }
+  }
+  let prev=null;
+  stroke.forEach(p=>{
+    const x=Math.max(0,Math.min(N-1,Math.round((p[0]-minX)/w*(N-10)+5)));
+    const y=Math.max(0,Math.min(N-1,Math.round((p[1]-minY)/h*(N-10)+5)));
+    if(prev) line(prev[0],prev[1],x,y); else mark(x,y,3);
+    prev=[x,y];
+  });
+  return grid;
+}
+function strokePresenceScore(userGrid, strokeMask, N){
+  // 各一画を「存在するか」で見る。
+  // 参照一画の近くに筆跡が何割あるか = presence。
+  const nearUser = dilateMask(userGrid, N, N, 7);
+  let refCount=0, covered=0;
+  for(let i=0;i<N*N;i++){
+    if(strokeMask[i]){
+      refCount++;
+      if(nearUser[i]) covered++;
+    }
+  }
+  return Math.round((covered / Math.max(1, refCount)) * 100);
+}
+async function strokePartsAnalysis(ch){
+  const user=userInkGrid();
+  if(!user) return {ok:false, unavailable:false, avg:0, details:'筆跡なし', missing:[{no:'?',score:0}], parts:[]};
+
+  const data=await loadCharDataPromise(ch);
+  if(!data || !data.medians || !data.medians.length){
+    return {ok:true, avg:50, details:'一画データ取得不可', missing:[], parts:[]};
+  }
+
+  const N=user.N;
+  const allStrokes=data.medians;
+  const parts=[];
+  for(let i=0;i<allStrokes.length;i++){
+    const mask=drawRefStrokeGlobalMask(allStrokes[i], allStrokes, N);
+    const score=strokePresenceScore(user.grid, mask, N);
+    parts.push({no:i+1, score});
+  }
+
+  // 小さい点も「1パーツ」として扱う。
+  // ただし手書きのズレはあるので、存在ラインは20点。
+  // 20未満は「その一画が存在しない」扱い。
+  const missing=parts.filter(p=>p.score<20);
+  const avg=Math.round(parts.reduce((a,b)=>a+b.score,0)/Math.max(1,parts.length));
+  const details=parts.map(p=>`${p.no}画:${p.score}`).join(' / ');
+  return {ok:missing.length===0, avg, details, missing, parts};
+}
+
 async function componentAnalysis(ch){
   const user=userInkGrid();
-  if(!user) return {score:0,details:'筆跡なし',bad:true};
+  if(!user) return {score:0,details:'筆跡なし',scores:[],missingMajor:[]};
   const data=await loadCharDataPromise(ch);
-  if(!data || !data.medians) return {score:50,details:'要素データ取得不可',bad:false};
+  if(!data || !data.medians) return {score:50,details:'要素データ取得不可',scores:[],missingMajor:[]};
+
   const groups=refComponentGroups(data);
   const scores=[];
+  const totalStrokes=(data.medians||[]).length || 1;
+
   for(const g of groups){
     const mask=drawRefGroupMask(g,user.N);
     const sc=gridOverlapScore(user.grid,mask,user.N);
-    scores.push({name:g.name,score:sc});
+    const strokeRatio=(g.strokes?.length||0)/totalStrokes;
+    scores.push({
+      name:g.name,
+      score:sc,
+      strokeCount:g.strokes?.length||0,
+      strokeRatio
+    });
   }
-  const core=scores.filter(s=>s.name!=='全体骨格');
-  const minCore=core.length?Math.min(...core.map(s=>s.score)):scores[0].score;
-  const avg=Math.round(scores.reduce((a,b)=>a+b.score,0)/scores.length);
-  const badParts=scores.filter(s=>s.name!=='全体骨格' && s.score<30).map(s=>`${s.name}${s.score}`);
+
+  const avg=Math.round(scores.reduce((a,b)=>a+b.score,0)/Math.max(1,scores.length));
   const details=scores.map(s=>`${s.name}:${s.score}`).join(' / ');
-  return {score:Math.round(avg*0.45+minCore*0.55),details,bad:badParts.length>0,badParts};
+
+  // 「細かい一画」では落とさない。
+  // ただし、左右/上下の大きな部品が丸ごと無いレベルは落とす。
+  // 条件：全体骨格以外・構成比25%以上・2画以上・スコア28未満
+  const missingMajor=scores.filter(s =>
+    s.name!=='全体骨格' &&
+    s.strokeCount>=2 &&
+    s.strokeRatio>=0.25 &&
+    s.score<28
+  );
+
+  return {score:avg,details,scores,missingMajor};
+}
+
+
+function mediansToCanvasPoints(medians, W, H){
+  const allPts=medians.flatMap(s=>s);
+  const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  const bw=Math.max(1,maxX-minX), bh=Math.max(1,maxY-minY);
+  return medians.map(st=>st.map(p=>[
+    Math.round((p[0]-minX)/bw*(W*0.62)+W*0.19),
+    Math.round((p[1]-minY)/bh*(H*0.62)+H*0.19)
+  ]));
+}
+function strokeBBoxPts(st){
+  let minX=999999,maxX=-1,minY=999999,maxY=-1;
+  for(const [x,y] of st){
+    if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+  }
+  return {minX,maxX,minY,maxY,w:maxX-minX+1,h:maxY-minY+1,cx:(minX+maxX)/2,cy:(minY+maxY)/2};
+}
+function makeVisualStrokeGroups(strokes,W,H){
+  // ストロークを見た目位置でクラスタリング。
+  // 画番号は使わない。bboxの近さ・重なりで「部品」にまとめる。
+  const boxes=strokes.map(strokeBBoxPts);
+  const n=boxes.length;
+  const parent=[...Array(n).keys()];
+  const find=i=>parent[i]===i?i:parent[i]=find(parent[i]);
+  const unite=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[b]=a;};
+  function overlap1(a1,a2,b1,b2){
+    return Math.max(0, Math.min(a2,b2)-Math.max(a1,b1));
+  }
+  for(let i=0;i<n;i++){
+    for(let j=i+1;j<n;j++){
+      const a=boxes[i], b=boxes[j];
+      const ox=overlap1(a.minX,a.maxX,b.minX,b.maxX);
+      const oy=overlap1(a.minY,a.maxY,b.minY,b.maxY);
+      const gapX=Math.max(0, Math.max(a.minX,b.minX)-Math.min(a.maxX,b.maxX));
+      const gapY=Math.max(0, Math.max(a.minY,b.minY)-Math.min(a.maxY,b.maxY));
+      const minW=Math.max(1,Math.min(a.w,b.w)), minH=Math.max(1,Math.min(a.h,b.h));
+      const close = (ox/minW>0.18 && gapY<42) || (oy/minH>0.18 && gapX<42) || (gapX<24 && gapY<24);
+      if(close) unite(i,j);
+    }
+  }
+  const map=new Map();
+  for(let i=0;i<n;i++){
+    const r=find(i);
+    if(!map.has(r)) map.set(r,[]);
+    map.get(r).push(i);
+  }
+  let groups=[...map.values()].map(ids=>{
+    let minX=999999,maxX=-1,minY=999999,maxY=-1,count=0;
+    for(const id of ids){
+      const b=boxes[id];
+      if(b.minX<minX)minX=b.minX;if(b.maxX>maxX)maxX=b.maxX;
+      if(b.minY<minY)minY=b.minY;if(b.maxY>maxY)maxY=b.maxY;
+      count += strokes[id].length;
+    }
+    return {ids,minX,maxX,minY,maxY,w:maxX-minX+1,h:maxY-minY+1,count,cx:(minX+maxX)/2,cy:(minY+maxY)/2};
+  });
+
+  // あまりに少ないと判定が粗い、あまりに多いと過分割。
+  // 複雑字は 5〜10 パーツ程度を目標にする。
+  groups.sort((a,b)=>(a.minY-b.minY)||(a.minX-b.minX));
+  return groups;
+}
+function drawStrokeGroupMask(strokes, ids, W, H){
+  const mask=new Uint8Array(W*H);
+  function mark(x,y,r=12){
+    for(let dy=-r;dy<=r;dy++){
+      for(let dx=-r;dx<=r;dx++){
+        if(dx*dx+dy*dy>r*r) continue;
+        const xx=x+dx, yy=y+dy;
+        if(xx>=0&&xx<W&&yy>=0&&yy<H) mask[yy*W+xx]=1;
+      }
+    }
+  }
+  function line(x1,y1,x2,y2){
+    const steps=Math.max(Math.abs(x2-x1),Math.abs(y2-y1),1);
+    for(let i=0;i<=steps;i++){
+      const t=i/steps;
+      mark(Math.round(x1+(x2-x1)*t), Math.round(y1+(y2-y1)*t));
+    }
+  }
+  for(const id of ids){
+    let prev=null;
+    for(const [x,y] of strokes[id]){
+      if(prev) line(prev[0],prev[1],x,y); else mark(x,y);
+      prev=[x,y];
+    }
+  }
+  return mask;
+}
+function groupMaskScore(userMask, groupMask, W, H, box){
+  const nearUser=dilateMask(userMask,W,H,26);
+  const nearRef=dilateMask(groupMask,W,H,24);
+
+  const pad=38;
+  const minX=Math.max(0,box.minX-pad), maxX=Math.min(W-1,box.maxX+pad);
+  const minY=Math.max(0,box.minY-pad), maxY=Math.min(H-1,box.maxY+pad);
+
+  let refCount=0, refCovered=0, userCount=0, userOnRef=0;
+  let ux=0,uy=0,rx=0,ry=0;
+  for(let y=minY;y<=maxY;y++){
+    for(let x=minX;x<=maxX;x++){
+      const p=y*W+x;
+      if(groupMask[p]){
+        refCount++; rx+=x; ry+=y;
+        if(nearUser[p]) refCovered++;
+      }
+      if(userMask[p]){
+        userCount++; ux+=x; uy+=y;
+        if(nearRef[p]) userOnRef++;
+      }
+    }
+  }
+  if(!refCount) return {score:0,cov:0,along:0,pos:0,ink:0};
+  if(!userCount) return {score:0,cov:0,along:0,pos:0,ink:0};
+
+  const cov=refCovered/refCount;
+  const along=userOnRef/userCount;
+
+  const rcx=rx/refCount, rcy=ry/refCount, ucx=ux/userCount, ucy=uy/userCount;
+  const maxDist=Math.max(28, Math.hypot(box.w,box.h)*0.40);
+  const pos=Math.max(0,1-Math.hypot(ucx-rcx,ucy-rcy)/maxDist);
+
+  const ink=Math.min(userCount,refCount)/Math.max(userCount,refCount,1);
+
+  // 部品の形比較。存在だけでなく、沿い方と中心位置も見る。
+  const score=Math.round((cov*0.45 + along*0.25 + pos*0.20 + ink*0.10)*100);
+  return {score,cov:Math.round(cov*100),along:Math.round(along*100),pos:Math.round(pos*100),ink:Math.round(ink*100)};
+}
+async function visualPartsAnalysis(ch){
+  const userFull = rasterMaskFromCanvas($('kanjiCanvas'),'user');
+  if(!userFull || !userFull.count) {
+    return {ok:false, unavailable:false, avg:0, details:'筆跡なし', missing:[{no:'?',score:0}], parts:[]};
+  }
+  const data=await loadCharDataPromise(ch);
+  if(!data || !data.medians || !data.medians.length){
+    return {ok:null, unavailable:true, avg:null, details:'KanjiVG字形データ未取得のため、部品判定はスキップ', missing:[], parts:[]};
+  }
+
+  const W=userFull.W,H=userFull.H;
+  const strokes=mediansToCanvasPoints(data.medians,W,H);
+  const groups=makeVisualStrokeGroups(strokes,W,H);
+
+  const parts=groups.map((g,i)=>{
+    const mask=drawStrokeGroupMask(strokes,g.ids,W,H);
+    const sc=groupMaskScore(userFull.mask,mask,W,H,g);
+    return {no:i+1,score:sc.score,coverage:sc.cov,precision:sc.along,centroid:sc.pos,density:sc.ink,ids:g.ids};
+  });
+
+  // 部品単位で 30 未満なら、その部品は見た目として成立していない。
+  // 愛・紹など複雑字でも、上/中/下/左/右のまとまりで見る。
+  const missing=parts.filter(p=>p.score<30);
+  const avg=Math.round(parts.reduce((a,b)=>a+b.score,0)/Math.max(1,parts.length));
+  const details=parts.map(p=>`P${p.no}:${p.score}(覆${p.coverage}/沿${p.precision}/位${p.centroid})`).join(' / ');
+  return {ok:missing.length===0, avg, details, missing, parts};
 }
 
 async function judgeCandidates(ans,cands){
   cands=[...new Set(cands)];
   const pos=cands.indexOf(ans);
-  const shape=fallbackScore(ans);
+  const trace=traceGlyphScore(ans);
+  const shape=trace.score;
   const comp=await componentAnalysis(ans);
+  const visual=await visualPartsAnalysis(ans);
 
-  // 要素分解判定：
-  // 認識候補だけでは○にしない。
-  // 「認識1位」「形」「要素分解」の3つが揃った時だけ○。
+  const recOK = pos >= 0 && pos < 5;
+  const recWeakOK = pos >= 0 && pos < 10;
+
+  // KanjiVGが取れない文字は、部品判定を0点扱いしない。
+  // 認識候補＋全体字形＋componentAnalysisで判定する。
+  const visualUnavailable = !!visual.unavailable;
+  const compAvg = comp && typeof comp.overall === 'number' ? comp.overall : 0;
+  const visualScore = visualUnavailable ? compAvg : (visual.avg ?? 0);
+
+  const shapeOK = shape >= 50;
+  const visualOK = visualUnavailable ? compAvg >= 45 : (visual.ok && visualScore >= 45);
+  const total = Math.round(shape*0.35 + (recOK?100:(recWeakOK?60:0))*0.35 + visualScore*0.30);
+
   let msg,isOk=false,level='ng';
-  if(pos===0 && shape>=30 && comp.score>=30 && !comp.bad){
+
+  if(pos < 0){
+    level='ng';
+    msg=`× 不正解：認識候補に「${ans}」なし。候補に正解が無いので×・字形${shape}点`;
+  }
+  else if(!recOK){
+    level='ng';
+    msg=`× 不正解：「${ans}」は候補${pos+1}位。候補順位が低い・字形${shape}点`;
+  }
+  else if(!shapeOK && total < 65){
+    level='ng';
+    msg=`× 不正解：全体字形不足・字形${shape}点・総合${total}点`;
+  }
+  else if(!visualOK){
+    level='ng';
+    if(visualUnavailable){
+      msg=`× 不正解：部品判定データ未取得。補助要素スコア不足・字形${shape}点・補助${compAvg}点`;
+    }else{
+      msg=`× 不正解：見た目部品不一致（${visual.missing.map(p=>'P'+p.no).join('、')||'平均不足'}）・平均${visualScore}点`;
+    }
+  }
+  else{
     isOk=true;
     level='ok';
-    msg=`○ 正解！ 認識1位・形${shape}点・要素${comp.score}点`;
-  }else if(pos===0){
-    level='maybe';
-    msg=`△ 要素確認。認識1位・形${shape}点・要素${comp.score}点`;
-  }else if(pos>0 && pos<10){
-    level='maybe';
-    msg=`△ 正解候補${pos+1}位・形${shape}点・要素${comp.score}点`;
-  }else{
-    level='ng';
-    msg=`× 不正解（形${shape}点・要素${comp.score}点）`;
+    if(visualUnavailable){
+      msg=`○ 正解！ 認識候補${pos+1}位・字形${shape}点・KanjiVG未取得は補助判定で通過・総合${total}点`;
+    }else{
+      msg=`○ 正解！ 認識候補${pos+1}位・字形${shape}点・部品平均${visualScore}点・総合${total}点`;
+    }
   }
-  finishJudge(isOk,msg,cands,level,comp);
+
+  finishJudge(isOk,msg,cands,level,comp,total,trace,visual);
 }
 
-function finishJudge(isOk,msg,cands,level='',comp=null){ 
+function finishJudge(isOk,msg,cands,level='',comp=null,total=null,trace=null,visual=null){ 
   const cur=order[idx];
   done++; if(isOk)ok++;
   if(isOk) wrongIds=wrongIds.filter(id=>id!==cur.id); else if(!wrongIds.includes(cur.id)) wrongIds.push(cur.id);
   safeSet('highKanjiWrong',JSON.stringify(wrongIds));
   updateScore();
+
   const cls=isOk?'okTxt':(level==='maybe'||msg.startsWith('△'))?'maybeTxt':'ngTxt';
   $('resultMain').className='resultMain '+cls;
   $('resultMain').textContent=msg;
   $('candidates').textContent=cands.length ? `認識候補：${cands.slice(0,10).join('、')}` : '認識候補：なし';
+
   if($('componentBox') && $('componentDetails')){
     $('componentBox').style.display='block';
-    const bad = comp && comp.badParts && comp.badParts.length ? ` / 弱い要素: ${comp.badParts.join('、')}` : '';
-    $('componentDetails').innerHTML = comp ? `認識候補・形比較・要素分解で判定。<br>${comp.details}${bad}` : '要素分解データなし';
+    const traceLine = trace ? `全体線一致:${trace.coverage}% / 筆跡近接:${trace.precision}% / 筆跡量:${trace.density}%<br>` : '';
+    const visualLine = visual
+      ? (visual.unavailable
+          ? `見たまま部品グループ比較：KanjiVG未取得のためスキップ<br>${visual.details}`
+          : `見たまま部品グループ比較：${visual.ok?'全部OK':'不一致あり'} / 平均${visual.avg}点<br>${visual.details}` +
+            (visual.missing.length ? `<br><span class="componentBad">不一致：${visual.missing.map(p=>'P'+p.no).join('、')}</span>` : ''))
+      : '見たまま部品比較なし';
+    $('componentDetails').innerHTML =
+      `判定：認識候補に正解があることを必須条件にし、見た目部品も比較。KanjiVG未取得時は0点/P?にせず補助判定。<br>${traceLine}${visualLine}`;
   }
+
   showStrokeVisual(cur.char);
   $('resultBox').classList.add('open');
 }
-
 function kanjiVGFileName(ch){
   const cp=[...ch][0].codePointAt(0).toString(16).padStart(5,'0');
   return `${cp}.svg`;
@@ -536,7 +1121,91 @@ function replayStrokeVisual(){
 /* fallback drawing / shape score */
 function attachFallbackDrawing(){const ctx=canvas.getContext('2d');canvas.addEventListener('pointerdown',e=>{e.preventDefault();drawing=true;canvas.setPointerCapture(e.pointerId);curStroke=[pos(e)];strokes.push(curStroke);});canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();curStroke.push(pos(e));fallbackRedraw();});function end(e){if(!drawing)return;drawing=false;e.preventDefault();}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end)}
 function fallbackRedraw(){if(!canvas)return;const ctx=canvas.getContext('2d'),r=canvas.getBoundingClientRect();ctx.clearRect(0,0,r.width,r.height);strokes.forEach(s=>{if(s.length<2)return;ctx.beginPath();ctx.moveTo(s[0].x,s[0].y);for(let i=1;i<s.length;i++){const p=s[i],pr=s[i-1],mx=(p.x+pr.x)/2,my=(p.y+pr.y)/2;ctx.quadraticCurveTo(pr.x,pr.y,mx,my)}ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#0f172a';ctx.lineWidth=11;ctx.stroke()})}
-function fallbackScore(ch){renderFallbackUser();renderFallbackRef(ch);const ref=$('fallbackRef').getContext('2d').getImageData(0,0,320,320).data;const usr=$('fallbackTmp').getContext('2d').getImageData(0,0,320,320).data;let overlap=0,userInk=0,refInk=0,near=0,W=320,H=320,rm=new Uint8Array(W*H),um=new Uint8Array(W*H);for(let i=0,p=0;i<ref.length;i+=4,p++){rm[p]=ref[i]<180?1:0;um[p]=usr[i]<200?1:0;if(rm[p])refInk++;if(um[p])userInk++;if(rm[p]&&um[p])overlap++}for(let y=3;y<H-3;y++)for(let x=3;x<W-3;x++){const p=y*W+x;if(!um[p])continue;let hit=false;for(let dy=-3;dy<=3&&!hit;dy++)for(let dx=-3;dx<=3;dx++){if(rm[(y+dy)*W+x+dx]){hit=true;break}}if(hit)near++}const precision=userInk?near/userInk:0,recall=refInk?overlap/refInk:0,density=Math.min(userInk,refInk)/Math.max(userInk,refInk||1);return Math.round((precision*.70+recall*.12+density*.18)*100)}
+
+function rasterMaskFromCanvas(cnv,mode='user'){
+  const ctx=cnv.getContext('2d');
+  const W=cnv.width,H=cnv.height;
+  let img;
+  try{img=ctx.getImageData(0,0,W,H).data}catch(e){return {W,H,mask:new Uint8Array(W*H),count:0}}
+  const mask=new Uint8Array(W*H);
+  let count=0;
+  for(let y=0,p=0;y<H;y++){
+    for(let x=0;x<W;x++,p++){
+      const i=p*4,r=img[i],g=img[i+1],b=img[i+2],a=img[i+3];
+      let on=false;
+      if(mode==='ref'){
+        // 参照字形は黒で描く
+        on = a>20 && r<230 && g<230 && b<230;
+      }else{
+        // ユーザー筆跡。ガイド線や薄い答えの灰色は除外。
+        const dark=(r+g+b)/3<170;
+        const saturated=(Math.max(r,g,b)-Math.min(r,g,b))>28;
+        const grayGuide=Math.abs(r-g)<10 && Math.abs(g-b)<10 && r>120;
+        on = a>20 && (dark||saturated) && !grayGuide;
+      }
+      if(on){mask[p]=1;count++;}
+    }
+  }
+  return {W,H,mask,count};
+}
+function drawReferenceGlyphCanvas(ch){
+  const c=$('fallbackRef');
+  const src=$('kanjiCanvas');
+  c.width=src.width;
+  c.height=src.height;
+  const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle='#000';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  const size=Math.floor(Math.min(c.width*0.62,c.height*0.62));
+  ctx.font=`900 ${size}px "Yu Gothic","Yu Mincho","Noto Sans CJK JP","Noto Serif CJK JP",sans-serif`;
+  ctx.fillText(ch,c.width/2,c.height/2);
+  return c;
+}
+function dilateMask(mask,W,H,radius){
+  const out=new Uint8Array(W*H);
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      if(!mask[y*W+x]) continue;
+      for(let dy=-radius;dy<=radius;dy++){
+        const yy=y+dy; if(yy<0||yy>=H) continue;
+        for(let dx=-radius;dx<=radius;dx++){
+          if(dx*dx+dy*dy>radius*radius) continue;
+          const xx=x+dx; if(xx<0||xx>=W) continue;
+          out[yy*W+xx]=1;
+        }
+      }
+    }
+  }
+  return out;
+}
+function traceGlyphScore(ch){
+  const refCanvas=drawReferenceGlyphCanvas(ch);
+  const user=rasterMaskFromCanvas($('kanjiCanvas'),'user');
+  const ref=rasterMaskFromCanvas(refCanvas,'ref');
+  if(!user.count) return {score:0,precision:0,coverage:0,density:0,userInk:0,refInk:ref.count};
+  const W=user.W,H=user.H;
+  // 手書きはズレ・太さ・端末差が大きいので、参照線と筆跡を広めに膨張して比較する。
+  const refNear=dilateMask(ref.mask,W,H,18);
+  const userNear=dilateMask(user.mask,W,H,20);
+  let userOnRef=0, refCovered=0;
+  for(let i=0;i<W*H;i++){
+    if(user.mask[i] && refNear[i]) userOnRef++;
+    if(ref.mask[i] && userNear[i]) refCovered++;
+  }
+  const precision=userOnRef/Math.max(1,user.count);       // 書いた線が正解字形の近くにあるか
+  const coverage=refCovered/Math.max(1,ref.count);       // 正解字形の主要線をなぞれているか
+  const density=Math.min(user.count,ref.count)/Math.max(user.count,ref.count,1); // 筆跡量が極端に少なすぎないか
+  // なぞり・通常手書きの両方を拾うため coverage を強めにする
+  const score=Math.round((precision*0.38 + coverage*0.52 + density*0.10)*100);
+  return {score,precision:Math.round(precision*100),coverage:Math.round(coverage*100),density:Math.round(density*100),userInk:user.count,refInk:ref.count};
+}
+
+function fallbackScore(ch){
+  const t=traceGlyphScore(ch);
+  return t.score;
+}
 function renderFallbackRef(ch){const c=$('fallbackRef'),g=c.getContext('2d');g.clearRect(0,0,320,320);g.fillStyle='#fff';g.fillRect(0,0,320,320);g.fillStyle='#000';g.textAlign='center';g.textBaseline='middle';g.font='260px "Yu Mincho","Hiragino Mincho ProN","Noto Serif CJK JP",serif';g.fillText(ch,160,174)}
 function renderFallbackUser(){ 
   const out=$('fallbackTmp'),g=out.getContext('2d');g.clearRect(0,0,320,320);g.fillStyle='#fff';g.fillRect(0,0,320,320);
