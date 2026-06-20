@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>高校 漢字｜手書き自動認識テスト</title>
+<title>高校 漢字｜手書き自動認識テスト（線量廃止）</title>
 <style>
 :root{--bg:#0f172a;--ink:#f8fafc;--muted:#cbd5e1;--line:#334155;--pri:#2563eb;--ok:#16a34a;--ng:#dc2626;--warn:#f97316}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -97,7 +97,7 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
     <button class="primary" onclick="next()">次</button>
     <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
   </div>
-  <div class="small">判定：認識候補に正解があること＋全体字形＋見た目部品。KanjiVG部品未取得時は、候補＋全体字形で判定。</div>
+  <div class="small">判定：認識候補＋全体線一致＋筆跡近接＋見た目部品。線の量は評価から除外。</div>
 </footer>
 </div>
 <canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
@@ -174,7 +174,7 @@ function initEngine(){
       engineReady=false; attachFallbackDrawing();
     }
     $('status').textContent = engineReady
-      ? '認識候補＋全体字形＋見た目部品で判定。KanjiVG部品未取得時は0点扱いしない。'
+      ? '認識候補＋全体字形＋見た目部品で判定。太さ差に左右される線量評価は使わない。'
       : '認識エンジン未読込。形比較で動作中。';
     start();
   }catch(e){
@@ -556,21 +556,18 @@ function localPartShapeScore(userMask, refMask, W, H, part){
   const dist=Math.hypot(u.cx-r.cx,u.cy-r.cy);
   const centroid=Math.max(0,1-dist/maxDist);
 
-  // 筆跡量が極端に多すぎ/少なすぎないか
-  const density=Math.min(u.count,r.count)/Math.max(u.count,r.count,1);
-
   // 外接サイズが似ているか
   const wr=Math.min(u.w,r.w)/Math.max(u.w,r.w,1);
   const hr=Math.min(u.h,r.h)/Math.max(u.h,r.h,1);
   const size=Math.sqrt(wr*hr);
 
-  const score=Math.round((coverage*0.40 + precision*0.25 + centroid*0.15 + density*0.10 + size*0.10)*100);
+  const score=Math.round((coverage*0.45 + precision*0.30 + centroid*0.15 + size*0.10)*100);
   return {
     score,
     coverage:Math.round(coverage*100),
     precision:Math.round(precision*100),
     centroid:Math.round(centroid*100),
-    density:Math.round(density*100),
+    density:0,
     size:Math.round(size*100)
   };
 }
@@ -606,7 +603,7 @@ function visualPartsAnalysis(ch){
       coverage:sc.coverage,
       precision:sc.precision,
       centroid:sc.centroid,
-      density:sc.density,
+      density:0,
       size:sc.size,
       minX:p.minX,minY:p.minY,maxX:p.maxX,maxY:p.maxY,count:p.count
     };
@@ -853,11 +850,9 @@ function groupMaskScore(userMask, groupMask, W, H, box){
   const maxDist=Math.max(28, Math.hypot(box.w,box.h)*0.40);
   const pos=Math.max(0,1-Math.hypot(ucx-rcx,ucy-rcy)/maxDist);
 
-  const ink=Math.min(userCount,refCount)/Math.max(userCount,refCount,1);
-
-  // 部品の形比較。存在だけでなく、沿い方と中心位置も見る。
-  const score=Math.round((cov*0.45 + along*0.25 + pos*0.20 + ink*0.10)*100);
-  return {score,cov:Math.round(cov*100),along:Math.round(along*100),pos:Math.round(pos*100),ink:Math.round(ink*100)};
+  // 部品の形比較。存在・沿い方・中心位置で見る。太さ差に左右されるは使わない。
+  const score=Math.round((cov*0.50 + along*0.30 + pos*0.20)*100);
+  return {score,cov:Math.round(cov*100),along:Math.round(along*100),pos:Math.round(pos*100),ink:0};
 }
 async function visualPartsAnalysis(ch){
   const userFull = rasterMaskFromCanvas($('kanjiCanvas'),'user');
@@ -959,7 +954,7 @@ function finishJudge(isOk,msg,cands,level='',comp=null,total=null,trace=null,vis
 
   if($('componentBox') && $('componentDetails')){
     $('componentBox').style.display='block';
-    const traceLine = trace ? `全体線一致:${trace.coverage}% / 筆跡近接:${trace.precision}% / 筆跡量:${trace.density}%<br>` : '';
+    const traceLine = trace ? `全体線一致:${trace.coverage}% / 筆跡近接:${trace.precision}%<br>` : '';
     const visualLine = visual
       ? (visual.unavailable
           ? `見たまま部品グループ比較：KanjiVG未取得のためスキップ<br>${visual.details}`
@@ -1198,10 +1193,10 @@ function traceGlyphScore(ch){
   }
   const precision=userOnRef/Math.max(1,user.count);       // 書いた線が正解字形の近くにあるか
   const coverage=refCovered/Math.max(1,ref.count);       // 正解字形の主要線をなぞれているか
-  const density=Math.min(user.count,ref.count)/Math.max(user.count,ref.count,1); // 筆跡量が極端に少なすぎないか
+  const density=Math.min(user.count,ref.count)/Math.max(user.count,ref.count,1); // が極端に少なすぎないか
   // なぞり・通常手書きの両方を拾うため coverage を強めにする
   const score=Math.round((precision*0.38 + coverage*0.52 + density*0.10)*100);
-  return {score,precision:Math.round(precision*100),coverage:Math.round(coverage*100),density:Math.round(density*100),userInk:user.count,refInk:ref.count};
+  return {score,precision:Math.round(precision*100),coverage:Math.round(coverage*100),density:0,userInk:user.count,refInk:ref.count};
 }
 
 function fallbackScore(ch){
