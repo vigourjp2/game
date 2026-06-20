@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "scoreUsers": {
+      "$userId": {
+        ".read": true,
+        ".write": true,
+        "subjects": {
+          "$subjectId": {
+            ".validate": "newData.hasChildren(['bestScore','updatedAt']) || newData.hasChildren(['bestScore'])"
+          }
+        }
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}
