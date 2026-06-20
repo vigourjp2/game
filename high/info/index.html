@@ -15,4 +15,130 @@ ip:{title:'知的財産権の分類',html:`<div class="ref"><h3>知的財産権<
 auth:{title:'認証と対策',html:`<div class="ref"><h3>認証の種類</h3><div class="cards"><b>ユーザID＋パスワード</b><span>本人を識別し、秘密の文字列で確認</span><b>ワンタイムパスワード</b><span>一度だけ使えるパスワード</span><b>マトリクス認証</b><span>表の位置から指定文字を入力</span><b>デバイス認証</b><span>登録済み端末で確認</span><b>メール認証</b><span>メールに届いたコードで確認</span><b>バイオメトリクス認証</b><span>指紋・顔など身体特徴</span><b>多要素認証</b><span>知識・所持・生体などを組み合わせる</span></div></div>`}
 };
 
-let order=[],idx=0,ok=0,answered=false,current=null,wrongIds=JSON.parse(localStorage.getItem('highInfoWrong')||'[]');const $=id=>document.getElementById(id);function shuffle(a){return [...a].sort(()=>Math.random()-.5)}function init(){$('total').textContent=QUESTIONS.length;const cats=[...new Set(QUESTIONS.map(q=>q.cat))];$('cat').innerHTML='<option value="">全カテゴリ</option>'+cats.map(c=>`<option>${c}</option>`).join('');$('memo').value=localStorage.getItem('highInfoMemo')||'';start()}function start(){const mode=$('mode').value,cat=$('cat').value;let pool=QUESTIONS.map((q,i)=>({...q,id:i}));if(cat)pool=pool.filter(q=>q.cat===cat);if(mode==='wrong')pool=pool.filter(q=>wrongIds.includes(q.id));pool=shuffle(pool);if(mode==='exam')pool=pool.slice(0,50);if(pool.length===0){$('prompt').textContent='対象問題がない。全問モードでやり直して。';$('choices').innerHTML='';return}order=pool;idx=0;ok=0;answered=false;render()}function render(){current=order[idx];answered=false;$('qcat').textContent=current.cat;$('qno').textContent=`${idx+1} / ${order.length}`;$('prompt').textContent=current.prompt;$('res').textContent='';$('res').className='result';$('exp').textContent='';$('nextBtn').classList.add('hidden');$('figBtnArea').innerHTML=current.fig?`<button class="secondary" onclick="openFigure('${current.fig}')">📖 参照を見る</button>`:'';const choices=shuffle(current.choices);$('choices').innerHTML=choices.map((c,i)=>`<button class="choice" data-choice="${i}">${c}</button>`).join('');[...document.querySelectorAll('.choice')].forEach((b,i)=>b.addEventListener('click',()=>choose(b, choices[i])));updateStats()}function choose(btn,val){if(answered)return;answered=true;[...document.querySelectorAll('.choice')].forEach(b=>{if(b.textContent===current.answer)b.classList.add('correct')});if(val===current.answer){ok++;$('res').textContent='正解！';$('res').classList.add('ok');wrongIds=wrongIds.filter(id=>id!==current.id)}else{btn.classList.add('wrong');$('res').textContent=`不正解。正解は「${current.answer}」。`;$('res').classList.add('ng');if(!wrongIds.includes(current.id))wrongIds.push(current.id)}localStorage.setItem('highInfoWrong',JSON.stringify(wrongIds));$('exp').textContent=current.exp||'';$('nextBtn').classList.remove('hidden');updateStats()}function showAnswer(){if(answered)return;[...document.querySelectorAll('.choice')].forEach(b=>{if(b.textContent===current.answer)b.classList.add('correct')});$('res').textContent=`正解は「${current.answer}」。`;$('res').className='result ok';$('exp').textContent=current.exp||'';answered=true;$('nextBtn').classList.remove('hidden')}function next(){idx++;if(idx>=order.length){$('prompt').textContent=`終了！ 得点は ${Math.round(ok/order.length*100)}点相当。`;$('choices').innerHTML='';$('figBtnArea').innerHTML='';$('qno').textContent=`${order.length} / ${order.length}`;$('res').textContent=`正解 ${ok} / ${order.length}`;$('exp').textContent='間違いだけ復習モードで弱点をつぶそう。';$('nextBtn').classList.add('hidden');updateStats();return}render()}function updateStats(){$('ok').textContent=ok;const done=answered?idx+1:idx;const denom=order.length||1;$('score').textContent=order.length?Math.round(ok/denom*100):0;$('rate').textContent=done?Math.round(ok/done*100)+'%':'0%'}function openFigure(key){const f=FIGURES[key];if(!f)return;$('modalTitle').textContent=f.title;$('modalBody').innerHTML=f.html;$('modal').classList.add('open')}function closeModal(){$('modal').classList.remove('open')}function speak(text){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';speechSynthesis.speak(u)}catch(e){}}function saveMemo(){localStorage.setItem('highInfoMemo',$('memo').value);alert('保存した')}function clearProgress(){localStorage.removeItem('highInfoWrong');wrongIds=[];alert('リセットした')}init();</script></body></html>
+let order=[],idx=0,ok=0,answered=false,current=null,wrongIds=JSON.parse(localStorage.getItem('highInfoWrong')||'[]');const $=id=>document.getElementById(id);function shuffle(a){return [...a].sort(()=>Math.random()-.5)}function init(){$('total').textContent=QUESTIONS.length;const cats=[...new Set(QUESTIONS.map(q=>q.cat))];$('cat').innerHTML='<option value="">全カテゴリ</option>'+cats.map(c=>`<option>${c}</option>`).join('');$('memo').value=localStorage.getItem('highInfoMemo')||'';start()}function start(){const mode=$('mode').value,cat=$('cat').value;let pool=QUESTIONS.map((q,i)=>({...q,id:i}));if(cat)pool=pool.filter(q=>q.cat===cat);if(mode==='wrong')pool=pool.filter(q=>wrongIds.includes(q.id));pool=shuffle(pool);if(mode==='exam')pool=pool.slice(0,50);if(pool.length===0){$('prompt').textContent='対象問題がない。全問モードでやり直して。';$('choices').innerHTML='';return}order=pool;idx=0;ok=0;answered=false;render()}function render(){current=order[idx];answered=false;$('qcat').textContent=current.cat;$('qno').textContent=`${idx+1} / ${order.length}`;$('prompt').textContent=current.prompt;$('res').textContent='';$('res').className='result';$('exp').textContent='';$('nextBtn').classList.add('hidden');$('figBtnArea').innerHTML=current.fig?`<button class="secondary" onclick="openFigure('${current.fig}')">📖 参照を見る</button>`:'';const choices=shuffle(current.choices);$('choices').innerHTML=choices.map((c,i)=>`<button class="choice" data-choice="${i}">${c}</button>`).join('');[...document.querySelectorAll('.choice')].forEach((b,i)=>b.addEventListener('click',()=>choose(b, choices[i])));updateStats()}function choose(btn,val){if(answered)return;answered=true;[...document.querySelectorAll('.choice')].forEach(b=>{if(b.textContent===current.answer)b.classList.add('correct')});if(val===current.answer){ok++;$('res').textContent='正解！';$('res').classList.add('ok');wrongIds=wrongIds.filter(id=>id!==current.id)}else{btn.classList.add('wrong');$('res').textContent=`不正解。正解は「${current.answer}」。`;$('res').classList.add('ng');if(!wrongIds.includes(current.id))wrongIds.push(current.id)}localStorage.setItem('highInfoWrong',JSON.stringify(wrongIds));$('exp').textContent=current.exp||'';$('nextBtn').classList.remove('hidden');updateStats()}function showAnswer(){if(answered)return;[...document.querySelectorAll('.choice')].forEach(b=>{if(b.textContent===current.answer)b.classList.add('correct')});$('res').textContent=`正解は「${current.answer}」。`;$('res').className='result ok';$('exp').textContent=current.exp||'';answered=true;$('nextBtn').classList.remove('hidden')}function next(){idx++;if(idx>=order.length){$('prompt').textContent=`終了！ 得点は ${Math.round(ok/order.length*100)}点相当。`;$('choices').innerHTML='';$('figBtnArea').innerHTML='';$('qno').textContent=`${order.length} / ${order.length}`;$('res').textContent=`正解 ${ok} / ${order.length}`;$('exp').textContent='間違いだけ復習モードで弱点をつぶそう。';$('nextBtn').classList.add('hidden');updateStats();return}render()}function updateStats(){$('ok').textContent=ok;const done=answered?idx+1:idx;const denom=order.length||1;$('score').textContent=order.length?Math.round(ok/denom*100):0;$('rate').textContent=done?Math.round(ok/done*100)+'%':'0%'}function openFigure(key){const f=FIGURES[key];if(!f)return;$('modalTitle').textContent=f.title;$('modalBody').innerHTML=f.html;$('modal').classList.add('open')}function closeModal(){$('modal').classList.remove('open')}function speak(text){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='ja-JP';speechSynthesis.speak(u)}catch(e){}}function saveMemo(){localStorage.setItem('highInfoMemo',$('memo').value);alert('保存した')}function clearProgress(){localStorage.removeItem('highInfoWrong');wrongIds=[];alert('リセットした')}init();</script>
+<script src="../../firebase-config.js"></script>
+<script id="periodic-test-score-addon">
+(function(){
+  const META={id:"high-info",name:"高校 情報"};
+  const KEY='periodicTestBest:'+META.id;
+  const LAST='periodicTestLast:'+META.id;
+  const STYLE_ID='periodic-test-style';
+  const USER_KEY='gakushuScoreUserId';
+  let firebaseState='確認中';
+  let fbCache=null;
+  function $(id){return document.getElementById(id)}
+  function safeId(s){return String(s||'default').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)||'default'}
+  function getUserId(){
+    let id=localStorage.getItem(USER_KEY);
+    if(!id){id='guest-'+(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));localStorage.setItem(USER_KEY,id)}
+    return safeId(id);
+  }
+  function firebaseConfigured(){
+    const c=window.GAKUSHU_FIREBASE_CONFIG;
+    return !!(c && c.apiKey && c.databaseURL && !String(c.apiKey).includes('PASTE_') && !String(c.databaseURL).includes('PASTE_'));
+  }
+  async function fb(){
+    if(fbCache) return fbCache;
+    if(!firebaseConfigured()){firebaseState='Firebase未設定・端末保存';return null;}
+    try{
+      const [{initializeApp,getApps},{getDatabase,ref,get,set,remove,onValue,serverTimestamp}]=await Promise.all([
+        import('https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js'),
+        import('https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js')
+      ]);
+      const app=getApps().length?getApps()[0]:initializeApp(window.GAKUSHU_FIREBASE_CONFIG);
+      const db=getDatabase(app);
+      fbCache={db,ref,get,set,remove,onValue,serverTimestamp};
+      firebaseState='Firebase DB同期ON';
+      return fbCache;
+    }catch(e){console.warn('Firebase init failed',e);firebaseState='Firebase接続失敗・端末保存';return null;}
+  }
+  function pathFor(){return 'scoreUsers/'+getUserId()+'/subjects/'+META.id}
+  function readBest(){const v=localStorage.getItem(KEY); return v==null?null:Number(v)}
+  async function readRemoteBest(){
+    const f=await fb(); if(!f) return null;
+    try{const snap=await f.get(f.ref(f.db,pathFor())); const v=snap.exists()?snap.val():null; return v&&typeof v.best==='number'?v.best:null}catch(e){console.warn(e);return null}
+  }
+  async function writeRemoteBest(score){
+    const f=await fb(); if(!f) return;
+    try{
+      const p=f.ref(f.db,pathFor());
+      const snap=await f.get(p); const old=snap.exists()?snap.val():null; const oldBest=old&&typeof old.best==='number'?old.best:null;
+      if(oldBest==null || score>oldBest){
+        await f.set(p,{best:score,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:getUserId()});
+        firebaseState='Firebase DB同期済';
+      }else{
+        // 最高点更新なしでも最終点だけ持つ
+        await f.set(p,{...(old||{}),best:oldBest,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:getUserId()});
+        firebaseState='Firebase DB同期済';
+      }
+      updatePanel();
+    }catch(e){console.warn('Firebase write failed',e);firebaseState='Firebase書込失敗・端末保存';updatePanel();}
+  }
+  async function removeRemoteBest(){const f=await fb(); if(!f)return; try{await f.remove(f.ref(f.db,pathFor())); firebaseState='Firebase DBリセット済';}catch(e){console.warn(e);firebaseState='Firebaseリセット失敗';}}
+  async function syncFromRemote(){
+    const rb=await readRemoteBest();
+    if(rb!=null){const lb=readBest(); if(lb==null||rb>lb)localStorage.setItem(KEY,String(rb));}
+    updatePanel();
+  }
+  async function watchRemote(){
+    const f=await fb(); if(!f)return;
+    try{f.onValue(f.ref(f.db,pathFor()),snap=>{const v=snap.val(); if(v&&typeof v.best==='number'){const lb=readBest(); if(lb==null||v.best>=lb)localStorage.setItem(KEY,String(v.best));}else{localStorage.removeItem(KEY)} updatePanel();});}catch(e){console.warn(e)}
+  }
+  function writeBest(score){
+    score=Math.max(0,Math.min(100,Math.round(Number(score)||0)));
+    const old=readBest();
+    localStorage.setItem(LAST, JSON.stringify({score,at:new Date().toISOString(),name:META.name,scoreUserId:getUserId()}));
+    if(old==null || score>old){localStorage.setItem(KEY,String(score));}
+    updatePanel();
+    writeRemoteBest(score);
+  }
+  window.__recordPeriodicTestScore=function(score){writeBest(score)};
+  window.__resetPeriodicTestBest=async function(){if(confirm(META.name+' の歴代最高得点をFirebase DBごとリセットする？')){localStorage.removeItem(KEY);localStorage.removeItem(LAST);await removeRemoteBest();updatePanel();}};
+  function ensurePanel(){
+    if(!$(STYLE_ID)){
+      const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      .ptsPanel{position:fixed;right:10px;bottom:10px;z-index:2147483000;background:rgba(15,23,42,.92);color:#fff;border:1px solid rgba(148,163,184,.45);border-radius:16px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.35);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:270px}
+      .ptsPanel b{display:block;font-size:13px;letter-spacing:.02em}.ptsBest{font-size:18px;font-weight:1000;color:#fde68a;margin-top:2px}.ptsRow{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}.ptsRow button{border:0;border-radius:999px;padding:7px 9px;font-weight:900;background:#2563eb;color:white}.ptsRow button.reset{background:#475569}.ptsMini{font-size:11px;color:#cbd5e1;font-weight:800;line-height:1.35;margin-top:4px}.ptsFb{font-size:11px;color:#93c5fd;font-weight:900;margin-top:3px}@media(max-width:560px){.ptsPanel{left:8px;right:8px;bottom:6px;max-width:none;display:flex;align-items:center;justify-content:space-between;gap:8px}.ptsRow{margin-top:0}.ptsMini,.ptsFb{display:none}}`;
+      document.head.appendChild(st);
+    }
+    if($('periodicTestPanel')) return;
+    const div=document.createElement('div');div.className='ptsPanel';div.id='periodicTestPanel';div.innerHTML=`<div><b>定期テスト対策テスト</b><div class="ptsBest" id="periodicBest">最高 --点</div><div class="ptsMini">完走点をFirebase DBに歴代最高で保存</div><div class="ptsFb" id="periodicFbState">Firebase確認中</div></div><div class="ptsRow"><button type="button" id="periodicManual">今の点を記録</button><button type="button" class="reset" id="periodicReset">リセット</button></div>`;
+    document.body.appendChild(div);
+    $('periodicManual').onclick=()=>{const s=extractScore(); if(s==null){alert('まだ点数を検出できない。最後まで解いてから押して。');return} writeBest(s); alert(META.name+'：'+s+'点を記録した。')};
+    $('periodicReset').onclick=window.__resetPeriodicTestBest;
+    updatePanel();
+  }
+  function updatePanel(){const b=readBest(); const el=$('periodicBest'); if(el)el.textContent=b==null?'最高 --点':'最高 '+b+'点'; const fbEl=$('periodicFbState'); if(fbEl)fbEl.textContent=firebaseState+' / ID:'+getUserId();}
+  function num(s){const n=Number(String(s||'').replace(/[^0-9.]/g,''));return Number.isFinite(n)?n:null}
+  function scoreFromOkTotal(ok,total){ok=Number(ok);total=Number(total); if(!total||total<1)return null; return Math.round(ok/total*100)}
+  function extractScore(){
+    const bodyText=(document.body&&document.body.innerText)||'';
+    let best=null;
+    const patterns=[/正解\s*([0-9]+)\s*\/\s*([0-9]+)/g,/([0-9]+)問中\s*([0-9]+)問正解/g,/([0-9]+)\s*\/\s*([0-9]+)\s*問/g];
+    for(const re of patterns){let m; while((m=re.exec(bodyText))){let a=Number(m[1]),b=Number(m[2]); let sc=null; if(re.source.startsWith('([0-9]+)問中')) sc=scoreFromOkTotal(b,a); else sc=scoreFromOkTotal(a,b); if(sc!=null)best=sc;}}
+    let m=bodyText.match(/(?:得点|スコア|点数)[^0-9]{0,8}([0-9]{1,3})\s*点/); if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    m=bodyText.match(/([0-9]{1,3})\s*点相当/); if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    const scoreEl=$('score'); if(scoreEl){const n=num(scoreEl.textContent); if(n!=null&&n>=0&&n<=100)best=Math.round(n)}
+    return best;
+  }
+  function completionSignal(){
+    const t=(document.body&&document.body.innerText)||'';
+    if(/終了|完了|最後|1周終わり|テスト終了|全問終了/.test(t)) return true;
+    const qno=$('qno')?.textContent||''; const m=qno.match(/([0-9]+)\s*\/\s*([0-9]+)/); if(m&&Number(m[1])>=Number(m[2])&&Number(m[2])>0&&/正解\s*[0-9]+\s*\//.test(t))return true;
+    return false;
+  }
+  let recordedAt=0;
+  function maybeRecord(){
+    if(Date.now()-recordedAt<1500)return;
+    if(!completionSignal())return;
+    const s=extractScore();
+    if(s==null)return;
+    recordedAt=Date.now(); writeBest(s);
+  }
+  const oldAlert=window.alert;
+  window.alert=function(msg){try{if(String(msg).match(/1周終わり|終了|完了/)){setTimeout(maybeRecord,50)}}catch(e){} return oldAlert.apply(this,arguments)};
+  window.addEventListener('storage',()=>syncFromRemote());
+  window.addEventListener('load',()=>{ensurePanel(); syncFromRemote(); watchRemote(); setInterval(maybeRecord,1200); const mo=new MutationObserver(()=>maybeRecord()); mo.observe(document.body,{childList:true,subtree:true,characterData:true});});
+})();
+</script>
+</body></html>
