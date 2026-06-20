@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: pbomber-20260620-playcanvas-richpower-v1 -->
+<!-- build: pbomber-20260620-playcanvas-richpower-textured-v2 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -136,8 +136,8 @@
 #game{position:relative;z-index:2}
 #pcGame{position:absolute;left:50%;top:50%;z-index:1;pointer-events:none;display:none;transform:translate(-50%,-50%) translateZ(0);will-change:transform}
 body.playcanvas3d #pcGame{display:block}
-body.playcanvas3d #game{opacity:.22;mix-blend-mode:screen}
-body.playcanvas3d::after{content:'PLAYCANVAS RICH POWER';position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);transform:translateX(-50%);z-index:34;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.42);background:rgba(2,6,23,.60);color:#fde68a;font:1000 10px system-ui,sans-serif;letter-spacing:.08em;pointer-events:none;text-shadow:0 2px 8px #000}
+body.playcanvas3d #game{opacity:.16;mix-blend-mode:screen}
+body.playcanvas3d::after{content:'PLAYCANVAS TEXTURED RICH POWER';position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);transform:translateX(-50%);z-index:34;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.42);background:rgba(2,6,23,.60);color:#fde68a;font:1000 10px system-ui,sans-serif;letter-spacing:.08em;pointer-events:none;text-shadow:0 2px 8px #000}
 </style>
 </head>
 <body>
@@ -224,7 +224,7 @@ body.playcanvas3d::after{content:'PLAYCANVAS RICH POWER';position:fixed;left:50%
 (()=>{'use strict';
 const firebaseConfig={apiKey:"AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY",authDomain:"minicra.firebaseapp.com",databaseURL:"https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"minicra",storageBucket:"minicra.firebasestorage.app",messagingSenderId:"943025034725",appId:"1:943025034725:web:c46da7ded946ce4fde0b0c"};
 const cvs=document.getElementById('game'),ctx=cvs.getContext('2d',{alpha:false,desynchronized:false}),$=id=>document.getElementById(id);
-const GAME_BUILD='PLAYCANVAS-RICHPOWER-V1-20260620',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
+const GAME_BUILD='PLAYCANVAS-RICHPOWER-TEXTURED-V2-20260620',CART_ALLOWED_MAX_WAVE=3,FINAL_BOSS_WAVE=33;
 const W=832,H=704,T=48,EMPTY=0,SOFT=1,HARD=2,DIRS=[[1,0],[-1,0],[0,1],[0,-1]],MINECART_MODE='RIDE_TRIGGER_PATH_V4_WAVE1_3_ONLY';let C=15,R=13,OX=0,OY=0;let camX=0,camY=0,viewScale=1,viewOffX=0,viewOffY=0,currentTheme=null,gimmicks=[],carts=[];
 const RENDER_MIN_WIDTH=2560,RENDER_MIN_HEIGHT=1440,RENDER_MAX_PIXELS=9000000,RENDER_MAX_SCALE=4;
 const RENDER_DPR_CAP=3.5,RENDER_RESIZE_DELAY=24;
@@ -233,7 +233,7 @@ let viewMode3D=false;const VIEW3D_SPEED_SCALE=1;
 const view3D={yaw:0,pitch:0,ready:false,third:false};
 const movePad={dx:0,dy:0};
 const lookTouch={active:false,id:null,sx:0,sy:0,x:0,y:0,dx:0,dy:0,started:0,moved:false};
-const playCanvasRich={app:null,canvas:null,root:null,camera:null,light:null,ready:false,failed:false,pools:{},mats:{},lastSync:0,lastW:0,lastH:0};
+const playCanvasRich={app:null,canvas:null,root:null,camera:null,light:null,ready:false,failed:false,pools:{},mats:{},lastSync:0,lastW:0,lastH:0,surface:null,surfaceMat:null,surfaceTex:null,surfaceLastW:0,surfaceLastH:0,surfaceSeq:0};
 function pcRichAvailable(){return !!(window.pc&&pc.Application&&pc.Entity&&pc.Color)}
 function pcRichSyncCanvasSize(){
   const st=playCanvasRich;if(!st.canvas||!cvs)return;
@@ -265,7 +265,7 @@ function pcRichInit(){
     const cam=new pc.Entity('pbomber_pc_camera');cam.addComponent('camera',{clearColor:new pc.Color(.025,.055,.105),fov:67,nearClip:.04,farClip:80});app.root.addChild(cam);st.camera=cam;
     const sun=new pc.Entity('pbomber_pc_sun');sun.addComponent('light',{type:'directional',color:new pc.Color(1,.94,.78),intensity:1.75,castShadows:true,shadowDistance:24,shadowResolution:1024});sun.setLocalEulerAngles(47,132,0);app.root.addChild(sun);st.light=sun;
     const fill=new pc.Entity('pbomber_pc_fill');fill.addComponent('light',{type:'omni',color:new pc.Color(.35,.62,1),intensity:.42,range:18});fill.setLocalPosition(0,5,0);app.root.addChild(fill);
-    st.root=new pc.Entity('pbomber_pc_world');app.root.addChild(st.root);app.start();st.ready=true;return true;
+    st.root=new pc.Entity('pbomber_pc_world');app.root.addChild(st.root);pcRichEnsureSurface();app.start();st.ready=true;return true;
   }catch(e){console.warn('PlayCanvas RichPower init failed',e);st.failed=true;return false;}
 }
 function pcRichColor(hex){
@@ -275,6 +275,10 @@ function pcRichColor(hex){
 function pcRichMat(key,hex,emissive){
   const st=playCanvasRich,k=key+'|'+hex+'|'+(emissive?1:0);if(st.mats[k])return st.mats[k];
   let m=new pc.StandardMaterial();m.diffuse=pcRichColor(hex);m.specular=new pc.Color(.12,.12,.12);m.shininess=emissive?72:28;
+  // 2D表面テクスチャが主役。立体モデルは半透明の位置補助にして、下の2D情報を潰さない。
+  let ks=String(key||'');
+  let alpha=ks.startsWith('floor')?.16:(ks==='hard'||ks==='soft'||ks.startsWith('wall')?.52:(ks.startsWith('flame')?.62:.72));
+  try{m.opacity=alpha;m.blendType=pc.BLEND_NORMAL;m.depthWrite=alpha>.68;}catch(e){}
   if(emissive){m.emissive=pcRichColor(hex);m.emissiveIntensity=emissive===true?.35:emissive;}
   try{m.useMetalness=false;m.update()}catch(e){}
   return st.mats[k]=m;
@@ -287,6 +291,38 @@ function pcRichPrimitive(type,name){
 }
 function pcRichSetMat(e,m){
   try{let c=e.render||e.model;if(c&&c.meshInstances)c.meshInstances.forEach(mi=>mi.material=m)}catch(err){}
+}
+
+function pcRichEnsureSurface(){
+  const st=playCanvasRich;if(!st.app||!st.root||!pcRichAvailable())return null;
+  if(!st.surface){
+    const e=pcRichPrimitive('plane','pbomber_2d_surface_texture');
+    try{e.render.castShadows=false;e.render.receiveShadows=true;}catch(err){}
+    st.root.addChild(e);st.surface=e;
+  }
+  if(!st.surfaceTex||st.surfaceLastW!==cvs.width||st.surfaceLastH!==cvs.height){
+    st.surfaceLastW=cvs.width;st.surfaceLastH=cvs.height;
+    try{
+      st.surfaceTex=new pc.Texture(st.app.graphicsDevice,{width:Math.max(1,cvs.width),height:Math.max(1,cvs.height),format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:false,minFilter:pc.FILTER_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE});
+      st.surfaceTex.setSource(cvs);
+      if('flipY' in st.surfaceTex)st.surfaceTex.flipY=false;
+      const m=new pc.StandardMaterial();
+      m.diffuse=new pc.Color(1,1,1);m.specular=new pc.Color(0,0,0);m.shininess=0;
+      m.diffuseMap=st.surfaceTex;m.emissiveMap=st.surfaceTex;m.emissive=new pc.Color(1,1,1);m.emissiveIntensity=.78;
+      try{m.useLighting=false;}catch(e){}
+      try{m.cull=pc.CULLFACE_NONE;}catch(e){}
+      m.update();st.surfaceMat=m;pcRichSetMat(st.surface,st.surfaceMat);
+    }catch(e){console.warn('PlayCanvas 2D texture surface failed',e);st.surfaceTex=null;}
+  }
+  return st.surface;
+}
+function pcRichUpload2DTexture(){
+  const st=playCanvasRich;if(!st.surfaceTex)return;
+  try{
+    st.surfaceTex.setSource(cvs);
+    if(st.surfaceMat)st.surfaceMat.update();
+    st.surfaceSeq++;
+  }catch(e){}
 }
 function pcRichPool(kind,type,i){
   const st=playCanvasRich;let a=st.pools[kind]||(st.pools[kind]=[]);
@@ -304,6 +340,13 @@ function pcRichRender(dt){
   const st=playCanvasRich;pcRichSyncCanvasSize();document.body.classList.add('playcanvas3d');
   let th=currentTheme||themeForWave(wave)||{},bg=pcRichColor(th.bg||'#07101d');
   try{if(st.camera&&st.camera.camera)st.camera.camera.clearColor=bg;if(st.app&&st.app.scene)st.app.scene.ambientLight=new pc.Color(.22,.27,.36);}catch(e){}
+  let surf=pcRichEnsureSurface();
+  if(surf){
+    pcRichUpload2DTexture();
+    // 2Dの完成画面を3D盤面そのものに貼る。全要素の読みやすさを最優先し、立体モデルは薄い補助形状にする。
+    let center=pcRichWorld(W*.5,H*.5,0);
+    surf.enabled=true;surf.setLocalPosition(center.x,.012,center.z);surf.setLocalEulerAngles(0,0,0);surf.setLocalScale(W/T,1,H/T);
+  }
   let n=0;
   for(let r=0;r<R;r++)for(let c=0;c<C;c++){
     let o=pcRichWorld(OX+c*T+T*.5,OY+r*T+T*.5,0),e=pcRichPool('floor','box',n++);
@@ -338,12 +381,12 @@ function pcRichRender(dt){
   return true;
 }
 function drawPlayCanvasHudHint(){
-  beginFrame();ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle='rgba(2,6,23,.20)';ctx.fillRect(0,0,W,H);
-  ctx.textAlign='left';ctx.textBaseline='top';ctx.font='900 13px system-ui';ctx.fillStyle='#fde68a';ctx.fillText('PLAYCANVAS RICH POWER / WebGL 3D',12,12);
-  ctx.font='900 12px system-ui';ctx.fillStyle='#dbeafe';ctx.fillText('WAVE '+wave+'  '+(msg||''),12,31);
+  beginFrame();ctx.save();
+  ctx.fillStyle='rgba(2,6,23,.62)';round(8,8,310,42,10);ctx.fill();
+  ctx.textAlign='left';ctx.textBaseline='top';ctx.font='900 13px system-ui';ctx.fillStyle='#fde68a';ctx.fillText('PLAYCANVAS TEXTURED RICH POWER',18,14);
+  ctx.font='900 12px system-ui';ctx.fillStyle='#dbeafe';ctx.fillText('2D SURFACE TEXTURE / WAVE '+wave,18,33);
   ctx.restore();
 }
-
 function applyRenderQuality(){
   ctx.setTransform(renderScale,0,0,renderScale,0,0);
   ctx.imageSmoothingEnabled=true;
@@ -388,7 +431,7 @@ resizeGameCanvas(true);
 window.addEventListener('resize',()=>scheduleRenderResize(false),{passive:true});
 window.addEventListener('orientationchange',()=>scheduleRenderResize(true),{passive:true});
 if(window.ResizeObserver){new ResizeObserver(()=>scheduleRenderResize(false)).observe(cvs)}
-function updateViewModeButton(){const b=$('viewModeBtn');if(!b)return;b.textContent=viewMode3D?'3D PLAYCANVAS x1.0':'2D VIEW';b.classList.toggle('on3d',viewMode3D);}
+function updateViewModeButton(){const b=$('viewModeBtn');if(!b)return;b.textContent=viewMode3D?'3D TEXTURE x1.0':'2D VIEW';b.classList.toggle('on3d',viewMode3D);}
 function init3DViewFromPlayer(force=false){let p=players&&players[myId]||Object.values(players||{})[0];if(!p)return;if(force||!view3D.ready){let dx=Number.isFinite(p.lastDirX)?p.lastDirX:1,dy=Number.isFinite(p.lastDirY)?p.lastDirY:0;if(Math.hypot(dx,dy)<.2){dx=1;dy=0}view3D.yaw=Math.atan2(dy,dx);view3D.pitch=clamp(view3D.pitch||0,-.92,.92);view3D.ready=true;}}
 function clear3DLookTouch(){if(!lookTouch.active&&lookTouch.id===null&&(lookTouch.dx||0)===0&&(lookTouch.dy||0)===0)return;lookTouch.active=false;lookTouch.id=null;lookTouch.dx=0;lookTouch.dy=0;updateLookPadVisual();}
 function toggleViewMode(){viewMode3D=!viewMode3D;if(viewMode3D){init3DViewFromPlayer(true);msg='3D VIEW - マイクラ操作 / 通常速度'}else{clear3DLookTouch();movePad.dx=0;movePad.dy=0;localInput.dx=0;localInput.dy=0;msg='2D VIEW - 通常速度'}try{localStorage.pbomberViewMode=viewMode3D?'3d':'2d'}catch(e){}updateViewModeButton();updateLookPadVisual();}
@@ -4685,7 +4728,7 @@ function loop(ts){
     if(started&&isHost&&mode!=='offline')runHostLockstep(simDt)
     else if(started&&isHost){updateHost(simDt);publishState()}
     if(now()-lastHudUpdate>120){lastHudUpdate=now();updateHud();}
-    updateRestartButton();if(!grid||grid.length!==R||!grid[0])drawBoot();else if(viewMode3D){if(pcRichRender(simDt))drawPlayCanvasHudHint();else draw3DWorld();}else{document.body.classList.remove('playcanvas3d');clear3DLookTouch();draw()}
+    updateRestartButton();if(!grid||grid.length!==R||!grid[0])drawBoot();else if(viewMode3D){draw();if(pcRichRender(simDt))drawPlayCanvasHudHint();else draw3DWorld();}else{document.body.classList.remove('playcanvas3d');clear3DLookTouch();draw()}
   }catch(e){console.error(e);drawBoot()}
   requestAnimationFrame(loop)
 }makeGrid();requestAnimationFrame(loop);
