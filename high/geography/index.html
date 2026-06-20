@@ -20,15 +20,7 @@ $('speak').onclick=()=>{speechSynthesis.cancel(); speechSynthesis.speak(new Spee
 $('modalClose').onclick=()=>$('modal').classList.remove('show');$('modal').onclick=e=>{if(e.target.id==='modal')$('modal').classList.remove('show')};
 function openRef(q){$('modalTitle').textContent=q.ref.title||'図を見る'; $('modalBody').innerHTML=refHtml(q.ref); $('modal').classList.add('show')}
 function refHtml(r){if(r.kind==='country')return countryMap(r.lat,r.lon); return staticFig(r.key)}
-function countryMap(lat,lon){
- const W=1200,H=483;
- const px=(lon+180)/360*W, py=(85-lat)/145*H;
- const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
- const vw=360, vh=220;
- const vx=clamp(px-vw/2,0,W-vw), vy=clamp(py-vh/2,0,H-vh);
- const marker=(x,y,r=22)=>`<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="#ef4444" stroke-width="1.4" stroke-linecap="round" vector-effect="non-scaling-stroke"/><line x1="${x}" y1="${y-r-30}" x2="${x}" y2="${y+r+30}" stroke="#ef4444" stroke-width="1" stroke-linecap="round" vector-effect="non-scaling-stroke"/><line x1="${x-r-30}" y1="${y}" x2="${x+r+30}" y2="${y}" stroke="#ef4444" stroke-width="1" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
- return `<svg class="refsvg" viewBox="0 0 ${W} ${H}" role="img" aria-label="世界全体での位置"><image href="${MAP}" x="0" y="0" width="${W}" height="${H}"/>${marker(px,py,24)}</svg><svg class="refsvg" viewBox="${vx} ${vy} ${vw} ${vh}" role="img" aria-label="周辺の拡大位置" style="margin-top:10px"><image href="${MAP}" x="0" y="0" width="${W}" height="${H}"/>${marker(px,py,20)}</svg><div class="caption">上：世界全体での位置。下：同じ座標をSVGのviewBoxで正確に切り出した拡大図。赤い細線の円は塗りつぶしなしで、十字の交点がその国のおおよその中心位置。</div>`
-}
+function countryMap(lat,lon){const x=(lon+180)/360*100, y=(85-lat)/145*100; const lx=50-x*3, ty=50-y*3; return `<div class="mapBox"><img src="${MAP}" alt="世界地図"><span class="pin" style="left:${x}%;top:${y}%" aria-hidden="true"></span></div><div class="zoomBox"><img src="${MAP}" alt="拡大世界地図" style="left:${lx}%;top:${ty}%"><span class="zoomPin" aria-hidden="true"></span></div><div class="caption">上：世界全体での位置。下：その周辺の拡大。赤い細線の円は塗りつぶしなしで、円の中心がおおよその国の中心位置。</div>`}
 function svgWrap(inner,cap=''){return `<svg class="refsvg" viewBox="0 0 760 420" role="img">${inner}</svg><div class="caption">${cap}</div>`}
 function staticFig(k){
  const grid='<defs><pattern id="g" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#dbe7f7"/></pattern></defs><rect width="760" height="420" fill="#f8fafc"/><rect width="760" height="420" fill="url(#g)"/>';
@@ -49,4 +41,130 @@ function staticFig(k){
  if(k==='gis')return svgWrap(`${grid}<rect x="150" y="100" width="460" height="220" rx="20" fill="#e0f2fe" stroke="#334155"/><rect x="205" y="140" width="350" height="40" fill="#fff" stroke="#2563eb"/><rect x="205" y="190" width="350" height="40" fill="#fff" stroke="#16a34a"/><rect x="205" y="240" width="350" height="40" fill="#fff" stroke="#f97316"/><text x="230" y="167" font-size="20">道路レイヤー</text><text x="230" y="217" font-size="20">人口レイヤー</text><text x="230" y="267" font-size="20">土地利用レイヤー</text><text x="160" y="370" font-size="20">GIS：地理情報を重ねて分析</text>`, 'GISでは複数の地理情報を重ね合わせて分析する。');
  return '<div class="caption">図なし</div>'}
 renderWrong(); start('50');
-</script></body></html>
+</script>
+<script src="../../firebase-config.js"></script>
+<script id="periodic-test-score-addon">
+(function(){
+  const META={id:"high-geography",name:"高校 地理総合"};
+  const KEY='periodicTestBest:'+META.id;
+  const LAST='periodicTestLast:'+META.id;
+  const STYLE_ID='periodic-test-style';
+  const USER_KEY='gakushuScoreUserId';
+  let firebaseState='確認中';
+  let fbCache=null;
+  function $(id){return document.getElementById(id)}
+  function safeId(s){return String(s||'default').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)||'default'}
+  function getUserId(){
+    let id=localStorage.getItem(USER_KEY);
+    if(!id){id='guest-'+(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));localStorage.setItem(USER_KEY,id)}
+    return safeId(id);
+  }
+  function firebaseConfigured(){
+    const c=window.GAKUSHU_FIREBASE_CONFIG;
+    return !!(c && c.apiKey && c.databaseURL && !String(c.apiKey).includes('PASTE_') && !String(c.databaseURL).includes('PASTE_'));
+  }
+  async function fb(){
+    if(fbCache) return fbCache;
+    if(!firebaseConfigured()){firebaseState='Firebase未設定・端末保存';return null;}
+    try{
+      const [{initializeApp,getApps},{getDatabase,ref,get,set,remove,onValue,serverTimestamp}]=await Promise.all([
+        import('https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js'),
+        import('https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js')
+      ]);
+      const app=getApps().length?getApps()[0]:initializeApp(window.GAKUSHU_FIREBASE_CONFIG);
+      const db=getDatabase(app);
+      fbCache={db,ref,get,set,remove,onValue,serverTimestamp};
+      firebaseState='Firebase DB同期ON';
+      return fbCache;
+    }catch(e){console.warn('Firebase init failed',e);firebaseState='Firebase接続失敗・端末保存';return null;}
+  }
+  function pathFor(){return 'scoreUsers/'+getUserId()+'/subjects/'+META.id}
+  function readBest(){const v=localStorage.getItem(KEY); return v==null?null:Number(v)}
+  async function readRemoteBest(){
+    const f=await fb(); if(!f) return null;
+    try{const snap=await f.get(f.ref(f.db,pathFor())); const v=snap.exists()?snap.val():null; return v&&typeof v.best==='number'?v.best:null}catch(e){console.warn(e);return null}
+  }
+  async function writeRemoteBest(score){
+    const f=await fb(); if(!f) return;
+    try{
+      const p=f.ref(f.db,pathFor());
+      const snap=await f.get(p); const old=snap.exists()?snap.val():null; const oldBest=old&&typeof old.best==='number'?old.best:null;
+      if(oldBest==null || score>oldBest){
+        await f.set(p,{best:score,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:getUserId()});
+        firebaseState='Firebase DB同期済';
+      }else{
+        // 最高点更新なしでも最終点だけ持つ
+        await f.set(p,{...(old||{}),best:oldBest,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:getUserId()});
+        firebaseState='Firebase DB同期済';
+      }
+      updatePanel();
+    }catch(e){console.warn('Firebase write failed',e);firebaseState='Firebase書込失敗・端末保存';updatePanel();}
+  }
+  async function removeRemoteBest(){const f=await fb(); if(!f)return; try{await f.remove(f.ref(f.db,pathFor())); firebaseState='Firebase DBリセット済';}catch(e){console.warn(e);firebaseState='Firebaseリセット失敗';}}
+  async function syncFromRemote(){
+    const rb=await readRemoteBest();
+    if(rb!=null){const lb=readBest(); if(lb==null||rb>lb)localStorage.setItem(KEY,String(rb));}
+    updatePanel();
+  }
+  async function watchRemote(){
+    const f=await fb(); if(!f)return;
+    try{f.onValue(f.ref(f.db,pathFor()),snap=>{const v=snap.val(); if(v&&typeof v.best==='number'){const lb=readBest(); if(lb==null||v.best>=lb)localStorage.setItem(KEY,String(v.best));}else{localStorage.removeItem(KEY)} updatePanel();});}catch(e){console.warn(e)}
+  }
+  function writeBest(score){
+    score=Math.max(0,Math.min(100,Math.round(Number(score)||0)));
+    const old=readBest();
+    localStorage.setItem(LAST, JSON.stringify({score,at:new Date().toISOString(),name:META.name,scoreUserId:getUserId()}));
+    if(old==null || score>old){localStorage.setItem(KEY,String(score));}
+    updatePanel();
+    writeRemoteBest(score);
+  }
+  window.__recordPeriodicTestScore=function(score){writeBest(score)};
+  window.__resetPeriodicTestBest=async function(){if(confirm(META.name+' の歴代最高得点をFirebase DBごとリセットする？')){localStorage.removeItem(KEY);localStorage.removeItem(LAST);await removeRemoteBest();updatePanel();}};
+  function ensurePanel(){
+    if(!$(STYLE_ID)){
+      const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      .ptsPanel{position:fixed;right:10px;bottom:10px;z-index:2147483000;background:rgba(15,23,42,.92);color:#fff;border:1px solid rgba(148,163,184,.45);border-radius:16px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.35);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:270px}
+      .ptsPanel b{display:block;font-size:13px;letter-spacing:.02em}.ptsBest{font-size:18px;font-weight:1000;color:#fde68a;margin-top:2px}.ptsRow{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}.ptsRow button{border:0;border-radius:999px;padding:7px 9px;font-weight:900;background:#2563eb;color:white}.ptsRow button.reset{background:#475569}.ptsMini{font-size:11px;color:#cbd5e1;font-weight:800;line-height:1.35;margin-top:4px}.ptsFb{font-size:11px;color:#93c5fd;font-weight:900;margin-top:3px}@media(max-width:560px){.ptsPanel{left:8px;right:8px;bottom:6px;max-width:none;display:flex;align-items:center;justify-content:space-between;gap:8px}.ptsRow{margin-top:0}.ptsMini,.ptsFb{display:none}}`;
+      document.head.appendChild(st);
+    }
+    if($('periodicTestPanel')) return;
+    const div=document.createElement('div');div.className='ptsPanel';div.id='periodicTestPanel';div.innerHTML=`<div><b>定期テスト対策テスト</b><div class="ptsBest" id="periodicBest">最高 --点</div><div class="ptsMini">完走点をFirebase DBに歴代最高で保存</div><div class="ptsFb" id="periodicFbState">Firebase確認中</div></div><div class="ptsRow"><button type="button" id="periodicManual">今の点を記録</button><button type="button" class="reset" id="periodicReset">リセット</button></div>`;
+    document.body.appendChild(div);
+    $('periodicManual').onclick=()=>{const s=extractScore(); if(s==null){alert('まだ点数を検出できない。最後まで解いてから押して。');return} writeBest(s); alert(META.name+'：'+s+'点を記録した。')};
+    $('periodicReset').onclick=window.__resetPeriodicTestBest;
+    updatePanel();
+  }
+  function updatePanel(){const b=readBest(); const el=$('periodicBest'); if(el)el.textContent=b==null?'最高 --点':'最高 '+b+'点'; const fbEl=$('periodicFbState'); if(fbEl)fbEl.textContent=firebaseState+' / ID:'+getUserId();}
+  function num(s){const n=Number(String(s||'').replace(/[^0-9.]/g,''));return Number.isFinite(n)?n:null}
+  function scoreFromOkTotal(ok,total){ok=Number(ok);total=Number(total); if(!total||total<1)return null; return Math.round(ok/total*100)}
+  function extractScore(){
+    const bodyText=(document.body&&document.body.innerText)||'';
+    let best=null;
+    const patterns=[/正解\s*([0-9]+)\s*\/\s*([0-9]+)/g,/([0-9]+)問中\s*([0-9]+)問正解/g,/([0-9]+)\s*\/\s*([0-9]+)\s*問/g];
+    for(const re of patterns){let m; while((m=re.exec(bodyText))){let a=Number(m[1]),b=Number(m[2]); let sc=null; if(re.source.startsWith('([0-9]+)問中')) sc=scoreFromOkTotal(b,a); else sc=scoreFromOkTotal(a,b); if(sc!=null)best=sc;}}
+    let m=bodyText.match(/(?:得点|スコア|点数)[^0-9]{0,8}([0-9]{1,3})\s*点/); if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    m=bodyText.match(/([0-9]{1,3})\s*点相当/); if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    const scoreEl=$('score'); if(scoreEl){const n=num(scoreEl.textContent); if(n!=null&&n>=0&&n<=100)best=Math.round(n)}
+    return best;
+  }
+  function completionSignal(){
+    const t=(document.body&&document.body.innerText)||'';
+    if(/終了|完了|最後|1周終わり|テスト終了|全問終了/.test(t)) return true;
+    const qno=$('qno')?.textContent||''; const m=qno.match(/([0-9]+)\s*\/\s*([0-9]+)/); if(m&&Number(m[1])>=Number(m[2])&&Number(m[2])>0&&/正解\s*[0-9]+\s*\//.test(t))return true;
+    return false;
+  }
+  let recordedAt=0;
+  function maybeRecord(){
+    if(Date.now()-recordedAt<1500)return;
+    if(!completionSignal())return;
+    const s=extractScore();
+    if(s==null)return;
+    recordedAt=Date.now(); writeBest(s);
+  }
+  const oldAlert=window.alert;
+  window.alert=function(msg){try{if(String(msg).match(/1周終わり|終了|完了/)){setTimeout(maybeRecord,50)}}catch(e){} return oldAlert.apply(this,arguments)};
+  window.addEventListener('storage',()=>syncFromRemote());
+  window.addEventListener('load',()=>{ensurePanel(); syncFromRemote(); watchRemote(); setInterval(maybeRecord,1200); const mo=new MutationObserver(()=>maybeRecord()); mo.observe(document.body,{childList:true,subtree:true,characterData:true});});
+})();
+</script>
+</body></html>
