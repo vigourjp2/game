@@ -81,7 +81,7 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
     <button class="primary" onclick="next()">次</button>
     <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
   </div>
-  <div class="small">判定：添付画像の語＋漢検5級のむずかしめ問題のみ。結果には漢字画像と一画ずつの書き順アニメを表示。</div>
+  <div class="small">判定：部首抜けは厳しめ。添付画像語＋5級むずかしめのみ。正解画像と書き順アニメを表示。</div>
 </footer>
 </div>
 <canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
@@ -181,20 +181,47 @@ function recognizeNow(){
   }
   judgeCandidates(ans,cands);
 }
+function hasCriticalLeftPart(ch){
+  // 部首を落としても別漢字として認識されやすい字は、候補順位だけで○にしない
+  // 例：仰を「卯」っぽく書く、伯を「白」っぽく書く、保を「呆」っぽく書く等
+  const ninben = "仰仮件体休位仲伯佐依俗候俳俵保俸値借傾偉傷備側働像優";
+  const tehen = "扱抵択扶技抄把投折抜抱押拍拝拡括拾持指挙振捕捨探推接採掲握援損描提換授揮操担";
+  const kihen = "机札杉材村束松板林枚枝枠柄柱査栄校株根格桜梅械棒植検極構権横樹";
+  return ninben.includes(ch) || tehen.includes(ch) || kihen.includes(ch);
+}
 function judgeCandidates(ans,cands){
   cands=[...new Set(cands)];
   const pos=cands.indexOf(ans);
   const shape=fallbackScore(ans);
+  const strictPart = hasCriticalLeftPart(ans);
   let msg,isOk=false,level='ng';
-  if(pos===0){isOk=true;level='ok';msg=`○ 正解！ 認識1位・形${shape}点`;}
-  else if(pos>0 && pos<5){isOk=true;level='ok';msg=`○ 正解扱い！ 候補${pos+1}位・形${shape}点`;}
-  else if(pos>=5 && pos<10 && shape>=25){isOk=true;level='ok';msg=`○ 手書きOK！ 候補${pos+1}位・形${shape}点`;}
-  else if(shape>=60){isOk=true;level='ok';msg=`○ 見た目OK！ 形${shape}点`;}
-  else if(pos>=0 && pos<10){level='maybe';msg=`△ 正解候補あり（${pos+1}位）・形${shape}点`;}
-  else if(shape>=35){level='maybe';msg=`△ 見た目は近い（形${shape}点）`;}
-  else {level='ng';msg=`× たぶん違う（形${shape}点）`;}
+
+  if(strictPart){
+    // 部首抜け対策：正解が1位でない限り、ゆるく○にしない
+    // 仰を「卯」っぽく書いたケースなどは、候補に仰が出ても△止まり
+    if(pos===0){
+      isOk=true;level='ok';msg=`○ 正解！ 認識1位・形${shape}点`;
+    }else if(pos===1 && shape>=55){
+      isOk=true;level='ok';msg=`○ 正解扱い！ 候補2位・形${shape}点`;
+    }else if(pos>=0 && pos<10){
+      level='maybe';msg=`△ 部首を確認！ 正解候補${pos+1}位・形${shape}点`;
+    }else if(shape>=70){
+      level='maybe';msg=`△ 部首注意。見た目は近い（形${shape}点）`;
+    }else{
+      level='ng';msg=`× 部首不足の可能性（形${shape}点）`;
+    }
+  }else{
+    if(pos===0){isOk=true;level='ok';msg=`○ 正解！ 認識1位・形${shape}点`;}
+    else if(pos>0 && pos<5){isOk=true;level='ok';msg=`○ 正解扱い！ 候補${pos+1}位・形${shape}点`;}
+    else if(pos>=5 && pos<10 && shape>=25){isOk=true;level='ok';msg=`○ 手書きOK！ 候補${pos+1}位・形${shape}点`;}
+    else if(shape>=60){isOk=true;level='ok';msg=`○ 見た目OK！ 形${shape}点`;}
+    else if(pos>=0 && pos<10){level='maybe';msg=`△ 正解候補あり（${pos+1}位）・形${shape}点`;}
+    else if(shape>=35){level='maybe';msg=`△ 見た目は近い（形${shape}点）`;}
+    else {level='ng';msg=`× たぶん違う（形${shape}点）`;}
+  }
   finishJudge(isOk,msg,cands,level);
 }
+
 function finishJudge(isOk,msg,cands,level=''){ 
   const cur=order[idx];
   done++; if(isOk)ok++;
