@@ -97,7 +97,7 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
     <button class="primary" onclick="next()">次</button>
     <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
   </div>
-  <div class="small">判定：認識候補に正解があること＋全体字形＋見た目部品。KanjiVG未取得時は補助判定に切替。</div>
+  <div class="small">判定：認識候補に正解があること＋全体字形＋見た目部品。KanjiVG部品未取得時は、候補＋全体字形で判定。</div>
 </footer>
 </div>
 <canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
@@ -174,7 +174,7 @@ function initEngine(){
       engineReady=false; attachFallbackDrawing();
     }
     $('status').textContent = engineReady
-      ? '認識候補＋全体字形＋見た目部品で判定。KanjiVG未取得時は0点扱いしない。'
+      ? '認識候補＋全体字形＋見た目部品で判定。KanjiVG部品未取得時は0点扱いしない。'
       : '認識エンジン未読込。形比較で動作中。';
     start();
   }catch(e){
@@ -896,17 +896,19 @@ async function judgeCandidates(ans,cands){
   const visual=await visualPartsAnalysis(ans);
 
   const recOK = pos >= 0 && pos < 5;
+  const recTop = pos === 0;
   const recWeakOK = pos >= 0 && pos < 10;
 
-  // KanjiVGが取れない文字は、部品判定を0点扱いしない。
-  // 認識候補＋全体字形＋componentAnalysisで判定する。
   const visualUnavailable = !!visual.unavailable;
-  const compAvg = comp && typeof comp.overall === 'number' ? comp.overall : 0;
+  const compAvg = comp && typeof comp.score === 'number' ? comp.score : (comp && typeof comp.overall === 'number' ? comp.overall : 0);
   const visualScore = visualUnavailable ? compAvg : (visual.avg ?? 0);
 
   const shapeOK = shape >= 50;
-  const visualOK = visualUnavailable ? compAvg >= 45 : (visual.ok && visualScore >= 45);
-  const total = Math.round(shape*0.35 + (recOK?100:(recWeakOK?60:0))*0.35 + visualScore*0.30);
+  const visualOK = visualUnavailable
+    ? (compAvg >= 45 || (recTop && shape >= 70 && trace.precision >= 80))
+    : (visual.ok && visualScore >= 45);
+
+  const total = Math.round(shape*0.35 + (recOK?100:(recWeakOK?60:0))*0.35 + (visualUnavailable ? Math.max(compAvg, shape) : visualScore)*0.30);
 
   let msg,isOk=false,level='ng';
 
@@ -925,7 +927,7 @@ async function judgeCandidates(ans,cands){
   else if(!visualOK){
     level='ng';
     if(visualUnavailable){
-      msg=`× 不正解：部品判定データ未取得。補助要素スコア不足・字形${shape}点・補助${compAvg}点`;
+      msg=`× 不正解：部品データ未取得。認識候補はOKだが、字形/補助不足・字形${shape}点・補助${compAvg}点`;
     }else{
       msg=`× 不正解：見た目部品不一致（${visual.missing.map(p=>'P'+p.no).join('、')||'平均不足'}）・平均${visualScore}点`;
     }
@@ -934,7 +936,7 @@ async function judgeCandidates(ans,cands){
     isOk=true;
     level='ok';
     if(visualUnavailable){
-      msg=`○ 正解！ 認識候補${pos+1}位・字形${shape}点・KanjiVG未取得は補助判定で通過・総合${total}点`;
+      msg=`○ 正解！ 認識候補${pos+1}位・字形${shape}点・KanjiVG部品未取得は候補＋全体字形で通過・総合${total}点`;
     }else{
       msg=`○ 正解！ 認識候補${pos+1}位・字形${shape}点・部品平均${visualScore}点・総合${total}点`;
     }
@@ -965,7 +967,7 @@ function finishJudge(isOk,msg,cands,level='',comp=null,total=null,trace=null,vis
             (visual.missing.length ? `<br><span class="componentBad">不一致：${visual.missing.map(p=>'P'+p.no).join('、')}</span>` : ''))
       : '見たまま部品比較なし';
     $('componentDetails').innerHTML =
-      `判定：認識候補に正解があることを必須条件にし、見た目部品も比較。KanjiVG未取得時は0点/P?にせず補助判定。<br>${traceLine}${visualLine}`;
+      `判定：認識候補に正解があることを必須条件にし、見た目部品も比較。KanjiVG部品未取得時は0点/P?にせず、候補＋全体字形で判定。<br>${traceLine}${visualLine}`;
   }
 
   showStrokeVisual(cur.char);
