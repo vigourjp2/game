@@ -34,6 +34,18 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
 .small{font-size:11px;color:#94a3b8;font-weight:700;line-height:1.25;margin-top:4px}.toggle{display:flex;gap:6px;align-items:center;color:#cbd5e1;font-size:12px;font-weight:800}input[type=checkbox]{width:18px;height:18px}
 #candidateList{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
 @media (orientation:landscape){.top{padding-top:5px}.q{font-size:20px}.sub,.small{display:none}.bottom{padding-top:5px}button,select{min-height:36px;padding:7px 9px}}
+
+.componentBox{margin-top:10px;padding:10px 12px;border-radius:14px;background:rgba(15,23,42,.62);border:1px solid rgba(148,163,184,.22)}
+.componentTitle{color:#fde68a;font-weight:900;font-size:clamp(15px,4vw,20px);margin-bottom:6px}
+.componentLine{color:#dbeafe;font-weight:900;line-height:1.55;font-size:clamp(13px,3.5vw,17px)}
+.componentBad{color:#fecaca}.componentOk{color:#bbf7d0}.componentWarn{color:#fde68a}
+
+
+.kvgStroke{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.kvgOutline{fill:none;stroke:rgba(255,255,255,.20);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.kvgNum{font:bold 5px sans-serif;fill:#fff;paint-order:stroke;stroke:#0f172a;stroke-width:1.6px}
+.kvgLoading{color:#dbeafe;font-weight:900}
+
 </style>
 <script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/kanji-canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/ref-patterns.js"></script>
@@ -42,9 +54,9 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
 <body>
 <div class="app">
 <header class="top">
-  <div class="row"><span class="title">高校 漢字 手書き自動認識</span><span class="badge">漢検5級1026字</span><span class="badge">添付画像語</span><span class="score" id="score">0問中 0問正解</span></div>
+  <div class="row"><span class="title">高校 漢字 手書き自動認識</span><span class="badge">5級むずかしめ</span><span class="badge">添付画像語</span><span class="score" id="score">0問中 0問正解</span></div>
   <div class="q" id="question">開始を押してね</div>
-  <div class="sub" id="status">GitHub PagesなどHTTPS環境推奨。画面いっぱいに一文字を書いて「自動判定」。</div>
+  <div class="sub" id="status">語の中に入る一文字を書いて「自動判定」。認識候補＋形＋要素分解で判定。</div>
 </header>
 
 <main class="canvasWrap">
@@ -56,10 +68,14 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
     <div class="ans" id="answerText">---</div>
     <div class="mean" id="meaning">---</div>
     <div class="strokeVisualWrap">
-      <div class="strokeVisualHead">正しい漢字の画像（書き順つき）</div>
+      <div class="strokeVisualHead">正しい漢字の画像（KanjiVG筆順つき）</div>
       <div class="strokeVisualBox"><div id="strokeVisual"></div></div>
       <div class="strokeVisualNote" id="strokeVisualNote">---</div>
       <button class="replayBtn" type="button" onclick="replayStrokeVisual()">もう一回再生</button>
+    </div>
+    <div class="componentBox" id="componentBox" style="display:none">
+      <div class="componentTitle">要素分解チェック</div>
+      <div class="componentLine" id="componentDetails">---</div>
     </div>
     <div class="cands" id="candidates">---</div>
   </div>
@@ -81,7 +97,7 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
     <button class="primary" onclick="next()">次</button>
     <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
   </div>
-  <div class="small">判定：間違い復習修正版。×/△は保存、○で復習から外す。部首抜けは厳しめ。</div>
+  <div class="small">判定：認識候補＋形比較＋要素分解。形比較・要素分解とも閾値は30点。偏/旁/上下/全体骨格を解析して評価。</div>
 </footer>
 </div>
 <canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
@@ -101,56 +117,24 @@ function safeSet(key, val){
   try { localStorage.setItem(key, val); }
   catch(e) {}
 }
-function keyFor(q){
-  return `${q.source}|${q.word}|${q.index}|${q.char}`;
-}
-let wrongKeys=[];
-try {
-  const savedKeys = JSON.parse(safeGet('highKanjiWrongKeys','[]'));
-  const legacyIds = JSON.parse(safeGet('highKanjiWrong','[]'));
-  wrongKeys = Array.isArray(savedKeys) ? savedKeys : [];
-  // 旧版の数字IDも一度だけ救済
-  if(Array.isArray(legacyIds) && legacyIds.length){
-    legacyIds.forEach(id=>{
-      const q=QUESTIONS[id];
-      if(q){
-        const k=keyFor(q);
-        if(!wrongKeys.includes(k)) wrongKeys.push(k);
-      }
-    });
-    safeSet('highKanjiWrongKeys', JSON.stringify(wrongKeys));
-  }
-} catch(e) { wrongKeys=[]; }
+let wrongIds=[];
+try { wrongIds=JSON.parse(safeGet('highKanjiWrong','[]')); }
+catch(e) { wrongIds=[]; }
 
 function $(id){return document.getElementById(id)}
 function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
 function start(){
   let mode=$('mode').value;
-  let pool=QUESTIONS.map((q,i)=>({...q,id:i,key:keyFor(q)}));
+  let pool=QUESTIONS.map((q,i)=>({...q,id:i}));
   if(mode==='image') pool=pool.filter(q=>q.source==='添付画像語');
   if(mode==='kanken') pool=pool.filter(q=>q.source==='漢検5級むずかしめ');
-  if(mode==='wrong') pool=pool.filter(q=>wrongKeys.includes(q.key));
-
-  // ここが不具合ポイント：旧版は間違いが0件でも全部問題に戻していた。
-  // 間違い復習では0件なら0件として表示する。
-  if(!pool.length && mode==='wrong'){
-    order=[];idx=0;ok=0;done=0;showEmptyWrong();updateScore();return;
-  }
-  if(!pool.length) pool=QUESTIONS.map((q,i)=>({...q,id:i,key:keyFor(q)}));
+  if(mode==='wrong') pool=pool.filter(q=>wrongIds.includes(q.id));
+  if(!pool.length) pool=QUESTIONS.map((q,i)=>({...q,id:i}));
   order=shuffle(pool);idx=0;ok=0;done=0;showQ();
-}
-function showEmptyWrong(){
-  $('question').textContent='間違い復習は現在0件。× または △ になった問題がここに入ります。';
-  $('answerText').textContent='---';
-  $('meaning').textContent='間違えた問題を保存して、正解したら復習リストから外します。';
-  $('resultBox').classList.remove('open');
-  if($('strokeVisual')) $('strokeVisual').innerHTML='';
-  if($('strokeVisualNote')) $('strokeVisualNote').textContent='間違い復習は空です';
-  clearPad(false);drawGhost();
 }
 function maskedWord(q){return [...q.word].map((c,i)=>i===q.index?'□':c).join('')}
 function showQ(){
-  if(!order.length){ showEmptyWrong(); return; }
+  if(!order.length) start();
   const cur=order[idx];
   const masked = maskedWord(cur);
   const isSingle = [...cur.word].length <= 1;
@@ -163,9 +147,10 @@ function showQ(){
   $('resultBox').classList.remove('open');
   if($('strokeVisual')) $('strokeVisual').innerHTML='';
   if($('strokeVisualNote')) $('strokeVisualNote').textContent='判定後に正しい漢字画像を表示';
+  if($('componentBox')) $('componentBox').style.display='none';
   clearPad(false);drawGhost();updateScore();
 }
-function next(){if(!order.length){start();return;} idx=(idx+1)%order.length;showQ()}
+function next(){idx=(idx+1)%order.length;showQ()}
 function updateScore(){$('score').textContent=`${done}問中 ${ok}問正解`}
 function drawGhost(){if(!order.length){$('ghost').textContent='';return}$('ghost').textContent=$('ghostToggle').checked ? order[idx].char : ''}
 function pos(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}}
@@ -189,7 +174,7 @@ function initEngine(){
       engineReady=false; attachFallbackDrawing();
     }
     $('status').textContent = engineReady
-      ? '認識エンジンOK。語の中に入る一文字を書いて「自動判定」。一文字語のときは意味も問題文に表示。'
+      ? '認識エンジンOK。厳格判定中。認識候補＋形＋要素分解で判定。'
       : '認識エンジン未読込。形比較で動作中。';
     start();
   }catch(e){
@@ -221,62 +206,293 @@ function hasCriticalLeftPart(ch){
   const kihen = "机札杉材村束松板林枚枝枠柄柱査栄校株根格桜梅械棒植検極構権横樹";
   return ninben.includes(ch) || tehen.includes(ch) || kihen.includes(ch);
 }
-function judgeCandidates(ans,cands){
+
+function loadCharDataPromise(ch){
+  return new Promise(resolve=>{
+    if(typeof loadHanziWriterData==='function') loadHanziWriterData(ch, data=>resolve(data));
+    else resolve(null);
+  });
+}
+function userInkGrid(){
+  const srcCanvas=$('kanjiCanvas');
+  const sw=srcCanvas.width, sh=srcCanvas.height;
+  const ctx=srcCanvas.getContext('2d');
+  let img;
+  try{ img=ctx.getImageData(0,0,sw,sh); }catch(e){ return null; }
+  const d=img.data;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,pts=[];
+  for(let y=0;y<sh;y++){
+    for(let x=0;x<sw;x++){
+      const i=(y*sw+x)*4, r=d[i], g=d[i+1], b=d[i+2], a=d[i+3];
+      const dark=(r+g+b)/3<220, sat=(Math.max(r,g,b)-Math.min(r,g,b))>25;
+      const gray=Math.abs(r-g)<8 && Math.abs(g-b)<8 && r>145;
+      if(a>20 && (dark||sat) && !gray && !(r>245&&g>245&&b>245)){
+        pts.push([x,y]); minX=Math.min(minX,x); minY=Math.min(minY,y); maxX=Math.max(maxX,x); maxY=Math.max(maxY,y);
+      }
+    }
+  }
+  if(!pts.length) return null;
+  const w=Math.max(1,maxX-minX+1), h=Math.max(1,maxY-minY+1);
+  const N=64, grid=new Uint8Array(N*N);
+  pts.forEach(([x,y])=>{
+    const nx=Math.max(0,Math.min(N-1,Math.floor((x-minX)/w*N)));
+    const ny=Math.max(0,Math.min(N-1,Math.floor((y-minY)/h*N)));
+    grid[ny*N+nx]=1;
+  });
+  return {grid,N,ink:pts.length};
+}
+function refComponentGroups(charData){
+  if(!charData || !charData.medians || !charData.medians.length) return [];
+  const strokes=charData.medians.map((pts,idx)=>{
+    let xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+    return {idx,pts,cx:(Math.min(...xs)+Math.max(...xs))/2,cy:(Math.min(...ys)+Math.max(...ys))/2,
+      minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};
+  });
+  const minX=Math.min(...strokes.map(s=>s.minX)), maxX=Math.max(...strokes.map(s=>s.maxX));
+  const minY=Math.min(...strokes.map(s=>s.minY)), maxY=Math.max(...strokes.map(s=>s.maxY));
+  const w=maxX-minX, h=maxY-minY;
+  let groups=[];
+  // 左右分解できる字は左右を別要素として必ず見る。偏抜け対策。
+  const left=strokes.filter(s=>(s.cx-minX)/w<0.43);
+  const right=strokes.filter(s=>(s.cx-minX)/w>=0.43);
+  if(left.length>=2 && right.length>=2){
+    groups.push({name:'左要素/偏',strokes:left});
+    groups.push({name:'右要素/旁',strokes:right});
+  }
+  // 上下も見る。冠・脚・下部抜け対策。
+  const top=strokes.filter(s=>(s.cy-minY)/h<0.42);
+  const bottom=strokes.filter(s=>(s.cy-minY)/h>=0.42);
+  if(top.length>=2 && bottom.length>=2){
+    groups.push({name:'上要素/冠',strokes:top});
+    groups.push({name:'下要素/脚',strokes:bottom});
+  }
+  // 全体も見る。
+  groups.push({name:'全体骨格',strokes});
+  return groups;
+}
+function drawRefGroupMask(group,N){
+  const grid=new Uint8Array(N*N);
+  const allPts=group.strokes.flatMap(s=>s.pts);
+  const xs=allPts.map(p=>p[0]), ys=allPts.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
+  const w=Math.max(1,maxX-minX), h=Math.max(1,maxY-minY);
+  function mark(x,y,r=2){
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+      const xx=x+dx, yy=y+dy;
+      if(xx>=0&&xx<N&&yy>=0&&yy<N) grid[yy*N+xx]=1;
+    }
+  }
+  function line(x1,y1,x2,y2){
+    const steps=Math.max(Math.abs(x2-x1),Math.abs(y2-y1),1);
+    for(let i=0;i<=steps;i++){
+      const t=i/steps; mark(Math.round(x1+(x2-x1)*t),Math.round(y1+(y2-y1)*t),2);
+    }
+  }
+  group.strokes.forEach(s=>{
+    let prev=null;
+    s.pts.forEach(p=>{
+      const x=Math.max(0,Math.min(N-1,Math.round((p[0]-minX)/w*(N-8)+4)));
+      const y=Math.max(0,Math.min(N-1,Math.round((p[1]-minY)/h*(N-8)+4)));
+      if(prev) line(prev[0],prev[1],x,y);
+      else mark(x,y,2);
+      prev=[x,y];
+    });
+  });
+  return grid;
+}
+function gridOverlapScore(user,mask,N){
+  let ref=0, hit=0, userNear=0, userInk=0;
+  const near=new Uint8Array(N*N);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(mask[y*N+x]){
+      ref++;
+      for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){
+        const xx=x+dx, yy=y+dy;
+        if(xx>=0&&xx<N&&yy>=0&&yy<N) near[yy*N+xx]=1;
+      }
+    }
+  }
+  for(let i=0;i<N*N;i++){
+    if(user[i]){ userInk++; if(near[i]) userNear++; }
+    if(mask[i] && user[i]) hit++;
+  }
+  const recall=ref?userNear/Math.max(userInk,1):0;
+  const coverage=ref?hit/ref:0;
+  return Math.round((recall*0.55+coverage*0.45)*100);
+}
+async function componentAnalysis(ch){
+  const user=userInkGrid();
+  if(!user) return {score:0,details:'筆跡なし',bad:true};
+  const data=await loadCharDataPromise(ch);
+  if(!data || !data.medians) return {score:50,details:'要素データ取得不可',bad:false};
+  const groups=refComponentGroups(data);
+  const scores=[];
+  for(const g of groups){
+    const mask=drawRefGroupMask(g,user.N);
+    const sc=gridOverlapScore(user.grid,mask,user.N);
+    scores.push({name:g.name,score:sc});
+  }
+  const core=scores.filter(s=>s.name!=='全体骨格');
+  const minCore=core.length?Math.min(...core.map(s=>s.score)):scores[0].score;
+  const avg=Math.round(scores.reduce((a,b)=>a+b.score,0)/scores.length);
+  const badParts=scores.filter(s=>s.name!=='全体骨格' && s.score<30).map(s=>`${s.name}${s.score}`);
+  const details=scores.map(s=>`${s.name}:${s.score}`).join(' / ');
+  return {score:Math.round(avg*0.45+minCore*0.55),details,bad:badParts.length>0,badParts};
+}
+
+async function judgeCandidates(ans,cands){
   cands=[...new Set(cands)];
   const pos=cands.indexOf(ans);
   const shape=fallbackScore(ans);
-  const strictPart = hasCriticalLeftPart(ans);
-  let msg,isOk=false,level='ng';
+  const comp=await componentAnalysis(ans);
 
-  if(strictPart){
-    // 部首抜け対策：正解が1位でない限り、ゆるく○にしない
-    // 仰を「卯」っぽく書いたケースなどは、候補に仰が出ても△止まり
-    if(pos===0){
-      isOk=true;level='ok';msg=`○ 正解！ 認識1位・形${shape}点`;
-    }else if(pos===1 && shape>=55){
-      isOk=true;level='ok';msg=`○ 正解扱い！ 候補2位・形${shape}点`;
-    }else if(pos>=0 && pos<10){
-      level='maybe';msg=`△ 部首を確認！ 正解候補${pos+1}位・形${shape}点`;
-    }else if(shape>=70){
-      level='maybe';msg=`△ 部首注意。見た目は近い（形${shape}点）`;
-    }else{
-      level='ng';msg=`× 部首不足の可能性（形${shape}点）`;
-    }
+  // 要素分解判定：
+  // 認識候補だけでは○にしない。
+  // 「認識1位」「形」「要素分解」の3つが揃った時だけ○。
+  let msg,isOk=false,level='ng';
+  if(pos===0 && shape>=30 && comp.score>=30 && !comp.bad){
+    isOk=true;
+    level='ok';
+    msg=`○ 正解！ 認識1位・形${shape}点・要素${comp.score}点`;
+  }else if(pos===0){
+    level='maybe';
+    msg=`△ 要素確認。認識1位・形${shape}点・要素${comp.score}点`;
+  }else if(pos>0 && pos<10){
+    level='maybe';
+    msg=`△ 正解候補${pos+1}位・形${shape}点・要素${comp.score}点`;
   }else{
-    if(pos===0){isOk=true;level='ok';msg=`○ 正解！ 認識1位・形${shape}点`;}
-    else if(pos>0 && pos<5){isOk=true;level='ok';msg=`○ 正解扱い！ 候補${pos+1}位・形${shape}点`;}
-    else if(pos>=5 && pos<10 && shape>=25){isOk=true;level='ok';msg=`○ 手書きOK！ 候補${pos+1}位・形${shape}点`;}
-    else if(shape>=60){isOk=true;level='ok';msg=`○ 見た目OK！ 形${shape}点`;}
-    else if(pos>=0 && pos<10){level='maybe';msg=`△ 正解候補あり（${pos+1}位）・形${shape}点`;}
-    else if(shape>=35){level='maybe';msg=`△ 見た目は近い（形${shape}点）`;}
-    else {level='ng';msg=`× たぶん違う（形${shape}点）`;}
+    level='ng';
+    msg=`× 不正解（形${shape}点・要素${comp.score}点）`;
   }
-  finishJudge(isOk,msg,cands,level);
+  finishJudge(isOk,msg,cands,level,comp);
 }
 
-function finishJudge(isOk,msg,cands,level=''){ 
+function finishJudge(isOk,msg,cands,level='',comp=null){ 
   const cur=order[idx];
   done++; if(isOk)ok++;
-  const k=cur.key || keyFor(cur);
-  if(isOk) {
-    wrongKeys=wrongKeys.filter(x=>x!==k);
-  } else if(!wrongKeys.includes(k)) {
-    wrongKeys.push(k);
-  }
-  safeSet('highKanjiWrongKeys',JSON.stringify(wrongKeys));
-  // 旧版互換用にも数字IDを残す。ただし主判定はwrongKeys。
-  try {
-    const wrongIds = QUESTIONS.map((q,i)=>wrongKeys.includes(keyFor(q)) ? i : null).filter(x=>x!==null);
-    safeSet('highKanjiWrong',JSON.stringify(wrongIds));
-  } catch(e) {}
+  if(isOk) wrongIds=wrongIds.filter(id=>id!==cur.id); else if(!wrongIds.includes(cur.id)) wrongIds.push(cur.id);
+  safeSet('highKanjiWrong',JSON.stringify(wrongIds));
   updateScore();
   const cls=isOk?'okTxt':(level==='maybe'||msg.startsWith('△'))?'maybeTxt':'ngTxt';
   $('resultMain').className='resultMain '+cls;
   $('resultMain').textContent=msg;
   $('candidates').textContent=cands.length ? `認識候補：${cands.slice(0,10).join('、')}` : '認識候補：なし';
+  if($('componentBox') && $('componentDetails')){
+    $('componentBox').style.display='block';
+    const bad = comp && comp.badParts && comp.badParts.length ? ` / 弱い要素: ${comp.badParts.join('、')}` : '';
+    $('componentDetails').innerHTML = comp ? `認識候補・形比較・要素分解で判定。<br>${comp.details}${bad}` : '要素分解データなし';
+  }
   showStrokeVisual(cur.char);
   $('resultBox').classList.add('open');
 }
+
+function kanjiVGFileName(ch){
+  const cp=[...ch][0].codePointAt(0).toString(16).padStart(5,'0');
+  return `${cp}.svg`;
+}
+async function fetchKanjiVG(ch){
+  const file=kanjiVGFileName(ch);
+  const urls=[
+    `https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@master/kanji/${file}`,
+    `https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${file}`
+  ];
+  let lastErr=null;
+  for(const u of urls){
+    try{
+      const r=await fetch(u,{cache:'force-cache'});
+      if(!r.ok) throw new Error('not found');
+      return await r.text();
+    }catch(e){ lastErr=e; }
+  }
+  throw lastErr || new Error('KanjiVG fetch failed');
+}
+async function renderKanjiVGStroke(ch){
+  const el=$('strokeVisual'), note=$('strokeVisualNote');
+  if(!el||!note) return false;
+  el.innerHTML='<div class="kvgLoading">書き順SVGを取得中…</div>';
+  try{
+    const raw=await fetchKanjiVG(ch);
+    const doc=new DOMParser().parseFromString(raw,'image/svg+xml');
+    const paths=[...doc.querySelectorAll('path')].filter(p=>p.getAttribute('d'));
+    if(!paths.length) throw new Error('no paths');
+    const ns='http://www.w3.org/2000/svg';
+    const svg=document.createElementNS(ns,'svg');
+    svg.setAttribute('viewBox','0 0 109 109');
+    svg.setAttribute('width','220');
+    svg.setAttribute('height','220');
+    svg.setAttribute('aria-label',`${ch}のKanjiVG書き順`);
+    svg.style.maxWidth='100%';
+    svg.style.height='220px';
+
+    const bg=document.createElementNS(ns,'rect');
+    bg.setAttribute('x','2'); bg.setAttribute('y','2'); bg.setAttribute('width','105'); bg.setAttribute('height','105');
+    bg.setAttribute('rx','7'); bg.setAttribute('fill','rgba(15,23,42,.10)');
+    bg.setAttribute('stroke','rgba(255,255,255,.18)');
+    bg.setAttribute('stroke-dasharray','2 2');
+    svg.appendChild(bg);
+
+    // 薄い下書き
+    paths.forEach(srcPath=>{
+      const p=document.createElementNS(ns,'path');
+      p.setAttribute('d',srcPath.getAttribute('d'));
+      p.setAttribute('class','kvgOutline');
+      svg.appendChild(p);
+    });
+
+    // 色付きストローク
+    const colors=['#60a5fa','#f472b6','#34d399','#fbbf24','#a78bfa','#fb7185','#22d3ee','#bef264','#f97316','#c084fc','#2dd4bf','#facc15','#93c5fd','#fda4af','#86efac','#fdba74','#d8b4fe','#67e8f9'];
+    const drawn=[];
+    paths.forEach((srcPath,i)=>{
+      const p=document.createElementNS(ns,'path');
+      p.setAttribute('d',srcPath.getAttribute('d'));
+      p.setAttribute('class','kvgStroke');
+      p.setAttribute('stroke',colors[i%colors.length]);
+      p.setAttribute('stroke-width','5.2');
+      p.setAttribute('data-stroke-no',String(i+1));
+      p.style.filter='drop-shadow(0 1px 1px rgba(0,0,0,.35))';
+      svg.appendChild(p);
+      drawn.push(p);
+    });
+
+    // 番号をパス始点付近に表示
+    drawn.forEach((p,i)=>{
+      try{
+        const pt=p.getPointAtLength(Math.min(1,p.getTotalLength()));
+        const t=document.createElementNS(ns,'text');
+        t.setAttribute('x',String(Math.max(4,Math.min(103,pt.x+1.5))));
+        t.setAttribute('y',String(Math.max(7,Math.min(105,pt.y-1.5))));
+        t.setAttribute('class','kvgNum');
+        t.textContent=String(i+1);
+        svg.appendChild(t);
+      }catch(e){}
+    });
+
+    el.innerHTML='';
+    el.appendChild(svg);
+
+    // アニメーション
+    drawn.forEach((p,i)=>{
+      let len=120;
+      try{len=p.getTotalLength();}catch(e){}
+      p.style.strokeDasharray=len;
+      p.style.strokeDashoffset=len;
+      p.style.transition='none';
+      setTimeout(()=>{
+        p.style.transition='stroke-dashoffset .42s ease';
+        p.style.strokeDashoffset='0';
+      }, 120+i*260);
+    });
+
+    note.textContent=`「${ch}」はKanjiVGの筆順データから動的表示。文字ごとのハードコードなし。`;
+    currentStrokeWriter={animateCharacter:()=>renderKanjiVGStroke(ch)};
+    return true;
+  }catch(e){
+    el.innerHTML='';
+    note.textContent=`KanjiVG取得失敗。外部データが読めないため通常表示へ切替。`;
+    return false;
+  }
+}
+
 function loadHanziWriterData(char,onComplete){ 
   const urls=[
     `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${encodeURIComponent(char)}.json`,
@@ -284,20 +500,38 @@ function loadHanziWriterData(char,onComplete){
   ];
   (function tryNext(i){if(i>=urls.length){onComplete(null);return}fetch(urls[i]).then(r=>{if(!r.ok)throw new Error('fetch failed');return r.json()}).then(data=>onComplete(data)).catch(()=>tryNext(i+1));})(0);
 }
-function showStrokeVisual(ch){ 
+function showStrokeVisual(ch){
   const el=$('strokeVisual'),note=$('strokeVisualNote'); if(!el||!note)return;
-  el.innerHTML=''; note.textContent=`「${ch}」の正しい字形と書き順を表示中…`; currentStrokeWriter=null;
-  if(window.HanziWriter){ 
-    try{ 
-      currentStrokeWriter=HanziWriter.create('strokeVisual',ch,{width:220,height:220,padding:10,showOutline:true,showCharacter:false,strokeAnimationSpeed:.85,delayBetweenStrokes:180,outlineColor:'rgba(255,255,255,0.25)',strokeColor:'#ffffff',radicalColor:'#60a5fa',charDataLoader:(char,onComplete)=>loadHanziWriterData(char,onComplete)});
-      note.textContent=`「${ch}」の正しい漢字画像。上で一画ずつ再生する。`;
-      setTimeout(()=>{try{currentStrokeWriter.animateCharacter()}catch(e){}},80); return;
-    }catch(e){}
-  }
-  el.innerHTML=`<div class="strokeCharFallback">${ch}</div>`;
-  note.textContent=`ネット読込できないため「${ch}」の字だけ表示。`;
+  el.innerHTML=''; note.textContent=`「${ch}」の日本式に近い書き順SVGを取得中…`; currentStrokeWriter=null;
+
+  // 全漢字共通：KanjiVGを動的取得して表示。文字ごとのハードコードは禁止。
+  renderKanjiVGStroke(ch).then(ok=>{
+    if(ok) return;
+
+    // KanjiVGが取れない環境だけ、予備としてHanziWriterにフォールバック。
+    if(window.HanziWriter){
+      try{
+        currentStrokeWriter=HanziWriter.create('strokeVisual',ch,{
+          width:220,height:220,padding:10,showOutline:true,showCharacter:false,
+          strokeAnimationSpeed:.85,delayBetweenStrokes:180,
+          outlineColor:'rgba(255,255,255,0.25)',strokeColor:'#ffffff',radicalColor:'#60a5fa',
+          charDataLoader:(char,onComplete)=>loadHanziWriterData(char,onComplete)
+        });
+        note.textContent=`「${ch}」の予備書き順表示。KanjiVGが読めない場合のみ使用。`;
+        setTimeout(()=>{try{currentStrokeWriter.animateCharacter()}catch(e){}},80);
+        return;
+      }catch(e){}
+    }
+
+    el.innerHTML=`<div class="strokeCharFallback">${ch}</div>`;
+    note.textContent=`外部筆順データが読めないため「${ch}」の字形だけ表示。`;
+  });
 }
-function replayStrokeVisual(){if(currentStrokeWriter && currentStrokeWriter.animateCharacter){try{currentStrokeWriter.animateCharacter();return}catch(e){}} const cur=order[idx]; if(cur)showStrokeVisual(cur.char)}
+function replayStrokeVisual(){
+  const cur=order[idx];
+  if(!cur) return;
+  showStrokeVisual(cur.char);
+}
 
 /* fallback drawing / shape score */
 function attachFallbackDrawing(){const ctx=canvas.getContext('2d');canvas.addEventListener('pointerdown',e=>{e.preventDefault();drawing=true;canvas.setPointerCapture(e.pointerId);curStroke=[pos(e)];strokes.push(curStroke);});canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();curStroke.push(pos(e));fallbackRedraw();});function end(e){if(!drawing)return;drawing=false;e.preventDefault();}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end)}
