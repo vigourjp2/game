@@ -280,6 +280,7 @@ let lastNet=0,lastStateWrite=0,lastFullStateWrite=0,lastInputWrite=0,lastMemberH
 let localClearedBlocks=new Set(),localBlockClears=[],localBlockClearSeq=0,localBlockSets=[],localBlockSetSeq=0,localCollectedItems=new Set(),localKilledEnemies=new Set(),localEnemyHitAt={},seenGameEvents={},enemyFlameHits=new Set();
 let pendingCartBreakClaims=[],cartBreakClaimSeq=0,appliedCartBreakClaims={};
 let moneyTexts=[],trapDangerFx=[],specialSeq=0,summonedBlockHp={};
+let worldFrameSeq=0,pendingDualSubSpecials=[];
 let netSeq=0,netStateAge=0;
 let clientPredictedBombs={};
 let pendingItemGrants={};
@@ -972,6 +973,7 @@ function applyState(s){
   if(waveChanged){
     resetStageMutationHistory();
     pendingCartBreakClaims=[];
+    pendingDualSubSpecials=[];
     cartBreakClaimSeq=0;
     appliedCartBreakClaims={};
     localInput.cartBreakSeq=0;
@@ -991,6 +993,8 @@ function applyState(s){
       seenGameEvents={};
       enemyFlameHits=new Set();
       pendingCartBreakClaims=[];
+      pendingDualSubSpecials=[];
+      worldFrameSeq=0;
       cartBreakClaimSeq=0;
       appliedCartBreakClaims={};
       touch.active=false;touch.id=null;movePad.dx=0;movePad.dy=0;localInput.dx=0;localInput.dy=0;setStickVisual();
@@ -1485,7 +1489,7 @@ function startOffline(){beginGameBgmFromUserGesture();roomId='OFFLINE';roomSeed=
 async function copyRoom(){let r=safeRoom($('room').value)||roomId;if(!r){setPanel('ROOM IDなし');return}try{await navigator.clipboard.writeText(r);setPanel('ROOM IDコピー: '+r)}catch(e){setPanel('ROOM ID: '+r)}}
 $('hostBtn').onclick=startHost;$('joinBtn').onclick=startJoin;$('offBtn').onclick=startOffline;$('copyBtn').onclick=copyRoom;
 function resetDeterminism(){worldRngState=(roomSeed||hashSeed(roomId||'OFFLINE'))>>>0;enemySeq=0;itemSeq=0;dropSeq=0;partSeq=0;lockFrame=0;lockAcc=0;lockstepPackets={};lockstepStarted=false;lastStepPacketAt=0;lastLockBroadcast=0;lastAuthStateSent=0;lastAuthFullStateSent=0;}
-function bootGame(preserveMembers=false){let prevMembers=preserveMembers?{...(members||{})}:{};let prevInputs=preserveMembers?{...(inputs||{})}:{};if(preserveMembers){Object.keys(prevInputs).forEach(id=>{prevInputs[id]=normalizeRestartInput(prevInputs[id])})}resetDeterminism();players={};members=preserveMembers?prevMembers:{};inputs=preserveMembers?prevInputs:{};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];swordFx=[];moneyTexts=[];trapDangerFx=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localBlockSets=[];localBlockSetSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();pendingCartBreakClaims=[];cartBreakClaimSeq=0;appliedCartBreakClaims={};resetBattleState();resetMasterSwordBgmStateForWave();resetLocalDeathInput();setupStageForWave(wave);if(preserveMembers){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);ids.forEach(id=>{let m=(members&&members[id])||{},inp=(inputs&&inputs[id])||{};players[id]=makePlayer(id,inp.name||m.name||(id===myId?nameVal():'PLAYER'))})}applyStartWave();if(wave===1)spawnWave();started=true;last=performance.now();updateRestartButton()}
+function bootGame(preserveMembers=false){let prevMembers=preserveMembers?{...(members||{})}:{};let prevInputs=preserveMembers?{...(inputs||{})}:{};if(preserveMembers){Object.keys(prevInputs).forEach(id=>{prevInputs[id]=normalizeRestartInput(prevInputs[id])})}resetDeterminism();players={};members=preserveMembers?prevMembers:{};inputs=preserveMembers?prevInputs:{};clientPredictedBombs={};pendingDualSubSpecials=[];worldFrameSeq=0;bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];swordFx=[];moneyTexts=[];trapDangerFx=[];wave=1;msg='WAVE 1';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localBlockSets=[];localBlockSetSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();pendingCartBreakClaims=[];cartBreakClaimSeq=0;appliedCartBreakClaims={};resetBattleState();resetMasterSwordBgmStateForWave();resetLocalDeathInput();setupStageForWave(wave);if(preserveMembers){let ids=new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);ids.forEach(id=>{let m=(members&&members[id])||{},inp=(inputs&&inputs[id])||{};players[id]=makePlayer(id,inp.name||m.name||(id===myId?nameVal():'PLAYER'))})}applyStartWave();if(wave===1)spawnWave();started=true;last=performance.now();updateRestartButton()}
 function bootJoinLocal(){resetDeterminism();players={};inputs={};clientPredictedBombs={};bombs=[];flames=[];enemies=[];items=[];falling=[];parts=[];swordFx=[];moneyTexts=[];trapDangerFx=[];wave=1;msg='JOIN LOCKSTEP WAIT';dropTimer=0;waveQueue=[];waveSpawnTimer=0;waveIsBoss=false;goalGate=null;goalCelebration=0;gameEnded=false;endingTimer=0;endingCloseAttempted=false;localClearedBlocks=new Set();localBlockClears=[];localBlockClearSeq=0;localBlockSets=[];localBlockSetSeq=0;localCollectedItems=new Set();localKilledEnemies=new Set();localEnemyHitAt={};seenGameEvents={};enemyFlameHits=new Set();pendingCartBreakClaims=[];cartBreakClaimSeq=0;appliedCartBreakClaims={};resetBattleState();setupStageForWave(wave);members=members||{};members[myId]=members[myId]||{id:myId,name:nameVal(),joined:now(),last:now()};players[myId]=makePlayer(myId,nameVal());started=true;joinBooted=true;last=performance.now();$('panel').classList.add('hidden')}
 
 function allPlayersDead(){let list=Object.values(players||{});return started&&list.length>0&&list.every(p=>p&&p.alive===false)}
@@ -2225,6 +2229,33 @@ function useSpecialAtTemporaryLevel(p,inp,type,lv){
   }
   return ok;
 }
+function enqueueDualSubSpecial(p,inp={},main='',sub='',eff=1,beforeCooldown=0,afterFirst=0){
+  if(!p||!sub||eff<=0)return false;
+  pendingDualSubSpecials.push({
+    owner:p.id,main,sub,eff:eff|0,
+    beforeCooldown:beforeCooldown||0,
+    afterFirst:afterFirst||0,
+    targetFrame:(worldFrameSeq|0)+1,
+    inp:{dx:inp&&inp.dx||0,dy:inp&&inp.dy||0,activeSpecial:main,subSpecial:sub}
+  });
+  return true;
+}
+function processPendingDualSubSpecials(){
+  if(!pendingDualSubSpecials.length)return;
+  const cur=worldFrameSeq|0,keep=[];
+  for(const q of pendingDualSubSpecials){
+    if(!q||((q.targetFrame|0)>cur)){keep.push(q);continue;}
+    const p=players&&players[q.owner];
+    if(!p||p.alive===false)continue;
+    ensureSpecialBag(p);
+    const before=Math.max(p.specialCooldown||0,q.beforeCooldown||0),after=q.afterFirst||0;
+    p.specialCooldown=0;
+    const ok=useSpecialAtTemporaryLevel(p,q.inp||{},q.sub,q.eff||1);
+    p.specialCooldown=Math.max(p.specialCooldown||0,after,before,720);
+    if(ok){partsBurst(p.x,p.y,'#fef08a',28);shockwave(p.x,p.y,70,'#fef08a');msg=`${p.name} DOUBLE SPECIAL Lv${q.eff||1} ${specialName(q.main)} → ${specialName(q.sub)}`;}
+  }
+  pendingDualSubSpecials=keep;
+}
 function useDualSpecialAction(p,inp={},main='',sub=''){
   ensureSpecialBag(p);main=main||activeSpecialForReel(p);sub=sub||normalizeSubSpecial(p);let eff=dualSpecialEffectiveLevel(p,main,sub);
   if(!main||!sub||main===sub||eff<=0)return false;
@@ -2232,10 +2263,17 @@ function useDualSpecialAction(p,inp={},main='',sub=''){
   let beforeCooldown=p.specialCooldown||0;
   let ok1=useSpecialAtTemporaryLevel(p,inp,main,eff);
   let afterFirst=p.specialCooldown||0;
+  if(ok1){
+    enqueueDualSubSpecial(p,inp,main,sub,eff,beforeCooldown,afterFirst);
+    p.specialCooldown=Math.max(p.specialCooldown||0,afterFirst,beforeCooldown,720);
+    partsBurst(p.x,p.y,'#fef08a',34);shockwave(p.x,p.y,78,'#fef08a');
+    msg=`${p.name} DOUBLE SPECIAL Lv${eff} ${specialName(main)} → ${specialName(sub)}`;
+    return true;
+  }
   p.specialCooldown=0;
   let ok2=useSpecialAtTemporaryLevel(p,inp,sub,eff);
   p.specialCooldown=Math.max(p.specialCooldown||0,afterFirst,beforeCooldown,720);
-  if(ok1||ok2){partsBurst(p.x,p.y,'#fef08a',42);shockwave(p.x,p.y,92,'#fef08a');msg=`${p.name} DOUBLE SPECIAL Lv${eff} ${specialName(main)} + ${specialName(sub)}`;return true;}
+  if(ok2){partsBurst(p.x,p.y,'#fef08a',42);shockwave(p.x,p.y,92,'#fef08a');msg=`${p.name} DOUBLE SPECIAL Lv${eff} ${specialName(main)} + ${specialName(sub)}`;return true;}
   return false;
 }
 function useSpecialAction(p,inp={}){
@@ -3500,7 +3538,7 @@ function worldToScreen(x,y){return{x:viewOffX+(x-camX)*viewScale,y:viewOffY+(y-c
 function screenToWorld(x,y){return{x:(x-viewOffX)/viewScale+camX,y:(y-viewOffY)/viewScale+camY}}
 function hostCanUseClientPose(id,p,inp){return !!(id!==myId&&p&&inp&&Number.isFinite(inp.clientX)&&Number.isFinite(inp.clientY)&&inp.clientX>0&&inp.clientY>0&&inp.last&&now()-inp.last<1500&&!playerCartAuthorityLocked(id,p)&&!playerJumpAuthorityLocked(id,p)&&!p.jumpState)}
 function hostAdoptClientPose(id,p,inp){if(!hostCanUseClientPose(id,p,inp))return false;const tx=clamp(+inp.clientX,OX+p.rad,OX+C*T-p.rad),ty=clamp(+inp.clientY,OY+p.rad,OY+R*T-p.rad);const err=Math.hypot((p.x||0)-tx,(p.y||0)-ty);if(err<JOIN_HOST_ACCEPT_ERR)return true;if(canAt(p,tx,ty,id)||err>JOIN_HOST_FORCE_ERR){const oldX=p.x,oldY=p.y;p.x=tx;p.y=ty;p.vx=0;p.vy=0;const c=tc(p.x,p.y);p.c=c.c;p.r=c.r;depen(p,id);if(err>JOIN_HOST_FORCE_ERR)markTeleportBlink(p,Math.hypot(p.x-oldX,p.y-oldY),'SYNC');return true}return false}
-function updateHost(dt){let t=now();ensureShadowEnemyPlayerForWave(wave);if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();swordFx=swordFx.filter(f=>{f.t-=dt*1000;return f.t>0&&!f.dead;});parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);updateTrapDangerFx(dt);return}updateMasterSwordCharges(dt);maintainMasterSwordBgm();if(isTimeStopped()){timeStop.timer=Math.max(0,(timeStop.timer||0)-dt*1000);if(timeStop.timer<=0){let ownerName=timeStop.ownerName||'OVERDRIVE';timeStop={active:false,owner:null,ownerName:'',timer:0,total:0,level:0,seq:(timeStop.seq||0)};msg=ownerName+' TIME STOP END';}}let allIds=(window.__pbomberLocalPad&&window.__pbomberLocalPad.enabled)?new Set([...Object.keys(members||{}),...Object.keys(inputs||{})]):new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(p&&p.isShadowEnemy){p.lastSeen=t+86400000;return;}if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}
+function updateHost(dt){worldFrameSeq=(worldFrameSeq+1)|0;processPendingDualSubSpecials();let t=now();ensureShadowEnemyPlayerForWave(wave);if(gameEnded){endingTimer-=dt*1000;if(endingTimer<=0)closeGameAfterEnding();swordFx=swordFx.filter(f=>{f.t-=dt*1000;return f.t>0&&!f.dead;});parts.forEach(p=>{if(!p.ring){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.97;p.vy*=.97}p.life-=dt*1000});parts=parts.filter(p=>p.life>0);updateMoneyTexts(dt);updateTrapDangerFx(dt);return}updateMasterSwordCharges(dt);maintainMasterSwordBgm();if(isTimeStopped()){timeStop.timer=Math.max(0,(timeStop.timer||0)-dt*1000);if(timeStop.timer<=0){let ownerName=timeStop.ownerName||'OVERDRIVE';timeStop={active:false,owner:null,ownerName:'',timer:0,total:0,level:0,seq:(timeStop.seq||0)};msg=ownerName+' TIME STOP END';}}let allIds=(window.__pbomberLocalPad&&window.__pbomberLocalPad.enabled)?new Set([...Object.keys(members||{}),...Object.keys(inputs||{})]):new Set([...Object.keys(members||{}),...Object.keys(inputs||{}),myId]);for(const id of allIds){let m=(members&&members[id])||{},input=(inputs&&inputs[id])||{};if(!players[id])players[id]=makePlayer(id,input.name||m.name||'PLAYER');players[id].name=input.name||m.name||players[id].name;players[id].lastSeen=input.last||m.last||t;if(id!==myId&&(input.dead===true||input.alive===false)&&(input.deathSeq||0)>(players[id].remoteDeathSeq||0)){players[id].remoteDeathSeq=input.deathSeq||0;damagePlayer(players[id],'reported')}}Object.entries(players).forEach(([id,p])=>{if(p&&p.isShadowEnemy){p.lastSeen=t+86400000;return;}if(id!==myId&&members[id]===undefined&&inputs[id]===undefined&&t-p.lastSeen>12000)delete players[id]});if(players[myId]){players[myId].name=nameVal();players[myId].lastSeen=t}
   if(isHost){Object.entries(inputs||{}).forEach(([id,inp])=>{(Array.isArray(inp&&inp.cartBreaks)?inp.cartBreaks:[]).forEach(cl=>applyCartBreakClaim(id,cl,false));});}
   for(const [id,p] of Object.entries(players)){let inp=id===myId?localInput:(inputs[id]||{});if(p.alive){const timeStoppedForPlayer=isTimeStopped()&&!isTimeStopOwner(id);if(timeStoppedForPlayer){p.vx=0;p.vy=0;continue;}let mdx=inp.dx||0,mdy=inp.dy||0;if(Math.hypot(mdx,mdy)>.2){p.lastDirX=mdx;p.lastDirY=mdy}const clientPoseDriven=hostCanUseClientPose(id,p,inp);if(!updatePlayerJump(p,dt,inp)){if(clientPoseDriven){hostAdoptClientPose(id,p,inp);applyTerrain(p,dt,true)}else{moveEntity(p,mdx,mdy,dt,id);applyTerrain(p,dt,true);}}
         updateShadowTrail(p,dt);applyInputActiveSpecial(p,inp);if(p.invuln>0)p.invuln-=dt*1000;if(p.teleportBlink>0)p.teleportBlink-=dt*1000;if(p.shield>0)p.shield-=dt*1000;if(p.specialCooldown>0)p.specialCooldown-=dt*1000;let primaryActedThisTick=false;if(inp.bombSeq&&inp.bombSeq!==p.lastBombSeq){primaryActedThisTick=primaryBombOrHandAction(p,inp.bombSeq);p.lastBombSeq=inp.bombSeq}if(!primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){throwBomb(p);p.lastHandSeq=inp.handSeq}else if(primaryActedThisTick&&inp.handSeq&&inp.handSeq!==p.lastHandSeq){p.lastHandSeq=inp.handSeq}if(inp.specialSeq&&inp.specialSeq!==p.lastSpecialSeq){useSpecialAction(p,inp);p.lastSpecialSeq=inp.specialSeq}}}
@@ -4570,7 +4608,7 @@ try{document.body.dataset.syncFixBuild='BGM-HOST-JOIN-SYNC-V22-20260604'}catch(e
 (function installLocalPadTeamFix(){
   if(window.__pbomberLocalPadTeamFix)return;
   window.__pbomberLocalPadTeamFix=true;
-  const LOCAL_BUILD='LOCAL-PAD-CHARGE-SUB-POPUP-V1-20260614';
+  const LOCAL_BUILD='LOCAL-PAD-DUAL-MAIN-FIRST-V1-20260620';
   const localPad=window.__pbomberLocalPad={enabled:false,ids:[],pads:[],prev:Object.create(null),teamDraft:Object.create(null),flash:Object.create(null),statusEl:null,teamEl:null,timer:null,build:LOCAL_BUILD,hudState:Object.create(null),photoData:Object.create(null),comboPrev:Object.create(null),photoCapture:null,photoTimer:null};
   try{document.body.dataset.localPadTeamFixBuild=LOCAL_BUILD}catch(e){}
   function pads(){let a=[];try{a=Array.from((navigator.getGamepads&&navigator.getGamepads())||[]).filter(g=>g&&g.connected)}catch(e){a=[]}return a}
