@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Voxel Study World - PlayCanvas Engine</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#79b7ff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
+  #app{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;background:#79b7ff}
+  #hud{position:fixed;left:10px;top:10px;z-index:10;color:#fff;background:rgba(10,15,25,.58);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:10px 12px;font-size:12px;line-height:1.45;text-shadow:0 1px 3px #000;min-width:190px;pointer-events:none;box-shadow:0 8px 22px rgba(0,0,0,.24)}
+  #hud b{color:#fde68a}.hudLine{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.good{color:#bef264}.bad{color:#fca5a5}.info{color:#bfdbfe}.gold{color:#fde68a}
+  #centerDot{position:fixed;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%);z-index:9;pointer-events:none}.ch{position:absolute;background:white;box-shadow:0 1px 4px #000;border-radius:2px}.ch.v{left:12px;top:3px;width:2px;height:20px}.ch.h{left:3px;top:12px;width:20px;height:2px}
+  #targetBox{position:fixed;left:50%;top:calc(50% + 20px);transform:translateX(-50%);z-index:9;color:#fff;background:rgba(0,0,0,.36);border-radius:999px;padding:5px 10px;font-size:12px;text-shadow:0 1px 3px #000;pointer-events:none}
+  #toolbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:7px;z-index:12;padding:7px;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.24);border-radius:18px;backdrop-filter:blur(8px)}
+  .slot{width:48px;height:48px;border-radius:13px;border:2px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:800;text-shadow:0 1px 3px #000}.slot.on{border-color:#facc15;box-shadow:0 0 16px rgba(250,204,21,.5);background:rgba(250,204,21,.18)}.swatch{width:21px;height:16px;border-radius:5px;border:1px solid rgba(255,255,255,.55);box-shadow:inset 0 0 8px rgba(255,255,255,.25);margin-bottom:3px}
+  .stick{position:fixed;bottom:86px;width:142px;height:142px;border-radius:50%;background:rgba(0,0,0,.20);border:2px solid rgba(255,255,255,.34);z-index:12;touch-action:none;display:none}.stick .knob{position:absolute;left:46px;top:46px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.42);border:2px solid rgba(255,255,255,.75);will-change:transform;box-shadow:0 5px 16px rgba(0,0,0,.28)}#moveStick{left:18px}#lookStick{right:18px}
+  #mobileButtons{position:fixed;right:18px;bottom:238px;display:none;gap:8px;z-index:12;flex-direction:column}.mbtn{width:74px;height:54px;border-radius:16px;border:2px solid rgba(255,255,255,.45);background:rgba(0,0,0,.42);color:white;font-size:12px;font-weight:900;text-shadow:0 1px 3px #000;touch-action:manipulation}.mbtn:active{transform:scale(.96);background:rgba(34,197,94,.65)}
+  #start{position:fixed;inset:0;z-index:30;background:linear-gradient(180deg,rgba(8,13,28,.86),rgba(8,13,28,.70));display:flex;align-items:center;justify-content:center;color:#fff;padding:18px}.card{width:min(520px,94vw);background:rgba(17,24,39,.88);border:1px solid rgba(255,255,255,.22);border-radius:22px;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.38);backdrop-filter:blur(12px)}.card h1{margin:0 0 8px;font-size:28px;letter-spacing:.02em}.card p{margin:8px 0;color:#e5e7eb;font-size:14px;line-height:1.55}.startBtn{width:100%;padding:13px;border:0;border-radius:14px;background:#22c55e;color:#fff;font-weight:900;font-size:18px;margin-top:12px;box-shadow:0 8px 18px rgba(34,197,94,.25)}.startBtn.secondary{background:#3b82f6}.mini{font-size:12px;color:#bfdbfe;margin-top:10px}.kbd{display:inline-block;border:1px solid rgba(255,255,255,.25);border-bottom-width:3px;background:rgba(255,255,255,.1);border-radius:6px;padding:1px 5px;font-weight:800;color:#fff}
+  #error{position:fixed;left:10px;right:10px;bottom:10px;z-index:40;display:none;background:rgba(127,29,29,.92);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:14px;padding:12px;font-size:13px;line-height:1.45;white-space:pre-wrap}
+  @media (pointer:coarse),(max-width:900px){.stick,#mobileButtons{display:block}#mobileButtons{display:flex}#hud{max-width:calc(100vw - 20px);font-size:11px;padding:8px 10px}.slot{width:43px;height:43px;font-size:9px}#toolbar{bottom:10px;gap:5px;padding:5px}.swatch{width:18px;height:14px}.card h1{font-size:24px}}
+</style>
+</head>
+<body>
+<canvas id="app"></canvas>
+<div id="hud">
+  <div class="hudLine"><b>Voxel Study World</b> / PlayCanvas Engine</div>
+  <div class="hudLine">FPS: <span id="fps">--</span> / PixelRatio: <span id="pr">--</span></div>
+  <div class="hudLine">座標: <span id="pos">--</span></div>
+  <div class="hudLine">世界: <span id="chunks">--</span></div>
+  <div class="hudLine">操作: <span class="info">WASD/タッチ</span>　中央照準で破壊/配置</div>
+  <div class="hudLine"><span id="msg" class="gold">地下充填ロジック / 60FPS優先</span></div>
+</div>
+<div id="centerDot"><div class="ch v"></div><div class="ch h"></div></div>
+<div id="targetBox">中央のブロックを狙う</div>
+<div id="toolbar"></div>
+<div class="stick" id="moveStick"><div class="knob" id="moveKnob"></div></div>
+<div class="stick" id="lookStick"><div class="knob" id="lookKnob"></div></div>
+<div id="mobileButtons">
+  <button class="mbtn" id="breakBtn">BREAK<br>破壊</button>
+  <button class="mbtn" id="placeBtn">PLACE<br>配置</button>
+  <button class="mbtn" id="jumpBtn">JUMP<br>跳ぶ</button>
+</div>
+<div id="start"><div class="card">
+  <h1>Voxel Study World</h1>
+  <p>今までの <span class="kbd">index.html</span> 運用のまま、PlayCanvas EngineをCDNで読み込む1ファイル版。Android Chromeでも動く前提で、タッチ操作・疑似高解像度テクスチャ・滑らか移動・固定シードのランダム無限チャンク生成を入れてあります。戻っても同じ地形に復元します。地下は本家マイクラ寄せで詰まるロジックにしつつ、画面には見える面だけを出して60FPS優先で動かします。</p>
+  <p>PC: <span class="kbd">WASD</span>移動 / マウス視点 / 左クリック破壊 / 右クリック配置 / <span class="kbd">1〜5</span>ブロック切替。スマホ: 左スティック移動 / 右スティック視点 / BREAK・PLACEボタン。中央の照準に当たったブロックを操作します。</p>
+  <button class="startBtn" id="startBtn">開始</button>
+  <button class="startBtn secondary" id="qualityBtn">画質: HIGH</button>
+  <div class="mini">既存ゲームの素材・BGMは使っていません。全部このHTML内の生成素材です。</div>
+</div></div>
+<div id="error"></div>
+<script src="https://cdn.jsdelivr.net/npm/playcanvas@latest/build/playcanvas.min.js"></script>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const canvas=$('app'), err=$('error');
+function showError(e){err.style.display='block';err.textContent='ERROR:\n'+(e&&e.stack?e.stack:String(e));}
+window.addEventListener('error',ev=>showError(ev.error||ev.message));
+window.addEventListener('unhandledrejection',ev=>showError(ev.reason));
+if(!window.pc){showError('PlayCanvas Engineを読み込めませんでした。ネット接続/CDN/GitHub Pages配置を確認。');return;}
+
+const state={started:false,qualityHigh:true,selected:'grass',target:null,lastMsg:'',mobile:/Android|iPhone|iPad|iPod/i.test(navigator.userAgent),pointerLocked:false};
+const blockDefs={
+ grass:{label:'草',color:'#37b34a'},dirt:{label:'土',color:'#805033'},stone:{label:'石',color:'#858b91'},wood:{label:'木',color:'#8b5728'},water:{label:'水',color:'#2490ff'},leaves:{label:'葉',color:'#2f9e44'}
+};
+const order=['grass','dirt','stone','wood','water'];
+
+const app=new pc.Application(canvas,{mouse:new pc.Mouse(canvas),keyboard:new pc.Keyboard(window),touch:new pc.TouchDevice(canvas),graphicsDeviceOptions:{antialias:true,powerPreference:'high-performance',alpha:false,stencil:false,preserveDrawingBuffer:false}});
+app.start();
+app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+app.setCanvasResolution(pc.RESOLUTION_AUTO);
+const targetPixelRatio=()=>state.qualityHigh?(state.mobile?Math.min(window.devicePixelRatio||1,1.35):Math.min(window.devicePixelRatio||1,1.75)):1;
+if(app.graphicsDevice){app.graphicsDevice.maxPixelRatio=targetPixelRatio();}
+$('pr').textContent=(app.graphicsDevice?app.graphicsDevice.maxPixelRatio:targetPixelRatio()).toFixed(2);
+window.addEventListener('resize',()=>app.resizeCanvas());
+
+app.scene.ambientLight=new pc.Color(0.55,0.62,0.76);
+try{app.scene.fog=pc.FOG_LINEAR;app.scene.fogColor=new pc.Color(0.64,0.80,1.0);app.scene.fogStart=28;app.scene.fogEnd=62;}catch(e){}
+
+function makeTexture(name,base,accent,type){
+ const size=state.qualityHigh?128:64;
+ const c=document.createElement('canvas');c.width=c.height=size;const g=c.getContext('2d');
+ g.fillStyle=base;g.fillRect(0,0,size,size);
+ const rnd=(i)=>{let x=Math.sin(i*127.1+name.length*91.7)*43758.5453;return x-Math.floor(x)};
+ for(let i=0;i<900;i++){
+   const x=rnd(i)*size,y=rnd(i+3)*size,s=1+rnd(i+9)*5;
+   g.globalAlpha=0.08+rnd(i+1)*0.16;g.fillStyle=(rnd(i+2)>.5?accent:'#ffffff');g.fillRect(x,y,s,s);
+ }
+ g.globalAlpha=1;
+ if(type==='grass'){
+   for(let i=0;i<70;i++){g.strokeStyle='rgba(255,255,255,.18)';g.beginPath();let x=rnd(i+21)*size,y=rnd(i+22)*size;g.moveTo(x,y);g.lineTo(x+rnd(i+23)*8-4,y-rnd(i+24)*10);g.stroke();}
+ }
+ if(type==='stone'){
+   g.strokeStyle='rgba(20,25,32,.22)';for(let i=0;i<12;i++){g.beginPath();let x=rnd(i+50)*size,y=rnd(i+51)*size;g.moveTo(x,y);for(let j=0;j<5;j++)g.lineTo(x+(rnd(i+j+60)-.5)*60,y+(rnd(i+j+70)-.5)*60);g.stroke();}
+ }
+ if(type==='wood'){
+   g.strokeStyle='rgba(60,30,12,.35)';g.lineWidth=2;for(let y=8;y<size;y+=16){g.beginPath();g.moveTo(0,y);for(let x=0;x<size;x+=10)g.lineTo(x,y+Math.sin(x*.12+y)*4);g.stroke();}
+ }
+ if(type==='water'){
+   const grad=g.createLinearGradient(0,0,size,size);grad.addColorStop(0,'rgba(255,255,255,.26)');grad.addColorStop(.5,'rgba(45,160,255,.12)');grad.addColorStop(1,'rgba(0,40,150,.24)');g.fillStyle=grad;g.fillRect(0,0,size,size);
+ }
+ const tex=new pc.Texture(app.graphicsDevice,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+ tex.setSource(c);tex.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;tex.magFilter=pc.FILTER_LINEAR;tex.addressU=pc.ADDRESS_REPEAT;tex.addressV=pc.ADDRESS_REPEAT;tex.anisotropy=8;return tex;
+}
+function makeMat(name,base,accent,type,alpha){
+ const m=new pc.StandardMaterial();m.name=name;m.diffuseMap=makeTexture(name,base,accent,type);m.diffuse=new pc.Color(1,1,1);m.specular=new pc.Color(.08,.08,.08);m.shininess=type==='water'?45:18;m.useMetalness=false;if(alpha<1){m.opacity=alpha;m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;m.alphaTest=0.01;}m.update();return m;
+}
+const mats={
+ grass:makeMat('grass','#39a84a','#1f7a32','grass',1),
+ dirt:makeMat('dirt','#72452a','#4b2c19','dirt',1),
+ stone:makeMat('stone','#777e86','#4c535a','stone',1),
+ wood:makeMat('wood','#845124','#5a2c12','wood',1),
+ leaves:makeMat('leaves','#2f9e44','#66d26f','grass',.92),
+ water:makeMat('water','#1384ff','#8ed8ff','water',.72)
+};
+
+const world=new Map();
+const chunks=new Map();
+const edits=new Map();
+const chunkColumnCache=new Map();
+const WORLD_SEED=7331;
+const CHUNK_SIZE=16;
+const ACTIVE_CHUNKS=state.mobile?2:3;
+const UNLOAD_CHUNKS=ACTIVE_CHUNKS+1;
+// 地下は論理的に詰める。描画は露出ブロックだけ。
+// これで“掘れば地下がある”状態と60FPSを両立する。
+const WORLD_BOTTOM=-24;
+const GEN_BUDGET_MS=state.mobile?7.0:10.0;
+const GEN_COLS_PER_FRAME=state.mobile?2200:6200;
+const MAX_ACTIVE_BLOCKS=state.mobile?11500:28000;
+let lastChunkX=999999,lastChunkZ=999999,chunkCursor=0;
+function key(x,y,z){return x+','+y+','+z;}
+function parseKey(id){const p=id.split(',').map(Number);return {x:p[0],y:p[1],z:p[2]};}
+function chunkKey(cx,cz){return cx+','+cz;}
+function chunkOf(v){return Math.floor(v/CHUNK_SIZE);}
+function chunkIdForBlock(x,z){return chunkKey(chunkOf(x),chunkOf(z));}
+function hasBlock(x,y,z){return world.has(key(x,y,z));}
+function blockAt(x,y,z){return world.get(key(x,y,z));}
+function hash2(x,z){let n=((x+WORLD_SEED)*374761393+(z-WORLD_SEED)*668265263)^0x5bf03635;n=(n^(n>>>13))*1274126177;return ((n^(n>>>16))>>>0)/4294967295;}
+function smoothNoise(x,z){
+ const ix=Math.floor(x),iz=Math.floor(z),fx=x-ix,fz=z-iz;
+ const u=fx*fx*(3-2*fx),v=fz*fz*(3-2*fz);
+ const a=hash2(ix,iz),b=hash2(ix+1,iz),c=hash2(ix,iz+1),d=hash2(ix+1,iz+1);
+ return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
+}
+function noise(x,z){return (smoothNoise(x*.055,z*.055)-.5)*8+(smoothNoise(x*.12+80,z*.12-40)-.5)*4+(smoothNoise(x*.25-20,z*.25+120)-.5)*1.6;}
+function terrainHeight(x,z){
+ let h=Math.floor(2+noise(x,z));
+ const lake=smoothNoise(x*.032+400,z*.032-600);
+ if(lake>.66)h-=Math.floor((lake-.66)*18);
+ return Math.max(-1,Math.min(10,h));
+}
+function baseTerrainType(x,y,z){
+ const h=terrainHeight(x,z);
+ const lake=smoothNoise(x*.032+400,z*.032-600);
+ if(y<WORLD_BOTTOM)return null;
+ if(y===WORLD_BOTTOM)return 'stone';
+ if(lake>.66&&y===1)return 'water';
+ if(y>h)return null;
+ if(h<=0)return y<=0?'stone':null;
+ if(y===h)return h>6?'stone':'grass';
+ if(y>=h-3)return 'dirt';
+ return 'stone';
+}
+function logicalTypeAt(x,y,z){
+ const id=key(x,y,z);
+ if(edits.has(id))return edits.get(id);
+ const e=world.get(id);
+ if(e)return e.data.type;
+ return baseTerrainType(x,y,z);
+}
+function isSolidAt(x,y,z){
+ const t=logicalTypeAt(x,y,z);
+ return !!(t&&isSolidType(t));
+}
+function isExposedBlock(x,y,z,type){
+ const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+ for(const d of dirs){
+   const nt=logicalTypeAt(x+d[0],y+d[1],z+d[2]);
+   if(!nt||nt==='water'||nt==='leaves')return true;
+ }
+ return false;
+}
+function maybeRenderLogicalBlock(x,y,z){
+ if(world.has(key(x,y,z)))return;
+ const t=logicalTypeAt(x,y,z);
+ if(!t)return;
+ if(t==='leaves')return;
+ if(isExposedBlock(x,y,z,t))addBlock(x,y,z,t,false);
+}
+function revealAround(x,y,z){
+ const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1],[1,1,0],[-1,1,0],[0,1,1],[0,1,-1]];
+ for(const d of dirs)maybeRenderLogicalBlock(x+d[0],y+d[1],z+d[2]);
+}
+function columnBlocks(x,z){
+ const h=terrainHeight(x,z),out=[];
+ const top=Math.max(h,1);
+ // 地下はWORLD_BOTTOMまで論理的に詰める。
+ // ただし最初から全部をEntity化しない。露出して見えるブロックだけ描画する。
+ // 掘った瞬間に下・横のブロックを追加描画するので、地下スカスカにならない。
+ for(let y=WORLD_BOTTOM;y<=top;y++){
+   const t=baseTerrainType(x,y,z);
+   if(t&&isExposedBlock(x,y,z,t))out.push([x,y,z,t]);
+ }
+ const tree=hash2(x*17+3,z*17-9);
+ if(h>=1&&tree>.995){
+   out.push([x,h+1,z,'wood'],[x,h+2,z,'wood'],[x,h+3,z,'wood']);
+   out.push([x,h+4,z,'leaves'],[x+1,h+4,z,'leaves'],[x-1,h+4,z,'leaves'],[x,h+4,z+1,'leaves'],[x,h+4,z-1,'leaves']);
+ }
+ return out;
+}
+function addBlock(x,y,z,type,remember){
+ const id=key(x,y,z); if(world.has(id))return null;
+ if(!remember&&edits.has(id)){const v=edits.get(id);if(v===null)return null;type=v;}
+ const e=new pc.Entity('b_'+id);e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});e.render.material=mats[type]||mats.grass;e.setPosition(x,y+.5,z);e.tags.add('block');e.data={x,y,z,type};app.root.addChild(e);world.set(id,e);
+ const ck=chunkIdForBlock(x,z),ch=chunks.get(ck);if(ch)ch.entities.add(id);
+ if(remember)edits.set(id,type);
+ return e;
+}
+function removeBlock(x,y,z,remember){const id=key(x,y,z),e=world.get(id);if(!e)return false;e.destroy();world.delete(id);const ch=chunks.get(chunkIdForBlock(x,z));if(ch)ch.entities.delete(id);if(remember)edits.set(id,null);return true;}
+function isSolidType(type){return type!=='water'&&type!=='leaves';}
+function heightAt(x,z,maxY=Infinity){
+ x=Math.round(x);z=Math.round(z);
+ let y=Math.min(Math.floor(maxY),16);
+ for(;y>=WORLD_BOTTOM;y--){if(isSolidAt(x,y,z))return y;}
+ return -999;
+}
+function createChunk(cx,cz){
+ const ck=chunkKey(cx,cz);if(chunks.has(ck))return chunks.get(ck);
+ const ch={cx,cz,key:ck,entities:new Set(),pending:[],done:false,restored:false,lastTouch:performance.now()};
+ if(chunkColumnCache.has(ck)){
+   ch.pending=chunkColumnCache.get(ck).map(v=>[v[0],v[1]]);
+ }else{
+   const cols=[];const sx=cx*CHUNK_SIZE,sz=cz*CHUNK_SIZE;
+   for(let lx=0;lx<CHUNK_SIZE;lx++)for(let lz=0;lz<CHUNK_SIZE;lz++)cols.push([sx+lx,sz+lz]);
+   chunkColumnCache.set(ck,cols);ch.pending=cols.map(v=>[v[0],v[1]]);
+ }
+ for(const [id,e] of world){if(chunkIdForBlock(e.data.x,e.data.z)===ck)ch.entities.add(id);}
+ chunks.set(ck,ch);return ch;
+}
+function restoreEditsForChunk(ch){
+ if(ch.restored)return;
+ for(const [id,type] of edits){
+   if(type===null)continue;
+   const p=parseKey(id);
+   if(chunkOf(p.x)===ch.cx&&chunkOf(p.z)===ch.cz&&!world.has(id))addBlock(p.x,p.y,p.z,type,false);
+ }
+ ch.restored=true;
+}
+function ensureChunksAroundPlayer(force){
+ const pcx=chunkOf(player.x),pcz=chunkOf(player.z);
+ if(!force&&pcx===lastChunkX&&pcz===lastChunkZ)return;
+ lastChunkX=pcx;lastChunkZ=pcz;
+ for(let dz=-ACTIVE_CHUNKS;dz<=ACTIVE_CHUNKS;dz++)for(let dx=-ACTIVE_CHUNKS;dx<=ACTIVE_CHUNKS;dx++)createChunk(pcx+dx,pcz+dz).lastTouch=performance.now();
+ for(const [ck,ch] of Array.from(chunks)){
+   const dist=Math.max(Math.abs(ch.cx-pcx),Math.abs(ch.cz-pcz));
+   if(dist>UNLOAD_CHUNKS){
+     for(const [id,e] of Array.from(world)){
+       if(chunkIdForBlock(e.data.x,e.data.z)===ck){e.destroy();world.delete(id);}
+     }
+     chunks.delete(ck);
+   }
+ }
+}
+function processChunkJobs(){
+ const start=performance.now();
+ const list=Array.from(chunks.values()).filter(ch=>ch.pending.length);
+ if(!list.length)return;
+ const pcx=chunkOf(player.x),pcz=chunkOf(player.z);
+ list.sort((a,b)=>(Math.abs(a.cx-pcx)+Math.abs(a.cz-pcz))-(Math.abs(b.cx-pcx)+Math.abs(b.cz-pcz)));
+ let made=0;
+ while((performance.now()-start<GEN_BUDGET_MS||(!state.started&&made<900))&&list.length&&made<GEN_COLS_PER_FRAME){
+   const ch=list[0];
+   const col=ch.pending.shift();
+   if(!col){ch.done=true;restoreEditsForChunk(ch);list.shift();continue;}
+   for(const b of columnBlocks(col[0],col[1]))addBlock(b[0],b[1],b[2],b[3],false);
+   made++;
+   if(ch.pending.length===0){ch.done=true;restoreEditsForChunk(ch);list.shift();}
+   if(world.size>MAX_ACTIVE_BLOCKS)break;
+ }
+}
+function buildWorld(){ensureChunksAroundPlayer(true);for(let i=0;i<260;i++)processChunkJobs();}
+function chunkStats(){let pending=0;for(const ch of chunks.values())pending+=ch.pending.length;return chunks.size+' chunks / '+world.size+' blocks / seed '+WORLD_SEED+(pending?(' / 生成待ち '+pending):'');}
+
+const camera=new pc.Entity('camera');camera.addComponent('camera',{clearColor:new pc.Color(.50,.70,1.0),fov:72,nearClip:.05,farClip:86});app.root.addChild(camera);
+const sun=new pc.Entity('sun');sun.addComponent('light',{type:'directional',color:new pc.Color(1,0.96,0.86),intensity:1.35,castShadows:false});sun.setEulerAngles(48,35,0);app.root.addChild(sun);
+const hemi=new pc.Entity('skyFill');hemi.addComponent('light',{type:'omni',color:new pc.Color(.35,.50,.85),intensity:.15,range:80});hemi.setPosition(0,25,0);app.root.addChild(hemi);
+
+const player={x:0,y:terrainHeight(0,-8)+3,z:-8,vx:0,vy:0,vz:0,yaw:0,pitch:0,onGround:false,height:1.72,radius:.28,speed:5.0};
+const input={mx:0,my:0,lx:0,ly:0,lookX:0,lookY:0,breaking:false,placing:false,jump:false};
+const smooth={mx:0,my:0,lookX:0,lookY:0};
+
+buildWorld();
+
+function setMsg(t,cls){const m=$('msg');m.textContent=t;m.className=cls||'gold';state.lastMsg=t;}
+function tryGround(){
+ const top=heightAt(player.x,player.z,player.y+.12);
+ if(top<=-900){player.onGround=false;return;}
+ const gy=top+1;
+ if(player.vy<=0&&player.y<=gy&&player.y>=gy-1.15){player.y=gy;player.vy=0;player.onGround=true;}
+ else player.onGround=Math.abs(player.y-gy)<.06;
+}
+function collision(nx,ny,nz){
+ const checks=[[nx-player.radius,ny+.1,nz-player.radius],[nx+player.radius,ny+.1,nz-player.radius],[nx-player.radius,ny+.1,nz+player.radius],[nx+player.radius,ny+.1,nz+player.radius],[nx-player.radius,ny+player.height*.9,nz-player.radius],[nx+player.radius,ny+player.height*.9,nz+player.radius],[nx-player.radius,ny+player.height*.9,nz+player.radius],[nx+player.radius,ny+player.height*.9,nz+player.radius]];
+ for(const p of checks){const bx=Math.floor(p[0]+.5),by=Math.floor(p[1]),bz=Math.floor(p[2]+.5);if(isSolidAt(bx,by,bz))return true;}return false;
+}
+function forwardVec(){const cy=Math.cos(player.yaw),sy=Math.sin(player.yaw),cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);return new pc.Vec3(sy*cp,sp,cy*cp).normalize();}
+function aimCamera(){
+ const dir=forwardVec();
+ camera.setPosition(player.x,player.y+1.48,player.z);
+ camera.lookAt(player.x+dir.x*10,player.y+1.48+dir.y*10,player.z+dir.z*10);
+}
+function rayBlock(){
+ const dir=forwardVec();let last=[Math.round(player.x),Math.floor(player.y+1.35),Math.round(player.z)];
+ for(let d=.2;d<7.5;d+=.08){
+   const px=player.x+dir.x*d,py=player.y+1.45+dir.y*d,pz=player.z+dir.z*d;
+   const bx=Math.floor(px+.5),by=Math.floor(py),bz=Math.floor(pz+.5);
+   const b=blockAt(bx,by,bz);if(b&&isSolidType(b.data.type))return {hit:b,place:last};
+   last=[bx,by,bz];
+ }
+ return null;
+}
+function breakBlock(){const r=rayBlock();if(!r){setMsg('届く範囲にブロックなし','bad');return;}const d=r.hit.data;if(d.y<=WORLD_BOTTOM){setMsg('基盤は破壊不可','bad');return;}removeBlock(d.x,d.y,d.z,true);revealAround(d.x,d.y,d.z);setMsg('破壊: '+blockDefs[d.type].label,'good');}
+function placeBlock(){const r=rayBlock();if(!r){setMsg('配置先が見つからない','bad');return;}const [x,y,z]=r.place;if(y<WORLD_BOTTOM||logicalTypeAt(x,y,z)){setMsg('そこには置けない','bad');return;}if(Math.abs(x-player.x)<.7&&Math.abs(z-player.z)<.7&&y<player.y+2){setMsg('自分の場所には置けない','bad');return;}addBlock(x,y,z,state.selected,true);revealAround(x,y,z);setMsg('配置: '+blockDefs[state.selected].label,'good');}
+
+function updateToolbar(){const tb=$('toolbar');tb.innerHTML='';order.forEach((k,i)=>{const d=blockDefs[k];const s=document.createElement('button');s.className='slot'+(state.selected===k?' on':'');s.innerHTML='<div class="swatch" style="background:'+d.color+'"></div>'+(i+1)+' '+d.label;s.onclick=()=>{state.selected=k;updateToolbar();setMsg('選択: '+d.label,'info')};tb.appendChild(s);});}
+updateToolbar();
+
+function bindStick(id,knobId,cb){
+ const el=$(id),knob=$(knobId);let active=false,pid=0,cx=0,cy=0;
+ const reset=()=>{active=false;knob.style.transform='translate3d(0,0,0)';cb(0,0)};
+ el.addEventListener('pointerdown',e=>{active=true;pid=e.pointerId;el.setPointerCapture(pid);const r=el.getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;e.preventDefault();});
+ el.addEventListener('pointermove',e=>{if(!active||e.pointerId!==pid)return;const dx=e.clientX-cx,dy=e.clientY-cy,max=48;const len=Math.hypot(dx,dy)||1;const nx=dx/Math.max(max,len),ny=dy/Math.max(max,len);knob.style.transform='translate3d('+(nx*max)+'px,'+(ny*max)+'px,0)';cb(nx,-ny);e.preventDefault();});
+ el.addEventListener('pointerup',reset);el.addEventListener('pointercancel',reset);
+}
+bindStick('moveStick','moveKnob',(x,y)=>{input.lx=-x;input.ly=y});
+bindStick('lookStick','lookKnob',(x,y)=>{input.lookX=x;input.lookY=y});
+$('breakBtn').addEventListener('pointerdown',e=>{e.preventDefault();breakBlock();});
+$('placeBtn').addEventListener('pointerdown',e=>{e.preventDefault();placeBlock();});
+$('jumpBtn').addEventListener('pointerdown',e=>{e.preventDefault();input.jump=true;});
+
+canvas.addEventListener('click',()=>{if(!state.mobile&&state.started&&document.pointerLockElement!==canvas)canvas.requestPointerLock&&canvas.requestPointerLock();});
+document.addEventListener('pointerlockchange',()=>{state.pointerLocked=document.pointerLockElement===canvas;});
+document.addEventListener('mousemove',e=>{if(state.pointerLocked){player.yaw-=e.movementX*.0024;player.pitch-=e.movementY*.0024;player.pitch=Math.max(-1.25,Math.min(1.25,player.pitch));}});
+canvas.addEventListener('pointerdown',e=>{
+ if(!state.started||state.mobile)return;
+ if(document.pointerLockElement!==canvas&&canvas.requestPointerLock)canvas.requestPointerLock();
+ if(e.button===0)breakBlock();
+ if(e.button===2)placeBlock();
+});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+window.addEventListener('keydown',e=>{if(e.code==='Space')input.jump=true;if(e.key>='1'&&e.key<='5'){state.selected=order[Number(e.key)-1]||state.selected;updateToolbar();}});
+
+$('startBtn').onclick=()=>{state.started=true;$('start').style.display='none';if(!state.mobile){canvas.focus();canvas.requestPointerLock&&canvas.requestPointerLock();}setMsg('起動成功。PlayCanvas Engineで描画中','good');};
+$('qualityBtn').onclick=()=>{state.qualityHigh=!state.qualityHigh;$('qualityBtn').textContent='画質: '+(state.qualityHigh?'HIGH':'LIGHT');if(app.graphicsDevice){app.graphicsDevice.maxPixelRatio=targetPixelRatio();$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}setMsg('画質変更: 再読込でテクスチャ解像度も反映','info');};
+
+let fpsAcc=0,fpsCount=0,fpsLast=performance.now();
+function update(dt){
+ ensureChunksAroundPlayer(false);
+ processChunkJobs();
+ if(!state.started){camera.setPosition(10,10,12);camera.lookAt(0,1,0);$('chunks').textContent=chunkStats();return;}
+ const kb=app.keyboard;
+ let mx=0,my=0;if(kb.isPressed(pc.KEY_W)||kb.isPressed(pc.KEY_UP))my+=1;if(kb.isPressed(pc.KEY_S)||kb.isPressed(pc.KEY_DOWN))my-=1;if(kb.isPressed(pc.KEY_D)||kb.isPressed(pc.KEY_RIGHT))mx-=1;if(kb.isPressed(pc.KEY_A)||kb.isPressed(pc.KEY_LEFT))mx+=1;
+ input.mx=mx+input.lx;input.my=my+input.ly;
+ smooth.mx+=(Math.max(-1,Math.min(1,input.mx))-smooth.mx)*Math.min(1,dt*12);smooth.my+=(Math.max(-1,Math.min(1,input.my))-smooth.my)*Math.min(1,dt*12);
+ smooth.lookX+=(input.lookX-smooth.lookX)*Math.min(1,dt*14);smooth.lookY+=(input.lookY-smooth.lookY)*Math.min(1,dt*14);
+ if(state.mobile){player.yaw-=smooth.lookX*dt*2.9;player.pitch+=smooth.lookY*dt*2.1;player.pitch=Math.max(-1.25,Math.min(1.25,player.pitch));}
+ const yaw=player.yaw, fwdX=Math.sin(yaw),fwdZ=Math.cos(yaw),rightX=Math.cos(yaw),rightZ=-Math.sin(yaw);
+ const vx=(fwdX*smooth.my+rightX*smooth.mx)*player.speed, vz=(fwdZ*smooth.my+rightZ*smooth.mx)*player.speed;
+ let nx=player.x+vx*dt,nz=player.z+vz*dt;
+ if(!collision(nx,player.y,player.z))player.x=nx;if(!collision(player.x,player.y,nz))player.z=nz;
+ player.vy-=18*dt;if(input.jump&&player.onGround){player.vy=7.2;player.onGround=false;}input.jump=false;
+ player.y+=player.vy*dt;tryGround();if(player.y<-10){player.x=0;player.y=10;player.z=-8;player.vy=0;}
+ aimCamera();
+ const r=rayBlock();state.target=r;$('targetBox').textContent=r?('照準: '+blockDefs[r.hit.data.type].label+' ['+r.hit.data.x+','+r.hit.data.y+','+r.hit.data.z+']'):'中央のブロックを狙う';
+ $('pos').textContent=player.x.toFixed(1)+','+player.y.toFixed(1)+','+player.z.toFixed(1);
+ $('chunks').textContent=chunkStats();
+}
+app.on('update',dt=>{dt=Math.min(dt,.05);update(dt);fpsAcc+=dt;fpsCount++;const now=performance.now();if(now-fpsLast>500){const fps=Math.round(fpsCount/fpsAcc);$('fps').textContent=fps;if(app.graphicsDevice&&state.started&&fps<52&&app.graphicsDevice.maxPixelRatio>1){app.graphicsDevice.maxPixelRatio=Math.max(1,app.graphicsDevice.maxPixelRatio-.1);$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}
+fpsAcc=0;fpsCount=0;fpsLast=now;}});
+setMsg('PlayCanvas Engine読込完了','good');
+})();
+</script>
+</body>
+</html>
