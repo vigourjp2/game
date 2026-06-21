@@ -10,3 +10,6 @@ window.GAKUSHU_FIREBASE_CONFIG = {
   "messagingSenderId": "943025034725",
   "appId": "1:943025034725:web:c46da7ded946ce4fde0b0c"
 };
+
+window.GAKUSHU_FIXED_SCORE_USER = "gakushu-main";
+window.GAKUSHU_SCORE_NO_INPUT = true;
