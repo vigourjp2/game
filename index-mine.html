@@ -15,9 +15,50 @@
   .slot{width:48px;height:48px;border-radius:13px;border:2px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:800;text-shadow:0 1px 3px #000}.slot.on{border-color:#facc15;box-shadow:0 0 16px rgba(250,204,21,.5);background:rgba(250,204,21,.18)}.swatch{width:21px;height:16px;border-radius:5px;border:1px solid rgba(255,255,255,.55);box-shadow:inset 0 0 8px rgba(255,255,255,.25);margin-bottom:3px}
   .stick{position:fixed;bottom:86px;width:142px;height:142px;border-radius:50%;background:rgba(0,0,0,.20);border:2px solid rgba(255,255,255,.34);z-index:12;touch-action:none;display:none}.stick .knob{position:absolute;left:46px;top:46px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.42);border:2px solid rgba(255,255,255,.75);will-change:transform;box-shadow:0 5px 16px rgba(0,0,0,.28)}#moveStick{left:18px}#lookStick{right:18px}
   #mobileButtons{position:fixed;right:18px;bottom:238px;display:none;gap:8px;z-index:12;flex-direction:column}.mbtn{width:74px;height:54px;border-radius:16px;border:2px solid rgba(255,255,255,.45);background:rgba(0,0,0,.42);color:white;font-size:12px;font-weight:900;text-shadow:0 1px 3px #000;touch-action:manipulation}.mbtn:active{transform:scale(.96);background:rgba(34,197,94,.65)}
+
+  #objectBtn{position:fixed;left:10px;bottom:238px;z-index:13;width:74px;height:54px;border-radius:16px;border:2px solid rgba(255,255,255,.45);background:rgba(168,85,247,.66);color:white;font-size:12px;font-weight:900;text-shadow:0 1px 3px #000;touch-action:manipulation;display:none}
+  #objectBtn:active{transform:scale(.96);background:rgba(168,85,247,.86)}
+  #objectEditor{position:fixed;inset:0;z-index:60;display:none;background:rgba(5,10,22,.90);color:#fff;padding:10px;box-sizing:border-box;overflow:auto;touch-action:auto}
+  #objectEditor .objCard{max-width:760px;margin:0 auto;background:rgba(17,24,39,.96);border:1px solid rgba(255,255,255,.24);border-radius:18px;padding:14px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
+  #objectEditor h2{margin:0 0 6px;font-size:22px}.objHint{font-size:12px;color:#bfdbfe;line-height:1.45}.objRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}.objRow button{border:0;border-radius:10px;padding:9px 11px;font-weight:900;color:#fff;background:#334155}.objRow button.goodBtn{background:#22c55e}.objRow button.badBtn{background:#ef4444}.objRow button.on{outline:3px solid #facc15;background:#7c3aed}.objRow input[type=color]{width:46px;height:38px;border:0;border-radius:10px;background:#fff}.objCanvasWrap{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}.objCanvas,.objPreview,.objPalette{image-rendering:pixelated;border:2px solid rgba(255,255,255,.38);border-radius:12px;background:#111827;touch-action:none}.objPalette{background:#fff}.objMiniLabel{font-size:12px;color:#e5e7eb}.objScale{width:190px}.objLayer{width:220px}.objModeBadge{padding:4px 8px;border-radius:999px;background:rgba(59,130,246,.28);font-size:12px;color:#dbeafe;font-weight:800}
+
   #start{position:fixed;inset:0;z-index:30;background:linear-gradient(180deg,rgba(8,13,28,.86),rgba(8,13,28,.70));display:flex;align-items:center;justify-content:center;color:#fff;padding:18px}.card{width:min(520px,94vw);background:rgba(17,24,39,.88);border:1px solid rgba(255,255,255,.22);border-radius:22px;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.38);backdrop-filter:blur(12px)}.card h1{margin:0 0 8px;font-size:28px;letter-spacing:.02em}.card p{margin:8px 0;color:#e5e7eb;font-size:14px;line-height:1.55}.startBtn{width:100%;padding:13px;border:0;border-radius:14px;background:#22c55e;color:#fff;font-weight:900;font-size:18px;margin-top:12px;box-shadow:0 8px 18px rgba(34,197,94,.25)}.startBtn.secondary{background:#3b82f6}.mini{font-size:12px;color:#bfdbfe;margin-top:10px}.kbd{display:inline-block;border:1px solid rgba(255,255,255,.25);border-bottom-width:3px;background:rgba(255,255,255,.1);border-radius:6px;padding:1px 5px;font-weight:800;color:#fff}
   #error{position:fixed;left:10px;right:10px;bottom:10px;z-index:40;display:none;background:rgba(127,29,29,.92);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:14px;padding:12px;font-size:13px;line-height:1.45;white-space:pre-wrap}
   @media (pointer:coarse),(max-width:900px){.stick,#mobileButtons{display:block}#mobileButtons{display:flex}#hud{max-width:calc(100vw - 20px);font-size:11px;padding:8px 10px}.slot{width:43px;height:43px;font-size:9px}#toolbar{bottom:10px;gap:5px;padding:5px}.swatch{width:18px;height:14px}.card h1{font-size:24px}}
+
+  /* field-style object builder overrides */
+  #objectEditor{position:fixed;left:8px;top:86px;right:auto;bottom:auto;z-index:60;display:none;background:transparent!important;padding:0!important;overflow:visible!important;pointer-events:none!important;touch-action:none!important;color:#fff}
+  #objectEditor .objCard{width:min(390px,calc(100vw - 16px));max-width:none!important;margin:0!important;padding:10px!important;border-radius:16px!important;background:rgba(15,23,42,.72)!important;backdrop-filter:blur(8px);pointer-events:auto!important}
+  #objectEditor h2{font-size:18px!important;margin:0 0 4px!important}.objHint{font-size:12px!important}.objRow{margin:6px 0!important}.objRow button{padding:7px 9px!important}.objScale{width:150px!important}
+
+  /* OBJ編集世界UI: 視界を潰さない。状態バー + 下部ツール + 右側アクション */
+  body.objEditing #hud{display:none!important}
+  body.objEditing #toolbar{display:none!important}
+  body.objEditing #objectBtn{display:none!important}
+  body.objEditing #mobileButtons{display:none!important}
+  #objEditBar{position:fixed;left:8px;right:8px;top:8px;z-index:97;display:none;color:#fff;background:rgba(15,23,42,.70);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:8px 10px;font-size:12px;line-height:1.35;text-shadow:0 1px 3px #000;backdrop-filter:blur(8px);pointer-events:none}
+  body.objEditing #objEditBar{display:block}
+  #objEditorQuickActions{position:fixed;right:8px;top:106px;z-index:96;display:none;flex-direction:column;gap:7px;pointer-events:auto}
+  body.objEditing #objEditorQuickActions{display:flex}
+  .objQuickBtn{width:76px;height:54px;border-radius:15px;border:2px solid rgba(255,255,255,.55);background:rgba(0,0,0,.62);color:#fff;font-size:12px;font-weight:900;text-shadow:0 1px 3px #000;box-shadow:0 8px 18px rgba(0,0,0,.28);touch-action:manipulation}
+  .objQuickBtn.place{background:rgba(34,197,94,.82)}
+  .objQuickBtn.break{background:rgba(239,68,68,.82)}
+  .objQuickBtn.up,.objQuickBtn.down{background:rgba(30,41,59,.82)}
+  .objQuickBtn.orbit{background:rgba(59,130,246,.82)}
+  .objQuickBtn:active{transform:scale(.96)}
+  /* OBJ編集中のパネルは操作スティックを絶対に塞がない。上左の小型ツールに寄せる */
+  body.objEditing #objectEditor{left:8px!important;right:auto!important;top:70px!important;bottom:auto!important;width:222px!important;z-index:60!important}
+  body.objEditing #objectEditor .objCard{width:222px!important;max-height:calc(100vh - 160px)!important;overflow:auto!important;padding:7px!important;border-radius:13px!important;background:rgba(15,23,42,.55)!important}
+  body.objEditing #objectEditor h2{display:none!important}
+  body.objEditing #objectEditor .objHint{display:none!important}
+  body.objEditing #objectEditor .objRow{margin:3px 0!important;gap:5px!important}
+  body.objEditing #objectEditor .objRow button{padding:6px 7px!important;font-size:10px!important;border-radius:8px!important}
+  body.objEditing #objectEditor input[type=color]{width:34px!important;height:30px!important}
+  body.objEditing #objectEditor .objMiniLabel{font-size:10px!important}
+  body.objEditing #objectEditor .objScale{width:112px!important}
+  body.objEditing #objScaleText{font-size:11px!important}
+  body.objEditing #targetBox{top:calc(50% + 34px)!important;background:rgba(0,0,0,.48)!important}
+  @media (pointer:coarse),(max-width:900px){body.objEditing #moveStick{bottom:78px!important;left:14px!important;z-index:98!important} body.objEditing #lookStick{bottom:78px!important;right:14px!important;z-index:98!important} body.objEditing #objectEditor{left:8px!important;top:68px!important;width:210px!important} body.objEditing #objectEditor .objCard{width:210px!important;max-height:38vh!important} #objEditBar{font-size:11px;padding:7px 9px} #objEditorQuickActions{top:104px!important;right:8px!important;gap:6px!important}.objQuickBtn{width:72px;height:48px;font-size:11px}}
 </style>
 </head>
 <body>
@@ -29,6 +70,7 @@
   <div class="hudLine">世界: <span id="chunks">--</span></div>
   <div class="hudLine">通信: <span id="mp" class="info">OFF</span> / 受信: <span id="mpRx" class="info">0</span> / 他人: <span id="mpRemote" class="info">0</span></div>
   <div class="hudLine">顔: <span id="faceCam" class="info">OFF</span></div>
+  <div class="hudLine">OBJ: <span id="objHud" class="info">0</span></div>
   <div class="hudLine">操作: <span class="info">WASD/タッチ</span>　中央照準で破壊/配置</div>
   <div class="hudLine"><span id="msg" class="gold">地下充填ロジック / 60FPS優先</span></div>
 </div>
@@ -41,6 +83,47 @@
   <button class="mbtn" id="breakBtn">BREAK<br>破壊</button>
   <button class="mbtn" id="placeBtn">PLACE<br>配置</button>
   <button class="mbtn" id="jumpBtn">JUMP<br>跳ぶ</button>
+</div>
+<div id="objEditBar">OBJ編集世界 / 0 blocks / size 0.10<br>地面グリッドあり。左スティックで移動、右スティックで見回し、回込で裏側へ移動。</div>
+<div id="objEditorQuickActions">
+  <button class="objQuickBtn place" id="objQuickPlace">OBJ<br>配置</button>
+  <button class="objQuickBtn break" id="objQuickBreak">OBJ<br>削除</button>
+  <button class="objQuickBtn orbit" id="objOrbitLeft">回込<br>←</button>
+  <button class="objQuickBtn orbit" id="objOrbitRight">回込<br>→</button>
+  <button class="objQuickBtn up" id="objFlyUp">OBJ<br>上昇</button>
+  <button class="objQuickBtn down" id="objFlyDown">OBJ<br>下降</button>
+</div>
+
+<button id="objectBtn">OBJ<br>作成</button>
+<div id="objectEditor">
+  <div class="objCard">
+    <h2>3Dオブジェクトビルダー</h2>
+    <div class="objHint">専用のOBJ編集世界に移動して作成します。右スティック/マウスでカメラを回し、自由飛行で近づいて、中央照準に <b>OBJ配置</b> または <b>PLACE</b> で小ブロック配置、<b>OBJ削除</b> または <b>BREAK</b> で削除。サイズに応じて視点・移動感も小さく/大きくなります。ブロック同士は隙間なしで密着します。</div>
+    <div class="objRow">
+      <button id="objVoxelBtn" class="on">立体ブロック</button>
+      <button id="objPlaneBtn">平面テクスチャ</button>
+      <span class="objModeBadge" id="objModeLabel">立体: 照準配置</span>
+    </div>
+    <div class="objRow">
+      <span>色</span><input id="objColor" type="color" value="#22c55e"><span id="objColorText" class="objMiniLabel">#22c55e</span>
+      <button id="objPickBtn">スポイト</button>
+      <button id="objEraseBtn">削除モード</button>
+    </div>
+    <div class="objRow">
+      <span>小ブロックサイズ</span><input id="objScale" class="objScale" type="range" min="0.03" max="0.70" step="0.01" value="0.10"><span id="objScaleText">0.10</span>
+    </div>
+    <div class="objRow">
+      <button id="objDoneBtn" class="goodBtn">完成して登録</button>
+      <button id="objClearBtn" class="badBtn">全消し</button>
+      <button id="objCancelBtn">戻る</button>
+    </div>
+    <div id="objStatus" class="objHint">OBJ作成を開始すると、目の前に編集用グリッドが出ます。</div>
+    <canvas id="objCanvas" width="1" height="1" style="display:none"></canvas>
+    <canvas id="objPreview" width="1" height="1" style="display:none"></canvas>
+    <canvas id="objPalette" width="1" height="1" style="display:none"></canvas>
+    <input id="objLayer" type="range" min="0" max="15" value="0" style="display:none"><span id="objLayerText" style="display:none">0</span>
+    <button id="objPaintBtn" style="display:none"></button><button id="objFillLayerBtn" style="display:none"></button><button id="objClearLayerBtn" style="display:none"></button>
+  </div>
 </div>
 <div id="start"><div class="card">
   <h1>Voxel Study World</h1>
@@ -447,6 +530,7 @@ function connectMultiplayer() {
      face: faceDataUrl || undefined
    });
    sendFaceSnapshot(true);
+   sendMultiplayer({type:'objectCatalogReq'});
    multiplayerHeartbeatTimer = setInterval(() => {
      sendMultiplayer({
        type: 'ping',
@@ -609,6 +693,7 @@ function handleMultiplayerMessage(raw) {
  eachMultiplayerPayload(root, (msg) => {
    if (!msg || msg.clientId === multiplayerClientId) return;
    const t = msg.type;
+   if (handleObjectCatalogMessage(msg)) return;
    if (t === 'welcome' || t === 'pong' || t === 'ping') return;
    if (t === 'leave' || t === 'disconnect') { removeRemotePlayer(msg.clientId || msg.playerId || msg.id); return; }
    if (t === 'join' || t === 'playerState' || t === 'playerUpdate' || t === 'state') updateRemotePlayer(msg);
@@ -670,7 +755,615 @@ function sendBlockEditMultiplayer(x,y,z,block) {
  });
 }
 
+
+// ===== 3D Online Custom Object Editor / Shared random object catalog =====
+const OBJECT_GRID = 16;
+const OBJECT_STORAGE_KEY = 'voxelStudyWorld.customObjects3d.v2';
+const customObjectDefs = new Map();
+const customObjectEntities = new Map();
+const customColorMats = new Map();
+const customSpawned = new Set();
+let objMode = 'voxel3d'; // voxel3d / plane
+let objLayer = 0;
+let objTool = 'paint';
+let objPaintColor = '#22c55e';
+let objPointerDown = false;
+let customObjectTickAcc = 0;
+const objVoxels = new Map(); // key: x,y,z -> hex
+const objPlanePixels = new Map(); // key: x,y -> hex
+
+function setObjHud(){ const el=$('objHud'); if(el) el.textContent=String(customObjectDefs.size); }
+function setObjStatus(t){ const el=$('objStatus'); if(el) el.textContent=t; }
+function setObjEditBar(t){ const el=$('objEditBar'); if(el) el.innerHTML=t; }
+function objKey3(x,y,z){return x+','+y+','+z;}
+function objKey2(x,y){return x+','+y;}
+function normalizeHexColor(c){
+ c=String(c||'').trim();
+ if(/^#[0-9a-fA-F]{6}$/.test(c)) return c.toLowerCase();
+ if(/^#[0-9a-fA-F]{3}$/.test(c)) return ('#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]).toLowerCase();
+ return '#22c55e';
+}
+function ensureCustomMat(hex){
+ hex=normalizeHexColor(hex);
+ if(customColorMats.has(hex)) return customColorMats.get(hex);
+ const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+ const m=new pc.StandardMaterial();
+ m.diffuse=new pc.Color(r,g,b);
+ m.emissive=new pc.Color(r*.10,g*.10,b*.10);
+ m.update();
+ customColorMats.set(hex,m);
+ return m;
+}
+function compactObjectCells(){
+ if(objMode==='plane'){
+   const cells=[];
+   for(const [k,color] of objPlanePixels){const [x,y]=k.split(',').map(Number);cells.push({x,y,color:normalizeHexColor(color)});}
+   return cells.slice(0,512);
+ }
+ const cells=[];
+ for(const [k,color] of objVoxels){const [x,y,z]=k.split(',').map(Number);cells.push({x,y,z,color:normalizeHexColor(color)});}
+ return cells.slice(0,1536);
+}
+function validateObjectDef(def){
+ if(!def || !Array.isArray(def.cells)) return null;
+ const kind = (def.kind==='plane') ? 'plane' : 'voxel3d';
+ const cells=[];
+ const maxCells = kind==='plane' ? 512 : 1536;
+ for(const c of def.cells.slice(0,maxCells)){
+   const x=Math.trunc(Number(c.x));
+   const y=Math.trunc(Number(c.y));
+   const z=kind==='plane' ? 0 : Math.trunc(Number(c.z));
+   if(x<0||x>=OBJECT_GRID||y<0||y>=OBJECT_GRID) continue;
+   if(kind==='voxel3d' && (z<0||z>=OBJECT_GRID)) continue;
+   const cell = kind==='plane' ? {x,y,color:normalizeHexColor(c.color)} : {x,y,z,color:normalizeHexColor(c.color)};
+   cells.push(cell);
+ }
+ if(!cells.length) return null;
+ const id=String(def.id||('obj-'+Date.now()+'-'+Math.floor(Math.random()*100000))).slice(0,96);
+ const scale=Math.max(.06,Math.min(.8,Number(def.scale)||.16));
+ return {id,name:String(def.name||'object').slice(0,40),kind,grid:OBJECT_GRID,scale,cells,createdAt:Number(def.createdAt)||Date.now()};
+}
+function saveCustomObjectsLocal(){
+ try{ localStorage.setItem(OBJECT_STORAGE_KEY, JSON.stringify(Array.from(customObjectDefs.values()).slice(-100))); }catch{}
+ setObjHud();
+}
+function loadCustomObjectsLocal(){
+ try{ const arr=JSON.parse(localStorage.getItem(OBJECT_STORAGE_KEY)||'[]'); if(Array.isArray(arr)) arr.forEach(d=>registerCustomObjectDef(d,'localLoad')); }catch{}
+ setObjHud();
+}
+function registerCustomObjectDef(def, source){
+ const clean=validateObjectDef(def);
+ if(!clean) return false;
+ if(customObjectDefs.has(clean.id)) return false;
+ customObjectDefs.set(clean.id, clean);
+ saveCustomObjectsLocal();
+ setObjStatus('登録済み: '+customObjectDefs.size+'個 / '+(clean.kind==='plane'?'平面':'立体'));
+ if(source==='localCreate') sendMultiplayer({type:'objectRegister', object:clean});
+ return true;
+}
+function addCustomBox(parent, mat, lx, ly, lz, sx, sy, sz){
+ const e=new pc.Entity('obj_cell');
+ e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ e.render.material=mat;
+ e.setLocalScale(sx,sy,sz);
+ e.setLocalPosition(lx,ly,lz);
+ parent.addChild(e);
+ return e;
+}
+function placeCustomObject(def, x, y, z, yaw, instanceKey){
+ def=validateObjectDef(def); if(!def) return null;
+ instanceKey=instanceKey || ('inst-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
+ if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
+ const root=new pc.Entity('custom_object_'+instanceKey);
+ const s=def.scale;
+ if(def.kind==='plane'){
+   const used=def.cells.slice(0,512);
+   for(const c of used){
+     const mat=ensureCustomMat(c.color);
+     const lx=(c.x-(OBJECT_GRID-1)/2)*s;
+     const ly=(OBJECT_GRID-1-c.y)*s;
+     addCustomBox(root, mat, lx, ly, 0, s*1.01, s*1.01, Math.max(.025,s*.045));
+     // 雑草っぽく横から見ても消えないように十字面も足す。ただし薄く軽量。
+     addCustomBox(root, mat, 0, ly, lx, Math.max(.025,s*.045), s*1.01, s*1.01);
+   }
+ } else {
+   const used=def.cells.slice(0,768);
+   for(const c of used){
+     const mat=ensureCustomMat(c.color);
+     const lx=(c.x-(OBJECT_GRID-1)/2)*s;
+     const ly=(c.y+.5)*s;
+     const lz=(c.z-(OBJECT_GRID-1)/2)*s;
+     addCustomBox(root, mat, lx, ly, lz, s*1.01, s*1.01, s*1.01);
+   }
+ }
+ root.setPosition(x,y,z);
+ root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
+ root.data={customObject:true,defId:def.id,chunk:chunkIdForBlock(Math.round(x),Math.round(z))};
+ app.root.addChild(root);
+ customObjectEntities.set(instanceKey, root);
+ return root;
+}
+function placeObjectInFront(def){
+ const dir=forwardVec();
+ const x=Math.round(player.x+dir.x*4), z=Math.round(player.z+dir.z*4);
+ const y=terrainHeight(x,z)+1;
+ return placeCustomObject(def,x,y,z,player.yaw,'front-'+def.id+'-'+Date.now());
+}
+function spawnCustomObjectForChunk(ch){
+ const defs=Array.from(customObjectDefs.values());
+ if(!defs.length||!ch||!ch.done) return;
+ const spawnKey='chunk:'+ch.key+':'+defs.map(d=>d.id).join('|');
+ if(customSpawned.has(spawnKey)) return;
+ customSpawned.add(spawnKey);
+ const chance=hash2(ch.cx*131+77,ch.cz*197-31);
+ if(chance>.12) return; // 約12%のチャンクに1個。7人・スマホ前提で控えめ。
+ const idx=Math.floor(hash2(ch.cx*251+9,ch.cz*263+17)*defs.length)%defs.length;
+ const def=defs[idx];
+ const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*331+5,ch.cz*337+6)*CHUNK_SIZE);
+ const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*353+7,ch.cz*359+8)*CHUNK_SIZE);
+ const y=terrainHeight(x,z)+1;
+ const yaw=Math.floor(hash2(ch.cx*389+1,ch.cz*397+2)*4)*(Math.PI/2);
+ placeCustomObject(def,x,y,z,yaw,'rand:'+ch.key+':'+def.id);
+}
+function spawnCustomObjectsInLoadedChunks(){ for(const ch of chunks.values()) if(ch.done) spawnCustomObjectForChunk(ch); }
+function unloadFarCustomObjects(){
+ const pcx=chunkOf(player.x), pcz=chunkOf(player.z);
+ for(const [id,e] of Array.from(customObjectEntities)){
+   if(!e || !e.getPosition){customObjectEntities.delete(id);continue;}
+   const p=e.getPosition();
+   const dist=Math.max(Math.abs(chunkOf(p.x)-pcx),Math.abs(chunkOf(p.z)-pcz));
+   if(dist>UNLOAD_CHUNKS+1){e.destroy();customObjectEntities.delete(id);}
+ }
+}
+function updateCustomObjectRuntime(dt){
+ customObjectTickAcc += dt;
+ if(customObjectTickAcc < .7) return;
+ customObjectTickAcc = 0;
+ spawnCustomObjectsInLoadedChunks();
+ unloadFarCustomObjects();
+}
+function broadcastObjectCatalog(){ if(customObjectDefs.size) sendMultiplayer({type:'objectCatalog', objects:Array.from(customObjectDefs.values()).slice(-100)}); }
+function handleObjectCatalogMessage(msg){
+ if(!msg) return false;
+ if(msg.type==='objectCatalogReq'){broadcastObjectCatalog();return true;}
+ if(msg.type==='objectRegister'){registerCustomObjectDef(msg.object||msg.def||msg,'remote');return true;}
+ if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));return true;}
+ return false;
+}
+function drawObjectPalette(){
+ const c=$('objPalette'); if(!c) return; const g=c.getContext('2d'); const w=c.width,h=c.height;
+ const grad=g.createLinearGradient(0,0,w,0);
+ ['#ff0000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#ff0000'].forEach((col,i)=>grad.addColorStop(i/6,col));
+ g.fillStyle=grad;g.fillRect(0,0,w,h);
+ const v=g.createLinearGradient(0,0,0,h);v.addColorStop(0,'rgba(255,255,255,1)');v.addColorStop(.5,'rgba(255,255,255,0)');v.addColorStop(.5,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,1)');
+ g.fillStyle=v;g.fillRect(0,0,w,h);
+}
+function currentEditorMap(){ return objMode==='plane' ? objPlanePixels : objVoxels; }
+function redrawObjCanvas(){
+ const c=$('objCanvas'); if(!c) return; const g=c.getContext('2d'); const cell=c.width/OBJECT_GRID;
+ g.fillStyle='#111827';g.fillRect(0,0,c.width,c.height);
+ if(objMode==='plane'){
+   for(let y=0;y<OBJECT_GRID;y++)for(let x=0;x<OBJECT_GRID;x++){const col=objPlanePixels.get(objKey2(x,y)); if(col){g.fillStyle=col;g.fillRect(x*cell,y*cell,cell,cell);}}
+ } else {
+   for(let z=0;z<OBJECT_GRID;z++)for(let x=0;x<OBJECT_GRID;x++){const col=objVoxels.get(objKey3(x,objLayer,z)); if(col){g.fillStyle=col;g.fillRect(x*cell,z*cell,cell,cell);}}
+ }
+ g.strokeStyle='rgba(255,255,255,.18)';g.lineWidth=1;
+ for(let i=0;i<=OBJECT_GRID;i++){g.beginPath();g.moveTo(i*cell,0);g.lineTo(i*cell,c.height);g.stroke();g.beginPath();g.moveTo(0,i*cell);g.lineTo(c.width,i*cell);g.stroke();}
+ const lab=$('objCanvasLabel'); if(lab) lab.textContent = objMode==='plane' ? '編集面: 平面テクスチャ 横×縦' : ('編集面: X-Z / 高さ '+objLayer);
+ drawObjPreview();
+}
+function drawIsoCube(g,x,y,size,color){
+ const h=size*.48;
+ g.fillStyle=color; g.beginPath();g.moveTo(x,y-h);g.lineTo(x+size,y);g.lineTo(x,y+h);g.lineTo(x-size,y);g.closePath();g.fill();
+ g.fillStyle='rgba(0,0,0,.20)';g.beginPath();g.moveTo(x-size,y);g.lineTo(x,y+h);g.lineTo(x,y+h+size*.72);g.lineTo(x-size,y+size*.72);g.closePath();g.fill();
+ g.fillStyle='rgba(255,255,255,.16)';g.beginPath();g.moveTo(x+size,y);g.lineTo(x,y+h);g.lineTo(x,y+h+size*.72);g.lineTo(x+size,y+size*.72);g.closePath();g.fill();
+}
+function drawObjPreview(){
+ const c=$('objPreview'); if(!c) return; const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height); g.fillStyle='#0f172a';g.fillRect(0,0,c.width,c.height);
+ const cells = objMode==='plane' ? compactObjectCells().map(c=>({x:c.x,y:OBJECT_GRID-1-c.y,z:8,color:c.color,plane:true})) : compactObjectCells();
+ if(!cells.length){g.fillStyle='rgba(255,255,255,.5)';g.font='12px system-ui';g.fillText('プレビュー',88,118);return;}
+ const size=objMode==='plane'?5.2:5.0; const cx=c.width/2, cy=objMode==='plane'?190:172;
+ const sorted=cells.slice().sort((a,b)=>(a.x+a.z+a.y)-(b.x+b.z+b.y));
+ if(objMode==='plane'){
+   for(const p of sorted){g.fillStyle=p.color; const px=cx+(p.x-7.5)*7, py=cy-(p.y)*7; g.fillRect(px,py,7,7);}
+ } else {
+   for(const p of sorted){const px=cx+(p.x-p.z)*size*.88; const py=cy+(p.x+p.z)*size*.44-p.y*size*.78; drawIsoCube(g,px,py,size*.64,p.color);}
+ }
+ g.strokeStyle='rgba(255,255,255,.18)';g.strokeRect(1,1,c.width-2,c.height-2);
+ const count=compactObjectCells().length; g.fillStyle='#bfdbfe';g.font='11px system-ui';g.fillText(count+' cells',8,16);
+}
+function setObjTool(t){ objTool=t; ['Paint','Erase','Pick'].forEach(n=>{const b=$('obj'+n+'Btn'); if(b)b.classList.toggle('on',t===n.toLowerCase());}); }
+function setObjColor(c){ objPaintColor=normalizeHexColor(c); const ci=$('objColor'); if(ci)ci.value=objPaintColor; const ct=$('objColorText'); if(ct)ct.textContent=objPaintColor; }
+function setObjMode(m){
+ objMode=(m==='plane')?'plane':'voxel3d';
+ const vb=$('objVoxelBtn'),pb=$('objPlaneBtn'),lb=$('objLayer'),ml=$('objModeLabel');
+ if(vb)vb.classList.toggle('on',objMode==='voxel3d'); if(pb)pb.classList.toggle('on',objMode==='plane');
+ if(lb)lb.disabled=objMode==='plane'; if(ml)ml.textContent=objMode==='plane'?'平面: 雑草/看板用':'立体: 横×奥行×高さ';
+ redrawObjCanvas();
+}
+function paintObjAtEvent(ev){
+ const c=$('objCanvas'); if(!c)return; const r=c.getBoundingClientRect();
+ const px=(ev.clientX-r.left)/r.width, py=(ev.clientY-r.top)/r.height;
+ const a=Math.max(0,Math.min(OBJECT_GRID-1,Math.floor(px*OBJECT_GRID)));
+ const b=Math.max(0,Math.min(OBJECT_GRID-1,Math.floor(py*OBJECT_GRID)));
+ const k = objMode==='plane' ? objKey2(a,b) : objKey3(a,objLayer,b);
+ const map=currentEditorMap();
+ if(objTool==='pick'){const col=map.get(k); if(col)setObjColor(col); setObjTool('paint');}
+ else if(objTool==='erase') map.delete(k);
+ else map.set(k,objPaintColor);
+ redrawObjCanvas();
+}
+function fillCurrentLayer(){
+ if(objMode==='plane'){for(let y=0;y<OBJECT_GRID;y++)for(let x=0;x<OBJECT_GRID;x++)objPlanePixels.set(objKey2(x,y),objPaintColor);}
+ else{for(let z=0;z<OBJECT_GRID;z++)for(let x=0;x<OBJECT_GRID;x++)objVoxels.set(objKey3(x,objLayer,z),objPaintColor);}
+ redrawObjCanvas();
+}
+function clearCurrentLayer(){
+ if(objMode==='plane') objPlanePixels.clear();
+ else{for(let z=0;z<OBJECT_GRID;z++)for(let x=0;x<OBJECT_GRID;x++)objVoxels.delete(objKey3(x,objLayer,z));}
+ redrawObjCanvas();
+}
+function openObjectEditor(){ state.editingObject=true; const el=$('objectEditor'); if(el)el.style.display='block'; setObjStatus('立体外形を作成中。高さレイヤーを切り替えて塗れ。'); redrawObjCanvas(); drawObjectPalette(); }
+function closeObjectEditor(){ state.editingObject=false; const el=$('objectEditor'); if(el)el.style.display='none'; }
+function finishObjectEditor(){
+ const cells=compactObjectCells();
+ if(!cells.length){setObjStatus('最低1マスは塗れ');return;}
+ const scale=Number($('objScale')&&$('objScale').value)||.55;
+ const def={id:'uobj-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36),name:'user-object',kind:objMode,grid:OBJECT_GRID,scale,cells,createdAt:Date.now()};
+ registerCustomObjectDef(def,'localCreate'); placeObjectInFront(def); closeObjectEditor(); setMsg((objMode==='plane'?'平面':'立体')+'オブジェクト登録・目の前に出現','good');
+}
+function bindObjectEditorUi(){
+ setObjHud(); drawObjectPalette(); redrawObjCanvas();
+ const ob=$('objectBtn'); if(ob){ob.style.display='block';ob.onclick=openObjectEditor;}
+ const oc=$('objCanvas'); if(oc){oc.addEventListener('pointerdown',e=>{objPointerDown=true;oc.setPointerCapture(e.pointerId);paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointermove',e=>{if(objPointerDown&&objTool!=='pick')paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointerup',()=>{objPointerDown=false;});oc.addEventListener('pointercancel',()=>{objPointerDown=false;});}
+ const pal=$('objPalette'); if(pal){pal.addEventListener('pointerdown',e=>{const r=pal.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)/r.width*pal.width),y=Math.floor((e.clientY-r.top)/r.height*pal.height);const d=pal.getContext('2d').getImageData(Math.max(0,Math.min(pal.width-1,x)),Math.max(0,Math.min(pal.height-1,y)),1,1).data;setObjColor('#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''));setObjTool('paint');});}
+ const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
+ const sc=$('objScale'); if(sc)sc.oninput=()=>{const t=$('objScaleText');if(t)t.textContent=Number(sc.value).toFixed(2);};
+ const ly=$('objLayer'); if(ly)ly.oninput=()=>{objLayer=Math.trunc(Number(ly.value)||0);const t=$('objLayerText');if(t)t.textContent=String(objLayer);redrawObjCanvas();};
+ const vb=$('objVoxelBtn'); if(vb)vb.onclick=()=>setObjMode('voxel3d'); const pl=$('objPlaneBtn'); if(pl)pl.onclick=()=>setObjMode('plane');
+ const pb=$('objPaintBtn'); if(pb)pb.onclick=()=>setObjTool('paint'); const eb=$('objEraseBtn'); if(eb)eb.onclick=()=>setObjTool('erase'); const pk=$('objPickBtn'); if(pk)pk.onclick=()=>setObjTool('pick');
+ const fl=$('objFillLayerBtn'); if(fl)fl.onclick=fillCurrentLayer; const cll=$('objClearLayerBtn'); if(cll)cll.onclick=clearCurrentLayer; const caa=$('objClearBtn'); if(caa)caa.onclick=()=>{objVoxels.clear();objPlanePixels.clear();redrawObjCanvas();};
+ const dn=$('objDoneBtn'); if(dn)dn.onclick=finishObjectEditor; const ca=$('objCancelBtn'); if(ca)ca.onclick=closeObjectEditor;
+ window.addEventListener('keydown',e=>{if(e.key==='o'||e.key==='O')openObjectEditor(); if(e.key==='Escape'&&state.editingObject)closeObjectEditor();});
+ loadCustomObjectsLocal(); setObjMode('voxel3d');
+}
+
+
+
+// ===== Dedicated object editor world / free-fly build mode =====
+const OBJECT_EDITOR_ORIGIN = new pc.Vec3(9000, 120, 9000);
+let objectEditorReturnPose = null;
+let objectEditorReturnPlace = null;
+let objectEditorBuildPos = null;
+let objectEditorFlyDown = false;
+let objectEditorOrbitDir = 0;
+function clonePlayerPose(){return {x:player.x,y:player.y,z:player.z,vx:player.vx,vy:player.vy,vz:player.vz,yaw:player.yaw,pitch:player.pitch,onGround:player.onGround};}
+function restorePlayerPose(pose){if(!pose)return;player.x=pose.x;player.y=pose.y;player.z=pose.z;player.vx=pose.vx||0;player.vy=pose.vy||0;player.vz=pose.vz||0;player.yaw=pose.yaw||0;player.pitch=pose.pitch||0;player.onGround=!!pose.onGround;}
+function currentEditorEyeHeight(){const s=currentObjScale();return Math.max(0.12,Math.min(1.48,s*9.5));}
+function currentEditorFlySpeed(){const s=currentObjScale();return Math.max(0.35,Math.min(6.5,s*18));}
+function enterObjectEditorWorld(){
+ objectEditorReturnPose=clonePlayerPose();
+ const dir=forwardVec();
+ const px=player.x+dir.x*3.2, pz=player.z+dir.z*3.2;
+ objectEditorReturnPlace={x:px,y:terrainHeight(px,pz)+1,z:pz,yaw:player.yaw};
+ objectEditorBuildPos=OBJECT_EDITOR_ORIGIN.clone();
+ player.x=OBJECT_EDITOR_ORIGIN.x;
+ player.y=OBJECT_EDITOR_ORIGIN.y+currentObjScale()*8+0.9;
+ player.z=OBJECT_EDITOR_ORIGIN.z-currentObjScale()*18-1.5;
+ player.vx=player.vy=player.vz=0;
+ player.yaw=0;
+ player.pitch=-0.10;
+ player.onGround=false;
+ lastChunkX=999999; lastChunkZ=999999;
+}
+function leaveObjectEditorWorld(placeResult){
+ const place=objectEditorReturnPlace;
+ restorePlayerPose(objectEditorReturnPose);
+ objectEditorReturnPose=null;
+ objectEditorReturnPlace=null;
+ objectEditorBuildPos=null;
+ objectEditorFlyDown=false;
+ objectEditorOrbitDir=0;
+ if(placeResult&&place&&placeResult.def){
+   placeCustomObject(placeResult.def,place.x,place.y,place.z,place.yaw,'front-'+placeResult.def.id+'-'+Date.now());
+ }
+ ensureChunksAroundPlayer(true);
+}
+function orbitAroundObjectEditor(dir,dt){
+ if(!dir||!objBuildRoot) return false;
+ const s=currentObjScale();
+ const center=objBuildRoot.getPosition().clone();
+ center.y += Math.max(s*2, OBJECT_GRID*s*.28);
+ let rx=player.x-center.x, rz=player.z-center.z;
+ let radius=Math.hypot(rx,rz);
+ if(radius < Math.max(.55, s*12)){ radius=Math.max(.55, s*18); rx=0; rz=-radius; }
+ const ang=Math.atan2(rz,rx)+dir*dt*1.75;
+ player.x=center.x+Math.cos(ang)*radius;
+ player.z=center.z+Math.sin(ang)*radius;
+ const eye=currentEditorEyeHeight();
+ const dx=center.x-player.x, dy=center.y-(player.y+eye), dz=center.z-player.z;
+ const hd=Math.max(.001,Math.hypot(dx,dz));
+ player.yaw=Math.atan2(dx,dz);
+ player.pitch=Math.max(-1.35,Math.min(1.35,Math.atan2(dy,hd)));
+ player.vx=player.vy=player.vz=0;
+ return true;
+}
+function updateObjectEditorFlight(dt){
+ const kb=app.keyboard;
+ let mx=0,my=0;
+ if(kb.isPressed(pc.KEY_W)||kb.isPressed(pc.KEY_UP))my+=1;
+ if(kb.isPressed(pc.KEY_S)||kb.isPressed(pc.KEY_DOWN))my-=1;
+ if(kb.isPressed(pc.KEY_D)||kb.isPressed(pc.KEY_RIGHT))mx-=1;
+ if(kb.isPressed(pc.KEY_A)||kb.isPressed(pc.KEY_LEFT))mx+=1;
+ input.mx=mx+input.lx; input.my=my+input.ly;
+ if(objectEditorOrbitDir){
+   orbitAroundObjectEditor(objectEditorOrbitDir,dt);
+   input.mx=0; input.my=0; input.lookX=0; input.lookY=0;
+ }
+ smooth.mx+=(Math.max(-1,Math.min(1,input.mx))-smooth.mx)*Math.min(1,dt*12);
+ smooth.my+=(Math.max(-1,Math.min(1,input.my))-smooth.my)*Math.min(1,dt*12);
+ smooth.lookX+=(input.lookX-smooth.lookX)*Math.min(1,dt*14);
+ smooth.lookY+=(input.lookY-smooth.lookY)*Math.min(1,dt*14);
+ if(state.mobile){player.yaw-=smooth.lookX*dt*2.9;player.pitch+=smooth.lookY*dt*2.1;player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch));}
+ const yaw=player.yaw, fwdX=Math.sin(yaw), fwdZ=Math.cos(yaw), rightX=Math.cos(yaw), rightZ=-Math.sin(yaw);
+ const sp=currentEditorFlySpeed();
+ player.x+=(fwdX*smooth.my+rightX*smooth.mx)*sp*dt;
+ player.z+=(fwdZ*smooth.my+rightZ*smooth.mx)*sp*dt;
+ let up=0;
+ if(input.jump||kb.isPressed(pc.KEY_SPACE))up+=1;
+ if(objectEditorFlyDown||kb.isPressed(pc.KEY_SHIFT)||kb.isPressed(pc.KEY_Q))up-=1;
+ player.y+=up*sp*dt;
+ input.jump=false;
+ aimCamera();
+ const count=objVoxels.size;
+ $('pos').textContent='OBJ編集世界 '+player.x.toFixed(2)+','+player.y.toFixed(2)+','+player.z.toFixed(2)+' / 目線 '+currentEditorEyeHeight().toFixed(2)+' / 速度 '+sp.toFixed(2);
+ $('chunks').textContent='OBJ編集専用 / '+count+' cells / サイズ '+currentObjScale().toFixed(2);
+}
+
+// ===== Field-style small voxel object builder =====
+let objBuildRoot=null;
+let objBuildCursor=null;
+let objBuildFloor=null;
+let objBuildAxes=[];
+let objBuildCellEntities=new Map();
+let objBuildLastAim=null;
+let objPickNext=false;
+let objBuilderStartedAt=0;
+let objCursorMat=null;
+
+function currentObjScale(){
+ const sc=$('objScale');
+ return Math.max(.03,Math.min(.7,Number(sc&&sc.value)||.10));
+}
+function objectCellLocal(x,y,z,s){
+ return new pc.Vec3((x-(OBJECT_GRID-1)/2)*s,(y+.5)*s,(z-(OBJECT_GRID-1)/2)*s);
+}
+function ensureObjCursorMat(){
+ if(objCursorMat) return objCursorMat;
+ objCursorMat=new pc.StandardMaterial();
+ objCursorMat.diffuse=new pc.Color(1,1,1);
+ objCursorMat.emissive=new pc.Color(.18,.18,.18);
+ objCursorMat.opacity=.36;
+ objCursorMat.blendType=pc.BLEND_NORMAL;
+ objCursorMat.update();
+ return objCursorMat;
+}
+
+function makeBuilderMat(hex, opacity){
+ const m=new pc.StandardMaterial();
+ const c=normalizeHexColor(hex);
+ const r=parseInt(c.slice(1,3),16)/255,g=parseInt(c.slice(3,5),16)/255,b=parseInt(c.slice(5,7),16)/255;
+ m.diffuse=new pc.Color(r,g,b);
+ m.emissive=new pc.Color(r*.06,g*.06,b*.06);
+ if(opacity!==undefined){m.opacity=opacity;m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}
+ m.update();
+ return m;
+}
+function makeBuilderBox(name,scale,pos,mat){
+ const e=new pc.Entity(name);
+ e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ e.render.material=mat;
+ e.setLocalScale(scale.x,scale.y,scale.z);
+ e.setLocalPosition(pos.x,pos.y,pos.z);
+ objBuildRoot.addChild(e);
+ return e;
+}
+function ensureObjectEditorScaffold(){
+ if(!objBuildRoot) return;
+ const s=currentObjScale();
+ const total=OBJECT_GRID*s;
+ if(!objBuildFloor){
+   objBuildFloor=makeBuilderBox('obj_builder_floor',new pc.Vec3(total,.018,total),new pc.Vec3(0,-.018,0),makeBuilderMat('#475569',.42));
+   objBuildAxes=[];
+   objBuildAxes.push(makeBuilderBox('obj_axis_x',new pc.Vec3(total,.035,.035),new pc.Vec3(0,.012,-total/2-.055),makeBuilderMat('#ef4444',.82)));
+   objBuildAxes.push(makeBuilderBox('obj_axis_z',new pc.Vec3(.035,.035,total),new pc.Vec3(-total/2-.055,.012,0),makeBuilderMat('#3b82f6',.82)));
+   objBuildAxes.push(makeBuilderBox('obj_axis_y',new pc.Vec3(.05,total,.05),new pc.Vec3(total/2+.08,total/2, total/2+.08),makeBuilderMat('#22c55e',.72)));
+   // 4隅の境界柱。空間の範囲を見失わないためのガイド
+   const guideMat=makeBuilderMat('#facc15',.55);
+   for(const sx of [-1,1]) for(const sz of [-1,1]){
+     objBuildAxes.push(makeBuilderBox('obj_corner_guide',new pc.Vec3(.035,total,.035),new pc.Vec3(sx*total/2, total/2, sz*total/2),guideMat));
+   }
+ } else {
+   objBuildFloor.setLocalScale(total,.018,total);
+   objBuildFloor.setLocalPosition(0,-.018,0);
+   if(objBuildAxes[0]){objBuildAxes[0].setLocalScale(total,.035,.035);objBuildAxes[0].setLocalPosition(0,.012,-total/2-.055);}
+   if(objBuildAxes[1]){objBuildAxes[1].setLocalScale(.035,.035,total);objBuildAxes[1].setLocalPosition(-total/2-.055,.012,0);}
+   if(objBuildAxes[2]){objBuildAxes[2].setLocalScale(.05,total,.05);objBuildAxes[2].setLocalPosition(total/2+.08,total/2,total/2+.08);}
+   let i=3; for(const sx of [-1,1]) for(const sz of [-1,1]){ if(objBuildAxes[i]){objBuildAxes[i].setLocalScale(.035,total,.035);objBuildAxes[i].setLocalPosition(sx*total/2,total/2,sz*total/2);} i++; }
+ }
+}
+function destroyObjectBuildRoot(){
+ if(objBuildRoot){try{objBuildRoot.destroy();}catch{}}
+ objBuildRoot=null; objBuildCursor=null; objBuildFloor=null; objBuildAxes=[]; objBuildCellEntities=new Map(); objBuildLastAim=null;
+}
+function ensureObjectBuildRoot(){
+ if(objBuildRoot) return;
+ objBuilderStartedAt=Date.now();
+ objBuildRoot=new pc.Entity('object_builder_root');
+ const buildPos = objectEditorBuildPos || (OBJECT_EDITOR_ORIGIN ? OBJECT_EDITOR_ORIGIN.clone() : new pc.Vec3(player.x,player.y,player.z));
+ objBuildRoot.setPosition(buildPos.x, buildPos.y, buildPos.z);
+ app.root.addChild(objBuildRoot);
+ objBuildCursor=new pc.Entity('object_builder_cursor');
+ objBuildCursor.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ objBuildCursor.render.material=ensureObjCursorMat();
+ objBuildRoot.addChild(objBuildCursor);
+ ensureObjectEditorScaffold();
+ rebuildObjectBuildEntities();
+ setObjStatus('OBJ編集世界。自由飛行で近づいて、照準にPLACEで配置 / BREAKで削除。確定で元フィールドへ戻る。');
+}
+function addObjectBuilderCellEntity(x,y,z,color){
+ if(!objBuildRoot) return;
+ const key=objKey3(x,y,z);
+ const old=objBuildCellEntities.get(key); if(old){try{old.destroy();}catch{}}
+ const s=currentObjScale();
+ const e=new pc.Entity('builder_cell');
+ e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ e.render.material=ensureCustomMat(color);
+ e.setLocalScale(s*1.045,s*1.045,s*1.045); // 微妙に重ねて隙間を殺す
+ e.setLocalPosition(objectCellLocal(x,y,z,s));
+ objBuildRoot.addChild(e);
+ objBuildCellEntities.set(key,e);
+}
+function removeObjectBuilderCellEntity(key){
+ const e=objBuildCellEntities.get(key);
+ if(e){try{e.destroy();}catch{}}
+ objBuildCellEntities.delete(key);
+}
+function rebuildObjectBuildEntities(){
+ if(!objBuildRoot) return;
+ ensureObjectEditorScaffold();
+ for(const e of objBuildCellEntities.values()){try{e.destroy();}catch{}}
+ objBuildCellEntities.clear();
+ if(objBuildCursor){objBuildCursor.setLocalScale(currentObjScale()*1.06,currentObjScale()*1.06,currentObjScale()*1.06);}
+ for(const [key,color] of objVoxels){const a=key.split(',').map(Number);addObjectBuilderCellEntity(a[0],a[1],a[2],color);}
+}
+function insideObjectCell(x,y,z){return x>=0&&x<OBJECT_GRID&&y>=0&&y<OBJECT_GRID&&z>=0&&z<OBJECT_GRID;}
+function objectBuilderAim(){
+ ensureObjectBuildRoot();
+ const s=currentObjScale();
+ const rootPos=objBuildRoot.getPosition();
+ const dir=forwardVec();
+ let lastEmpty=null, firstInside=null;
+ const step=Math.max(.025,s*.38);
+ for(let d=.15; d<9; d+=step){
+   const eye=currentEditorEyeHeight();
+   const wx=player.x+dir.x*d, wy=player.y+eye+dir.y*d, wz=player.z+dir.z*d;
+   const lx=wx-rootPos.x, ly=wy-rootPos.y, lz=wz-rootPos.z;
+   const x=Math.floor(lx/s+OBJECT_GRID/2), y=Math.floor(ly/s), z=Math.floor(lz/s+OBJECT_GRID/2);
+   if(!insideObjectCell(x,y,z)) continue;
+   const cell={x,y,z,key:objKey3(x,y,z)};
+   if(!firstInside) firstInside=cell;
+   if(objVoxels.has(cell.key)) return {hit:cell, place:lastEmpty||cell};
+   lastEmpty=cell;
+ }
+ // 空の状態や狙いが外れた時は、カメラ前方に一番作りやすい中心セルへ置く
+ const fallback = firstInside || lastEmpty || {x:Math.floor(OBJECT_GRID/2),y:0,z:Math.floor(OBJECT_GRID/2),key:objKey3(Math.floor(OBJECT_GRID/2),0,Math.floor(OBJECT_GRID/2))};
+ return {hit:null, place:fallback};
+}
+function updateObjectBuilder(dt){
+ if(!state.editingObject) return;
+ ensureObjectBuildRoot();
+ objBuildLastAim=objectBuilderAim();
+ const target=(objBuildLastAim&& (objBuildLastAim.hit||objBuildLastAim.place));
+ if(objBuildCursor&&target){
+   const s=currentObjScale();
+   objBuildCursor.enabled=true;
+   objBuildCursor.setLocalScale(s*1.07,s*1.07,s*1.07);
+   objBuildCursor.setLocalPosition(objectCellLocal(target.x,target.y,target.z,s));
+ }
+ const count=objVoxels.size;
+ setObjEditBar('<b>OBJ編集世界</b> / '+count+' blocks / size '+currentObjScale().toFixed(2)+'<br><span class="info">床=作成範囲。回込←/→で裏側へ回る。左下移動・右下視点は塞がない</span>');
+ $('targetBox').textContent=target?('OBJ照準 ['+target.x+','+target.y+','+target.z+'] / '+count+' blocks'):'OBJ照準なし';
+ setObjStatus('OBJ作成中: '+count+'ブロック / PLACE配置 / BREAK削除 / 色 '+objPaintColor+' / サイズ '+currentObjScale().toFixed(2));
+}
+function objectBuilderPlace(){
+ if(!state.editingObject) return false;
+ ensureObjectBuildRoot();
+ const aim=objectBuilderAim();
+ const c=aim.place || aim.hit;
+ if(!c||!insideObjectCell(c.x,c.y,c.z)) return true;
+ if(objPickNext){
+   const col=objVoxels.get(c.key);
+   if(col) setObjColor(col);
+   objPickNext=false;
+   setObjStatus('スポイト: '+(col||'色なし'));
+   return true;
+ }
+ objVoxels.set(c.key,objPaintColor);
+ addObjectBuilderCellEntity(c.x,c.y,c.z,objPaintColor);
+ setMsg('OBJ配置: ['+c.x+','+c.y+','+c.z+']','good');
+ return true;
+}
+function objectBuilderBreak(){
+ if(!state.editingObject) return false;
+ ensureObjectBuildRoot();
+ const aim=objectBuilderAim();
+ const c=aim.hit;
+ if(c&&objVoxels.has(c.key)){
+   objVoxels.delete(c.key);
+   removeObjectBuilderCellEntity(c.key);
+   setMsg('OBJ削除: ['+c.x+','+c.y+','+c.z+']','good');
+ } else setMsg('削除対象OBJブロックなし','bad');
+ return true;
+}
+// 旧レイヤー塗りエディタを、フィールド式ビルダーへ差し替え
+function openObjectEditor(){
+ if(state.editingObject) return;
+ state.editingObject=true;
+ document.body.classList.add('objEditing');
+ enterObjectEditorWorld();
+ const el=$('objectEditor'); if(el)el.style.display='block';
+ setObjMode('voxel3d');
+ ensureObjectBuildRoot();
+ setObjStatus('OBJ編集世界へ移動。自由飛行で作成。確定すると元フィールドに戻り、目の前に1個出現。');
+ setObjEditBar('<b>OBJ編集世界</b> / 0 blocks / size '+currentObjScale().toFixed(2)+'<br><span class="info">床=作成範囲。回込←/→で後ろ側へ。中央照準にOBJ配置</span>');
+ setMsg('OBJ編集世界へ移動','good');
+}
+function closeObjectEditor(){
+ state.editingObject=false;
+ document.body.classList.remove('objEditing');
+ const el=$('objectEditor'); if(el)el.style.display='none';
+ destroyObjectBuildRoot();
+ leaveObjectEditorWorld(null);
+ setMsg('OBJ作成をキャンセルして元フィールドへ復帰','info');
+}
+function finishObjectEditor(){
+ const cells=compactObjectCells();
+ if(!cells.length){setObjStatus('最低1ブロックは配置しろ');return;}
+ const scale=currentObjScale();
+ const def={id:'uobj-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36),name:'user-object',kind:'voxel3d',grid:OBJECT_GRID,scale,cells,createdAt:Date.now()};
+ registerCustomObjectDef(def,'localCreate');
+ destroyObjectBuildRoot();
+ state.editingObject=false;
+ document.body.classList.remove('objEditing');
+ const el=$('objectEditor'); if(el)el.style.display='none';
+ leaveObjectEditorWorld({def});
+ setMsg('立体オブジェクト登録・元フィールドの目の前に1個出現','good');
+}
+function bindObjectEditorUi(){
+ setObjHud(); setObjColor(objPaintColor);
+ const ob=$('objectBtn'); if(ob){ob.style.display='block';ob.onclick=openObjectEditor;}
+ const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
+ const sc=$('objScale'); if(sc)sc.oninput=()=>{const t=$('objScaleText');if(t)t.textContent=Number(sc.value).toFixed(2); if(state.editingObject){rebuildObjectBuildEntities(); setObjStatus('サイズ変更: 視点・移動感もサイズに合わせて調整');}};
+ const vb=$('objVoxelBtn'); if(vb)vb.onclick=()=>setObjMode('voxel3d');
+ const pl=$('objPlaneBtn'); if(pl)pl.onclick=()=>{setObjMode('plane');setObjStatus('平面テクスチャは後で草・看板用。今は立体ブロック作成が本命。');};
+ const pk=$('objPickBtn'); if(pk)pk.onclick=()=>{objPickNext=true;setObjStatus('次に中心照準のOBJブロックをPLACEすると色スポイト');};
+ const er=$('objEraseBtn'); if(er)er.onclick=()=>objectBuilderBreak();
+ const qp=$('objQuickPlace'); if(qp)qp.addEventListener('pointerdown',e=>{e.preventDefault();objectBuilderPlace();});
+ const qb=$('objQuickBreak'); if(qb)qb.addEventListener('pointerdown',e=>{e.preventDefault();objectBuilderBreak();});
+ const ol=$('objOrbitLeft'); if(ol){ol.addEventListener('pointerdown',e=>{e.preventDefault();objectEditorOrbitDir=-1;});ol.addEventListener('pointerup',e=>{e.preventDefault();objectEditorOrbitDir=0;});ol.addEventListener('pointercancel',e=>{e.preventDefault();objectEditorOrbitDir=0;});}
+ const orr=$('objOrbitRight'); if(orr){orr.addEventListener('pointerdown',e=>{e.preventDefault();objectEditorOrbitDir=1;});orr.addEventListener('pointerup',e=>{e.preventDefault();objectEditorOrbitDir=0;});orr.addEventListener('pointercancel',e=>{e.preventDefault();objectEditorOrbitDir=0;});}
+ const fu=$('objFlyUp'); if(fu){fu.addEventListener('pointerdown',e=>{e.preventDefault();input.jump=true;});}
+ const fd=$('objFlyDown'); if(fd){fd.addEventListener('pointerdown',e=>{e.preventDefault();objectEditorFlyDown=true;});fd.addEventListener('pointerup',e=>{e.preventDefault();objectEditorFlyDown=false;});fd.addEventListener('pointercancel',e=>{e.preventDefault();objectEditorFlyDown=false;});}
+ const caa=$('objClearBtn'); if(caa)caa.onclick=()=>{objVoxels.clear();objPlanePixels.clear();rebuildObjectBuildEntities();setObjStatus('全消し完了');};
+ const dn=$('objDoneBtn'); if(dn)dn.onclick=finishObjectEditor;
+ const ca=$('objCancelBtn'); if(ca)ca.onclick=closeObjectEditor;
+ window.addEventListener('keydown',e=>{if(e.key==='o'||e.key==='O')openObjectEditor(); if(e.key==='Escape'&&state.editingObject)closeObjectEditor();});
+ loadCustomObjectsLocal(); setObjMode('voxel3d');
+}
+
 buildWorld();
+bindObjectEditorUi();
 
 function setMsg(t,cls){const m=$('msg');m.textContent=t;m.className=cls||'gold';state.lastMsg=t;}
 function tryGround(){
@@ -687,8 +1380,9 @@ function collision(nx,ny,nz){
 function forwardVec(){const cy=Math.cos(player.yaw),sy=Math.sin(player.yaw),cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);return new pc.Vec3(sy*cp,sp,cy*cp).normalize();}
 function aimCamera(){
  const dir=forwardVec();
- camera.setPosition(player.x,player.y+1.48,player.z);
- camera.lookAt(player.x+dir.x*10,player.y+1.48+dir.y*10,player.z+dir.z*10);
+ const eye=state.editingObject?currentEditorEyeHeight():1.48;
+ camera.setPosition(player.x,player.y+eye,player.z);
+ camera.lookAt(player.x+dir.x*10,player.y+eye+dir.y*10,player.z+dir.z*10);
 }
 function rayBlock(){
  const dir=forwardVec();let last=[Math.round(player.x),Math.floor(player.y+1.35),Math.round(player.z)];
@@ -700,8 +1394,8 @@ function rayBlock(){
  }
  return null;
 }
-function breakBlock(){const r=rayBlock();if(!r){setMsg('届く範囲にブロックなし','bad');return;}const d=r.hit.data;if(d.y<=WORLD_BOTTOM){setMsg('基盤は破壊不可','bad');return;}removeBlock(d.x,d.y,d.z,true);sendBlockEditMultiplayer(d.x,d.y,d.z,null);revealAround(d.x,d.y,d.z);setMsg('破壊: '+blockDefs[d.type].label,'good');}
-function placeBlock(){const r=rayBlock();if(!r){setMsg('配置先が見つからない','bad');return;}const [x,y,z]=r.place;if(y<WORLD_BOTTOM||logicalTypeAt(x,y,z)){setMsg('そこには置けない','bad');return;}if(Math.abs(x-player.x)<.7&&Math.abs(z-player.z)<.7&&y<player.y+2){setMsg('自分の場所には置けない','bad');return;}addBlock(x,y,z,state.selected,true);sendBlockEditMultiplayer(x,y,z,state.selected);revealAround(x,y,z);setMsg('配置: '+blockDefs[state.selected].label,'good');}
+function breakBlock(){if(state.editingObject){objectBuilderBreak();return;}const r=rayBlock();if(!r){setMsg('届く範囲にブロックなし','bad');return;}const d=r.hit.data;if(d.y<=WORLD_BOTTOM){setMsg('基盤は破壊不可','bad');return;}removeBlock(d.x,d.y,d.z,true);sendBlockEditMultiplayer(d.x,d.y,d.z,null);revealAround(d.x,d.y,d.z);setMsg('破壊: '+blockDefs[d.type].label,'good');}
+function placeBlock(){if(state.editingObject){objectBuilderPlace();return;}const r=rayBlock();if(!r){setMsg('配置先が見つからない','bad');return;}const [x,y,z]=r.place;if(y<WORLD_BOTTOM||logicalTypeAt(x,y,z)){setMsg('そこには置けない','bad');return;}if(Math.abs(x-player.x)<.7&&Math.abs(z-player.z)<.7&&y<player.y+2){setMsg('自分の場所には置けない','bad');return;}addBlock(x,y,z,state.selected,true);sendBlockEditMultiplayer(x,y,z,state.selected);revealAround(x,y,z);setMsg('配置: '+blockDefs[state.selected].label,'good');}
 
 function updateToolbar(){const tb=$('toolbar');tb.innerHTML='';order.forEach((k,i)=>{const d=blockDefs[k];const s=document.createElement('button');s.className='slot'+(state.selected===k?' on':'');s.innerHTML='<div class="swatch" style="background:'+d.color+'"></div>'+(i+1)+' '+d.label;s.onclick=()=>{state.selected=k;updateToolbar();setMsg('選択: '+d.label,'info')};tb.appendChild(s);});}
 updateToolbar();
@@ -736,6 +1430,10 @@ $('qualityBtn').onclick=()=>{state.qualityHigh=!state.qualityHigh;$('qualityBtn'
 
 let fpsAcc=0,fpsCount=0,fpsLast=performance.now();
 function update(dt){
+ if(state.editingObject){
+   updateObjectEditorFlight(dt);
+   return;
+ }
  ensureChunksAroundPlayer(false);
  processChunkJobs();
  if(!state.started){camera.setPosition(10,10,12);camera.lookAt(0,1,0);$('chunks').textContent=chunkStats();return;}
@@ -756,7 +1454,7 @@ function update(dt){
  $('pos').textContent=player.x.toFixed(1)+','+player.y.toFixed(1)+','+player.z.toFixed(1);
  $('chunks').textContent=chunkStats();
 }
-app.on('update',dt=>{dt=Math.min(dt,.05);update(dt);updateMultiplayer(dt);fpsAcc+=dt;fpsCount++;const now=performance.now();if(now-fpsLast>500){const fps=Math.round(fpsCount/fpsAcc);$('fps').textContent=fps;if(app.graphicsDevice&&state.started&&fps<52&&app.graphicsDevice.maxPixelRatio>1){app.graphicsDevice.maxPixelRatio=Math.max(1,app.graphicsDevice.maxPixelRatio-.1);$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}
+app.on('update',dt=>{dt=Math.min(dt,.05);update(dt);updateMultiplayer(dt);updateCustomObjectRuntime(dt);updateObjectBuilder(dt);fpsAcc+=dt;fpsCount++;const now=performance.now();if(now-fpsLast>500){const fps=Math.round(fpsCount/fpsAcc);$('fps').textContent=fps;if(app.graphicsDevice&&state.started&&fps<52&&app.graphicsDevice.maxPixelRatio>1){app.graphicsDevice.maxPixelRatio=Math.max(1,app.graphicsDevice.maxPixelRatio-.1);$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}
 fpsAcc=0;fpsCount=0;fpsLast=now;}});
 setMsg('PlayCanvas Engine読込完了','good');
 })();
