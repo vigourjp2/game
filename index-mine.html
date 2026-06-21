@@ -27,6 +27,7 @@
   <div class="hudLine">FPS: <span id="fps">--</span> / PixelRatio: <span id="pr">--</span></div>
   <div class="hudLine">座標: <span id="pos">--</span></div>
   <div class="hudLine">世界: <span id="chunks">--</span></div>
+  <div class="hudLine">通信: <span id="mp" class="info">OFF</span> / 受信: <span id="mpRx" class="info">0</span></div>
   <div class="hudLine">操作: <span class="info">WASD/タッチ</span>　中央照準で破壊/配置</div>
   <div class="hudLine"><span id="msg" class="gold">地下充填ロジック / 60FPS優先</span></div>
 </div>
@@ -291,6 +292,84 @@ const player={x:0,y:terrainHeight(0,-8)+3,z:-8,vx:0,vy:0,vz:0,yaw:0,pitch:0,onGr
 const input={mx:0,my:0,lx:0,ly:0,lookX:0,lookY:0,breaking:false,placing:false,jump:false};
 const smooth={mx:0,my:0,lookX:0,lookY:0};
 
+// ===== Multiplayer WebSocket connection test =====
+const MULTIPLAYER_WS_URL = "wss://mine-server-git2.vigourjp2.workers.dev/room/main";
+let multiplayerSocket = null;
+let multiplayerReconnectTimer = null;
+let multiplayerHeartbeatTimer = null;
+let multiplayerRxCount = 0;
+let multiplayerName = "player-" + Math.floor(Math.random() * 10000);
+
+function setMultiplayerStatus(text, cls) {
+ const el = $('mp');
+ if (!el) return;
+ el.textContent = text;
+ el.className = cls || 'info';
+}
+function setMultiplayerRxCount() {
+ const el = $('mpRx');
+ if (el) el.textContent = String(multiplayerRxCount);
+}
+function sendMultiplayer(obj) {
+ if (!multiplayerSocket || multiplayerSocket.readyState !== WebSocket.OPEN) return false;
+ try {
+   multiplayerSocket.send(JSON.stringify(obj));
+   return true;
+ } catch (e) {
+   console.warn('multiplayer send failed', e);
+   return false;
+ }
+}
+function connectMultiplayer() {
+ if (multiplayerSocket && (multiplayerSocket.readyState === WebSocket.OPEN || multiplayerSocket.readyState === WebSocket.CONNECTING)) return;
+ clearTimeout(multiplayerReconnectTimer);
+ clearInterval(multiplayerHeartbeatTimer);
+ setMultiplayerStatus('CONNECTING', 'info');
+ multiplayerSocket = new WebSocket(MULTIPLAYER_WS_URL);
+ multiplayerSocket.addEventListener('open', () => {
+   setMultiplayerStatus('ONLINE', 'good');
+   setMsg('オンライン接続成功', 'good');
+   console.log('✅ multiplayer connected:', MULTIPLAYER_WS_URL);
+   sendMultiplayer({
+     type: 'join',
+     name: multiplayerName,
+     x: player.x,
+     y: player.y,
+     z: player.z,
+     yaw: player.yaw,
+     pitch: player.pitch,
+     time: Date.now()
+   });
+   multiplayerHeartbeatTimer = setInterval(() => {
+     sendMultiplayer({
+       type: 'ping',
+       name: multiplayerName,
+       x: player.x,
+       y: player.y,
+       z: player.z,
+       yaw: player.yaw,
+       pitch: player.pitch,
+       time: Date.now()
+     });
+   }, 10000);
+ });
+ multiplayerSocket.addEventListener('message', (event) => {
+   multiplayerRxCount++;
+   setMultiplayerRxCount();
+   console.log('📩 multiplayer message:', event.data);
+ });
+ multiplayerSocket.addEventListener('close', () => {
+   clearInterval(multiplayerHeartbeatTimer);
+   setMultiplayerStatus('RETRY', 'bad');
+   console.log('❌ multiplayer disconnected');
+   multiplayerReconnectTimer = setTimeout(connectMultiplayer, 3000);
+ });
+ multiplayerSocket.addEventListener('error', (error) => {
+   setMultiplayerStatus('ERROR', 'bad');
+   console.log('⚠️ multiplayer error:', error);
+ });
+}
+
 buildWorld();
 
 function setMsg(t,cls){const m=$('msg');m.textContent=t;m.className=cls||'gold';state.lastMsg=t;}
@@ -352,7 +431,7 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('keydown',e=>{if(e.code==='Space')input.jump=true;if(e.key>='1'&&e.key<='5'){state.selected=order[Number(e.key)-1]||state.selected;updateToolbar();}});
 
-$('startBtn').onclick=()=>{state.started=true;$('start').style.display='none';if(!state.mobile){canvas.focus();canvas.requestPointerLock&&canvas.requestPointerLock();}setMsg('起動成功。PlayCanvas Engineで描画中','good');};
+$('startBtn').onclick=()=>{state.started=true;$('start').style.display='none';if(!state.mobile){canvas.focus();canvas.requestPointerLock&&canvas.requestPointerLock();}connectMultiplayer();setMsg('起動成功。PlayCanvas Engineで描画中 / オンライン接続開始','good');};
 $('qualityBtn').onclick=()=>{state.qualityHigh=!state.qualityHigh;$('qualityBtn').textContent='画質: '+(state.qualityHigh?'HIGH':'LIGHT');if(app.graphicsDevice){app.graphicsDevice.maxPixelRatio=targetPixelRatio();$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}setMsg('画質変更: 再読込でテクスチャ解像度も反映','info');};
 
 let fpsAcc=0,fpsCount=0,fpsLast=performance.now();
