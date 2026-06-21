@@ -210,7 +210,7 @@ export class Room {
       return;
     }
 
-    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit' || msg.type === 'objectInstanceRemove') {
+    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit' || msg.type === 'objectInstanceRemove' || msg.type === 'objectInstancePlace') {
       if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate') {
         this.players.set(clientId, {
           clientId,
