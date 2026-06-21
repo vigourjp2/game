@@ -1,4 +1,4 @@
-export class MineRoom {
+export class Room {
   constructor(state, env) {
     this.state = state;
     this.env = env;
@@ -12,30 +12,43 @@ export class MineRoom {
     if (this.objectsLoaded) return;
     this.objectsLoaded = true;
     const saved = await this.state.storage.get('customObjects');
-    this.objects = Array.isArray(saved) ? saved.slice(-80) : [];
+    this.objects = Array.isArray(saved) ? saved.slice(-100) : [];
   }
 
   async saveObjects() {
-    await this.state.storage.put('customObjects', this.objects.slice(-80));
+    await this.state.storage.put('customObjects', this.objects.slice(-100));
   }
 
   cleanObject(def) {
     if (!def || !Array.isArray(def.cells)) return null;
+
+    const kind = def.kind === 'plane' ? 'plane' : 'voxel3d';
+    const grid = Math.max(4, Math.min(32, Math.trunc(Number(def.grid) || 16)));
+    const maxCells = kind === 'plane' ? 512 : 1536;
     const cells = [];
-    for (const c of def.cells.slice(0, 512)) {
+
+    for (const c of def.cells.slice(0, maxCells)) {
       const x = Math.trunc(Number(c.x));
       const y = Math.trunc(Number(c.y));
+      const z = kind === 'plane' ? 0 : Math.trunc(Number(c.z));
       const color = String(c.color || '').trim().toLowerCase();
-      if (x < 0 || x >= 16 || y < 0 || y >= 16) continue;
+
+      if (x < 0 || x >= grid || y < 0 || y >= grid) continue;
+      if (kind === 'voxel3d' && (z < 0 || z >= grid)) continue;
       if (!/^#[0-9a-f]{6}$/.test(color)) continue;
-      cells.push({ x, y, color });
+
+      if (kind === 'plane') cells.push({ x, y, color });
+      else cells.push({ x, y, z, color });
     }
+
     if (!cells.length) return null;
+
     return {
-      id: String(def.id || crypto.randomUUID()).slice(0, 80),
+      id: String(def.id || crypto.randomUUID()).slice(0, 96),
       name: String(def.name || 'object').slice(0, 40),
-      grid: 16,
-      scale: Math.max(0.25, Math.min(1.2, Number(def.scale) || 0.55)),
+      kind,
+      grid,
+      scale: Math.max(0.03, Math.min(0.8, Number(def.scale) || 0.16)),
       cells,
       createdAt: Number(def.createdAt) || Date.now()
     };
@@ -59,7 +72,7 @@ export class MineRoom {
     this.sessions.set(server, { playerId: serverPlayerId, connectedAt: Date.now() });
 
     server.send(JSON.stringify({ type: 'welcome', playerId: serverPlayerId, time: Date.now() }));
-    server.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects }));
+    server.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() }));
 
     server.addEventListener('message', async (event) => {
       await this.onMessage(server, event.data);
@@ -101,9 +114,9 @@ export class MineRoom {
         changed = true;
       }
       if (changed) {
-        this.objects = this.objects.slice(-80);
+        this.objects = this.objects.slice(-100);
         await this.saveObjects();
-        this.broadcast({ type: 'objectCatalog', objects: this.objects }, null);
+        this.broadcast({ type: 'objectCatalog', objects: this.objects, time: Date.now() }, null);
       }
       return;
     }
@@ -113,10 +126,11 @@ export class MineRoom {
       if (!clean) return;
       if (!this.objects.some(o => o.id === clean.id)) {
         this.objects.push(clean);
-        this.objects = this.objects.slice(-80);
+        this.objects = this.objects.slice(-100);
         await this.saveObjects();
       }
       this.broadcast({ type: 'objectRegister', object: clean, clientId, time: Date.now() }, ws);
+      try { ws.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() })); } catch {}
       return;
     }
 
@@ -137,7 +151,6 @@ export class MineRoom {
       return;
     }
 
-    // 未知タイプも小さければ中継。将来の拡張用。
     if (String(raw).length < 20000) this.broadcast(base, ws);
   }
 
@@ -160,6 +173,9 @@ export class MineRoom {
   }
 }
 
+// wrangler側が MineRoom 指定でも壊れないように別名もexportする。
+export { Room as MineRoom };
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -168,9 +184,15 @@ export default {
         headers: { 'content-type': 'text/plain; charset=utf-8' }
       });
     }
+
     const roomId = decodeURIComponent(url.pathname.slice('/room/'.length) || 'main');
-    const id = env.MINE_ROOM.idFromName(roomId);
-    const room = env.MINE_ROOM.get(id);
+    const namespace = env.MINE_ROOM || env.ROOM;
+    if (!namespace) {
+      return new Response('Durable Object binding not found. Expected env.MINE_ROOM or env.ROOM.', { status: 500 });
+    }
+
+    const id = namespace.idFromName(roomId);
+    const room = namespace.get(id);
     return room.fetch(request);
   }
 };
