@@ -302,6 +302,7 @@ let multiplayerRxCount = 0;
 let multiplayerClientId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('c-' + Date.now() + '-' + Math.floor(Math.random() * 100000));
 let multiplayerName = "player-" + Math.floor(Math.random() * 10000);
 let multiplayerLastStateSend = 0;
+let multiplayerLastSent = { x:999999, y:999999, z:999999, yaw:999999, pitch:999999, force:0 };
 let multiplayerRemoteMat = null;
 const multiplayerRemotes = new Map();
 const MULTIPLAYER_SEND_INTERVAL_MS = 100; // 10Hz。7人でも安全優先。必要なら50ms=20Hzへ。
@@ -342,7 +343,6 @@ function connectMultiplayer() {
  multiplayerSocket.addEventListener('open', () => {
    setMultiplayerStatus('ONLINE', 'good');
    setMsg('オンライン接続成功', 'good');
-   console.log('✅ multiplayer connected:', MULTIPLAYER_WS_URL);
    sendMultiplayer({
      type: 'join',
      x: player.x,
@@ -366,17 +366,14 @@ function connectMultiplayer() {
    multiplayerRxCount++;
    setMultiplayerRxCount();
    handleMultiplayerMessage(event.data);
-   console.log('📩 multiplayer message:', event.data);
  });
  multiplayerSocket.addEventListener('close', () => {
    clearInterval(multiplayerHeartbeatTimer);
    setMultiplayerStatus('RETRY', 'bad');
-   console.log('❌ multiplayer disconnected');
    multiplayerReconnectTimer = setTimeout(connectMultiplayer, 3000);
  });
  multiplayerSocket.addEventListener('error', (error) => {
    setMultiplayerStatus('ERROR', 'bad');
-   console.log('⚠️ multiplayer error:', error);
  });
 }
 function parseMultiplayerData(raw) {
@@ -465,8 +462,10 @@ function handleMultiplayerMessage(raw) {
  });
 }
 function updateMultiplayer(dt) {
+ const nowForRemote = performance.now();
  for (const r of multiplayerRemotes.values()) {
    if (!r.entity || !r.target) continue;
+   if (nowForRemote - r.lastSeen > 15000) { removeRemotePlayer(r.id); continue; }
    const pos = r.entity.getPosition();
    pos.lerp(pos, r.target, Math.min(1, dt * 11));
    r.entity.setPosition(pos);
@@ -475,15 +474,33 @@ function updateMultiplayer(dt) {
  if (!state.started) return;
  const now = performance.now();
  if (now - multiplayerLastStateSend >= MULTIPLAYER_SEND_INTERVAL_MS) {
-   multiplayerLastStateSend = now;
-   sendMultiplayer({
-     type:'playerState',
-     x:player.x,
-     y:player.y,
-     z:player.z,
-     yaw:player.yaw,
-     pitch:player.pitch
-   });
+   const dx = player.x - multiplayerLastSent.x;
+   const dy = player.y - multiplayerLastSent.y;
+   const dz = player.z - multiplayerLastSent.z;
+   const dyaw = player.yaw - multiplayerLastSent.yaw;
+   const dpitch = player.pitch - multiplayerLastSent.pitch;
+   const moved = (dx*dx + dy*dy + dz*dz) > 0.0009;
+   const turned = Math.abs(dyaw) > 0.015 || Math.abs(dpitch) > 0.015;
+   const keepAlive = now - multiplayerLastSent.force > 1000;
+   if (moved || turned || keepAlive) {
+     multiplayerLastStateSend = now;
+     multiplayerLastSent.x = player.x;
+     multiplayerLastSent.y = player.y;
+     multiplayerLastSent.z = player.z;
+     multiplayerLastSent.yaw = player.yaw;
+     multiplayerLastSent.pitch = player.pitch;
+     multiplayerLastSent.force = now;
+     sendMultiplayer({
+       type:'playerState',
+       x:player.x,
+       y:player.y,
+       z:player.z,
+       yaw:player.yaw,
+       pitch:player.pitch
+     });
+   } else {
+     multiplayerLastStateSend = now;
+   }
  }
 }
 function sendBlockEditMultiplayer(x,y,z,block) {
