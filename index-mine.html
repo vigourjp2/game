@@ -28,6 +28,7 @@
   <div class="hudLine">座標: <span id="pos">--</span></div>
   <div class="hudLine">世界: <span id="chunks">--</span></div>
   <div class="hudLine">通信: <span id="mp" class="info">OFF</span> / 受信: <span id="mpRx" class="info">0</span> / 他人: <span id="mpRemote" class="info">0</span></div>
+  <div class="hudLine">顔: <span id="faceCam" class="info">OFF</span></div>
   <div class="hudLine">操作: <span class="info">WASD/タッチ</span>　中央照準で破壊/配置</div>
   <div class="hudLine"><span id="msg" class="gold">地下充填ロジック / 60FPS優先</span></div>
 </div>
@@ -292,7 +293,7 @@ const player={x:0,y:terrainHeight(0,-8)+3,z:-8,vx:0,vy:0,vz:0,yaw:0,pitch:0,onGr
 const input={mx:0,my:0,lx:0,ly:0,lookX:0,lookY:0,breaking:false,placing:false,jump:false};
 const smooth={mx:0,my:0,lookX:0,lookY:0};
 
-// ===== Multiplayer WebSocket connection test =====
+// ===== Multiplayer WebSocket + lightweight front-camera avatar =====
 const MULTIPLAYER_WS_URL = "wss://mine-server-git2.vigourjp2.workers.dev/room/main";
 
 let multiplayerSocket = null;
@@ -304,8 +305,23 @@ let multiplayerName = "player-" + Math.floor(Math.random() * 10000);
 let multiplayerLastStateSend = 0;
 let multiplayerLastSent = { x:999999, y:999999, z:999999, yaw:999999, pitch:999999, force:0 };
 let multiplayerRemoteMat = null;
+let multiplayerFacePlaceholderMat = null;
 const multiplayerRemotes = new Map();
 const MULTIPLAYER_SEND_INTERVAL_MS = 100; // 10Hz。7人でも安全優先。必要なら50ms=20Hzへ。
+
+// インカメは動画を直接送らない。96px JPEGスナップショットを数秒ごとに送る。
+// 7人時に重くしないため、遠隔プレイヤー表示は「顔写真カード + 小さい胴体」にする。
+let faceVideo = null;
+let faceCanvas = null;
+let faceStream = null;
+let faceReady = false;
+let faceDataUrl = '';
+let faceLastCapture = 0;
+let faceLastSend = 0;
+const FACE_SNAPSHOT_SIZE = 96;
+const FACE_CAPTURE_INTERVAL_MS = 3200;
+const FACE_SEND_INTERVAL_MS = 3300;
+const FACE_MAX_DATA_URL = 16000;
 
 function setMultiplayerStatus(text, cls) {
  const el = $('mp');
@@ -321,6 +337,12 @@ function setMultiplayerRemoteCount() {
  const el = $('mpRemote');
  if (el) el.textContent = String(multiplayerRemotes.size);
 }
+function setFaceStatus(text, cls) {
+ const el = $('faceCam');
+ if (!el) return;
+ el.textContent = text;
+ el.className = cls || 'info';
+}
 function sendMultiplayer(obj) {
  if (!multiplayerSocket || multiplayerSocket.readyState !== WebSocket.OPEN) return false;
  try {
@@ -333,6 +355,78 @@ function sendMultiplayer(obj) {
    console.warn('multiplayer send failed', e);
    return false;
  }
+}
+async function startFaceCamera() {
+ if (faceReady || faceStream) return;
+ if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+   setFaceStatus('非対応', 'bad');
+   return;
+ }
+ try {
+   setFaceStatus('許可待ち', 'info');
+   faceStream = await navigator.mediaDevices.getUserMedia({
+     audio:false,
+     video:{
+       facingMode:'user',
+       width:{ideal:160,max:320},
+       height:{ideal:160,max:320},
+       frameRate:{ideal:5,max:10}
+     }
+   });
+   faceVideo = document.createElement('video');
+   faceVideo.playsInline = true;
+   faceVideo.muted = true;
+   faceVideo.autoplay = true;
+   faceVideo.srcObject = faceStream;
+   await faceVideo.play();
+   faceCanvas = document.createElement('canvas');
+   faceCanvas.width = FACE_SNAPSHOT_SIZE;
+   faceCanvas.height = FACE_SNAPSHOT_SIZE;
+   faceReady = true;
+   setFaceStatus('ON', 'good');
+   captureFaceSnapshot(true);
+   sendFaceSnapshot(true);
+ } catch (e) {
+   faceReady = false;
+   setFaceStatus('OFF', 'bad');
+   setMsg('インカメ許可なし: 黄色/カード表示で継続', 'info');
+ }
+}
+function captureFaceSnapshot(force=false) {
+ if (!faceReady || !faceVideo || !faceCanvas || !faceVideo.videoWidth || !faceVideo.videoHeight) return false;
+ const now = performance.now();
+ if (!force && now - faceLastCapture < FACE_CAPTURE_INTERVAL_MS) return false;
+ faceLastCapture = now;
+ const ctx = faceCanvas.getContext('2d', { alpha:false });
+ const vw = faceVideo.videoWidth, vh = faceVideo.videoHeight;
+ const side = Math.min(vw, vh);
+ const sx = (vw - side) / 2;
+ const sy = (vh - side) / 2;
+ ctx.save();
+ ctx.translate(FACE_SNAPSHOT_SIZE, 0);
+ ctx.scale(-1, 1); // 自撮りっぽく左右反転
+ ctx.drawImage(faceVideo, sx, sy, side, side, 0, 0, FACE_SNAPSHOT_SIZE, FACE_SNAPSHOT_SIZE);
+ ctx.restore();
+ let data = '';
+ try { data = faceCanvas.toDataURL('image/jpeg', .48); } catch { return false; }
+ if (!data || data.length > FACE_MAX_DATA_URL) return false;
+ faceDataUrl = data;
+ return true;
+}
+function sendFaceSnapshot(force=false) {
+ if (!faceDataUrl) return false;
+ const now = performance.now();
+ if (!force && now - faceLastSend < FACE_SEND_INTERVAL_MS) return false;
+ faceLastSend = now;
+ return sendMultiplayer({
+   type:'faceSnapshot',
+   x:player.x,
+   y:player.y,
+   z:player.z,
+   yaw:player.yaw,
+   pitch:player.pitch,
+   face:faceDataUrl
+ });
 }
 function connectMultiplayer() {
  if (multiplayerSocket && (multiplayerSocket.readyState === WebSocket.OPEN || multiplayerSocket.readyState === WebSocket.CONNECTING)) return;
@@ -349,8 +443,10 @@ function connectMultiplayer() {
      y: player.y,
      z: player.z,
      yaw: player.yaw,
-     pitch: player.pitch
+     pitch: player.pitch,
+     face: faceDataUrl || undefined
    });
+   sendFaceSnapshot(true);
    multiplayerHeartbeatTimer = setInterval(() => {
      sendMultiplayer({
        type: 'ping',
@@ -360,6 +456,7 @@ function connectMultiplayer() {
        yaw: player.yaw,
        pitch: player.pitch
      });
+     sendFaceSnapshot(false);
    }, 10000);
  });
  multiplayerSocket.addEventListener('message', (event) => {
@@ -395,18 +492,67 @@ function getRemoteId(p) {
 function ensureRemoteMaterial() {
  if (multiplayerRemoteMat) return multiplayerRemoteMat;
  multiplayerRemoteMat = new pc.StandardMaterial();
- multiplayerRemoteMat.diffuse = new pc.Color(1.0, 0.85, 0.15);
- multiplayerRemoteMat.emissive = new pc.Color(0.18, 0.12, 0.02);
+ multiplayerRemoteMat.diffuse = new pc.Color(0.08, 0.16, 0.22);
+ multiplayerRemoteMat.emissive = new pc.Color(0.01, 0.02, 0.03);
  multiplayerRemoteMat.update();
  return multiplayerRemoteMat;
 }
+function ensureFacePlaceholderMaterial() {
+ if (multiplayerFacePlaceholderMat) return multiplayerFacePlaceholderMat;
+ multiplayerFacePlaceholderMat = new pc.StandardMaterial();
+ multiplayerFacePlaceholderMat.diffuse = new pc.Color(1.0, 0.85, 0.15);
+ multiplayerFacePlaceholderMat.emissive = new pc.Color(0.18, 0.12, 0.02);
+ multiplayerFacePlaceholderMat.update();
+ return multiplayerFacePlaceholderMat;
+}
 function createRemoteEntity(id) {
- const e = new pc.Entity('remote_' + id);
- e.addComponent('render', { type:'box', castShadows:false, receiveShadows:false });
- e.render.material = ensureRemoteMaterial();
- e.setLocalScale(0.62, 1.75, 0.62);
- app.root.addChild(e);
- return e;
+ const root = new pc.Entity('remote_' + id);
+ const body = new pc.Entity('remote_body_' + id);
+ body.addComponent('render', { type:'box', castShadows:false, receiveShadows:false });
+ body.render.material = ensureRemoteMaterial();
+ body.setLocalScale(0.42, 1.35, 0.42);
+ body.setLocalPosition(0, 0.0, 0);
+ root.addChild(body);
+
+ const face = new pc.Entity('remote_face_' + id);
+ face.addComponent('render', { type:'box', castShadows:false, receiveShadows:false });
+ face.render.material = ensureFacePlaceholderMaterial();
+ face.setLocalScale(1.08, 1.08, 0.06);
+ face.setLocalPosition(0, 1.18, -0.28);
+ root.addChild(face);
+
+ root._bodyEntity = body;
+ root._faceEntity = face;
+ app.root.addChild(root);
+ return root;
+}
+function setRemoteFaceImage(id, dataUrl) {
+ if (!dataUrl || typeof dataUrl !== 'string' || dataUrl.length > FACE_MAX_DATA_URL) return;
+ if (!dataUrl.startsWith('data:image/')) return;
+ const r = multiplayerRemotes.get(id);
+ if (!r || !r.entity || r.faceDataUrl === dataUrl) return;
+ r.faceDataUrl = dataUrl;
+ const img = new Image();
+ img.onload = () => {
+   const tex = new pc.Texture(app.graphicsDevice, {
+     minFilter: pc.FILTER_LINEAR,
+     magFilter: pc.FILTER_LINEAR,
+     addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+     addressV: pc.ADDRESS_CLAMP_TO_EDGE
+   });
+   tex.setSource(img);
+   const mat = new pc.StandardMaterial();
+   mat.diffuseMap = tex;
+   mat.emissiveMap = tex;
+   mat.emissive = new pc.Color(0.45, 0.45, 0.45);
+   mat.update();
+   if (r.faceMaterial && r.faceMaterial.destroy) {
+     try { r.faceMaterial.destroy(); } catch {}
+   }
+   r.faceMaterial = mat;
+   if (r.entity._faceEntity && r.entity._faceEntity.render) r.entity._faceEntity.render.material = mat;
+ };
+ img.src = dataUrl;
 }
 function updateRemotePlayer(p) {
  const id = getRemoteId(p);
@@ -415,21 +561,29 @@ function updateRemotePlayer(p) {
  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
  let r = multiplayerRemotes.get(id);
  if (!r) {
-   r = { id, entity:createRemoteEntity(id), target:new pc.Vec3(x, y + .88, z), yaw:0, lastSeen:performance.now() };
+   r = { id, entity:createRemoteEntity(id), target:new pc.Vec3(x, y + .70, z), yaw:0, lastSeen:performance.now(), faceDataUrl:'' };
    r.entity.setPosition(r.target);
    multiplayerRemotes.set(id, r);
    setMultiplayerRemoteCount();
    setMsg('他プレイヤー検出: ' + multiplayerRemotes.size + '人', 'good');
  }
- r.target.set(x, y + .88, z);
+ r.target.set(x, y + .70, z);
  r.yaw = Number(p.yaw) || 0;
  r.lastSeen = performance.now();
+ if (p.face) setRemoteFaceImage(id, p.face);
+}
+function updateRemoteFace(p) {
+ const id = getRemoteId(p);
+ if (!id || id === multiplayerClientId) return;
+ if (Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y)) && Number.isFinite(Number(p.z))) updateRemotePlayer(p);
+ if (p.face) setRemoteFaceImage(id, p.face);
 }
 function removeRemotePlayer(id) {
  id = String(id || '');
  const r = multiplayerRemotes.get(id);
  if (!r) return;
  if (r.entity) r.entity.destroy();
+ if (r.faceMaterial && r.faceMaterial.destroy) { try { r.faceMaterial.destroy(); } catch {} }
  multiplayerRemotes.delete(id);
  setMultiplayerRemoteCount();
 }
@@ -458,12 +612,13 @@ function handleMultiplayerMessage(raw) {
    if (t === 'welcome' || t === 'pong' || t === 'ping') return;
    if (t === 'leave' || t === 'disconnect') { removeRemotePlayer(msg.clientId || msg.playerId || msg.id); return; }
    if (t === 'join' || t === 'playerState' || t === 'playerUpdate' || t === 'state') updateRemotePlayer(msg);
+   if (t === 'faceSnapshot' || t === 'face' || msg.face) updateRemoteFace(msg);
    if (t === 'blockEdit' || t === 'break' || t === 'place') applyRemoteBlockEditMsg(msg);
  });
 }
 function updateMultiplayer(dt) {
  const nowForRemote = performance.now();
- for (const r of multiplayerRemotes.values()) {
+ for (const r of Array.from(multiplayerRemotes.values())) {
    if (!r.entity || !r.target) continue;
    if (nowForRemote - r.lastSeen > 15000) { removeRemotePlayer(r.id); continue; }
    const pos = r.entity.getPosition();
@@ -472,6 +627,8 @@ function updateMultiplayer(dt) {
    r.entity.setEulerAngles(0, (r.yaw || 0) * 180 / Math.PI, 0);
  }
  if (!state.started) return;
+ const faceChanged = captureFaceSnapshot(false);
+ if (faceChanged) sendFaceSnapshot(false);
  const now = performance.now();
  if (now - multiplayerLastStateSend >= MULTIPLAYER_SEND_INTERVAL_MS) {
    const dx = player.x - multiplayerLastSent.x;
@@ -574,7 +731,7 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('keydown',e=>{if(e.code==='Space')input.jump=true;if(e.key>='1'&&e.key<='5'){state.selected=order[Number(e.key)-1]||state.selected;updateToolbar();}});
 
-$('startBtn').onclick=()=>{state.started=true;$('start').style.display='none';if(!state.mobile){canvas.focus();canvas.requestPointerLock&&canvas.requestPointerLock();}connectMultiplayer();setMsg('起動成功。PlayCanvas Engineで描画中 / オンライン接続開始','good');};
+$('startBtn').onclick=()=>{state.started=true;$('start').style.display='none';if(!state.mobile){canvas.focus();canvas.requestPointerLock&&canvas.requestPointerLock();}startFaceCamera();connectMultiplayer();setMsg('起動成功。PlayCanvas Engineで描画中 / オンライン接続開始','good');};
 $('qualityBtn').onclick=()=>{state.qualityHigh=!state.qualityHigh;$('qualityBtn').textContent='画質: '+(state.qualityHigh?'HIGH':'LIGHT');if(app.graphicsDevice){app.graphicsDevice.maxPixelRatio=targetPixelRatio();$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}setMsg('画質変更: 再読込でテクスチャ解像度も反映','info');};
 
 let fpsAcc=0,fpsCount=0,fpsLast=performance.now();
