@@ -28,125 +28,129 @@ let order=[],idx=0,ok=0,answered=false,current=null,wrongIds=JSON.parse(localSto
 <script id="periodic-test-score-addon">
 (function(){
   const META={id:"high-info",name:"高校 情報"};
+  const FIXED_USER='gakushu-main';
   const KEY='periodicTestBest:'+META.id;
   const LAST='periodicTestLast:'+META.id;
-  const STYLE_ID='periodic-test-style';
-  const USER_KEY='gakushuScoreUserId';
   let firebaseState='確認中';
   let fbCache=null;
   function $(id){return document.getElementById(id)}
-  function safeId(s){return String(s||'default').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)||'default'}
-  function getUserId(){
-    let id=localStorage.getItem(USER_KEY);
-    if(!id){id='guest-'+(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));localStorage.setItem(USER_KEY,id)}
-    return safeId(id);
-  }
+  function getUserId(){return FIXED_USER}
   function firebaseConfigured(){
     const c=window.GAKUSHU_FIREBASE_CONFIG;
-    return !!(c && c.apiKey && c.databaseURL && !String(c.apiKey).includes('PASTE_') && !String(c.databaseURL).includes('PASTE_'));
+    return !!(c&&c.apiKey&&c.databaseURL&&!String(c.apiKey).includes('PASTE_')&&!String(c.databaseURL).includes('PASTE_'));
   }
   async function fb(){
-    if(fbCache) return fbCache;
-    if(!firebaseConfigured()){firebaseState='Firebase未設定・端末保存';return null;}
+    if(fbCache)return fbCache;
+    if(!firebaseConfigured()){firebaseState='Firebase未設定・一時端末保存';return null}
     try{
-      const [{initializeApp,getApps},{getDatabase,ref,get,set,remove,onValue,serverTimestamp}]=await Promise.all([
+      const [appMod,dbMod]=await Promise.all([
         import('https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js'),
         import('https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js')
       ]);
-      const app=getApps().length?getApps()[0]:initializeApp(window.GAKUSHU_FIREBASE_CONFIG);
-      const db=getDatabase(app);
-      fbCache={db,ref,get,set,remove,onValue,serverTimestamp};
+      const app=appMod.getApps().length?appMod.getApps()[0]:appMod.initializeApp(window.GAKUSHU_FIREBASE_CONFIG);
+      const db=dbMod.getDatabase(app);
+      fbCache={db,...dbMod};
       firebaseState='Firebase DB同期ON';
       return fbCache;
-    }catch(e){console.warn('Firebase init failed',e);firebaseState='Firebase接続失敗・端末保存';return null;}
+    }catch(e){console.warn('Firebase init failed',e);firebaseState='Firebase接続失敗・一時端末保存';return null}
   }
-  function pathFor(){return 'scoreUsers/'+getUserId()+'/subjects/'+META.id}
-  function readBest(){const v=localStorage.getItem(KEY); return v==null?null:Number(v)}
+  function pathFor(){return 'scoreUsers/'+FIXED_USER+'/subjects/'+META.id}
+  function readBest(){const v=localStorage.getItem(KEY);return v==null?null:Number(v)}
   async function readRemoteBest(){
-    const f=await fb(); if(!f) return null;
-    try{const snap=await f.get(f.ref(f.db,pathFor())); const v=snap.exists()?snap.val():null; return v&&typeof v.best==='number'?v.best:null}catch(e){console.warn(e);return null}
+    const f=await fb();if(!f)return null;
+    try{const snap=await f.get(f.ref(f.db,pathFor()));const v=snap.exists()?snap.val():null;return v&&typeof v.best==='number'?v.best:null}catch(e){console.warn(e);return null}
   }
   async function writeRemoteBest(score){
-    const f=await fb(); if(!f) return;
+    const f=await fb();if(!f)return;
     try{
       const p=f.ref(f.db,pathFor());
-      const snap=await f.get(p); const old=snap.exists()?snap.val():null; const oldBest=old&&typeof old.best==='number'?old.best:null;
-      if(oldBest==null || score>oldBest){
-        await f.set(p,{best:score,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:getUserId()});
-        firebaseState='Firebase DB同期済';
-      }else{
-        // 最高点更新なしでも最終点だけ持つ
-        await f.set(p,{...(old||{}),best:oldBest,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:getUserId()});
-        firebaseState='Firebase DB同期済';
-      }
-      updatePanel();
-    }catch(e){console.warn('Firebase write failed',e);firebaseState='Firebase書込失敗・端末保存';updatePanel();}
+      const snap=await f.get(p);
+      const old=snap.exists()?snap.val():null;
+      const oldBest=old&&typeof old.best==='number'?old.best:null;
+      const payload={...(old||{}),best:oldBest==null||score>oldBest?score:oldBest,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:FIXED_USER};
+      await f.set(p,payload);
+      firebaseState='Firebase DB同期済';
+      updateInlineBest();
+    }catch(e){console.warn('Firebase write failed',e);firebaseState='Firebase書込失敗・一時端末保存';updateInlineBest()}
   }
-  async function removeRemoteBest(){const f=await fb(); if(!f)return; try{await f.remove(f.ref(f.db,pathFor())); firebaseState='Firebase DBリセット済';}catch(e){console.warn(e);firebaseState='Firebaseリセット失敗';}}
+  async function removeRemoteBest(){
+    const f=await fb();if(!f)return;
+    try{await f.remove(f.ref(f.db,pathFor()));firebaseState='Firebase DBリセット済'}catch(e){console.warn(e);firebaseState='Firebaseリセット失敗'}
+  }
+  function updateInlineBest(){
+    const b=readBest();
+    document.querySelectorAll('[data-periodic-best],.periodicBestInline').forEach(el=>{el.textContent=b==null?'最高 --点':'最高 '+b+'点'});
+  }
   async function syncFromRemote(){
     const rb=await readRemoteBest();
-    if(rb!=null){const lb=readBest(); if(lb==null||rb>lb)localStorage.setItem(KEY,String(rb));}
-    updatePanel();
+    if(rb!=null){const lb=readBest();if(lb==null||rb>lb)localStorage.setItem(KEY,String(rb))}
+    updateInlineBest();
   }
   async function watchRemote(){
-    const f=await fb(); if(!f)return;
-    try{f.onValue(f.ref(f.db,pathFor()),snap=>{const v=snap.val(); if(v&&typeof v.best==='number'){const lb=readBest(); if(lb==null||v.best>=lb)localStorage.setItem(KEY,String(v.best));}else{localStorage.removeItem(KEY)} updatePanel();});}catch(e){console.warn(e)}
+    const f=await fb();if(!f)return;
+    try{f.onValue(f.ref(f.db,pathFor()),snap=>{const v=snap.val();if(v&&typeof v.best==='number'){const lb=readBest();if(lb==null||v.best>=lb)localStorage.setItem(KEY,String(v.best))}else{localStorage.removeItem(KEY)}updateInlineBest()})}catch(e){console.warn(e)}
   }
   function writeBest(score){
     score=Math.max(0,Math.min(100,Math.round(Number(score)||0)));
     const old=readBest();
-    localStorage.setItem(LAST, JSON.stringify({score,at:new Date().toISOString(),name:META.name,scoreUserId:getUserId()}));
-    if(old==null || score>old){localStorage.setItem(KEY,String(score));}
-    updatePanel();
-    writeRemoteBest(score);
+    localStorage.setItem(LAST,JSON.stringify({score,at:new Date().toISOString(),name:META.name,scoreUserId:FIXED_USER}));
+    if(old==null||score>old){localStorage.setItem(KEY,String(score));writeRemoteBest(score);}
+    else {writeRemoteBest(score);}
+    updateInlineBest();
   }
-  window.__recordPeriodicTestScore=function(score){writeBest(score)};
-  window.__resetPeriodicTestBest=async function(){if(confirm(META.name+' の歴代最高得点をFirebase DBごとリセットする？')){localStorage.removeItem(KEY);localStorage.removeItem(LAST);await removeRemoteBest();updatePanel();}};
-  function ensurePanel(){
-    if(!$(STYLE_ID)){
-      const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
-      .ptsPanel{position:fixed;right:10px;bottom:10px;z-index:2147483000;background:rgba(15,23,42,.92);color:#fff;border:1px solid rgba(148,163,184,.45);border-radius:16px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.35);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:270px}
-      .ptsPanel b{display:block;font-size:13px;letter-spacing:.02em}.ptsBest{font-size:18px;font-weight:1000;color:#fde68a;margin-top:2px}.ptsRow{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}.ptsRow button{border:0;border-radius:999px;padding:7px 9px;font-weight:900;background:#2563eb;color:white}.ptsRow button.reset{background:#475569}.ptsMini{font-size:11px;color:#cbd5e1;font-weight:800;line-height:1.35;margin-top:4px}.ptsFb{font-size:11px;color:#93c5fd;font-weight:900;margin-top:3px}@media(max-width:560px){.ptsPanel{left:8px;right:8px;bottom:6px;max-width:none;display:flex;align-items:center;justify-content:space-between;gap:8px}.ptsRow{margin-top:0}.ptsMini,.ptsFb{display:none}}`;
+  window.__recordPeriodicTestScore=function(score,opts){if(opts&&opts.completed===false)return;writeBest(score)};
+  window.__resetPeriodicTestBest=async function(){
+    if(confirm(META.name+' の歴代最高得点をリセットする？')){localStorage.removeItem(KEY);localStorage.removeItem(LAST);await removeRemoteBest();updateInlineBest()}
+  };
+  function ensureInlineInfo(){
+    const old=$('periodicTestPanel');if(old)old.remove();
+    let host=document.querySelector('[data-periodic-host]')||document.querySelector('header')||document.body.firstElementChild||document.body;
+    if(!document.querySelector('.periodicBestInline')){
+      const box=document.createElement('div');
+      box.className='periodicBestInlineBox';
+      box.innerHTML='<span>定期テスト最高：</span><b class="periodicBestInline" data-periodic-best>最高 --点</b><button type="button" class="periodicResetInline">リセット</button>';
+      const st=document.createElement('style');
+      st.textContent='.periodicBestInlineBox{position:static!important;z-index:auto!important;margin:8px 12px;padding:8px 10px;border:1px solid rgba(148,163,184,.35);border-radius:12px;background:rgba(15,23,42,.06);font-weight:900;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.periodicBestInlineBox button{border:0;border-radius:999px;padding:6px 10px;background:#64748b;color:white;font-weight:900}';
       document.head.appendChild(st);
+      if(host===document.body)document.body.insertBefore(box,document.body.firstChild);else host.appendChild(box);
+      box.querySelector('button').onclick=window.__resetPeriodicTestBest;
     }
-    if($('periodicTestPanel')) return;
-    const div=document.createElement('div');div.className='ptsPanel';div.id='periodicTestPanel';div.innerHTML=`<div><b>定期テスト対策テスト</b><div class="ptsBest" id="periodicBest">最高 --点</div><div class="ptsMini">完走点をFirebase DBに歴代最高で保存</div><div class="ptsFb" id="periodicFbState">Firebase確認中</div></div><div class="ptsRow"><button type="button" id="periodicManual">今の点を記録</button><button type="button" class="reset" id="periodicReset">リセット</button></div>`;
-    document.body.appendChild(div);
-    $('periodicManual').onclick=()=>{const s=extractScore(); if(s==null){alert('まだ点数を検出できない。最後まで解いてから押して。');return} writeBest(s); alert(META.name+'：'+s+'点を記録した。')};
-    $('periodicReset').onclick=window.__resetPeriodicTestBest;
-    updatePanel();
+    updateInlineBest();
   }
-  function updatePanel(){const b=readBest(); const el=$('periodicBest'); if(el)el.textContent=b==null?'最高 --点':'最高 '+b+'点'; const fbEl=$('periodicFbState'); if(fbEl)fbEl.textContent=firebaseState+' / ID:'+getUserId();}
+  function scoreFromOkTotal(ok,total){ok=Number(ok);total=Number(total);if(!total||total<1)return null;return Math.round(ok/total*100)}
   function num(s){const n=Number(String(s||'').replace(/[^0-9.]/g,''));return Number.isFinite(n)?n:null}
-  function scoreFromOkTotal(ok,total){ok=Number(ok);total=Number(total); if(!total||total<1)return null; return Math.round(ok/total*100)}
   function extractScore(){
     const bodyText=(document.body&&document.body.innerText)||'';
     let best=null;
     const patterns=[/正解\s*([0-9]+)\s*\/\s*([0-9]+)/g,/([0-9]+)問中\s*([0-9]+)問正解/g,/([0-9]+)\s*\/\s*([0-9]+)\s*問/g];
-    for(const re of patterns){let m; while((m=re.exec(bodyText))){let a=Number(m[1]),b=Number(m[2]); let sc=null; if(re.source.startsWith('([0-9]+)問中')) sc=scoreFromOkTotal(b,a); else sc=scoreFromOkTotal(a,b); if(sc!=null)best=sc;}}
-    let m=bodyText.match(/(?:得点|スコア|点数)[^0-9]{0,8}([0-9]{1,3})\s*点/); if(m)best=Math.max(0,Math.min(100,Number(m[1])));
-    m=bodyText.match(/([0-9]{1,3})\s*点相当/); if(m)best=Math.max(0,Math.min(100,Number(m[1])));
-    const scoreEl=$('score'); if(scoreEl){const n=num(scoreEl.textContent); if(n!=null&&n>=0&&n<=100)best=Math.round(n)}
+    for(const re of patterns){let m;while((m=re.exec(bodyText))){let a=Number(m[1]),b=Number(m[2]);let sc=null;if(re.source.startsWith('([0-9]+)問中'))sc=scoreFromOkTotal(b,a);else sc=scoreFromOkTotal(a,b);if(sc!=null)best=sc}}
+    let m=bodyText.match(/(?:得点|スコア|点数)[^0-9]{0,8}([0-9]{1,3})\s*点/);if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    m=bodyText.match(/([0-9]{1,3})\s*点相当/);if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    const scoreEl=$('score');if(scoreEl){const n=num(scoreEl.textContent);if(n!=null&&n>=0&&n<=100)best=Math.round(n)}
     return best;
   }
   function completionSignal(){
     const t=(document.body&&document.body.innerText)||'';
-    if(/終了|完了|最後|1周終わり|テスト終了|全問終了/.test(t)) return true;
-    const qno=$('qno')?.textContent||''; const m=qno.match(/([0-9]+)\s*\/\s*([0-9]+)/); if(m&&Number(m[1])>=Number(m[2])&&Number(m[2])>0&&/正解\s*[0-9]+\s*\//.test(t))return true;
+    if(/終了|完了|最後|1周終わり|テスト終了|全問終了|結果/.test(t))return true;
+    const qno=$('qno')?.textContent||'';const m=qno.match(/([0-9]+)\s*\/\s*([0-9]+)/);
+    if(m&&Number(m[1])>=Number(m[2])&&Number(m[2])>0&&/正解\s*[0-9]+\s*\//.test(t))return true;
+    const m2=t.match(/([0-9]+)問中\s*([0-9]+)問正解/);
+    if(m2&&Number(m2[1])>0)return true;
     return false;
   }
-  let recordedAt=0;
+  let recordedAt=0,lastScoreKey='';
   function maybeRecord(){
     if(Date.now()-recordedAt<1500)return;
     if(!completionSignal())return;
-    const s=extractScore();
-    if(s==null)return;
-    recordedAt=Date.now(); writeBest(s);
+    const s=extractScore();if(s==null)return;
+    const key=String(s)+'|'+((document.body&&document.body.innerText)||'').slice(0,80);
+    if(key===lastScoreKey)return;
+    lastScoreKey=key;recordedAt=Date.now();writeBest(s);
   }
   const oldAlert=window.alert;
-  window.alert=function(msg){try{if(String(msg).match(/1周終わり|終了|完了/)){setTimeout(maybeRecord,50)}}catch(e){} return oldAlert.apply(this,arguments)};
+  window.alert=function(msg){try{if(String(msg).match(/1周終わり|終了|完了|結果/))setTimeout(maybeRecord,50)}catch(e){}return oldAlert.apply(this,arguments)};
   window.addEventListener('storage',()=>syncFromRemote());
-  window.addEventListener('load',()=>{ensurePanel(); syncFromRemote(); watchRemote(); setInterval(maybeRecord,1200); const mo=new MutationObserver(()=>maybeRecord()); mo.observe(document.body,{childList:true,subtree:true,characterData:true});});
+  window.addEventListener('load',()=>{ensureInlineInfo();syncFromRemote();watchRemote();setInterval(maybeRecord,1200);const mo=new MutationObserver(()=>maybeRecord());mo.observe(document.body,{childList:true,subtree:true,characterData:true})});
 })();
 </script>
 </body></html>
