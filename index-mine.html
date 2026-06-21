@@ -66,6 +66,18 @@
   #objectManager h2{margin:0 0 6px;font-size:20px}.bpHint{font-size:12px;color:#bfdbfe;line-height:1.45;margin-bottom:8px}.bpTop{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.bpTop button,.bpCard button{border:0;border-radius:10px;padding:8px 10px;font-weight:900;color:#fff;background:#334155}.bpTop .goodBtn{background:#22c55e}.bpTop .badBtn,.bpCard .badBtn{background:#ef4444}.bpGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:10px}.bpCard{background:rgba(30,41,59,.86);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px}.bpThumb{width:100%;aspect-ratio:1.2/1;background:#020617;border-radius:10px;border:1px solid rgba(255,255,255,.18);object-fit:contain;image-rendering:pixelated}.bpName{font-size:13px;font-weight:900;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bpMeta{font-size:11px;color:#cbd5e1;margin:3px 0 6px}.bpBtns{display:grid;grid-template-columns:1fr 1fr;gap:5px}.bpBtns button{font-size:11px;padding:7px 5px}.bpEmpty{padding:18px;text-align:center;color:#bfdbfe;border:1px dashed rgba(255,255,255,.22);border-radius:14px}
   @media (pointer:coarse),(max-width:900px){#objectManager{padding:7px} #objectManager .bpPanel{padding:9px;border-radius:15px} .bpGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.bpTop button{padding:9px 10px}.bpCard{padding:7px}.bpBtns{grid-template-columns:1fr}.bpBtns button{font-size:11px;padding:8px 4px}}
 
+
+  /* Custom object color picker: simple Windows-like RGB/HEX panel */
+  #objColorCustomBtn{border:0;border-radius:10px;padding:9px 11px;font-weight:900;color:#fff;background:#2563eb}
+  #objColorPanel{position:fixed;inset:0;z-index:220;display:none;background:rgba(2,6,23,.78);color:#fff;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;touch-action:auto}
+  #objColorPanel .cpCard{width:min(560px,94vw);background:rgba(17,24,39,.96);border:1px solid rgba(255,255,255,.22);border-radius:20px;padding:16px;box-shadow:0 18px 60px rgba(0,0,0,.45);backdrop-filter:blur(10px)}
+  #objColorPanel h2{margin:0 0 10px;font-size:22px}.cpHint{font-size:12px;color:#bfdbfe;line-height:1.45;margin-bottom:10px}
+  .cpTop{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.cpPreview{width:74px;height:74px;border-radius:14px;border:3px solid rgba(255,255,255,.75);box-shadow:inset 0 0 16px rgba(255,255,255,.25),0 8px 20px rgba(0,0,0,.35)}
+  .cpHex{font-size:18px;font-weight:900;color:#fde68a;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.20);border-radius:10px;padding:8px 10px;width:120px;color:#fff}
+  .cpRow{display:grid;grid-template-columns:34px 1fr 52px;gap:8px;align-items:center;margin:10px 0}.cpRow b{font-size:16px}.cpRow input[type=range]{width:100%;accent-color:#38bdf8}.cpRow input[type=number]{width:52px;border:0;border-radius:8px;padding:7px;background:#0f172a;color:#fff;font-weight:900}
+  .cpPresetGrid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin:12px 0}.cpPreset{height:34px;border-radius:9px;border:2px solid rgba(255,255,255,.55);box-shadow:inset 0 0 10px rgba(255,255,255,.20)}
+  .cpBtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.cpBtns button{border:0;border-radius:11px;padding:10px 14px;color:#fff;font-weight:900;background:#334155}.cpBtns .goodBtn{background:#22c55e}.cpBtns .badBtn{background:#ef4444}
+
 </style>
 </head>
 <body>
@@ -127,7 +139,8 @@
     </div>
     <div class="objRow">
       <span>色</span><input id="objColor" type="color" value="#22c55e"><span id="objColorText" class="objMiniLabel">#22c55e</span>
-      <button id="objPickBtn">スポイト</button>
+      <button id="objColorCustomBtn">色を作る</button>
+      <button id="objPickBtn">スポイト取得</button>
       <button id="objEraseBtn">削除モード</button>
     </div>
     <div class="objRow">
@@ -144,6 +157,25 @@
     <canvas id="objPalette" width="1" height="1" style="display:none"></canvas>
     <input id="objLayer" type="range" min="0" max="15" value="0" style="display:none"><span id="objLayerText" style="display:none">0</span>
     <button id="objPaintBtn" style="display:none"></button><button id="objFillLayerBtn" style="display:none"></button><button id="objClearLayerBtn" style="display:none"></button>
+  </div>
+</div>
+<div id="objColorPanel">
+  <div class="cpCard">
+    <h2>色を作る</h2>
+    <div class="cpHint">赤・緑・青を動かして、思い通りの色を作ります。HEX直接入力もできます。スポイトは編集世界で中央照準が当たっているOBJブロックの色を直接取得します。</div>
+    <div class="cpTop">
+      <div id="cpPreview" class="cpPreview"></div>
+      <input id="cpHex" class="cpHex" value="#22c55e" maxlength="7">
+      <span id="cpRgbText" class="objMiniLabel">R34 G197 B94</span>
+    </div>
+    <div class="cpRow"><b>R</b><input id="cpR" type="range" min="0" max="255" value="34"><input id="cpRn" type="number" min="0" max="255" value="34"></div>
+    <div class="cpRow"><b>G</b><input id="cpG" type="range" min="0" max="255" value="197"><input id="cpGn" type="number" min="0" max="255" value="197"></div>
+    <div class="cpRow"><b>B</b><input id="cpB" type="range" min="0" max="255" value="94"><input id="cpBn" type="number" min="0" max="255" value="94"></div>
+    <div id="cpPresets" class="cpPresetGrid"></div>
+    <div class="cpBtns">
+      <button id="cpCancel" class="badBtn">キャンセル</button>
+      <button id="cpApply" class="goodBtn">この色にする</button>
+    </div>
   </div>
 </div>
 <div id="start"><div class="card">
@@ -1101,6 +1133,37 @@ function drawObjPreview(){
 }
 function setObjTool(t){ objTool=t; ['Paint','Erase','Pick'].forEach(n=>{const b=$('obj'+n+'Btn'); if(b)b.classList.toggle('on',t===n.toLowerCase());}); }
 function setObjColor(c){ objPaintColor=normalizeHexColor(c); const ci=$('objColor'); if(ci)ci.value=objPaintColor; const ct=$('objColorText'); if(ct)ct.textContent=objPaintColor; }
+function objHexToRgb(hex){hex=normalizeHexColor(hex);return {r:parseInt(hex.slice(1,3),16),g:parseInt(hex.slice(3,5),16),b:parseInt(hex.slice(5,7),16)};}
+function objRgbToHex(r,g,b){const clamp=v=>Math.max(0,Math.min(255,Math.round(Number(v)||0)));return '#'+[clamp(r),clamp(g),clamp(b)].map(v=>v.toString(16).padStart(2,'0')).join('');}
+function syncObjColorPanelFromHex(hex){
+ hex=normalizeHexColor(hex); const rgb=objHexToRgb(hex);
+ const pr=$('cpPreview'), hx=$('cpHex'), tx=$('cpRgbText');
+ if(pr)pr.style.background=hex; if(hx)hx.value=hex; if(tx)tx.textContent='R'+rgb.r+' G'+rgb.g+' B'+rgb.b;
+ [['R',rgb.r],['G',rgb.g],['B',rgb.b]].forEach(([k,v])=>{const r=$('cp'+k),n=$('cp'+k+'n'); if(r)r.value=v; if(n)n.value=v;});
+}
+function syncObjColorPanelFromRgb(){
+ const r=Number($('cpR')&&$('cpR').value)||0,g=Number($('cpG')&&$('cpG').value)||0,b=Number($('cpB')&&$('cpB').value)||0;
+ syncObjColorPanelFromHex(objRgbToHex(r,g,b));
+}
+function openObjColorPanel(){const p=$('objColorPanel'); if(!p)return; syncObjColorPanelFromHex(objPaintColor); p.style.display='flex';}
+function closeObjColorPanel(){const p=$('objColorPanel'); if(p)p.style.display='none';}
+function applyObjColorPanel(){const hx=$('cpHex'); const hex=normalizeHexColor(hx&&hx.value); setObjColor(hex); closeObjColorPanel(); setObjStatus('色を設定: '+hex);}
+function buildObjColorPresets(){
+ const box=$('cpPresets'); if(!box||box.dataset.ready)return; box.dataset.ready='1';
+ const cols=['#ef4444','#f97316','#facc15','#22c55e','#14b8a6','#38bdf8','#3b82f6','#8b5cf6','#ec4899','#ffffff','#94a3b8','#000000','#7f1d1d','#78350f','#365314','#1e3a8a'];
+ for(const c of cols){const b=document.createElement('button');b.type='button';b.className='cpPreset';b.style.background=c;b.title=c;b.onclick=()=>syncObjColorPanelFromHex(c);box.appendChild(b);}
+}
+function sampleObjColorAtAim(){
+ if(!state.editingObject){setObjStatus('スポイトはOBJ編集世界で使えます');return false;}
+ const aim=objectBuilderAim();
+ const hit=aim&&aim.hit;
+ if(!hit){setObjStatus('スポイト失敗: 中央照準を色付きOBJブロックに合わせて押して');return false;}
+ const col=objVoxels.get(hit.key);
+ if(!col){setObjStatus('スポイト失敗: その位置に色がありません');return false;}
+ setObjColor(col);
+ setObjStatus('スポイト取得: '+col+' ['+hit.x+','+hit.y+','+hit.z+']');
+ return true;
+}
 function setObjMode(m){
  objMode=(m==='plane')?'plane':'voxel3d';
  const vb=$('objVoxelBtn'),pb=$('objPlaneBtn'),lb=$('objLayer'),ml=$('objModeLabel');
@@ -1412,15 +1475,13 @@ function objectBuilderPlace(){
  if(!state.editingObject) return false;
  ensureObjectBuildRoot();
  const aim=objectBuilderAim();
- const c=aim.place || aim.hit;
- if(!c||!insideObjectCell(c.x,c.y,c.z)) return true;
  if(objPickNext){
-   const col=objVoxels.get(c.key);
-   if(col) setObjColor(col);
    objPickNext=false;
-   setObjStatus('スポイト: '+(col||'色なし'));
+   sampleObjColorAtAim();
    return true;
  }
+ const c=aim.place || aim.hit;
+ if(!c||!insideObjectCell(c.x,c.y,c.z)) return true;
  objVoxels.set(c.key,objPaintColor);
  addObjectBuilderCellEntity(c.x,c.y,c.z,objPaintColor);
  setMsg('OBJ配置: ['+c.x+','+c.y+','+c.z+']','good');
@@ -1567,10 +1628,16 @@ function bindObjectEditorUi(){
  const bc=$('bpCloseBtn'); if(bc)bc.onclick=closeObjectManager;
  const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\nCloudflare側に残っているOBJは再接続で戻る可能性あり。')){localStorage.removeItem(OBJECT_STORAGE_KEY);customObjectDefs.clear();renderObjectManager();setObjHud();}};
  const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
+ const cbtn=$('objColorCustomBtn'); if(cbtn)cbtn.onclick=openObjColorPanel;
+ buildObjColorPresets();
+ ['R','G','B'].forEach(k=>{const r=$('cp'+k),n=$('cp'+k+'n'); if(r)r.oninput=()=>{const nn=$('cp'+k+'n'); if(nn)nn.value=r.value; syncObjColorPanelFromRgb();}; if(n)n.oninput=()=>{const rr=$('cp'+k); if(rr)rr.value=n.value; syncObjColorPanelFromRgb();};});
+ const hx=$('cpHex'); if(hx)hx.oninput=()=>syncObjColorPanelFromHex(hx.value);
+ const caColor=$('cpCancel'); if(caColor)caColor.onclick=closeObjColorPanel;
+ const apColor=$('cpApply'); if(apColor)apColor.onclick=applyObjColorPanel;
  const sc=$('objScale'); if(sc)sc.oninput=()=>{const t=$('objScaleText');if(t)t.textContent=Number(sc.value).toFixed(2); if(state.editingObject){rebuildObjectBuildEntities(); setObjStatus('サイズ変更: 視点・移動感もサイズに合わせて調整');}};
  const vb=$('objVoxelBtn'); if(vb)vb.onclick=()=>setObjMode('voxel3d');
  const pl=$('objPlaneBtn'); if(pl)pl.onclick=()=>{setObjMode('plane');setObjStatus('平面テクスチャは後で草・看板用。今は立体ブロック作成が本命。');};
- const pk=$('objPickBtn'); if(pk)pk.onclick=()=>{objPickNext=true;setObjStatus('次に中心照準のOBJブロックをPLACEすると色スポイト');};
+ const pk=$('objPickBtn'); if(pk)pk.onclick=()=>sampleObjColorAtAim();
  const er=$('objEraseBtn'); if(er)er.onclick=()=>objectBuilderBreak();
  const qp=$('objQuickPlace'); if(qp)qp.addEventListener('pointerdown',e=>{e.preventDefault();objectBuilderPlace();});
  const qb=$('objQuickBreak'); if(qb)qb.addEventListener('pointerdown',e=>{e.preventDefault();objectBuilderBreak();});
