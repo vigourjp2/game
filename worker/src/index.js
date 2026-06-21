@@ -24,6 +24,12 @@ export class Room {
     return /^#[0-9a-f]{6}$/.test(c) ? c : '#22c55e';
   }
 
+  cleanCellSize(size, fallback = 0.10) {
+    const fb = Number(fallback) || 0.10;
+    const n = Number(size);
+    return Math.max(0.03, Math.min(0.70, Number.isFinite(n) ? n : fb));
+  }
+
   cleanTextureCells(cells, grid) {
     const out = [];
     const seen = new Set();
@@ -88,7 +94,7 @@ export class Room {
       seen.add(key);
 
       if (kind === 'plane') cells.push({ x, y, color });
-      else cells.push({ x, y, z, color });
+      else cells.push({ x, y, z, color, size: this.cleanCellSize(c.size, Number(def.scale) || 0.10) });
     }
 
     if (!cells.length) return null;
