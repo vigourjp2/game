@@ -34,10 +34,18 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
 .small{font-size:11px;color:#94a3b8;font-weight:700;line-height:1.25;margin-top:4px}.toggle{display:flex;gap:6px;align-items:center;color:#cbd5e1;font-size:12px;font-weight:800}input[type=checkbox]{width:18px;height:18px}
 #candidateList{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
 @media (orientation:landscape){.top{padding-top:5px}.q{font-size:20px}.sub,.small{display:none}.bottom{padding-top:5px}button,select{min-height:36px;padding:7px 9px}}
+
+/* fixed shared id hide */
+#sharedIdPanel,#shareIdPanel,#scoreUserPanel,#firebaseUserPanel,.sharedIdPanel,.shareIdPanel,.scoreUserPanel,.firebaseUserPanel,
+input[id*="share" i],input[id*="共有" i],button[id*="share" i],button[id*="共有" i],
+label[for*="share" i],label[for*="共有" i]{
+  display:none!important;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/kanji-canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/ref-patterns.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.7/dist/hanzi-writer.min.js"></script>
+<script src="../../score-user-fixed.js"></script>
 </head>
 <body>
 <div class="app">
