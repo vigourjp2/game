@@ -1,73 +1,84 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>学習テスト対策メニュー</title><style>
-:root{--bg:#eef6ff;--ink:#102033;--muted:#66758a;--line:#dbe7f7;--pri:#2563eb;--pri2:#06b6d4;--ok:#16a34a;--warn:#f59e0b;--off:#9ca3af;--shadow:0 16px 40px rgba(30,64,175,.14);--r:24px}*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:radial-gradient(circle at top left,#dff7ff 0,#eef6ff 34%,#fff8ed 100%)}a{color:inherit;text-decoration:none}button,input{font:inherit}.wrap{max-width:1180px;margin:auto;padding:22px 16px 80px}.hero{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-bottom:18px}.heroMain,.heroSide,.card,.foot,.fbBox{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}.heroMain,.heroSide,.fbBox{padding:22px}h1{margin:0 0 8px;font-size:clamp(28px,5vw,48px);line-height:1.05}.lead{margin:0;color:var(--muted);font-weight:800;line-height:1.7}.badgeRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.badge{border-radius:999px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-weight:1000;font-size:13px}.heroSide h2{margin:0 0 10px}.nowList{display:grid;gap:8px;max-height:560px;overflow:auto;padding-right:4px}.now{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px 12px;border-radius:16px;background:#f8fafc;border:1px solid var(--line);font-weight:1000}.scoreBadge{border-radius:999px;padding:5px 9px;font-size:12px;font-weight:1000;background:#e5e7eb;color:#475569;white-space:nowrap}.scoreBadge.has{background:#dcfce7;color:#166534}.scoreBadge.fb{background:#dbeafe;color:#1d4ed8}.tabs{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.tab{border:0;border-radius:999px;padding:12px 18px;font-weight:1000;background:#fff;color:#334155;box-shadow:0 8px 24px rgba(15,23,42,.08)}.tab.active{background:linear-gradient(135deg,var(--pri),var(--pri2));color:white}.panel{display:none}.panel.active{display:block}.sectionHead{display:flex;justify-content:space-between;align-items:flex-end;margin:18px 0 12px;gap:12px}.sectionHead h2{margin:0;font-size:24px}.sectionHead p{margin:0;color:var(--muted);font-weight:800}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{position:relative;min-height:176px;display:flex;flex-direction:column;justify-content:space-between;padding:18px;overflow:hidden;transition:.18s}.card.ready:hover{transform:translateY(-3px)}.card.ready:after{content:"TEST";position:absolute;right:-18px;top:16px;transform:rotate(18deg);font-size:46px;font-weight:1000;color:rgba(37,99,235,.08)}.subject{display:flex;align-items:center;gap:12px}.ico{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;font-size:25px;background:linear-gradient(135deg,#dbeafe,#ecfeff)}.card h3{margin:0;font-size:22px}.card p{margin:10px 0 0;color:var(--muted);font-weight:750;line-height:1.45}.status{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap}.open{font-weight:1000;color:var(--pri);background:#eff6ff;border:1px solid #bfdbfe;border-radius:999px;padding:8px 11px}.resetOne{border:0;border-radius:999px;background:#f1f5f9;color:#475569;font-weight:1000;padding:8px 10px}.resetAll{border:0;border-radius:999px;background:#0f172a;color:white;font-weight:1000;padding:10px 13px;margin-top:12px}.foot{margin-top:22px;padding:16px 18px;color:var(--muted);font-weight:800;line-height:1.7}.fbBox{margin:16px 0;display:grid;gap:8px}.fbLine{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.fbLine input{min-width:240px;flex:1;border:1px solid var(--line);border-radius:999px;padding:10px 12px;font-weight:800}.fbLine button{border:0;border-radius:999px;padding:10px 13px;font-weight:1000;background:#2563eb;color:white}.fbState{font-weight:1000;color:#1d4ed8}.deploy{margin-top:14px;background:#0f172a;color:#e5e7eb;border-radius:18px;padding:14px;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;line-height:1.6}mark{background:#fef3c7;border-radius:8px;padding:0 5px}@media(max-width:860px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.wrap{padding:14px 10px 64px}.heroMain,.heroSide,.fbBox{padding:18px}.grid{grid-template-columns:1fr}.tab{flex:1}}
-
-/* fixed shared id hide */
-#sharedIdPanel,#shareIdPanel,#scoreUserPanel,#firebaseUserPanel,.sharedIdPanel,.shareIdPanel,.scoreUserPanel,.firebaseUserPanel,
-input[id*="share" i],input[id*="共有" i],button[id*="share" i],button[id*="共有" i],
-label[for*="share" i],label[for*="共有" i]{
-  display:none!important;
-}
-</style><script src="score-user-fixed.js"></script>
-
-<style id="fixed-score-clean-ui">
-/* Firebase固定ID版：共通スコアID入力っぽいUIは完全非表示 */
-#sharedIdPanel,#shareIdPanel,#scoreUserPanel,#firebaseUserPanel,
-.sharedIdPanel,.shareIdPanel,.scoreUserPanel,.firebaseUserPanel,
-input[id*="share" i], input[id*="scoreUser" i],
-button[id*="share" i], button[id*="scoreUser" i],
-label[for*="share" i], label[for*="scoreUser" i] {
-  display:none!important;
-}
-.fixedScoreNote{
-  margin:10px 0 14px;
-  padding:10px 12px;
-  border-radius:14px;
-  background:#ecfeff;
-  border:1px solid #bae6fd;
-  color:#075985;
-  font-weight:800;
-}
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>学習テスト対策</title>
+<style>
+:root{--bg:#eef6ff;--ink:#102033;--muted:#64748b;--line:#dbe7f7;--pri:#2563eb;--ok:#16a34a;--shadow:0 16px 40px rgba(30,64,175,.14);--r:24px}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:radial-gradient(circle at top left,#dff7ff 0,#eef6ff 34%,#fff8ed 100%)}a{color:inherit;text-decoration:none}button{font:inherit}
+.wrap{max-width:1180px;margin:auto;padding:22px 16px 80px}.hero{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-bottom:18px}.heroMain,.heroSide,.card,.foot,.fbBox{background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}.heroMain,.heroSide,.fbBox{padding:22px}h1{margin:0 0 8px;font-size:clamp(28px,5vw,48px);line-height:1.05}.lead{margin:0;color:var(--muted);font-weight:800;line-height:1.7}.badgeRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.badge{border-radius:999px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-weight:1000;font-size:13px}
+.latest{margin:10px 0;padding:10px 12px;border-radius:12px;background:#dcfce7;color:#166534;font-weight:1000;border:1px solid #86efac}
+.nowList{display:grid;gap:8px;max-height:560px;overflow:auto;padding-right:4px}.now{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px 12px;border-radius:16px;background:#f8fafc;border:1px solid var(--line);font-weight:1000}
+.scoreBadge{border-radius:999px;padding:5px 9px;font-size:12px;font-weight:1000;background:#e5e7eb;color:#475569;white-space:nowrap}.scoreBadge.has{background:#dcfce7;color:#166534}.scoreBadge.fb{background:#dbeafe;color:#1d4ed8}
+.tabs{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.tab{border:0;border-radius:999px;padding:12px 18px;font-weight:1000;background:#fff;color:#334155;box-shadow:0 8px 20px rgba(15,23,42,.08)}.tab.active{background:linear-gradient(135deg,#2563eb,#06b6d4);color:white}
+.panel{display:none}.panel.active{display:block}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.card{padding:16px;display:grid;gap:10px}.card .icon{font-size:34px}.card h3{margin:0;font-size:21px}.card p{margin:0;color:var(--muted);font-weight:800;line-height:1.55}.go{display:inline-flex;align-items:center;justify-content:center;border-radius:14px;background:#2563eb;color:white;padding:10px 12px;font-weight:1000}.resetBtn{border:0;border-radius:12px;padding:8px 10px;background:#64748b;color:white;font-weight:1000}
+.fbBox{margin:14px 0}.fbLine{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}.fbState{font-weight:1000;color:#1d4ed8;margin-top:4px}.danger{border:0;border-radius:14px;background:#ef4444;color:white;padding:10px 12px;font-weight:1000;margin-top:12px}.foot{margin-top:18px;padding:16px;color:#475569;font-weight:800;line-height:1.6}code{background:#f1f5f9;border-radius:8px;padding:2px 6px}
+@media(max-width:760px){.hero{grid-template-columns:1fr}.wrap{padding:14px 10px 70px}.heroMain,.heroSide,.fbBox{padding:16px}}
 </style>
-
-</head><body><div class="wrap"><header class="hero"><div class="heroMain"><h1>学習テスト対策<br>トップメニュー</h1><p class="lead">各科目の定期テスト対策テストの歴代最高得点を <b>Firebase Realtime Database</b> に保存して、このTOPにも表示する。</p><div class="badgeRow"><span class="badge">📱 スマホ対応</span><span class="badge">🎮 定期テスト対策</span><span class="badge">🏆 歴代最高得点</span><span class="badge">🔥 Firebase DB</span></div><button class="resetAll" onclick="resetAllScores()">全科目の最高得点をFirebase DBごとリセット</button></div><aside class="heroSide"><h2><div class="fixedScoreNote">Firebase保存先：scoreUsers/gakushu-main/subjects/科目ID（入力不要）</div>
-いま使える教材</h2><div class="nowList" id="nowList"></div></aside></header><section class="fbBox"><b>Firebase DB 同期状態</b><div class="fbState" id="fbState">確認中</div><div class="fbLine"><input id="scoreUserId" placeholder="全端末共通スコア（入力不要）" autocomplete="off"><button onclick="saveScoreUserId()"></button><button onclick="loadFirebaseScores()">再読込</button></div><p class="lead" style="font-size:13px">同じURLを見る全端末で、同じ最高得点を表示します。ID入力は不要です。</p></section><nav class="tabs"><button class="tab active" data-tab="elementary">小学生</button><button class="tab" data-tab="middle">中学</button><button class="tab" data-tab="high">高校</button></nav><main><section id="elementary" class="panel active"><div class="sectionHead"><h2>小学生メニュー</h2><p>最高得点つき</p></div><div class="grid" id="elementaryGrid"></div></section><section id="middle" class="panel"><div class="sectionHead"><h2>中学メニュー</h2><p>中1中間テスト対策中心</p></div><div class="grid" id="middleGrid"></div></section><section id="high" class="panel"><div class="sectionHead"><h2>高校メニュー</h2><p>アップ済み教材を全部リンク</p></div><div class="grid" id="highGrid"></div></section></main><footer class="foot"><b>記録方式：</b><mark>Firebase Realtime Database</mark> に <code>scoreUsers/&lt;共通ID&gt;/subjects/&lt;科目ID&gt;</code> で保存。Firebase未接続時のみ一時的にlocalStorageへ退避。<div class="deploy">repo-root/
-├─ index.html
-├─ firebase-config.js
-├─ firebase-realtime-database-rules.json
-├─ elementary/grade1-kanji/index.html
-├─ middle/social/index.html
-├─ middle/english/index.html
-├─ middle/vocab/index.html
-├─ middle/science/index.html
-├─ middle/math/index.html
-└─ high/...</div></footer></div>
-<script src="./firebase-config.js"></script><script>
+<script>
+window.GAKUSHU_FIREBASE_CONFIG={"apiKey": "AIzaSyCuC8k-Bkrj3MFcExjsWjnVxQR0WMYeTlY", "authDomain": "minicra.firebaseapp.com", "databaseURL": "https://minicra-default-rtdb.asia-southeast1.firebasedatabase.app", "projectId": "minicra", "storageBucket": "minicra.firebasestorage.app", "messagingSenderId": "943025034725", "appId": "1:943025034725:web:c46da7ded946ce4fde0b0c"};
+window.GAKUSHU_FIXED_SCORE_USER='gakushu-main';
+window.GAKUSHU_SCORE_NO_INPUT=true;
+</script>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <section class="heroMain">
+      <h1>学習テスト対策<br><span style="font-size:.56em;color:#2563eb">トップメニュー</span></h1>
+      <p class="lead">各科目の定期テスト対策テストの歴代最高得点を Firebase Realtime Database に保存して、このTOPにも表示する。</p>
+      <div class="badgeRow"><span class="badge">📱 スマホ対応</span><span class="badge">🎮 定期テスト対策</span><span class="badge">🏆 歴代最高得点</span><span class="badge">🔥 Firebase DB</span></div>
+      <button class="danger" onclick="resetAllScores()">全科目の最高得点をFirebase DBごとリセット</button>
+      <div class="lead" style="margin-top:12px;font-size:14px">Firebase保存先：<code>scoreUsers/gakushu-main/subjects/科目ID</code>（入力不要）</div>
+    </section>
+    <aside class="heroSide">
+      <h2>いま使える教材</h2>
+      <div class="latest">最新版：教科表示修正・自動記録・前面パネル廃止・固定ID gakushu-main</div>
+      <div class="nowList" id="nowList"></div>
+    </aside>
+  </header>
+  <section class="fbBox">
+    <b>Firebase DB 同期状態</b>
+    <div class="fbState" id="fbState">確認中</div>
+    <div class="fbLine"><button onclick="loadFirebaseScores()">再読込</button></div>
+    <p class="lead" style="font-size:13px">同じURLを見る全端末で、同じ最高得点を表示します。ID入力は不要です。</p>
+  </section>
+  <nav class="tabs">
+    <button class="tab active" data-tab="elementary">小学生</button>
+    <button class="tab" data-tab="middle">中学</button>
+    <button class="tab" data-tab="high">高校</button>
+  </nav>
+  <section id="elementary" class="panel active"><h2>小学生メニュー <span style="font-size:.7em;color:#64748b">最高得点つき</span></h2><div class="grid" id="elementaryGrid"></div></section>
+  <section id="middle" class="panel"><h2>中学メニュー <span style="font-size:.7em;color:#64748b">最高得点つき</span></h2><div class="grid" id="middleGrid"></div></section>
+  <section id="high" class="panel"><h2>高校メニュー <span style="font-size:.7em;color:#64748b">最高得点つき</span></h2><div class="grid" id="highGrid"></div></section>
+  <footer class="foot">
+    記録方式：Firebase Realtime Database に <code>scoreUsers/gakushu-main/subjects/科目ID</code> で保存。Firebase未接続時のみ一時的にlocalStorageへ退避。<br>
+    repo-root/ ├─ index.html ├─ firebase-config.js ├─ firebase-realtime-database-rules.json ├─ elementary/grade1-kanji/index.html ├─ middle/social/index.html ├─ middle/english/index.html ├─ middle/vocab/index.html ├─ middle/science/index.html ├─ middle/math/index.html └─ high/...
+  </footer>
+</div>
+<script>
 const SUBJECTS=[{"id": "g1-kanji", "name": "小1漢字", "icon": "🌱", "href": "./elementary/grade1-kanji/", "note": "小1漢字80字。手書き・筆順。", "level": "elementary"}, {"id": "middle-social", "name": "社会", "icon": "🌏", "href": "./middle/social/", "note": "中1 前期中間 対策。", "level": "middle"}, {"id": "middle-english", "name": "英語", "icon": "🔤", "href": "./middle/english/", "note": "Unit1〜2・音声読み上げ。", "level": "middle"}, {"id": "middle-vocab", "name": "英単語", "icon": "🧠", "href": "./middle/vocab/", "note": "Unit1〜2 単語ストーリー。", "level": "middle"}, {"id": "middle-science", "name": "理科", "icon": "🔬", "href": "./middle/science/", "note": "中1範囲＋良問生成。", "level": "middle"}, {"id": "middle-math", "name": "数学", "icon": "📐", "href": "./middle/math/", "note": "正負の数・計算・数直線。", "level": "middle"}, {"id": "high-english-ci", "name": "CI・英語", "icon": "🔤", "href": "./high/english/", "note": "Lesson 1〜2・本文参照つき。", "level": "high"}, {"id": "high-ron1", "name": "論理・表現I", "icon": "🗣️", "href": "./high/ron1/", "note": "文法・表現・本文参照つき。", "level": "high"}, {"id": "high-geography", "name": "地理総合", "icon": "🗺️", "href": "./high/geography/", "note": "地図・GIS・主要100か国。", "level": "high"}, {"id": "high-history", "name": "歴史", "icon": "🏛️", "href": "./high/history/", "note": "欧米諸国の近代化・図参照つき。", "level": "high"}, {"id": "high-info", "name": "情報", "icon": "💻", "href": "./high/info/", "note": "情報・メディア・法規・セキュリティ。", "level": "high"}, {"id": "high-chemistry", "name": "化学", "icon": "🧪", "href": "./high/chemistry/", "note": "物質分類・原子・イオン・周期表。", "level": "high"}, {"id": "high-kobun", "name": "古文", "icon": "📜", "href": "./high/classics/", "note": "古文単語ストーリー・音声・訳。", "level": "high"}, {"id": "high-math-a", "name": "数A", "icon": "📐", "href": "./high/mathA/", "note": "p6〜36 範囲対策。", "level": "high"}, {"id": "high-kanji", "name": "漢字", "icon": "✍️", "href": "./high/kanji/", "note": "添付画像語＋5級むずかしめ。手書き判定。", "level": "high"}];
-const USER_KEY='gakushuScoreUserId';
+const FIXED_USER='gakushu-main';
 const key=id=>'periodicTestBest:'+id;
 let remoteScores={};
 let firebaseState='確認中';
 let fbCache=null;
-function safeId(s){return String(s||'default').replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)||'default'}
-function getUserId(){let id=localStorage.getItem(USER_KEY); if(!id){id='guest-'+(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));localStorage.setItem(USER_KEY,id)} return safeId(id)}
-function firebaseConfigured(){const c=window.GAKUSHU_FIREBASE_CONFIG; return !!(c&&c.apiKey&&c.databaseURL&&!String(c.apiKey).includes('PASTE_')&&!String(c.databaseURL).includes('PASTE_'))}
-async function fb(){
- if(fbCache)return fbCache;
- if(!firebaseConfigured()){firebaseState='Firebase未設定・端末保存';setFbState();return null}
- try{const [appMod,dbMod]=await Promise.all([import('https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js'),import('https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js')]);
- const app=appMod.getApps().length?appMod.getApps()[0]:appMod.initializeApp(window.GAKUSHU_FIREBASE_CONFIG); const db=dbMod.getDatabase(app); fbCache={db,...dbMod}; firebaseState='Firebase DB同期ON';setFbState();return fbCache;}
- catch(e){console.warn(e);firebaseState='Firebase接続失敗・端末保存';setFbState();return null}
-}
-function setFbState(){const el=document.getElementById('fbState'); if(el)el.textContent=firebaseState+' / 共通ID:'+getUserId(); const inp=document.getElementById('scoreUserId'); if(inp && !inp.value)inp.value=getUserId();}
 function localBest(id){const v=localStorage.getItem(key(id));return v==null?null:Number(v)}
-function best(id){const r=remoteScores[id]; if(typeof r==='number')return r; return localBest(id)}
-function badgeHtml(id){const b=best(id); const fromFb=typeof remoteScores[id]==='number'; const cls=(b!=null?' has':'')+(fromFb?' fb':''); return `<span class="scoreBadge${cls}" data-score="${id}">${b==null?'最高 --点':'最高 '+b+'点'+(fromFb?' 🔥':'')}</span>`}
-function card(s){return `<div class="card ready"><div><div class="subject"><div class="ico">${s.icon}</div><h3>${s.name}</h3></div><p>${s.note}</p></div><div class="status">${badgeHtml(s.id)}<a class="open" href="${s.href}">定期テストへ →</a><button class="resetOne" onclick="resetScore(event,'${s.id}')">リセット</button></div></div>`}
-function render(){document.getElementById('nowList').innerHTML=SUBJECTS.map(s=>`<a class="now" href="${s.href}"><span>${s.icon} ${s.level==='middle'?'中学 ':s.level==='high'?'高校 ':''}${s.name}</span>${badgeHtml(s.id)}</a>`).join(''); for(const lv of ['elementary','middle','high']){document.getElementById(lv+'Grid').innerHTML=SUBJECTS.filter(s=>s.level===lv).map(card).join('')} setFbState();}
-async function loadFirebaseScores(){const f=await fb(); remoteScores={}; if(!f){render();return} try{const snap=await f.get(f.ref(f.db,'scoreUsers/'+getUserId()+'/subjects')); const v=snap.exists()?snap.val():{}; for(const [id,obj] of Object.entries(v||{})){if(obj&&typeof obj.best==='number'){remoteScores[id]=obj.best; localStorage.setItem(key(id),String(obj.best));}} firebaseState='Firebase DB読込済';}catch(e){console.warn(e);firebaseState='Firebase読込失敗・端末保存';} render();}
-async function resetScore(ev,id){ev.preventDefault();ev.stopPropagation();const s=SUBJECTS.find(x=>x.id===id); if(!confirm((s?s.name:id)+' の最高得点をFirebase DBごとリセットする？'))return; localStorage.removeItem(key(id)); localStorage.removeItem('periodicTestLast:'+id); delete remoteScores[id]; const f=await fb(); if(f){try{await f.remove(f.ref(f.db,'scoreUsers/'+getUserId()+'/subjects/'+id));firebaseState='Firebase DBリセット済';}catch(e){console.warn(e);firebaseState='Firebaseリセット失敗';}} render();}
-async function resetAllScores(){if(!confirm('全科目の歴代最高得点をFirebase DBごと全部リセットする？'))return; SUBJECTS.forEach(s=>{localStorage.removeItem(key(s.id));localStorage.removeItem('periodicTestLast:'+s.id)}); remoteScores={}; const f=await fb(); if(f){try{await f.remove(f.ref(f.db,'scoreUsers/'+getUserId()+'/subjects'));firebaseState='Firebase DB全リセット済';}catch(e){console.warn(e);firebaseState='Firebase全リセット失敗';}} render();}
-function saveScoreUserId(){const v=document.getElementById('scoreUserId').value.trim(); if(!v){alert('共通IDを入れて。');return} localStorage.setItem(USER_KEY,safeId(v)); fbCache=null; remoteScores={}; loadFirebaseScores();}
+function best(id){return typeof remoteScores[id]==='number'?remoteScores[id]:localBest(id)}
+function badgeHtml(id){const b=best(id);const fromFb=typeof remoteScores[id]==='number';const cls=(b!=null?' has':'')+(fromFb?' fb':'');return `<span class="scoreBadge${cls}">${b==null?'最高 --点':'最高 '+b+'点'+(fromFb?' 🔥':'')}</span>`}
+function card(s){return `<div class="card"><div class="icon">${s.icon}</div><h3>${s.name}</h3><p>${s.note}</p>${badgeHtml(s.id)}<a class="go" href="${s.href}">定期テストへ →</a><button class="resetBtn" onclick="event.preventDefault();resetOne('${s.id}','${s.name}')">リセット</button></div>`}
+function render(){document.getElementById('nowList').innerHTML=SUBJECTS.map(s=>`<a class="now" href="${s.href}"><span>${s.icon} ${s.level==='middle'?'中学 ':s.level==='high'?'高校 ':''}${s.name}</span>${badgeHtml(s.id)}</a>`).join('');for(const lv of ['elementary','middle','high']){document.getElementById(lv+'Grid').innerHTML=SUBJECTS.filter(s=>s.level===lv).map(card).join('')}setFbState()}
+function setFbState(){const el=document.getElementById('fbState');if(el)el.textContent=firebaseState+' / 保存先: scoreUsers/gakushu-main'}
+function firebaseConfigured(){const c=window.GAKUSHU_FIREBASE_CONFIG;return !!(c&&c.apiKey&&c.databaseURL&&!String(c.apiKey).includes('PASTE_')&&!String(c.databaseURL).includes('PASTE_'))}
+async function fb(){if(fbCache)return fbCache;if(!firebaseConfigured()){firebaseState='Firebase未設定・端末保存';setFbState();return null}try{const [appMod,dbMod]=await Promise.all([import('https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js'),import('https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js')]);const app=appMod.getApps().length?appMod.getApps()[0]:appMod.initializeApp(window.GAKUSHU_FIREBASE_CONFIG);const db=dbMod.getDatabase(app);fbCache={db,...dbMod};firebaseState='Firebase DB同期ON';setFbState();return fbCache}catch(e){console.warn(e);firebaseState='Firebase接続失敗・端末保存';setFbState();return null}}
+async function loadFirebaseScores(){const f=await fb();remoteScores={};if(!f){render();return}try{const snap=await f.get(f.ref(f.db,'scoreUsers/'+FIXED_USER+'/subjects'));const data=snap.exists()?snap.val():{};for(const [id,v] of Object.entries(data||{})){if(v&&typeof v.best==='number')remoteScores[id]=v.best}firebaseState='Firebase DB読込OK';render()}catch(e){console.warn(e);firebaseState='Firebase読込失敗・端末保存';render()}}
+async function resetOne(id,name){if(!confirm(name+' の歴代最高得点をリセットする？'))return;localStorage.removeItem(key(id));delete remoteScores[id];const f=await fb();if(f){try{await f.remove(f.ref(f.db,'scoreUsers/'+FIXED_USER+'/subjects/'+id));firebaseState='Firebase DBリセット済'}catch(e){firebaseState='Firebaseリセット失敗'}}render()}
+async function resetAllScores(){if(!confirm('全科目の歴代最高得点をFirebase DBごとリセットする？'))return;for(const s of SUBJECTS)localStorage.removeItem(key(s.id));remoteScores={};const f=await fb();if(f){try{await f.remove(f.ref(f.db,'scoreUsers/'+FIXED_USER+'/subjects'));firebaseState='Firebase DB全リセット済'}catch(e){firebaseState='Firebase全リセット失敗'}}render()}
 document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active')}));
-window.addEventListener('storage',()=>loadFirebaseScores());render();loadFirebaseScores();
-</script></body></html>
+window.addEventListener('storage',()=>loadFirebaseScores());
+render();
+loadFirebaseScores();
+</script>
+</body>
+</html>
