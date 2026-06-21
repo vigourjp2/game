@@ -1652,7 +1652,624 @@ function bindObjectEditorUi(){
  loadCustomObjectsLocal(); setObjMode('voxel3d');
 }
 
+
+
+// ===== Plane texture editor v2: high-res tile art + scale + 3D paste =====
+const PLANE_TEX_GRID_DEFAULT = 64;
+const PLANE_TEX_MAX_CELLS = 128 * 128;
+let planeTexEditorState = null;
+let planeTexDraw = false;
+let objPasteTextureId = '';
+let objPasteScale = 0.10; // 0.01..1.00, converted to 1..16 builder cells
+
+const __baseValidateObjectDef = validateObjectDef;
+validateObjectDef = function(def){
+ if(!def || !Array.isArray(def.cells)) return null;
+ const kind=(def.kind==='plane')?'plane':'voxel3d';
+ if(kind==='plane'){
+   const grid=Math.max(8,Math.min(128,Math.trunc(Number(def.grid)||PLANE_TEX_GRID_DEFAULT)));
+   const cells=[];
+   const seen=new Set();
+   for(const c of def.cells.slice(0, PLANE_TEX_MAX_CELLS)){
+     const x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y));
+     if(x<0||x>=grid||y<0||y>=grid) continue;
+     const key=x+','+y;
+     if(seen.has(key)) continue;
+     seen.add(key);
+     cells.push({x,y,color:normalizeHexColor(c.color)});
+   }
+   if(!cells.length) return null;
+   const id=String(def.id||('plane-'+Date.now()+'-'+Math.floor(Math.random()*100000))).slice(0,96);
+   const scale=Math.max(0.005,Math.min(0.50,Number(def.scale)||0.06)); // tile size in world units
+   return {id,name:String(def.name||'plane texture').slice(0,40),kind:'plane',grid,scale,cells,createdAt:Number(def.createdAt)||Date.now(),updatedAt:Number(def.updatedAt)||Date.now()};
+ }
+ return __baseValidateObjectDef(def);
+};
+
+function makePlaneTextureCanvas(def, pixelSize){
+ def=validateObjectDef(def); if(!def || def.kind!=='plane') return null;
+ const grid=def.grid||PLANE_TEX_GRID_DEFAULT;
+ const cell=Math.max(1,Math.floor((pixelSize||256)/grid));
+ const size=cell*grid;
+ const c=document.createElement('canvas'); c.width=size; c.height=size;
+ const g=c.getContext('2d');
+ g.clearRect(0,0,size,size);
+ for(const px of def.cells||[]){
+   g.fillStyle=normalizeHexColor(px.color);
+   g.fillRect(px.x*cell, px.y*cell, cell, cell);
+ }
+ return c;
+}
+
+const __basePlaceCustomObject = placeCustomObject;
+placeCustomObject = function(def,x,y,z,yaw,instanceKey){
+ def=validateObjectDef(def); if(!def) return null;
+ if(def.kind!=='plane') return __basePlaceCustomObject(def,x,y,z,yaw,instanceKey);
+ instanceKey=instanceKey || ('inst-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
+ if(customObjectRemovedInstances.has(instanceKey)) return null;
+ if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
+ const root=new pc.Entity('custom_plane_'+instanceKey);
+ const canvas=makePlaneTextureCanvas(def,256);
+ const tex=new pc.Texture(app.graphicsDevice,{mipmaps:false});
+ tex.minFilter=pc.FILTER_NEAREST; tex.magFilter=pc.FILTER_NEAREST; tex.addressU=pc.ADDRESS_CLAMP_TO_EDGE; tex.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+ tex.setSource(canvas);
+ const mat=new pc.StandardMaterial();
+ mat.diffuseMap=tex;
+ mat.opacityMap=tex;
+ mat.blendType=pc.BLEND_NORMAL;
+ mat.alphaTest=0.05;
+ mat.emissive=new pc.Color(.02,.02,.02);
+ mat.update();
+ const w=(def.grid||PLANE_TEX_GRID_DEFAULT)*(def.scale||0.06);
+ const h=w;
+ const e=new pc.Entity('obj_cell');
+ e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ e.render.material=mat;
+ e.setLocalScale(w, h, Math.max(.018, (def.scale||.06)*.20));
+ e.setLocalPosition(0,h/2,0);
+ e.data={customObjectCell:true, planeTexture:true};
+ root.addChild(e);
+ root.setPosition(x,y,z);
+ root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
+ root.data={customObject:true,defId:def.id,instanceKey,chunk:chunkIdForBlock(Math.round(x),Math.round(z))};
+ app.root.addChild(root);
+ customObjectEntities.set(instanceKey, root);
+ return root;
+};
+
+const __baseBlueprintThumb = blueprintThumb;
+blueprintThumb = function(def){
+ def=validateObjectDef(def);
+ if(!def) return '';
+ if(def.kind!=='plane') return __baseBlueprintThumb(def);
+ const canvas=document.createElement('canvas'); canvas.width=112; canvas.height=78;
+ const g=canvas.getContext('2d');
+ g.fillStyle='rgba(15,23,42,.95)'; g.fillRect(0,0,canvas.width,canvas.height);
+ const grid=def.grid||PLANE_TEX_GRID_DEFAULT;
+ const size=64, ox=24, oy=8;
+ g.fillStyle='rgba(255,255,255,.10)'; g.fillRect(ox,oy,size,size);
+ for(const c of def.cells||[]){
+   g.fillStyle=normalizeHexColor(c.color);
+   g.fillRect(ox + c.x/grid*size, oy + c.y/grid*size, Math.max(1,size/grid), Math.max(1,size/grid));
+ }
+ g.fillStyle='rgba(191,219,254,.95)'; g.font='10px system-ui';
+ g.fillText('平面 '+grid+'x'+grid+' / '+(def.scale||0).toFixed(3),6,74);
+ return canvas.toDataURL('image/png');
+};
+
+function ensurePlaneTextureEditorDom(){
+ if($('planeTextureEditor')) return;
+ const style=document.createElement('style');
+ style.textContent=`
+ #planeTextureEditor{position:fixed;inset:0;z-index:120;display:none;background:rgba(4,9,20,.94);color:#fff;box-sizing:border-box;padding:8px;touch-action:auto;overflow:auto}
+ #planeTextureEditor .ptPanel{max-width:720px;margin:0 auto;background:rgba(15,23,42,.96);border:1px solid rgba(255,255,255,.22);border-radius:18px;padding:12px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
+ #planeTextureEditor h2{margin:0 0 6px;font-size:20px}.ptHint{font-size:12px;color:#bfdbfe;line-height:1.35;margin-bottom:8px}
+ .ptRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:7px 0}.ptRow button{border:0;border-radius:10px;padding:9px 10px;font-weight:900;color:#fff;background:#334155}.ptRow button.goodBtn{background:#22c55e}.ptRow button.badBtn{background:#ef4444}.ptRow button.on{outline:3px solid #facc15;background:#7c3aed}
+ #ptCanvas{width:min(88vw,520px);height:min(88vw,520px);max-height:58vh;background:#0f172a;image-rendering:pixelated;touch-action:none;border:2px solid rgba(255,255,255,.35);border-radius:12px;display:block;margin:8px auto}
+ .ptSwatch{width:42px;height:34px;border-radius:9px;border:2px solid rgba(255,255,255,.6);background:#22c55e}.ptRange{width:190px}.ptSmall{font-size:12px;color:#e5e7eb}.ptHex{width:86px;border:0;border-radius:8px;padding:8px;font-weight:800}
+ .ptToolState{display:inline-block;padding:6px 9px;border-radius:999px;background:rgba(15,23,42,.85);border:1px solid rgba(255,255,255,.20);font-size:12px;color:#e0f2fe;font-weight:900}
+ .ptModeBtn.on{outline:3px solid #facc15;background:#7c3aed!important}
+ #ptColorMaker{display:none;margin:8px 0;padding:10px;border:1px solid rgba(255,255,255,.20);border-radius:14px;background:rgba(2,6,23,.55)}
+ #ptColorMaker.open{display:block}
+ #ptColorMaker .ptRgbRow{display:grid;grid-template-columns:28px 1fr 58px;gap:8px;align-items:center;margin:7px 0;font-weight:900}
+ #ptColorMaker input[type=number]{width:58px;border:0;border-radius:8px;padding:7px;font-weight:900}
+ #ptColorMaker .ptPreset{width:30px;height:28px;border:2px solid rgba(255,255,255,.45);border-radius:8px;padding:0}
+ .ptDefaultPalette{gap:6px;align-items:center}.ptDefaultPalette span{width:100%;font-size:12px;color:#bfdbfe;font-weight:900}
+ #objTexturePastePanel{border-top:1px solid rgba(255,255,255,.18);padding-top:6px;margin-top:6px}
+ #objTexturePastePanel select{max-width:180px;border:0;border-radius:8px;padding:7px;background:#111827;color:#fff}.pasteRange{width:130px}
+ `;
+ document.head.appendChild(style);
+ const div=document.createElement('div');
+ div.id='planeTextureEditor';
+ div.innerHTML=`<div class="ptPanel">
+   <h2>平面テクスチャエディタ</h2>
+   <div class="ptHint">タイルアートで平面テクスチャを作る。縁線なし・隙間なし。登録サイズ倍率を指定して、単体平面OBJとして登録できます。立体エディタでは、このテクスチャを選んで小さく貼付できます。</div>
+   <div class="ptRow">
+     <span>解像度</span>
+     <button id="ptGrid32">32×32</button><button id="ptGrid64" class="on">64×64</button><button id="ptGrid96">96×96</button>
+     <span class="ptSmall">細かいほど絵が描ける</span>
+   </div>
+   <canvas id="ptCanvas" width="512" height="512"></canvas>
+   <div class="ptRow">
+     <span>色</span><div id="ptColorPreview" class="ptSwatch"></div><input id="ptColor" type="color" value="#22c55e"><input id="ptHex" class="ptHex" value="#22c55e" maxlength="7">
+     <button id="ptMakeColor">色を作る</button><button id="ptUseObjColor">立体側の色をコピー</button>
+   </div>
+   <div class="ptRow">
+     <span id="ptToolState" class="ptToolState">現在: ブラシ / #22c55e</span>
+     <button id="ptPaintMode" class="ptModeBtn on">ブラシ</button><button id="ptEraseMode" class="ptModeBtn">消しゴム</button><button id="ptPickMode" class="ptModeBtn">スポイト</button>
+   </div>
+   <div id="ptColorMaker">
+     <div class="ptSmall">Windows風にRGB/HEXで色を作る。作った色はすぐブラシ色になります。</div>
+     <div class="ptRgbRow"><span>R</span><input id="ptR" type="range" min="0" max="255" value="34"><input id="ptRn" type="number" min="0" max="255" value="34"></div>
+     <div class="ptRgbRow"><span>G</span><input id="ptG" type="range" min="0" max="255" value="197"><input id="ptGn" type="number" min="0" max="255" value="197"></div>
+     <div class="ptRgbRow"><span>B</span><input id="ptB" type="range" min="0" max="255" value="94"><input id="ptBn" type="number" min="0" max="255" value="94"></div>
+     <div class="ptRow ptDefaultPalette"><span>基本色パレット</span><button class="ptPreset" title="#000000" data-color="#000000" style="background:#000000"></button><button class="ptPreset" title="#111827" data-color="#111827" style="background:#111827"></button><button class="ptPreset" title="#374151" data-color="#374151" style="background:#374151"></button><button class="ptPreset" title="#6b7280" data-color="#6b7280" style="background:#6b7280"></button><button class="ptPreset" title="#9ca3af" data-color="#9ca3af" style="background:#9ca3af"></button><button class="ptPreset" title="#d1d5db" data-color="#d1d5db" style="background:#d1d5db"></button><button class="ptPreset" title="#ffffff" data-color="#ffffff" style="background:#ffffff"></button><button class="ptPreset" title="#7f1d1d" data-color="#7f1d1d" style="background:#7f1d1d"></button><button class="ptPreset" title="#ef4444" data-color="#ef4444" style="background:#ef4444"></button><button class="ptPreset" title="#f97316" data-color="#f97316" style="background:#f97316"></button><button class="ptPreset" title="#facc15" data-color="#facc15" style="background:#facc15"></button><button class="ptPreset" title="#fde68a" data-color="#fde68a" style="background:#fde68a"></button><button class="ptPreset" title="#14532d" data-color="#14532d" style="background:#14532d"></button><button class="ptPreset" title="#16a34a" data-color="#16a34a" style="background:#16a34a"></button><button class="ptPreset" title="#22c55e" data-color="#22c55e" style="background:#22c55e"></button><button class="ptPreset" title="#86efac" data-color="#86efac" style="background:#86efac"></button><button class="ptPreset" title="#064e3b" data-color="#064e3b" style="background:#064e3b"></button><button class="ptPreset" title="#14b8a6" data-color="#14b8a6" style="background:#14b8a6"></button><button class="ptPreset" title="#0c4a6e" data-color="#0c4a6e" style="background:#0c4a6e"></button><button class="ptPreset" title="#38bdf8" data-color="#38bdf8" style="background:#38bdf8"></button><button class="ptPreset" title="#3b82f6" data-color="#3b82f6" style="background:#3b82f6"></button><button class="ptPreset" title="#1d4ed8" data-color="#1d4ed8" style="background:#1d4ed8"></button><button class="ptPreset" title="#312e81" data-color="#312e81" style="background:#312e81"></button><button class="ptPreset" title="#8b5cf6" data-color="#8b5cf6" style="background:#8b5cf6"></button><button class="ptPreset" title="#831843" data-color="#831843" style="background:#831843"></button><button class="ptPreset" title="#ec4899" data-color="#ec4899" style="background:#ec4899"></button><button class="ptPreset" title="#f9a8d4" data-color="#f9a8d4" style="background:#f9a8d4"></button><button class="ptPreset" title="#78350f" data-color="#78350f" style="background:#78350f"></button><button class="ptPreset" title="#a16207" data-color="#a16207" style="background:#a16207"></button><button class="ptPreset" title="#92400e" data-color="#92400e" style="background:#92400e"></button><button class="ptPreset" title="#4d7c0f" data-color="#4d7c0f" style="background:#4d7c0f"></button><button class="ptPreset" title="#84cc16" data-color="#84cc16" style="background:#84cc16"></button><button class="ptPreset" title="#164e63" data-color="#164e63" style="background:#164e63"></button><button class="ptPreset" title="#0891b2" data-color="#0891b2" style="background:#0891b2"></button><button class="ptPreset" title="#581c87" data-color="#581c87" style="background:#581c87"></button><button class="ptPreset" title="#c084fc" data-color="#c084fc" style="background:#c084fc"></button></div>
+   </div>
+   <div class="ptRow">
+     <span>ブラシ</span><input id="ptBrush" class="ptRange" type="range" min="1" max="8" step="1" value="1"><span id="ptBrushText">1</span>
+   </div>
+   <div class="ptRow">
+     <span>登録サイズ倍率</span><input id="ptScale" class="ptRange" type="range" min="0.005" max="0.250" step="0.005" value="0.040"><span id="ptScaleText">0.040</span>
+     <span id="ptWorldSize" class="ptSmall"></span>
+   </div>
+   <div class="ptRow">
+     <button id="ptDone" class="goodBtn">平面として登録</button><button id="ptClear" class="badBtn">全消し</button><button id="ptCancel">戻る</button>
+   </div>
+   <div id="ptStatus" class="ptHint">タイルをドラッグして描けます。</div>
+ </div>`;
+ document.body.appendChild(div);
+ bindPlaneTextureEditorDom();
+}
+function ptKey(x,y){return x+','+y;}
+function setPtStatus(t){const e=$('ptStatus'); if(e)e.textContent=t;}
+function currentPlaneScale(){const e=$('ptScale'); return Math.max(.005,Math.min(.25,Number(e&&e.value)||.04));}
+function syncPtWorldSize(){const e=$('ptWorldSize'); if(e&&planeTexEditorState){const total=planeTexEditorState.grid*currentPlaneScale(); e.textContent='表示幅 約 '+total.toFixed(2)+' ブロック';}}
+function syncPtToolUi(){
+ if(!planeTexEditorState) return;
+ const tool=planeTexEditorState.tool||'paint';
+ const label=tool==='erase'?'消しゴム':(tool==='pick'?'スポイト':'ブラシ');
+ const st=$('ptToolState'); if(st)st.textContent='現在: '+label+' / '+(tool==='erase'?'透明に消す':planeTexEditorState.color);
+ const p=$('ptPaintMode'), e=$('ptEraseMode'), k=$('ptPickMode');
+ if(p)p.classList.toggle('on',tool==='paint'); if(e)e.classList.toggle('on',tool==='erase'); if(k)k.classList.toggle('on',tool==='pick');
+}
+function setPtTool(tool){
+ if(!planeTexEditorState) return;
+ planeTexEditorState.tool=(tool==='erase'||tool==='pick')?tool:'paint';
+ syncPtToolUi();
+ setPtStatus(planeTexEditorState.tool==='erase'?'消しゴム: タイルを消す':(planeTexEditorState.tool==='pick'?'スポイト: キャンバス上の色をタップ':'ブラシ: タイルを描く'));
+}
+function syncPtColorMakerFromHex(hex){
+ hex=normalizeHexColor(hex); const rgb=objHexToRgb(hex);
+ const map={R:rgb.r,G:rgb.g,B:rgb.b};
+ for(const k of ['R','G','B']){const r=$('pt'+k), n=$('pt'+k+'n'); if(r)r.value=map[k]; if(n)n.value=map[k];}
+}
+function setPtColor(c){
+ c=normalizeHexColor(c); if(!planeTexEditorState) return;
+ planeTexEditorState.color=c; const pcv=$('ptColorPreview'); if(pcv)pcv.style.background=c; const co=$('ptColor'); if(co)co.value=c; const hx=$('ptHex'); if(hx)hx.value=c;
+ syncPtColorMakerFromHex(c); syncPtToolUi();
+}
+function updatePtColorFromRgb(){
+ const r=Number($('ptR')&&$('ptR').value)||0, g=Number($('ptG')&&$('ptG').value)||0, b=Number($('ptB')&&$('ptB').value)||0;
+ setPtColor(objRgbToHex(r,g,b));
+}
+function togglePtColorMaker(force){
+ const p=$('ptColorMaker'); if(!p)return;
+ p.classList.toggle('open', typeof force==='boolean'?force:!p.classList.contains('open'));
+}
+function drawPlaneTextureCanvas(){
+ if(!planeTexEditorState) return;
+ const canvas=$('ptCanvas'); if(!canvas)return; const g=canvas.getContext('2d'); const grid=planeTexEditorState.grid; const cell=canvas.width/grid;
+ g.clearRect(0,0,canvas.width,canvas.height);
+ // checker background, no tile outlines
+ const chk=16; for(let y=0;y<canvas.height;y+=chk)for(let x=0;x<canvas.width;x+=chk){g.fillStyle=((x/chk+y/chk)&1)?'rgba(255,255,255,.07)':'rgba(0,0,0,.16)';g.fillRect(x,y,chk,chk);}
+ for(const [k,col] of planeTexEditorState.pixels){const [x,y]=k.split(',').map(Number);g.fillStyle=col;g.fillRect(x*cell,y*cell,Math.ceil(cell),Math.ceil(cell));}
+ setPtStatus('平面 '+grid+'×'+grid+' / '+planeTexEditorState.pixels.size+' tiles / 倍率 '+currentPlaneScale().toFixed(3));
+ syncPtWorldSize();
+}
+function planePaintAtEvent(ev){
+ if(!planeTexEditorState) return;
+ const c=$('ptCanvas'), r=c.getBoundingClientRect();
+ const grid=planeTexEditorState.grid;
+ const x=Math.floor((ev.clientX-r.left)/r.width*grid), y=Math.floor((ev.clientY-r.top)/r.height*grid);
+ if(x<0||x>=grid||y<0||y>=grid) return;
+ const brush=Math.max(1,Math.min(8,Number($('ptBrush')&&$('ptBrush').value)||1));
+ if(planeTexEditorState.tool==='pick'){
+   const col=planeTexEditorState.pixels.get(ptKey(x,y));
+   if(col){setPtColor(col); setPtTool('paint'); setPtStatus('スポイト取得: '+col+' / ブラシに戻した');} else setPtStatus('空白タイルなので色なし');
+   return;
+ }
+ const half=Math.floor(brush/2);
+ for(let yy=y-half; yy<y-half+brush; yy++) for(let xx=x-half; xx<x-half+brush; xx++){
+   if(xx<0||xx>=grid||yy<0||yy>=grid) continue;
+   const key=ptKey(xx,yy);
+   if(planeTexEditorState.tool==='erase') planeTexEditorState.pixels.delete(key); else planeTexEditorState.pixels.set(key, planeTexEditorState.color);
+ }
+ drawPlaneTextureCanvas();
+}
+function bindPlaneTextureEditorDom(){
+ const cn=$('ptCanvas'); if(cn){
+   cn.addEventListener('pointerdown',e=>{planeTexDraw=true; cn.setPointerCapture(e.pointerId); planePaintAtEvent(e); e.preventDefault();});
+   cn.addEventListener('pointermove',e=>{if(planeTexDraw) planePaintAtEvent(e); e.preventDefault();});
+   cn.addEventListener('pointerup',e=>{planeTexDraw=false; e.preventDefault();});
+   cn.addEventListener('pointercancel',e=>{planeTexDraw=false;});
+ }
+ for(const n of [32,64,96]){ const b=$('ptGrid'+n); if(b)b.onclick=()=>{ if(!planeTexEditorState)return; if(planeTexEditorState.pixels.size && !confirm('解像度を変更すると現在のタイルをリサンプルします。続ける？')) return; resamplePlaneGrid(n); }; }
+ const co=$('ptColor'); if(co)co.oninput=()=>{setPtColor(co.value);setPtTool('paint');};
+ const hx=$('ptHex'); if(hx)hx.oninput=()=>{if(/^#[0-9a-fA-F]{6}$/.test(hx.value)){setPtColor(hx.value);setPtTool('paint');}};
+ const mk=$('ptMakeColor'); if(mk)mk.onclick=()=>togglePtColorMaker();
+ for(const k of ['R','G','B']){
+   const r=$('pt'+k), n=$('pt'+k+'n');
+   if(r)r.oninput=()=>{const nn=$('pt'+k+'n'); if(nn)nn.value=r.value; updatePtColorFromRgb(); setPtTool('paint');};
+   if(n)n.oninput=()=>{let v=Math.max(0,Math.min(255,Number(n.value)||0)); n.value=v; const rr=$('pt'+k); if(rr)rr.value=v; updatePtColorFromRgb(); setPtTool('paint');};
+ }
+ document.querySelectorAll('#ptColorMaker .ptPreset').forEach(b=>{b.onclick=()=>{setPtColor(b.dataset.color||'#22c55e');setPtTool('paint');};});
+ const uo=$('ptUseObjColor'); if(uo)uo.onclick=()=>{setPtColor(objPaintColor);setPtTool('paint');setPtStatus('立体エディタ側の現在色をコピー: '+objPaintColor);};
+ const pm=$('ptPaintMode'); if(pm)pm.onclick=()=>setPtTool('paint');
+ const pk=$('ptPickMode'); if(pk)pk.onclick=()=>setPtTool('pick');
+ const er=$('ptEraseMode'); if(er)er.onclick=()=>setPtTool('erase');
+ const br=$('ptBrush'); if(br)br.oninput=()=>{const t=$('ptBrushText'); if(t)t.textContent=br.value;};
+ const sc=$('ptScale'); if(sc)sc.oninput=()=>{const t=$('ptScaleText'); if(t)t.textContent=Number(sc.value).toFixed(3); drawPlaneTextureCanvas();};
+ const done=$('ptDone'); if(done)done.onclick=finishPlaneTextureEditor;
+ const clr=$('ptClear'); if(clr)clr.onclick=()=>{if(confirm('平面テクスチャを全消しする？')){planeTexEditorState.pixels.clear();drawPlaneTextureCanvas();}};
+ const cancel=$('ptCancel'); if(cancel)cancel.onclick=closePlaneTextureEditor;
+}
+function resamplePlaneGrid(newGrid){
+ if(!planeTexEditorState) return;
+ const oldGrid=planeTexEditorState.grid, oldPixels=new Map(planeTexEditorState.pixels);
+ const np=new Map();
+ for(const [k,col] of oldPixels){const [x,y]=k.split(',').map(Number); const nx=Math.min(newGrid-1,Math.floor(x/oldGrid*newGrid)), ny=Math.min(newGrid-1,Math.floor(y/oldGrid*newGrid)); np.set(ptKey(nx,ny),col);}
+ planeTexEditorState.grid=newGrid; planeTexEditorState.pixels=np;
+ for(const n of [32,64,96]){const b=$('ptGrid'+n); if(b)b.classList.toggle('on',n===newGrid);}
+ drawPlaneTextureCanvas();
+}
+function openPlaneTextureEditor(def, duplicate){
+ ensurePlaneTextureEditorDom();
+ closeObjectManager();
+ if(state.editingObject){try{closeObjectEditor();}catch{}}
+ const clean=def?validateObjectDef(def):null;
+ const grid=(clean&&clean.kind==='plane')?(clean.grid||PLANE_TEX_GRID_DEFAULT):PLANE_TEX_GRID_DEFAULT;
+ planeTexEditorState={id:(clean&&!duplicate)?clean.id:null, grid, pixels:new Map(), color:objPaintColor, tool:'paint'};
+ if(clean&&clean.kind==='plane'){
+   for(const c of clean.cells||[]) planeTexEditorState.pixels.set(ptKey(c.x,c.y),normalizeHexColor(c.color));
+   const sc=$('ptScale'); if(sc){sc.value=String(Math.max(.005,Math.min(.25,Number(clean.scale)||.04))); const t=$('ptScaleText'); if(t)t.textContent=Number(sc.value).toFixed(3);}
+ } else {
+   const sc=$('ptScale'); if(sc){sc.value='0.040'; const t=$('ptScaleText'); if(t)t.textContent='0.040';}
+ }
+ setPtColor(objPaintColor);
+ setPtTool('paint');
+ togglePtColorMaker(false);
+ for(const n of [32,64,96]){const b=$('ptGrid'+n); if(b)b.classList.toggle('on',n===grid);}
+ const el=$('planeTextureEditor'); if(el)el.style.display='block';
+ drawPlaneTextureCanvas();
+}
+function closePlaneTextureEditor(){ const el=$('planeTextureEditor'); if(el)el.style.display='none'; planeTexEditorState=null; }
+function finishPlaneTextureEditor(){
+ if(!planeTexEditorState) return;
+ const cells=[];
+ for(const [k,col] of planeTexEditorState.pixels){const [x,y]=k.split(',').map(Number); cells.push({x,y,color:normalizeHexColor(col)});}
+ if(!cells.length){setPtStatus('最低1タイルは描け'); return;}
+ const old=planeTexEditorState.id?customObjectDefs.get(planeTexEditorState.id):null;
+ const id=planeTexEditorState.id || ('plane-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36));
+ const def={id,name:(old&&old.name)||('平面Tex-'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'})),kind:'plane',grid:planeTexEditorState.grid,scale:currentPlaneScale(),cells,createdAt:(old&&old.createdAt)||Date.now(),updatedAt:Date.now()};
+ registerCustomObjectDef(def, old?'localUpdate':'localCreate');
+ closePlaneTextureEditor();
+ placeObjectInFront(def);
+ renderObjectManager();
+ updateTexturePasteOptions();
+ setMsg('平面テクスチャ登録・倍率 '+def.scale.toFixed(3)+' / 目の前に出現','good');
+}
+
+const __baseSetObjMode = setObjMode;
+setObjMode = function(m){
+ if(m==='plane'){
+   if(confirm('平面テクスチャ専用エディタへ移動します。立体編集中の未確定ブロックは破棄されます。続ける？')) openPlaneTextureEditor(null,false);
+   return;
+ }
+ return __baseSetObjMode(m);
+};
+
+const __baseStartEditObjectEditor = startEditObjectEditor;
+startEditObjectEditor = function(id, duplicate){
+ const def=customObjectDefs.get(String(id));
+ if(def && def.kind==='plane'){ openPlaneTextureEditor(def, duplicate); return; }
+ return __baseStartEditObjectEditor(id, duplicate);
+};
+
+function ensureTexturePastePanel(){
+ if($('objTexturePastePanel')) return;
+ const card=document.querySelector('#objectEditor .objCard'); if(!card) return;
+ const row=document.createElement('div'); row.id='objTexturePastePanel'; row.className='objRow';
+ row.innerHTML='<span>貼るテクスチャ</span><select id="objPasteTextureSelect"><option value="">なし</option></select><span>貼付倍率</span><input id="objPasteScale" class="pasteRange" type="range" min="0.01" max="1.00" step="0.01" value="0.10"><span id="objPasteScaleText">0.10</span><button id="objPasteTextureBtn">テクスチャ貼付</button>';
+ const status=$('objStatus'); card.insertBefore(row,status||card.lastChild);
+ const sel=$('objPasteTextureSelect'); if(sel)sel.onchange=()=>{objPasteTextureId=sel.value;};
+ const sc=$('objPasteScale'); if(sc)sc.oninput=()=>{objPasteScale=Math.max(.01,Math.min(1,Number(sc.value)||.1)); const t=$('objPasteScaleText'); if(t)t.textContent=objPasteScale.toFixed(2);};
+ const btn=$('objPasteTextureBtn'); if(btn)btn.onclick=pasteSelectedPlaneTextureToBuilder;
+ updateTexturePasteOptions();
+}
+function updateTexturePasteOptions(){
+ const sel=$('objPasteTextureSelect'); if(!sel) return;
+ const keep=sel.value||objPasteTextureId||'';
+ sel.innerHTML='<option value="">なし</option>';
+ for(const def of customObjectDefs.values()){
+   if(def.kind!=='plane') continue;
+   const opt=document.createElement('option'); opt.value=def.id; opt.textContent=(def.name||def.id)+' / '+(def.grid||64)+'px'; sel.appendChild(opt);
+ }
+ sel.value=customObjectDefs.has(keep)?keep:'';
+ objPasteTextureId=sel.value;
+}
+function pasteSelectedPlaneTextureToBuilder(){
+ if(!state.editingObject){setMsg('立体エディタ中だけ貼付できる','bad');return;}
+ const def=customObjectDefs.get(String(objPasteTextureId||''));
+ if(!def||def.kind!=='plane'){setMsg('貼る平面テクスチャを選べ','bad');return;}
+ const aim=objectBuilderAim(); const base=(aim&& (aim.place||aim.hit));
+ if(!base){setMsg('貼付位置がない','bad');return;}
+ const grid=def.grid||64;
+ const stamp=Math.max(1,Math.min(OBJECT_GRID,Math.round(grid*objPasteScale)));
+ const startX=Math.max(0,Math.min(OBJECT_GRID-stamp,base.x-Math.floor(stamp/2)));
+ const startY=Math.max(0,Math.min(OBJECT_GRID-stamp,base.y-Math.floor(stamp/2)));
+ const z=Math.max(0,Math.min(OBJECT_GRID-1,base.z));
+ let placed=0;
+ for(let yy=0; yy<stamp; yy++) for(let xx=0; xx<stamp; xx++){
+   const sx=Math.floor(xx/stamp*grid), sy=Math.floor(yy/stamp*grid);
+   // nearest non-empty exact pixel
+   const colMap=new Map((def.cells||[]).map(c=>[ptKey(c.x,c.y),normalizeHexColor(c.color)]));
+   const col=colMap.get(ptKey(sx,sy));
+   if(!col) continue;
+   const x=startX+xx, y=startY+(stamp-1-yy);
+   if(!insideObjectCell(x,y,z)) continue;
+   const key=objKey3(x,y,z); objVoxels.set(key,col); addObjectBuilderCellEntity(x,y,z,col); placed++;
+ }
+ setMsg('テクスチャ貼付: '+placed+' cells / 倍率 '+objPasteScale.toFixed(2),'good');
+}
+
+const __baseRegisterCustomObjectDef = registerCustomObjectDef;
+registerCustomObjectDef = function(def,source){ const r=__baseRegisterCustomObjectDef(def,source); updateTexturePasteOptions(); return r; };
+const __baseDeleteCustomObjectDef = deleteCustomObjectDef;
+deleteCustomObjectDef = function(id,broadcast){ const r=__baseDeleteCustomObjectDef(id,broadcast); updateTexturePasteOptions(); return r; };
+
+const __baseBindObjectEditorUi = bindObjectEditorUi;
+bindObjectEditorUi = function(){
+ __baseBindObjectEditorUi();
+ ensurePlaneTextureEditorDom();
+ ensureTexturePastePanel();
+ const top=document.querySelector('#objectManager .bpTop');
+ if(top && !$('bpNewPlaneBtn')){
+   const b=document.createElement('button'); b.id='bpNewPlaneBtn'; b.className='goodBtn'; b.textContent='新規平面テクスチャ'; b.onclick=()=>openPlaneTextureEditor(null,false);
+   const ref=$('bpNewBtn'); top.insertBefore(b, ref?ref.nextSibling:null);
+ }
+ const pl=$('objPlaneBtn'); if(pl)pl.onclick=()=>setObjMode('plane');
+ updateTexturePasteOptions();
+};
+
 buildWorld();
+
+
+// ===== Surface-fit texture paste: auto fit to selected block face =====
+// 立体ブロックの「面」に平面テクスチャを自動ぴったり貼る。ブロック追加ではなく薄い表面デカールとして扱う。
+let objSurfaceDecals = [];
+let objBuildDecalEntities = new Map();
+let surfaceTextureMats = new Map();
+
+function normalizeTextureCells(cells, grid){
+ grid=Math.max(1,Math.min(128,Math.trunc(Number(grid)||64)));
+ const out=[]; const seen=new Set();
+ if(!Array.isArray(cells)) return out;
+ for(const c of cells.slice(0, 128*128)){
+   const x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y));
+   if(x<0||x>=grid||y<0||y>=grid) continue;
+   const key=x+','+y; if(seen.has(key)) continue; seen.add(key);
+   out.push({x,y,color:normalizeHexColor(c.color)});
+ }
+ return out;
+}
+function normalizeSurfaceDecal(d){
+ if(!d) return null;
+ const x=Math.trunc(Number(d.x)), y=Math.trunc(Number(d.y)), z=Math.trunc(Number(d.z));
+ if(!insideObjectCell(x,y,z)) return null;
+ const face=['px','nx','py','ny','pz','nz'].includes(d.face)?d.face:'pz';
+ const grid=Math.max(8,Math.min(128,Math.trunc(Number(d.grid)||64)));
+ const cells=normalizeTextureCells(d.cells, grid);
+ if(!cells.length) return null;
+ return {x,y,z,face,grid,cells,textureId:String(d.textureId||'').slice(0,96)};
+}
+const __surfaceValidateObjectDef = validateObjectDef;
+validateObjectDef = function(def){
+ const clean=__surfaceValidateObjectDef(def);
+ if(!clean) return null;
+ if(clean.kind==='voxel3d'){
+   const decals=[];
+   if(Array.isArray(def.decals)){
+     for(const d of def.decals.slice(0,64)){
+       const nd=normalizeSurfaceDecal(d);
+       if(nd) decals.push(nd);
+     }
+   }
+   if(decals.length) clean.decals=decals;
+ }
+ return clean;
+};
+
+function makeCanvasFromTextureCells(grid,cells,pixelSize){
+ grid=Math.max(8,Math.min(128,Math.trunc(Number(grid)||64)));
+ const cell=Math.max(1,Math.floor((pixelSize||256)/grid));
+ const size=cell*grid;
+ const c=document.createElement('canvas'); c.width=size; c.height=size;
+ const g=c.getContext('2d'); g.clearRect(0,0,size,size);
+ for(const px of normalizeTextureCells(cells, grid)){
+   g.fillStyle=normalizeHexColor(px.color);
+   g.fillRect(px.x*cell, px.y*cell, cell, cell);
+ }
+ return c;
+}
+function makeSurfaceTextureMat(grid,cells){
+ const norm=normalizeTextureCells(cells, grid);
+ const sig=(grid||64)+'|'+norm.map(c=>c.x+','+c.y+','+c.color).join(';');
+ if(surfaceTextureMats.has(sig)) return surfaceTextureMats.get(sig);
+ const canvas=makeCanvasFromTextureCells(grid,norm,256);
+ const tex=new pc.Texture(app.graphicsDevice,{mipmaps:false});
+ tex.minFilter=pc.FILTER_NEAREST; tex.magFilter=pc.FILTER_NEAREST; tex.addressU=pc.ADDRESS_CLAMP_TO_EDGE; tex.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+ tex.setSource(canvas);
+ const mat=new pc.StandardMaterial();
+ mat.diffuse=new pc.Color(1,1,1);
+ mat.diffuseMap=tex;
+ // alpha付きcanvasをそのまま表面デカールにする。空タイルは透明、描いたタイルだけ表示。
+ mat.opacityMap=tex;
+ mat.opacity=1;
+ mat.blendType=pc.BLEND_NORMAL;
+ mat.alphaTest=0.03;
+ mat.emissive=new pc.Color(.015,.015,.015);
+ mat.cull=pc.CULLFACE_NONE;
+ mat.depthWrite=false;
+ mat.update();
+ surfaceTextureMats.set(sig,mat);
+ return mat;
+}
+function faceFromCurrentView(){
+ const d=forwardVec();
+ const ax=Math.abs(d.x), ay=Math.abs(d.y), az=Math.abs(d.z);
+ if(ay>ax && ay>az) return d.y<0?'py':'ny';
+ if(ax>az) return d.x>0?'nx':'px';
+ return d.z>0?'nz':'pz';
+}
+function decalLocalTransform(decal,s){
+ const p=objectCellLocal(decal.x,decal.y,decal.z,s);
+ const thin=Math.max(.003,s*.012);
+ const over=s*1.018;
+ const off=s*.515 + thin*.55;
+ let pos=new pc.Vec3(p.x,p.y,p.z), scale=new pc.Vec3(over,over,thin);
+ switch(decal.face){
+   case 'px': pos.x+=off; scale.set(thin,over,over); break;
+   case 'nx': pos.x-=off; scale.set(thin,over,over); break;
+   case 'py': pos.y+=off; scale.set(over,thin,over); break;
+   case 'ny': pos.y-=off; scale.set(over,thin,over); break;
+   case 'pz': pos.z+=off; scale.set(over,over,thin); break;
+   case 'nz': pos.z-=off; scale.set(over,over,thin); break;
+ }
+ return {pos,scale};
+}
+function addSurfaceDecalEntity(parent,decal,s,name){
+ const d=normalizeSurfaceDecal(decal); if(!d||!parent) return null;
+ const e=new pc.Entity(name||'obj_surface_texture');
+ e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ e.render.material=makeSurfaceTextureMat(d.grid,d.cells);
+ const t=decalLocalTransform(d,s);
+ e.setLocalScale(t.scale.x,t.scale.y,t.scale.z);
+ e.setLocalPosition(t.pos.x,t.pos.y,t.pos.z);
+ e.enabled=true;
+ e.data={customSurfaceDecal:true,customObjectCell:false,face:d.face,textureId:d.textureId,grid:d.grid};
+ parent.addChild(e);
+ return e;
+}
+function rebuildObjectBuilderDecals(){
+ if(!objBuildRoot) return;
+ for(const e of objBuildDecalEntities.values()){try{e.destroy();}catch{}}
+ objBuildDecalEntities.clear();
+ const s=currentObjScale();
+ for(let i=0;i<objSurfaceDecals.length;i++){
+   const e=addSurfaceDecalEntity(objBuildRoot,objSurfaceDecals[i],s,'builder_surface_texture');
+   if(e) objBuildDecalEntities.set(String(i),e);
+ }
+}
+const __surfaceRebuildObjectBuildEntities = rebuildObjectBuildEntities;
+rebuildObjectBuildEntities = function(){
+ __surfaceRebuildObjectBuildEntities();
+ rebuildObjectBuilderDecals();
+};
+
+const __surfaceAddObjectBuilderCellEntity = addObjectBuilderCellEntity;
+addObjectBuilderCellEntity = function(x,y,z,color){
+ const e=__surfaceAddObjectBuilderCellEntity(x,y,z,color);
+ // セル再作成後も、そのセルの表面デカールがあれば貼り直す
+ rebuildObjectBuilderDecals();
+ return e;
+};
+const __surfaceRemoveObjectBuilderCellEntity = removeObjectBuilderCellEntity;
+removeObjectBuilderCellEntity = function(key){
+ __surfaceRemoveObjectBuilderCellEntity(key);
+ const [x,y,z]=String(key).split(',').map(Number);
+ objSurfaceDecals=objSurfaceDecals.filter(d=>!(d.x===x&&d.y===y&&d.z===z));
+ rebuildObjectBuilderDecals();
+};
+
+const __surfaceBasePlaceCustomObject2 = placeCustomObject;
+placeCustomObject = function(def,x,y,z,yaw,instanceKey){
+ def=validateObjectDef(def); if(!def) return null;
+ const root=__surfaceBasePlaceCustomObject2(def,x,y,z,yaw,instanceKey);
+ if(root && def.kind==='voxel3d' && Array.isArray(def.decals) && def.decals.length){
+   const s=def.scale||.10;
+   for(const d of def.decals){ addSurfaceDecalEntity(root,d,s,'obj_surface_texture'); }
+ }
+ return root;
+};
+
+function surfaceTextureFromSelected(){
+ const def=customObjectDefs.get(String(objPasteTextureId||''));
+ if(!def||def.kind!=='plane') return null;
+ const clean=validateObjectDef(def);
+ if(!clean||clean.kind!=='plane') return null;
+ return {textureId:clean.id, grid:clean.grid||64, cells:(clean.cells||[]).map(c=>({x:c.x,y:c.y,color:normalizeHexColor(c.color)}))};
+}
+function pasteSelectedPlaneTextureToBuilder(){
+ if(!state.editingObject){setMsg('立体エディタ中だけ貼付できる','bad');return;}
+ const tex=surfaceTextureFromSelected();
+ if(!tex){setMsg('貼る平面テクスチャを選べ','bad');return;}
+ const aim=objectBuilderAim(); const hit=aim&&aim.hit;
+ if(!hit || !objVoxels.has(hit.key)){setMsg('貼付先のブロック面を中央照準で狙え','bad');return;}
+ const face=faceFromCurrentView();
+ // 同じセル・同じ面は上書き。ブロック面に自動でぴったり全面貼付する。
+ objSurfaceDecals = objSurfaceDecals.filter(d=>!(d.x===hit.x&&d.y===hit.y&&d.z===hit.z&&d.face===face));
+ objSurfaceDecals.push({x:hit.x,y:hit.y,z:hit.z,face,textureId:tex.textureId,grid:tex.grid,cells:tex.cells});
+ rebuildObjectBuilderDecals();
+ setMsg('テクスチャ貼付: ブロック面に自動ぴったり / face '+face,'good');
+};
+
+const __surfaceLoadDefIntoEditor = loadDefIntoEditor;
+loadDefIntoEditor = function(def){
+ objSurfaceDecals=[];
+ const ok=__surfaceLoadDefIntoEditor(def);
+ const clean=validateObjectDef(def);
+ if(ok && clean && Array.isArray(clean.decals)) objSurfaceDecals=clean.decals.map(d=>Object.assign({},d));
+ rebuildObjectBuilderDecals();
+ return ok;
+};
+const __surfaceStartNewObjectEditor = startNewObjectEditor;
+startNewObjectEditor = function(){ objSurfaceDecals=[]; __surfaceStartNewObjectEditor(); rebuildObjectBuilderDecals(); };
+const __surfaceCloseObjectEditor = closeObjectEditor;
+closeObjectEditor = function(){ objSurfaceDecals=[]; __surfaceCloseObjectEditor(); };
+
+finishObjectEditor = function(){
+ const cells=compactObjectCells();
+ if(!cells.length){setObjStatus('最低1ブロックは配置しろ');return;}
+ const scale=currentObjScale();
+ const old=objEditingId?customObjectDefs.get(objEditingId):null;
+ const id=objEditingId || ('uobj-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36));
+ const decals=objSurfaceDecals.map(d=>normalizeSurfaceDecal(d)).filter(Boolean);
+ const def={id,name:(old&&old.name)||('OBJ-'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'})),kind:'voxel3d',grid:OBJECT_GRID,scale,cells,decals,createdAt:(old&&old.createdAt)||Date.now(),updatedAt:Date.now()};
+ registerCustomObjectDef(def,objEditingId?'localUpdate':'localCreate');
+ objEditingId=null;
+ objSurfaceDecals=[];
+ destroyObjectBuildRoot();
+ state.editingObject=false;
+ document.body.classList.remove('objEditing');
+ const el=$('objectEditor'); if(el)el.style.display='none';
+ leaveObjectEditorWorld({def});
+ renderObjectManager();
+};
+
+const __surfaceEnsureTexturePastePanel = ensureTexturePastePanel;
+ensureTexturePastePanel = function(){
+ __surfaceEnsureTexturePastePanel();
+ const row=$('objTexturePastePanel');
+ if(!row) return;
+ const scale=$('objPasteScale'), scaleTxt=$('objPasteScaleText');
+ if(scale) scale.style.display='none';
+ if(scaleTxt) scaleTxt.textContent='自動ぴったり';
+ const btn=$('objPasteTextureBtn'); if(btn){btn.textContent='面にぴったり貼付'; btn.onclick=pasteSelectedPlaneTextureToBuilder;}
+ const spans=row.querySelectorAll('span');
+ spans.forEach(sp=>{ if(sp.textContent==='貼付倍率') sp.textContent='貼付: 面に自動フィット'; });
+};
+
+
 bindObjectEditorUi();
 
 function setMsg(t,cls){const m=$('msg');m.textContent=t;m.className=cls||'gold';state.lastMsg=t;}
