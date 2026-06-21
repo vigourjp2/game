@@ -59,6 +59,13 @@
   body.objEditing #objScaleText{font-size:11px!important}
   body.objEditing #targetBox{top:calc(50% + 34px)!important;background:rgba(0,0,0,.48)!important}
   @media (pointer:coarse),(max-width:900px){body.objEditing #moveStick{bottom:78px!important;left:14px!important;z-index:98!important} body.objEditing #lookStick{bottom:78px!important;right:14px!important;z-index:98!important} body.objEditing #objectEditor{left:8px!important;top:68px!important;width:210px!important} body.objEditing #objectEditor .objCard{width:210px!important;max-height:38vh!important} #objEditBar{font-size:11px;padding:7px 9px} #objEditorQuickActions{top:104px!important;right:8px!important;gap:6px!important}.objQuickBtn{width:72px;height:48px;font-size:11px}}
+
+  /* Blueprint-style OBJ manager */
+  #objectManager{position:fixed;inset:0;z-index:120;display:none;background:rgba(2,6,23,.88);color:#fff;padding:10px;box-sizing:border-box;overflow:auto;touch-action:auto}
+  #objectManager .bpPanel{max-width:920px;margin:0 auto;background:rgba(15,23,42,.96);border:1px solid rgba(255,255,255,.22);border-radius:18px;padding:12px;box-shadow:0 18px 60px rgba(0,0,0,.45)}
+  #objectManager h2{margin:0 0 6px;font-size:20px}.bpHint{font-size:12px;color:#bfdbfe;line-height:1.45;margin-bottom:8px}.bpTop{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.bpTop button,.bpCard button{border:0;border-radius:10px;padding:8px 10px;font-weight:900;color:#fff;background:#334155}.bpTop .goodBtn{background:#22c55e}.bpTop .badBtn,.bpCard .badBtn{background:#ef4444}.bpGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:10px}.bpCard{background:rgba(30,41,59,.86);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:8px}.bpThumb{width:100%;aspect-ratio:1.2/1;background:#020617;border-radius:10px;border:1px solid rgba(255,255,255,.18);object-fit:contain;image-rendering:pixelated}.bpName{font-size:13px;font-weight:900;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bpMeta{font-size:11px;color:#cbd5e1;margin:3px 0 6px}.bpBtns{display:grid;grid-template-columns:1fr 1fr;gap:5px}.bpBtns button{font-size:11px;padding:7px 5px}.bpEmpty{padding:18px;text-align:center;color:#bfdbfe;border:1px dashed rgba(255,255,255,.22);border-radius:14px}
+  @media (pointer:coarse),(max-width:900px){#objectManager{padding:7px} #objectManager .bpPanel{padding:9px;border-radius:15px} .bpGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.bpTop button{padding:9px 10px}.bpCard{padding:7px}.bpBtns{grid-template-columns:1fr}.bpBtns button{font-size:11px;padding:8px 4px}}
+
 </style>
 </head>
 <body>
@@ -94,7 +101,21 @@
   <button class="objQuickBtn down" id="objFlyDown">OBJ<br>下降</button>
 </div>
 
-<button id="objectBtn">OBJ<br>作成</button>
+<button id="objectBtn">OBJ<br>管理</button>
+
+<div id="objectManager">
+  <div class="bpPanel">
+    <h2>OBJブループリント管理</h2>
+    <div class="bpHint">登録済みOBJを一覧管理します。新規作成・呼出・編集・削除ができます。完成したOBJはCloudflareに登録され、以降の世界ランダム生成候補になります。</div>
+    <div class="bpTop">
+      <button id="bpNewBtn" class="goodBtn">新規OBJ作成</button>
+      <button id="bpRefreshBtn">一覧更新</button>
+      <button id="bpCloseBtn">閉じる</button>
+      <button id="bpClearLocalBtn" class="badBtn">端末キャッシュ全消し</button>
+    </div>
+    <div id="bpList" class="bpGrid"></div>
+  </div>
+</div>
 <div id="objectEditor">
   <div class="objCard">
     <h2>3Dオブジェクトビルダー</h2>
@@ -834,12 +855,32 @@ function loadCustomObjectsLocal(){
 function registerCustomObjectDef(def, source){
  const clean=validateObjectDef(def);
  if(!clean) return false;
- if(customObjectDefs.has(clean.id)) return false;
+ const existed=customObjectDefs.has(clean.id);
  customObjectDefs.set(clean.id, clean);
+ if(existed){removeCustomObjectInstancesByDef(clean.id);}
  saveCustomObjectsLocal();
- setObjStatus('登録済み: '+customObjectDefs.size+'個 / '+(clean.kind==='plane'?'平面':'立体'));
- if(source==='localCreate') sendMultiplayer({type:'objectRegister', object:clean});
+ setObjStatus((existed?'更新済み: ':'登録済み: ')+customObjectDefs.size+'個 / '+(clean.kind==='plane'?'平面':'立体'));
+ if(source==='localCreate'||source==='localUpdate') sendMultiplayer({type:'objectRegister', object:clean});
+ renderObjectManager();
  return true;
+}
+function removeCustomObjectInstancesByDef(defId){
+ for(const [key,e] of Array.from(customObjectEntities)){
+   if(!e || (e.data&&e.data.defId===defId) || key.indexOf(':'+defId)>=0 || key.indexOf(defId)>=0){
+     try{e&&e.destroy&&e.destroy();}catch{}
+     customObjectEntities.delete(key);
+   }
+ }
+}
+function deleteCustomObjectDef(id, broadcast){
+ id=String(id||''); if(!id) return false;
+ const existed=customObjectDefs.delete(id);
+ removeCustomObjectInstancesByDef(id);
+ saveCustomObjectsLocal();
+ renderObjectManager();
+ setObjHud();
+ if(existed && broadcast) sendMultiplayer({type:'objectDelete', objectId:id});
+ return existed;
 }
 function addCustomBox(parent, mat, lx, ly, lz, sx, sy, sz){
  const e=new pc.Entity('obj_cell');
@@ -924,11 +965,93 @@ function updateCustomObjectRuntime(dt){
 }
 function broadcastObjectCatalog(){ if(customObjectDefs.size) sendMultiplayer({type:'objectCatalog', objects:Array.from(customObjectDefs.values()).slice(-100)}); }
 function handleObjectCatalogMessage(msg){
- if(!msg) return false;
+ if(!msg||typeof msg!=='object') return false;
  if(msg.type==='objectCatalogReq'){broadcastObjectCatalog();return true;}
+ if(msg.type==='objectDelete'){deleteCustomObjectDef(msg.objectId||msg.id,false);return true;}
  if(msg.type==='objectRegister'){registerCustomObjectDef(msg.object||msg.def||msg,'remote');return true;}
- if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));return true;}
+ if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));renderObjectManager();return true;}
  return false;
+}
+
+// ===== Blueprint-like OBJ manager =====
+let objEditingId = null;
+function objectThumbDataUrl(def){
+ def=validateObjectDef(def); if(!def) return '';
+ const c=document.createElement('canvas'); c.width=160; c.height=120;
+ const g=c.getContext('2d');
+ g.fillStyle='#020617'; g.fillRect(0,0,c.width,c.height);
+ g.strokeStyle='rgba(255,255,255,.16)'; g.strokeRect(0.5,0.5,c.width-1,c.height-1);
+ const cells=def.cells.slice(0,900);
+ const cx=78, cy=72;
+ const size=def.kind==='plane'?4.6:4.2;
+ cells.sort((a,b)=>(((a.x||0)+(a.z||0)+(a.y||0))-((b.x||0)+(b.z||0)+(b.y||0))));
+ for(const cell of cells){
+   const x=Number(cell.x)||0, y=Number(cell.y)||0, z=Number(cell.z)||0;
+   const sx=(x-z)*size+cx;
+   const sy=(x+z)*size*.45 - y*size*.78 + cy;
+   g.fillStyle=normalizeHexColor(cell.color||'#22c55e');
+   g.globalAlpha=.96;
+   g.fillRect(sx,sy,size*1.05,size*1.05);
+ }
+ g.globalAlpha=1;
+ g.fillStyle='#bfdbfe'; g.font='10px system-ui';
+ g.fillText((def.kind==='plane'?'平面':'立体')+' '+def.cells.length+' cells',8,14);
+ return c.toDataURL('image/png');
+}
+function openObjectManager(){
+ const m=$('objectManager'); if(!m) return;
+ renderObjectManager();
+ m.style.display='block';
+ sendMultiplayer({type:'objectCatalogReq'});
+}
+function closeObjectManager(){const m=$('objectManager'); if(m)m.style.display='none';}
+function renderObjectManager(){
+ const list=$('bpList'); if(!list) return;
+ const defs=Array.from(customObjectDefs.values()).sort((a,b)=>(Number(b.createdAt)||0)-(Number(a.createdAt)||0));
+ if(!defs.length){list.innerHTML='<div class="bpEmpty">まだ登録OBJなし。<br>「新規OBJ作成」で1個ずつ登録できる。</div>';setObjHud();return;}
+ list.innerHTML='';
+ for(const def of defs){
+   const card=document.createElement('div'); card.className='bpCard';
+   const img=document.createElement('img'); img.className='bpThumb'; img.src=objectThumbDataUrl(def); img.alt=def.name||'object';
+   const name=document.createElement('div'); name.className='bpName'; name.textContent=def.name||def.id;
+   const meta=document.createElement('div'); meta.className='bpMeta'; meta.textContent=(def.kind==='plane'?'平面':'立体')+' / '+def.cells.length+' cells / size '+Number(def.scale||0).toFixed(2);
+   const btns=document.createElement('div'); btns.className='bpBtns';
+   const spawn=document.createElement('button'); spawn.textContent='呼出'; spawn.onclick=()=>{placeObjectInFront(def);closeObjectManager();setMsg('OBJ呼出: '+(def.name||def.id),'good');};
+   const edit=document.createElement('button'); edit.textContent='編集'; edit.onclick=()=>{closeObjectManager();startEditObjectDef(def.id,false);};
+   const dup=document.createElement('button'); dup.textContent='複製編集'; dup.onclick=()=>{closeObjectManager();startEditObjectDef(def.id,true);};
+   const del=document.createElement('button'); del.textContent='削除'; del.className='badBtn'; del.onclick=()=>{if(confirm('このOBJを削除する？\n'+(def.name||def.id))){deleteCustomObjectDef(def.id,true);}};
+   btns.append(spawn,edit,dup,del);
+   card.append(img,name,meta,btns);
+   list.appendChild(card);
+ }
+ setObjHud();
+}
+function resetEditorBuffers(){objVoxels.clear();objPlanePixels.clear();objLayer=0;objPickNext=false;}
+function startNewObjectEditor(){
+ objEditingId=null;
+ resetEditorBuffers();
+ const sc=$('objScale'); if(sc){sc.value='0.10'; const t=$('objScaleText'); if(t)t.textContent='0.10';}
+ openObjectEditor();
+}
+function loadDefIntoEditor(def){
+ def=validateObjectDef(def); if(!def) return false;
+ resetEditorBuffers();
+ setObjMode(def.kind==='plane'?'plane':'voxel3d');
+ const sc=$('objScale'); if(sc){sc.value=String(Math.max(.03,Math.min(.7,Number(def.scale)||.10))); const t=$('objScaleText'); if(t)t.textContent=Number(sc.value).toFixed(2);}
+ if(def.kind==='plane'){
+   for(const c of def.cells){objPlanePixels.set(objKey2(c.x,c.y),normalizeHexColor(c.color));}
+ }else{
+   for(const c of def.cells){objVoxels.set(objKey3(c.x,c.y,c.z),normalizeHexColor(c.color));}
+ }
+ return true;
+}
+function startEditObjectDef(id, duplicate){
+ const src=customObjectDefs.get(String(id));
+ if(!src){setMsg('編集対象OBJが見つからない','bad');return;}
+ loadDefIntoEditor(src);
+ objEditingId=duplicate?null:src.id;
+ openObjectEditor();
+ setObjStatus((duplicate?'複製編集':'既存OBJ編集')+': '+(src.name||src.id));
 }
 function drawObjectPalette(){
  const c=$('objPalette'); if(!c) return; const g=c.getContext('2d'); const w=c.width,h=c.height;
@@ -1007,342 +1130,28 @@ function openObjectEditor(){ state.editingObject=true; const el=$('objectEditor'
 function closeObjectEditor(){ state.editingObject=false; const el=$('objectEditor'); if(el)el.style.display='none'; }
 function finishObjectEditor(){
  const cells=compactObjectCells();
- if(!cells.length){setObjStatus('最低1マスは塗れ');return;}
- const scale=Number($('objScale')&&$('objScale').value)||.55;
- const def={id:'uobj-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36),name:'user-object',kind:objMode,grid:OBJECT_GRID,scale,cells,createdAt:Date.now()};
- registerCustomObjectDef(def,'localCreate'); placeObjectInFront(def); closeObjectEditor(); setMsg((objMode==='plane'?'平面':'立体')+'オブジェクト登録・目の前に出現','good');
-}
-function bindObjectEditorUi(){
- setObjHud(); drawObjectPalette(); redrawObjCanvas();
- const ob=$('objectBtn'); if(ob){ob.style.display='block';ob.onclick=openObjectEditor;}
- const oc=$('objCanvas'); if(oc){oc.addEventListener('pointerdown',e=>{objPointerDown=true;oc.setPointerCapture(e.pointerId);paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointermove',e=>{if(objPointerDown&&objTool!=='pick')paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointerup',()=>{objPointerDown=false;});oc.addEventListener('pointercancel',()=>{objPointerDown=false;});}
- const pal=$('objPalette'); if(pal){pal.addEventListener('pointerdown',e=>{const r=pal.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)/r.width*pal.width),y=Math.floor((e.clientY-r.top)/r.height*pal.height);const d=pal.getContext('2d').getImageData(Math.max(0,Math.min(pal.width-1,x)),Math.max(0,Math.min(pal.height-1,y)),1,1).data;setObjColor('#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''));setObjTool('paint');});}
- const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
- const sc=$('objScale'); if(sc)sc.oninput=()=>{const t=$('objScaleText');if(t)t.textContent=Number(sc.value).toFixed(2);};
- const ly=$('objLayer'); if(ly)ly.oninput=()=>{objLayer=Math.trunc(Number(ly.value)||0);const t=$('objLayerText');if(t)t.textContent=String(objLayer);redrawObjCanvas();};
- const vb=$('objVoxelBtn'); if(vb)vb.onclick=()=>setObjMode('voxel3d'); const pl=$('objPlaneBtn'); if(pl)pl.onclick=()=>setObjMode('plane');
- const pb=$('objPaintBtn'); if(pb)pb.onclick=()=>setObjTool('paint'); const eb=$('objEraseBtn'); if(eb)eb.onclick=()=>setObjTool('erase'); const pk=$('objPickBtn'); if(pk)pk.onclick=()=>setObjTool('pick');
- const fl=$('objFillLayerBtn'); if(fl)fl.onclick=fillCurrentLayer; const cll=$('objClearLayerBtn'); if(cll)cll.onclick=clearCurrentLayer; const caa=$('objClearBtn'); if(caa)caa.onclick=()=>{objVoxels.clear();objPlanePixels.clear();redrawObjCanvas();};
- const dn=$('objDoneBtn'); if(dn)dn.onclick=finishObjectEditor; const ca=$('objCancelBtn'); if(ca)ca.onclick=closeObjectEditor;
- window.addEventListener('keydown',e=>{if(e.key==='o'||e.key==='O')openObjectEditor(); if(e.key==='Escape'&&state.editingObject)closeObjectEditor();});
- loadCustomObjectsLocal(); setObjMode('voxel3d');
-}
-
-
-
-// ===== Dedicated object editor world / free-fly build mode =====
-const OBJECT_EDITOR_ORIGIN = new pc.Vec3(9000, 120, 9000);
-let objectEditorReturnPose = null;
-let objectEditorReturnPlace = null;
-let objectEditorBuildPos = null;
-let objectEditorFlyDown = false;
-let objectEditorOrbitDir = 0;
-function clonePlayerPose(){return {x:player.x,y:player.y,z:player.z,vx:player.vx,vy:player.vy,vz:player.vz,yaw:player.yaw,pitch:player.pitch,onGround:player.onGround};}
-function restorePlayerPose(pose){if(!pose)return;player.x=pose.x;player.y=pose.y;player.z=pose.z;player.vx=pose.vx||0;player.vy=pose.vy||0;player.vz=pose.vz||0;player.yaw=pose.yaw||0;player.pitch=pose.pitch||0;player.onGround=!!pose.onGround;}
-function currentEditorEyeHeight(){const s=currentObjScale();return Math.max(0.12,Math.min(1.48,s*9.5));}
-function currentEditorFlySpeed(){const s=currentObjScale();return Math.max(0.35,Math.min(6.5,s*18));}
-function enterObjectEditorWorld(){
- objectEditorReturnPose=clonePlayerPose();
- const dir=forwardVec();
- const px=player.x+dir.x*3.2, pz=player.z+dir.z*3.2;
- objectEditorReturnPlace={x:px,y:terrainHeight(px,pz)+1,z:pz,yaw:player.yaw};
- objectEditorBuildPos=OBJECT_EDITOR_ORIGIN.clone();
- player.x=OBJECT_EDITOR_ORIGIN.x;
- player.y=OBJECT_EDITOR_ORIGIN.y+currentObjScale()*8+0.9;
- player.z=OBJECT_EDITOR_ORIGIN.z-currentObjScale()*18-1.5;
- player.vx=player.vy=player.vz=0;
- player.yaw=0;
- player.pitch=-0.10;
- player.onGround=false;
- lastChunkX=999999; lastChunkZ=999999;
-}
-function leaveObjectEditorWorld(placeResult){
- const place=objectEditorReturnPlace;
- restorePlayerPose(objectEditorReturnPose);
- objectEditorReturnPose=null;
- objectEditorReturnPlace=null;
- objectEditorBuildPos=null;
- objectEditorFlyDown=false;
- objectEditorOrbitDir=0;
- if(placeResult&&place&&placeResult.def){
-   placeCustomObject(placeResult.def,place.x,place.y,place.z,place.yaw,'front-'+placeResult.def.id+'-'+Date.now());
- }
- ensureChunksAroundPlayer(true);
-}
-function orbitAroundObjectEditor(dir,dt){
- if(!dir||!objBuildRoot) return false;
- const s=currentObjScale();
- const center=objBuildRoot.getPosition().clone();
- center.y += Math.max(s*2, OBJECT_GRID*s*.28);
- let rx=player.x-center.x, rz=player.z-center.z;
- let radius=Math.hypot(rx,rz);
- if(radius < Math.max(.55, s*12)){ radius=Math.max(.55, s*18); rx=0; rz=-radius; }
- const ang=Math.atan2(rz,rx)+dir*dt*1.75;
- player.x=center.x+Math.cos(ang)*radius;
- player.z=center.z+Math.sin(ang)*radius;
- const eye=currentEditorEyeHeight();
- const dx=center.x-player.x, dy=center.y-(player.y+eye), dz=center.z-player.z;
- const hd=Math.max(.001,Math.hypot(dx,dz));
- player.yaw=Math.atan2(dx,dz);
- player.pitch=Math.max(-1.35,Math.min(1.35,Math.atan2(dy,hd)));
- player.vx=player.vy=player.vz=0;
- return true;
-}
-function updateObjectEditorFlight(dt){
- const kb=app.keyboard;
- let mx=0,my=0;
- if(kb.isPressed(pc.KEY_W)||kb.isPressed(pc.KEY_UP))my+=1;
- if(kb.isPressed(pc.KEY_S)||kb.isPressed(pc.KEY_DOWN))my-=1;
- if(kb.isPressed(pc.KEY_D)||kb.isPressed(pc.KEY_RIGHT))mx-=1;
- if(kb.isPressed(pc.KEY_A)||kb.isPressed(pc.KEY_LEFT))mx+=1;
- input.mx=mx+input.lx; input.my=my+input.ly;
- if(objectEditorOrbitDir){
-   orbitAroundObjectEditor(objectEditorOrbitDir,dt);
-   input.mx=0; input.my=0; input.lookX=0; input.lookY=0;
- }
- smooth.mx+=(Math.max(-1,Math.min(1,input.mx))-smooth.mx)*Math.min(1,dt*12);
- smooth.my+=(Math.max(-1,Math.min(1,input.my))-smooth.my)*Math.min(1,dt*12);
- smooth.lookX+=(input.lookX-smooth.lookX)*Math.min(1,dt*14);
- smooth.lookY+=(input.lookY-smooth.lookY)*Math.min(1,dt*14);
- if(state.mobile){player.yaw-=smooth.lookX*dt*2.9;player.pitch+=smooth.lookY*dt*2.1;player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch));}
- const yaw=player.yaw, fwdX=Math.sin(yaw), fwdZ=Math.cos(yaw), rightX=Math.cos(yaw), rightZ=-Math.sin(yaw);
- const sp=currentEditorFlySpeed();
- player.x+=(fwdX*smooth.my+rightX*smooth.mx)*sp*dt;
- player.z+=(fwdZ*smooth.my+rightZ*smooth.mx)*sp*dt;
- let up=0;
- if(input.jump||kb.isPressed(pc.KEY_SPACE))up+=1;
- if(objectEditorFlyDown||kb.isPressed(pc.KEY_SHIFT)||kb.isPressed(pc.KEY_Q))up-=1;
- player.y+=up*sp*dt;
- input.jump=false;
- aimCamera();
- const count=objVoxels.size;
- $('pos').textContent='OBJ編集世界 '+player.x.toFixed(2)+','+player.y.toFixed(2)+','+player.z.toFixed(2)+' / 目線 '+currentEditorEyeHeight().toFixed(2)+' / 速度 '+sp.toFixed(2);
- $('chunks').textContent='OBJ編集専用 / '+count+' cells / サイズ '+currentObjScale().toFixed(2);
-}
-
-// ===== Field-style small voxel object builder =====
-let objBuildRoot=null;
-let objBuildCursor=null;
-let objBuildFloor=null;
-let objBuildAxes=[];
-let objBuildCellEntities=new Map();
-let objBuildLastAim=null;
-let objPickNext=false;
-let objBuilderStartedAt=0;
-let objCursorMat=null;
-
-function currentObjScale(){
- const sc=$('objScale');
- return Math.max(.03,Math.min(.7,Number(sc&&sc.value)||.10));
-}
-function objectCellLocal(x,y,z,s){
- return new pc.Vec3((x-(OBJECT_GRID-1)/2)*s,(y+.5)*s,(z-(OBJECT_GRID-1)/2)*s);
-}
-function ensureObjCursorMat(){
- if(objCursorMat) return objCursorMat;
- objCursorMat=new pc.StandardMaterial();
- objCursorMat.diffuse=new pc.Color(1,1,1);
- objCursorMat.emissive=new pc.Color(.18,.18,.18);
- objCursorMat.opacity=.36;
- objCursorMat.blendType=pc.BLEND_NORMAL;
- objCursorMat.update();
- return objCursorMat;
-}
-
-function makeBuilderMat(hex, opacity){
- const m=new pc.StandardMaterial();
- const c=normalizeHexColor(hex);
- const r=parseInt(c.slice(1,3),16)/255,g=parseInt(c.slice(3,5),16)/255,b=parseInt(c.slice(5,7),16)/255;
- m.diffuse=new pc.Color(r,g,b);
- m.emissive=new pc.Color(r*.06,g*.06,b*.06);
- if(opacity!==undefined){m.opacity=opacity;m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}
- m.update();
- return m;
-}
-function makeBuilderBox(name,scale,pos,mat){
- const e=new pc.Entity(name);
- e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
- e.render.material=mat;
- e.setLocalScale(scale.x,scale.y,scale.z);
- e.setLocalPosition(pos.x,pos.y,pos.z);
- objBuildRoot.addChild(e);
- return e;
-}
-function ensureObjectEditorScaffold(){
- if(!objBuildRoot) return;
- const s=currentObjScale();
- const total=OBJECT_GRID*s;
- if(!objBuildFloor){
-   objBuildFloor=makeBuilderBox('obj_builder_floor',new pc.Vec3(total,.018,total),new pc.Vec3(0,-.018,0),makeBuilderMat('#475569',.42));
-   objBuildAxes=[];
-   objBuildAxes.push(makeBuilderBox('obj_axis_x',new pc.Vec3(total,.035,.035),new pc.Vec3(0,.012,-total/2-.055),makeBuilderMat('#ef4444',.82)));
-   objBuildAxes.push(makeBuilderBox('obj_axis_z',new pc.Vec3(.035,.035,total),new pc.Vec3(-total/2-.055,.012,0),makeBuilderMat('#3b82f6',.82)));
-   objBuildAxes.push(makeBuilderBox('obj_axis_y',new pc.Vec3(.05,total,.05),new pc.Vec3(total/2+.08,total/2, total/2+.08),makeBuilderMat('#22c55e',.72)));
-   // 4隅の境界柱。空間の範囲を見失わないためのガイド
-   const guideMat=makeBuilderMat('#facc15',.55);
-   for(const sx of [-1,1]) for(const sz of [-1,1]){
-     objBuildAxes.push(makeBuilderBox('obj_corner_guide',new pc.Vec3(.035,total,.035),new pc.Vec3(sx*total/2, total/2, sz*total/2),guideMat));
-   }
- } else {
-   objBuildFloor.setLocalScale(total,.018,total);
-   objBuildFloor.setLocalPosition(0,-.018,0);
-   if(objBuildAxes[0]){objBuildAxes[0].setLocalScale(total,.035,.035);objBuildAxes[0].setLocalPosition(0,.012,-total/2-.055);}
-   if(objBuildAxes[1]){objBuildAxes[1].setLocalScale(.035,.035,total);objBuildAxes[1].setLocalPosition(-total/2-.055,.012,0);}
-   if(objBuildAxes[2]){objBuildAxes[2].setLocalScale(.05,total,.05);objBuildAxes[2].setLocalPosition(total/2+.08,total/2,total/2+.08);}
-   let i=3; for(const sx of [-1,1]) for(const sz of [-1,1]){ if(objBuildAxes[i]){objBuildAxes[i].setLocalScale(.035,total,.035);objBuildAxes[i].setLocalPosition(sx*total/2,total/2,sz*total/2);} i++; }
- }
-}
-function destroyObjectBuildRoot(){
- if(objBuildRoot){try{objBuildRoot.destroy();}catch{}}
- objBuildRoot=null; objBuildCursor=null; objBuildFloor=null; objBuildAxes=[]; objBuildCellEntities=new Map(); objBuildLastAim=null;
-}
-function ensureObjectBuildRoot(){
- if(objBuildRoot) return;
- objBuilderStartedAt=Date.now();
- objBuildRoot=new pc.Entity('object_builder_root');
- const buildPos = objectEditorBuildPos || (OBJECT_EDITOR_ORIGIN ? OBJECT_EDITOR_ORIGIN.clone() : new pc.Vec3(player.x,player.y,player.z));
- objBuildRoot.setPosition(buildPos.x, buildPos.y, buildPos.z);
- app.root.addChild(objBuildRoot);
- objBuildCursor=new pc.Entity('object_builder_cursor');
- objBuildCursor.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
- objBuildCursor.render.material=ensureObjCursorMat();
- objBuildRoot.addChild(objBuildCursor);
- ensureObjectEditorScaffold();
- rebuildObjectBuildEntities();
- setObjStatus('OBJ編集世界。自由飛行で近づいて、照準にPLACEで配置 / BREAKで削除。確定で元フィールドへ戻る。');
-}
-function addObjectBuilderCellEntity(x,y,z,color){
- if(!objBuildRoot) return;
- const key=objKey3(x,y,z);
- const old=objBuildCellEntities.get(key); if(old){try{old.destroy();}catch{}}
- const s=currentObjScale();
- const e=new pc.Entity('builder_cell');
- e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
- e.render.material=ensureCustomMat(color);
- e.setLocalScale(s*1.045,s*1.045,s*1.045); // 微妙に重ねて隙間を殺す
- e.setLocalPosition(objectCellLocal(x,y,z,s));
- objBuildRoot.addChild(e);
- objBuildCellEntities.set(key,e);
-}
-function removeObjectBuilderCellEntity(key){
- const e=objBuildCellEntities.get(key);
- if(e){try{e.destroy();}catch{}}
- objBuildCellEntities.delete(key);
-}
-function rebuildObjectBuildEntities(){
- if(!objBuildRoot) return;
- ensureObjectEditorScaffold();
- for(const e of objBuildCellEntities.values()){try{e.destroy();}catch{}}
- objBuildCellEntities.clear();
- if(objBuildCursor){objBuildCursor.setLocalScale(currentObjScale()*1.06,currentObjScale()*1.06,currentObjScale()*1.06);}
- for(const [key,color] of objVoxels){const a=key.split(',').map(Number);addObjectBuilderCellEntity(a[0],a[1],a[2],color);}
-}
-function insideObjectCell(x,y,z){return x>=0&&x<OBJECT_GRID&&y>=0&&y<OBJECT_GRID&&z>=0&&z<OBJECT_GRID;}
-function objectBuilderAim(){
- ensureObjectBuildRoot();
- const s=currentObjScale();
- const rootPos=objBuildRoot.getPosition();
- const dir=forwardVec();
- let lastEmpty=null, firstInside=null;
- const step=Math.max(.025,s*.38);
- for(let d=.15; d<9; d+=step){
-   const eye=currentEditorEyeHeight();
-   const wx=player.x+dir.x*d, wy=player.y+eye+dir.y*d, wz=player.z+dir.z*d;
-   const lx=wx-rootPos.x, ly=wy-rootPos.y, lz=wz-rootPos.z;
-   const x=Math.floor(lx/s+OBJECT_GRID/2), y=Math.floor(ly/s), z=Math.floor(lz/s+OBJECT_GRID/2);
-   if(!insideObjectCell(x,y,z)) continue;
-   const cell={x,y,z,key:objKey3(x,y,z)};
-   if(!firstInside) firstInside=cell;
-   if(objVoxels.has(cell.key)) return {hit:cell, place:lastEmpty||cell};
-   lastEmpty=cell;
- }
- // 空の状態や狙いが外れた時は、カメラ前方に一番作りやすい中心セルへ置く
- const fallback = firstInside || lastEmpty || {x:Math.floor(OBJECT_GRID/2),y:0,z:Math.floor(OBJECT_GRID/2),key:objKey3(Math.floor(OBJECT_GRID/2),0,Math.floor(OBJECT_GRID/2))};
- return {hit:null, place:fallback};
-}
-function updateObjectBuilder(dt){
- if(!state.editingObject) return;
- ensureObjectBuildRoot();
- objBuildLastAim=objectBuilderAim();
- const target=(objBuildLastAim&& (objBuildLastAim.hit||objBuildLastAim.place));
- if(objBuildCursor&&target){
-   const s=currentObjScale();
-   objBuildCursor.enabled=true;
-   objBuildCursor.setLocalScale(s*1.07,s*1.07,s*1.07);
-   objBuildCursor.setLocalPosition(objectCellLocal(target.x,target.y,target.z,s));
- }
- const count=objVoxels.size;
- setObjEditBar('<b>OBJ編集世界</b> / '+count+' blocks / size '+currentObjScale().toFixed(2)+'<br><span class="info">床=作成範囲。回込←/→で裏側へ回る。左下移動・右下視点は塞がない</span>');
- $('targetBox').textContent=target?('OBJ照準 ['+target.x+','+target.y+','+target.z+'] / '+count+' blocks'):'OBJ照準なし';
- setObjStatus('OBJ作成中: '+count+'ブロック / PLACE配置 / BREAK削除 / 色 '+objPaintColor+' / サイズ '+currentObjScale().toFixed(2));
-}
-function objectBuilderPlace(){
- if(!state.editingObject) return false;
- ensureObjectBuildRoot();
- const aim=objectBuilderAim();
- const c=aim.place || aim.hit;
- if(!c||!insideObjectCell(c.x,c.y,c.z)) return true;
- if(objPickNext){
-   const col=objVoxels.get(c.key);
-   if(col) setObjColor(col);
-   objPickNext=false;
-   setObjStatus('スポイト: '+(col||'色なし'));
-   return true;
- }
- objVoxels.set(c.key,objPaintColor);
- addObjectBuilderCellEntity(c.x,c.y,c.z,objPaintColor);
- setMsg('OBJ配置: ['+c.x+','+c.y+','+c.z+']','good');
- return true;
-}
-function objectBuilderBreak(){
- if(!state.editingObject) return false;
- ensureObjectBuildRoot();
- const aim=objectBuilderAim();
- const c=aim.hit;
- if(c&&objVoxels.has(c.key)){
-   objVoxels.delete(c.key);
-   removeObjectBuilderCellEntity(c.key);
-   setMsg('OBJ削除: ['+c.x+','+c.y+','+c.z+']','good');
- } else setMsg('削除対象OBJブロックなし','bad');
- return true;
-}
-// 旧レイヤー塗りエディタを、フィールド式ビルダーへ差し替え
-function openObjectEditor(){
- if(state.editingObject) return;
- state.editingObject=true;
- document.body.classList.add('objEditing');
- enterObjectEditorWorld();
- const el=$('objectEditor'); if(el)el.style.display='block';
- setObjMode('voxel3d');
- ensureObjectBuildRoot();
- setObjStatus('OBJ編集世界へ移動。自由飛行で作成。確定すると元フィールドに戻り、目の前に1個出現。');
- setObjEditBar('<b>OBJ編集世界</b> / 0 blocks / size '+currentObjScale().toFixed(2)+'<br><span class="info">床=作成範囲。回込←/→で後ろ側へ。中央照準にOBJ配置</span>');
- setMsg('OBJ編集世界へ移動','good');
-}
-function closeObjectEditor(){
- state.editingObject=false;
- document.body.classList.remove('objEditing');
- const el=$('objectEditor'); if(el)el.style.display='none';
- destroyObjectBuildRoot();
- leaveObjectEditorWorld(null);
- setMsg('OBJ作成をキャンセルして元フィールドへ復帰','info');
-}
-function finishObjectEditor(){
- const cells=compactObjectCells();
  if(!cells.length){setObjStatus('最低1ブロックは配置しろ');return;}
  const scale=currentObjScale();
- const def={id:'uobj-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36),name:'user-object',kind:'voxel3d',grid:OBJECT_GRID,scale,cells,createdAt:Date.now()};
- registerCustomObjectDef(def,'localCreate');
+ const old=objEditingId?customObjectDefs.get(objEditingId):null;
+ const id=objEditingId || ('uobj-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36));
+ const def={id,name:(old&&old.name)||('OBJ-'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'})),kind:'voxel3d',grid:OBJECT_GRID,scale,cells,createdAt:(old&&old.createdAt)||Date.now(),updatedAt:Date.now()};
+ registerCustomObjectDef(def,objEditingId?'localUpdate':'localCreate');
+ objEditingId=null;
  destroyObjectBuildRoot();
  state.editingObject=false;
  document.body.classList.remove('objEditing');
  const el=$('objectEditor'); if(el)el.style.display='none';
  leaveObjectEditorWorld({def});
- setMsg('立体オブジェクト登録・元フィールドの目の前に1個出現','good');
+ renderObjectManager();
+ setMsg('OBJを'+(old?'更新':'登録')+'・元フィールドの目の前に1個出現','good');
 }
 function bindObjectEditorUi(){
  setObjHud(); setObjColor(objPaintColor);
- const ob=$('objectBtn'); if(ob){ob.style.display='block';ob.onclick=openObjectEditor;}
+ const ob=$('objectBtn'); if(ob){ob.style.display='block';ob.onclick=openObjectManager;}
+ const bn=$('bpNewBtn'); if(bn)bn.onclick=()=>{closeObjectManager();startNewObjectEditor();};
+ const br=$('bpRefreshBtn'); if(br)br.onclick=()=>{sendMultiplayer({type:'objectCatalogReq'});renderObjectManager();};
+ const bc=$('bpCloseBtn'); if(bc)bc.onclick=closeObjectManager;
+ const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\nCloudflare側に残っているOBJは再接続で戻る可能性あり。')){localStorage.removeItem(OBJECT_STORAGE_KEY);customObjectDefs.clear();renderObjectManager();setObjHud();}};
  const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
  const sc=$('objScale'); if(sc)sc.oninput=()=>{const t=$('objScaleText');if(t)t.textContent=Number(sc.value).toFixed(2); if(state.editingObject){rebuildObjectBuildEntities(); setObjStatus('サイズ変更: 視点・移動感もサイズに合わせて調整');}};
  const vb=$('objVoxelBtn'); if(vb)vb.onclick=()=>setObjMode('voxel3d');
