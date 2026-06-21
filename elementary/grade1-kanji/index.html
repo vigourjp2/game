@@ -46,10 +46,18 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
 .kvgNum{font:bold 5px sans-serif;fill:#fff;paint-order:stroke;stroke:#0f172a;stroke-width:1.6px}
 .kvgLoading{color:#dbeafe;font-weight:900}
 
+
+/* fixed shared id hide */
+#sharedIdPanel,#shareIdPanel,#scoreUserPanel,#firebaseUserPanel,.sharedIdPanel,.shareIdPanel,.scoreUserPanel,.firebaseUserPanel,
+input[id*="share" i],input[id*="共有" i],button[id*="share" i],button[id*="共有" i],
+label[for*="share" i],label[for*="共有" i]{
+  display:none!important;
+}
 </style>
 <script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/kanji-canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/ref-patterns.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.7/dist/hanzi-writer.min.js"></script>
+<script src="../../score-user-fixed.js"></script>
 </head>
 <body>
 <div class="app">
