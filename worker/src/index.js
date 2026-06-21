@@ -19,23 +19,73 @@ export class Room {
     await this.state.storage.put('customObjects', this.objects.slice(-100));
   }
 
+  normalizeHex(color) {
+    const c = String(color || '').trim().toLowerCase();
+    return /^#[0-9a-f]{6}$/.test(c) ? c : '#22c55e';
+  }
+
+  cleanTextureCells(cells, grid) {
+    const out = [];
+    const seen = new Set();
+    if (!Array.isArray(cells)) return out;
+    for (const c of cells.slice(0, 128 * 128)) {
+      const x = Math.trunc(Number(c.x));
+      const y = Math.trunc(Number(c.y));
+      if (x < 0 || x >= grid || y < 0 || y >= grid) continue;
+      const key = `${x},${y}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ x, y, color: this.normalizeHex(c.color) });
+    }
+    return out;
+  }
+
+  cleanDecal(d) {
+    if (!d) return null;
+    const x = Math.trunc(Number(d.x));
+    const y = Math.trunc(Number(d.y));
+    const z = Math.trunc(Number(d.z));
+    if (x < 0 || x >= 16 || y < 0 || y >= 16 || z < 0 || z >= 16) return null;
+
+    const face = ['px', 'nx', 'py', 'ny', 'pz', 'nz'].includes(d.face) ? d.face : 'pz';
+    const grid = Math.max(8, Math.min(128, Math.trunc(Number(d.grid) || 64)));
+    const cells = this.cleanTextureCells(d.cells, grid);
+    if (!cells.length) return null;
+
+    return {
+      x,
+      y,
+      z,
+      face,
+      textureId: String(d.textureId || '').slice(0, 96),
+      grid,
+      cells
+    };
+  }
+
   cleanObject(def) {
     if (!def || !Array.isArray(def.cells)) return null;
 
     const kind = def.kind === 'plane' ? 'plane' : 'voxel3d';
-    const grid = Math.max(4, Math.min(32, Math.trunc(Number(def.grid) || 16)));
-    const maxCells = kind === 'plane' ? 512 : 1536;
+    const grid = kind === 'plane'
+      ? Math.max(8, Math.min(128, Math.trunc(Number(def.grid) || 64)))
+      : Math.max(4, Math.min(32, Math.trunc(Number(def.grid) || 16)));
+
+    const maxCells = kind === 'plane' ? 128 * 128 : 1536;
     const cells = [];
+    const seen = new Set();
 
     for (const c of def.cells.slice(0, maxCells)) {
       const x = Math.trunc(Number(c.x));
       const y = Math.trunc(Number(c.y));
       const z = kind === 'plane' ? 0 : Math.trunc(Number(c.z));
-      const color = String(c.color || '').trim().toLowerCase();
+      const color = this.normalizeHex(c.color);
 
       if (x < 0 || x >= grid || y < 0 || y >= grid) continue;
       if (kind === 'voxel3d' && (z < 0 || z >= grid)) continue;
-      if (!/^#[0-9a-f]{6}$/.test(color)) continue;
+      const key = kind === 'plane' ? `${x},${y}` : `${x},${y},${z}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
 
       if (kind === 'plane') cells.push({ x, y, color });
       else cells.push({ x, y, z, color });
@@ -43,23 +93,36 @@ export class Room {
 
     if (!cells.length) return null;
 
-    return {
+    const clean = {
       id: String(def.id || crypto.randomUUID()).slice(0, 96),
       name: String(def.name || 'object').slice(0, 40),
       kind,
       grid,
-      scale: Math.max(0.03, Math.min(0.8, Number(def.scale) || 0.16)),
+      scale: kind === 'plane'
+        ? Math.max(0.005, Math.min(0.5, Number(def.scale) || 0.04))
+        : Math.max(0.03, Math.min(0.8, Number(def.scale) || 0.16)),
       cells,
       createdAt: Number(def.createdAt) || Date.now(),
       updatedAt: Number(def.updatedAt) || Date.now()
     };
+
+    if (kind === 'voxel3d' && Array.isArray(def.decals)) {
+      const decals = [];
+      for (const d of def.decals.slice(0, 64)) {
+        const cleanDecal = this.cleanDecal(d);
+        if (cleanDecal) decals.push(cleanDecal);
+      }
+      if (decals.length) clean.decals = decals;
+    }
+
+    return clean;
   }
 
   async fetch(request) {
     await this.loadObjects();
 
     if (request.headers.get('Upgrade') !== 'websocket') {
-      return new Response('mine-server-git2 WebSocket server OK', {
+      return new Response('mine-server-git2 WebSocket server OK / decals enabled', {
         headers: { 'content-type': 'text/plain; charset=utf-8' }
       });
     }
@@ -147,7 +210,7 @@ export class Room {
       return;
     }
 
-    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit') {
+    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit' || msg.type === 'objectInstanceRemove') {
       if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate') {
         this.players.set(clientId, {
           clientId,
@@ -178,34 +241,27 @@ export class Room {
 
   broadcast(obj, exceptWs = null) {
     const text = JSON.stringify(obj);
-    for (const ws of Array.from(this.sessions.keys())) {
-      if (ws === exceptWs) continue;
-      try { ws.send(text); }
-      catch { this.onClose(ws); }
+    for (const socket of this.sessions.keys()) {
+      if (socket === exceptWs) continue;
+      try { socket.send(text); } catch { this.onClose(socket); }
     }
   }
 }
 
-// wrangler側が MineRoom 指定でも壊れないように別名もexportする。
 export { Room as MineRoom };
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/room/')) {
-      return new Response('mine-server-git2 WebSocket server OK', {
-        headers: { 'content-type': 'text/plain; charset=utf-8' }
-      });
-    }
+    const roomName = url.pathname.startsWith('/room/')
+      ? decodeURIComponent(url.pathname.slice('/room/'.length) || 'main')
+      : (url.searchParams.get('room') || 'main');
 
-    const roomId = decodeURIComponent(url.pathname.slice('/room/'.length) || 'main');
-    const namespace = env.MINE_ROOM || env.ROOM;
-    if (!namespace) {
-      return new Response('Durable Object binding not found. Expected env.MINE_ROOM or env.ROOM.', { status: 500 });
-    }
+    const binding = env.ROOM || env.MINE_ROOM;
+    if (!binding) return new Response('Missing Durable Object binding ROOM', { status: 500 });
 
-    const id = namespace.idFromName(roomId);
-    const room = namespace.get(id);
+    const id = binding.idFromName(roomName || 'main');
+    const room = binding.get(id);
     return room.fetch(request);
   }
 };
