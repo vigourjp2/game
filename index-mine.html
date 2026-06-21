@@ -782,6 +782,8 @@ const OBJECT_GRID = 16;
 const OBJECT_STORAGE_KEY = 'voxelStudyWorld.customObjects3d.v2';
 const customObjectDefs = new Map();
 const customObjectEntities = new Map();
+// フィールド上でBREAK破壊したOBJインスタンス。ランダムOBJが即復活しないように記録する。
+const customObjectRemovedInstances = new Set();
 const customColorMats = new Map();
 const customSpawned = new Set();
 let objMode = 'voxel3d'; // voxel3d / plane
@@ -889,12 +891,14 @@ function addCustomBox(parent, mat, lx, ly, lz, sx, sy, sz){
  e.render.material=mat;
  e.setLocalScale(sx,sy,sz);
  e.setLocalPosition(lx,ly,lz);
+ e.data={customObjectCell:true};
  parent.addChild(e);
  return e;
 }
 function placeCustomObject(def, x, y, z, yaw, instanceKey){
  def=validateObjectDef(def); if(!def) return null;
  instanceKey=instanceKey || ('inst-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
+ if(customObjectRemovedInstances.has(instanceKey)) return null;
  if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
  const root=new pc.Entity('custom_object_'+instanceKey);
  const s=def.scale;
@@ -920,7 +924,7 @@ function placeCustomObject(def, x, y, z, yaw, instanceKey){
  }
  root.setPosition(x,y,z);
  root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
- root.data={customObject:true,defId:def.id,chunk:chunkIdForBlock(Math.round(x),Math.round(z))};
+ root.data={customObject:true,defId:def.id,instanceKey,chunk:chunkIdForBlock(Math.round(x),Math.round(z))};
  app.root.addChild(root);
  customObjectEntities.set(instanceKey, root);
  return root;
@@ -930,6 +934,85 @@ function placeObjectInFront(def){
  const x=Math.round(player.x+dir.x*4), z=Math.round(player.z+dir.z*4);
  const y=terrainHeight(x,z)+1;
  return placeCustomObject(def,x,y,z,player.yaw,'front-'+def.id+'-'+Date.now());
+}
+
+function customObjectCellAabb(cell){
+ if(!cell || cell.name!=='obj_cell' || !cell.getPosition || !cell.getLocalScale) return null;
+ const cp=cell.getPosition();
+ const sc=cell.getLocalScale();
+ const hx=Math.max(Math.abs(sc.x),Math.abs(sc.z),0.10)*0.54;
+ const hy=Math.max(Math.abs(sc.y),0.10)*0.54;
+ const hz=Math.max(Math.abs(sc.x),Math.abs(sc.z),0.10)*0.54;
+ return {cp,hx,hy,hz,minX:cp.x-hx,maxX:cp.x+hx,minY:cp.y-hy,maxY:cp.y+hy,minZ:cp.z-hz,maxZ:cp.z+hz};
+}
+function customObjectCellAtPoint(px,py,pz){
+ for(const [instanceKey,root] of customObjectEntities){
+   if(!root || !root.children) continue;
+   for(const cell of root.children){
+     const a=customObjectCellAabb(cell);
+     if(!a) continue;
+     if(px>=a.minX && px<=a.maxX && py>=a.minY && py<=a.maxY && pz>=a.minZ && pz<=a.maxZ){
+       return {root,cell,instanceKey,defId:root.data&&root.data.defId,aabb:a};
+     }
+   }
+ }
+ return null;
+}
+function customObjectTopBelow(px,pz,feetY){
+ let best=-999;
+ const rr=(player&&player.radius?player.radius:.28)*0.92;
+ for(const [,root] of customObjectEntities){
+   if(!root || !root.children) continue;
+   for(const cell of root.children){
+     const a=customObjectCellAabb(cell);
+     if(!a) continue;
+     if(px>=a.minX-rr && px<=a.maxX+rr && pz>=a.minZ-rr && pz<=a.maxZ+rr){
+       const top=a.maxY;
+       // 小物・階段状OBJにも乗れるよう、少し上までスナップ許容する。
+       if(top<=feetY+0.46 && top>=feetY-1.25 && top>best) best=top;
+     }
+   }
+ }
+ return best;
+}
+function customObjectCeilingAbove(px,pz,feetY,headY){
+ let best=999999;
+ const rr=(player&&player.radius?player.radius:.28)*0.88;
+ for(const [,root] of customObjectEntities){
+   if(!root || !root.children) continue;
+   for(const cell of root.children){
+     const a=customObjectCellAabb(cell);
+     if(!a) continue;
+     if(px>=a.minX-rr && px<=a.maxX+rr && pz>=a.minZ-rr && pz<=a.maxZ+rr){
+       const bottom=a.minY;
+       if(bottom>=feetY+0.15 && headY>=bottom-0.10 && headY<=a.maxY+0.22 && bottom<best) best=bottom;
+     }
+   }
+ }
+ return best<999999?best:null;
+}
+function blockCeilingAbove(px,pz,feetY,headY){
+ let best=999999;
+ const rr=(player&&player.radius?player.radius:.28)*0.78;
+ const pts=[[px-rr,pz-rr],[px+rr,pz-rr],[px-rr,pz+rr],[px+rr,pz+rr]];
+ for(const pt of pts){
+   const bx=Math.floor(pt[0]+.5), bz=Math.floor(pt[1]+.5);
+   const by=Math.floor(headY);
+   if(isSolidAt(bx,by,bz)){
+     const bottom=by;
+     if(bottom>=feetY+0.15 && bottom<best) best=bottom;
+   }
+ }
+ return best<999999?best:null;
+}
+function removeCustomObjectInstance(instanceKey,broadcast){
+ const root=customObjectEntities.get(instanceKey);
+ if(!root) return false;
+ customObjectRemovedInstances.add(instanceKey);
+ try{root.destroy();}catch{}
+ customObjectEntities.delete(instanceKey);
+ if(broadcast) sendMultiplayer({type:'objectInstanceRemove', instanceKey});
+ return true;
 }
 function spawnCustomObjectForChunk(ch){
  const defs=Array.from(customObjectDefs.values());
@@ -969,6 +1052,8 @@ function handleObjectCatalogMessage(msg){
  if(!msg) return false;
  if(msg.type==='objectCatalogReq'){broadcastObjectCatalog();return true;}
  if(msg.type==='objectRegister'){registerCustomObjectDef(msg.object||msg.def||msg,'remote');return true;}
+ if(msg.type==='objectDelete'){deleteCustomObjectDef(msg.objectId||msg.id,false);return true;}
+ if(msg.type==='objectInstanceRemove'){removeCustomObjectInstance(msg.instanceKey,false);return true;}
  if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));return true;}
  return false;
 }
@@ -1505,15 +1590,41 @@ bindObjectEditorUi();
 
 function setMsg(t,cls){const m=$('msg');m.textContent=t;m.className=cls||'gold';state.lastMsg=t;}
 function tryGround(){
- const top=heightAt(player.x,player.z,player.y+.12);
- if(top<=-900){player.onGround=false;return;}
- const gy=top+1;
- if(player.vy<=0&&player.y<=gy&&player.y>=gy-1.15){player.y=gy;player.vy=0;player.onGround=true;}
- else player.onGround=Math.abs(player.y-gy)<.06;
+ const blockTopY=heightAt(player.x,player.z,player.y+.12);
+ const blockGround=blockTopY<=-900 ? -999 : blockTopY+1;
+ const objGround=customObjectTopBelow(player.x,player.z,player.y);
+ const gy=Math.max(blockGround,objGround);
+ if(gy<=-900){player.onGround=false;}
+ else if(player.vy<=0&&player.y<=gy&&player.y>=gy-1.25){
+   player.y=gy;
+   player.vy=0;
+   player.onGround=true;
+ }else{
+   player.onGround=Math.abs(player.y-gy)<.065;
+ }
+ // 天井判定：通常ブロックとOBJ下側に頭をぶつけたら上昇を止める。
+ if(player.vy>0){
+   const headY=player.y+player.height;
+   const cb=blockCeilingAbove(player.x,player.z,player.y,headY);
+   const co=customObjectCeilingAbove(player.x,player.z,player.y,headY);
+   let bottom=null;
+   if(cb!==null) bottom=cb;
+   if(co!==null) bottom=(bottom===null?co:Math.min(bottom,co));
+   if(bottom!==null){
+     player.y=bottom-player.height-0.025;
+     player.vy=0;
+     player.onGround=false;
+   }
+ }
 }
 function collision(nx,ny,nz){
- const checks=[[nx-player.radius,ny+.1,nz-player.radius],[nx+player.radius,ny+.1,nz-player.radius],[nx-player.radius,ny+.1,nz+player.radius],[nx+player.radius,ny+.1,nz+player.radius],[nx-player.radius,ny+player.height*.9,nz-player.radius],[nx+player.radius,ny+player.height*.9,nz+player.radius],[nx-player.radius,ny+player.height*.9,nz+player.radius],[nx+player.radius,ny+player.height*.9,nz+player.radius]];
- for(const p of checks){const bx=Math.floor(p[0]+.5),by=Math.floor(p[1]),bz=Math.floor(p[2]+.5);if(isSolidAt(bx,by,bz))return true;}return false;
+ const checks=[[nx-player.radius,ny+.1,nz-player.radius],[nx+player.radius,ny+.1,nz-player.radius],[nx-player.radius,ny+.1,nz+player.radius],[nx+player.radius,ny+.1,nz+player.radius],[nx-player.radius,ny+player.height*.9,nz-player.radius],[nx+player.radius,ny+player.height*.9,nz-player.radius],[nx-player.radius,ny+player.height*.9,nz+player.radius],[nx+player.radius,ny+player.height*.9,nz+player.radius]];
+ for(const p of checks){
+   const bx=Math.floor(p[0]+.5),by=Math.floor(p[1]),bz=Math.floor(p[2]+.5);
+   if(isSolidAt(bx,by,bz))return true;
+   if(customObjectCellAtPoint(p[0],p[1],p[2]))return true;
+ }
+ return false;
 }
 function forwardVec(){const cy=Math.cos(player.yaw),sy=Math.sin(player.yaw),cp=Math.cos(player.pitch),sp=Math.sin(player.pitch);return new pc.Vec3(sy*cp,sp,cy*cp).normalize();}
 function aimCamera(){
@@ -1528,12 +1639,32 @@ function rayBlock(){
    const px=player.x+dir.x*d,py=player.y+1.45+dir.y*d,pz=player.z+dir.z*d;
    const bx=Math.floor(px+.5),by=Math.floor(py),bz=Math.floor(pz+.5);
    const b=blockAt(bx,by,bz);if(b&&isSolidType(b.data.type))return {hit:b,place:last};
+   const oh=customObjectCellAtPoint(px,py,pz);if(oh)return {objectHit:oh,place:last};
    last=[bx,by,bz];
  }
  return null;
 }
-function breakBlock(){if(state.editingObject){objectBuilderBreak();return;}const r=rayBlock();if(!r){setMsg('届く範囲にブロックなし','bad');return;}const d=r.hit.data;if(d.y<=WORLD_BOTTOM){setMsg('基盤は破壊不可','bad');return;}removeBlock(d.x,d.y,d.z,true);sendBlockEditMultiplayer(d.x,d.y,d.z,null);revealAround(d.x,d.y,d.z);setMsg('破壊: '+blockDefs[d.type].label,'good');}
-function placeBlock(){if(state.editingObject){objectBuilderPlace();return;}const r=rayBlock();if(!r){setMsg('配置先が見つからない','bad');return;}const [x,y,z]=r.place;if(y<WORLD_BOTTOM||logicalTypeAt(x,y,z)){setMsg('そこには置けない','bad');return;}if(Math.abs(x-player.x)<.7&&Math.abs(z-player.z)<.7&&y<player.y+2){setMsg('自分の場所には置けない','bad');return;}addBlock(x,y,z,state.selected,true);sendBlockEditMultiplayer(x,y,z,state.selected);revealAround(x,y,z);setMsg('配置: '+blockDefs[state.selected].label,'good');}
+function breakBlock(){
+ if(state.editingObject){objectBuilderBreak();return;}
+ const r=rayBlock();
+ if(!r){setMsg('届く範囲にブロック/OBJなし','bad');return;}
+ if(r.objectHit){
+   const ok=removeCustomObjectInstance(r.objectHit.instanceKey,true);
+   setMsg(ok?'OBJ除去':'OBJ除去失敗',ok?'good':'bad');
+   return;
+ }
+ const d=r.hit.data;if(d.y<=WORLD_BOTTOM){setMsg('基盤は破壊不可','bad');return;}
+ removeBlock(d.x,d.y,d.z,true);sendBlockEditMultiplayer(d.x,d.y,d.z,null);revealAround(d.x,d.y,d.z);setMsg('破壊: '+blockDefs[d.type].label,'good');
+}
+function placeBlock(){
+ if(state.editingObject){objectBuilderPlace();return;}
+ const r=rayBlock();if(!r){setMsg('配置先が見つからない','bad');return;}
+ if(r.objectHit){setMsg('OBJには直接配置しない。先にBREAKで除去','bad');return;}
+ const [x,y,z]=r.place;if(y<WORLD_BOTTOM||logicalTypeAt(x,y,z)||customObjectCellAtPoint(x,y+.5,z)){setMsg('そこには置けない','bad');return;}
+ if(Math.abs(x-player.x)<.7&&Math.abs(z-player.z)<.7&&y<player.y+2){setMsg('自分の場所には置けない','bad');return;}
+ addBlock(x,y,z,state.selected,true);sendBlockEditMultiplayer(x,y,z,state.selected);revealAround(x,y,z);setMsg('配置: '+blockDefs[state.selected].label,'good');
+}
+
 
 function updateToolbar(){const tb=$('toolbar');tb.innerHTML='';order.forEach((k,i)=>{const d=blockDefs[k];const s=document.createElement('button');s.className='slot'+(state.selected===k?' on':'');s.innerHTML='<div class="swatch" style="background:'+d.color+'"></div>'+(i+1)+' '+d.label;s.onclick=()=>{state.selected=k;updateToolbar();setMsg('選択: '+d.label,'info')};tb.appendChild(s);});}
 updateToolbar();
@@ -1588,7 +1719,7 @@ function update(dt){
  player.vy-=18*dt;if(input.jump&&player.onGround){player.vy=7.2;player.onGround=false;}input.jump=false;
  player.y+=player.vy*dt;tryGround();if(player.y<-10){player.x=0;player.y=10;player.z=-8;player.vy=0;}
  aimCamera();
- const r=rayBlock();state.target=r;$('targetBox').textContent=r?('照準: '+blockDefs[r.hit.data.type].label+' ['+r.hit.data.x+','+r.hit.data.y+','+r.hit.data.z+']'):'中央のブロックを狙う';
+ const r=rayBlock();state.target=r;$('targetBox').textContent=r?(r.objectHit?('照準: OBJ ['+(r.objectHit.defId||'object')+']'):('照準: '+blockDefs[r.hit.data.type].label+' ['+r.hit.data.x+','+r.hit.data.y+','+r.hit.data.z+']')):'中央のブロック/OBJを狙う';
  $('pos').textContent=player.x.toFixed(1)+','+player.y.toFixed(1)+','+player.z.toFixed(1);
  $('chunks').textContent=chunkStats();
 }
