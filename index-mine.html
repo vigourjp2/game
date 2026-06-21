@@ -78,9 +78,19 @@
   .cpPresetGrid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin:12px 0}.cpPreset{height:34px;border-radius:9px;border:2px solid rgba(255,255,255,.55);box-shadow:inset 0 0 10px rgba(255,255,255,.20)}
   .cpBtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.cpBtns button{border:0;border-radius:11px;padding:10px 14px;color:#fff;font-weight:900;background:#334155}.cpBtns .goodBtn{background:#22c55e}.cpBtns .badBtn{background:#ef4444}
 
+
+  /* OBJ editor UI auto-hide */
+  #objUiToggle{position:fixed;left:8px;top:72px;z-index:126;display:none;border:0;border-radius:14px;padding:10px 12px;font-weight:1000;color:#fff;background:rgba(124,58,237,.92);box-shadow:0 10px 28px rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.55);text-shadow:0 2px 5px rgba(0,0,0,.35);touch-action:none}
+  body.objEditing.objUiHidden #objUiToggle{display:block}
+  body.objEditing.objUiHidden #objectEditor{opacity:0!important;transform:translateX(-115%) scale(.98)!important;pointer-events:none!important;transition:opacity .22s ease, transform .22s ease!important}
+  body.objEditing.objUiHidden #objEditBar{opacity:.36!important;transition:opacity .22s ease!important}
+  body.objEditing.objUiHidden #objEditBar:hover{opacity:1!important}
+
 </style>
 </head>
 <body>
+<button id="objUiToggle" type="button">OBJ UI</button>
+
 <canvas id="app"></canvas>
 <div id="hud">
   <div class="hudLine"><b>Voxel Study World</b> / PlayCanvas Engine</div>
@@ -2464,8 +2474,81 @@ function update(dt){
 }
 app.on('update',dt=>{dt=Math.min(dt,.05);update(dt);updateMultiplayer(dt);updateCustomObjectRuntime(dt);if(typeof updateObjectBuilder==='function')updateObjectBuilder(dt);fpsAcc+=dt;fpsCount++;const now=performance.now();if(now-fpsLast>500){const fps=Math.round(fpsCount/fpsAcc);$('fps').textContent=fps;if(app.graphicsDevice&&state.started&&fps<52&&app.graphicsDevice.maxPixelRatio>1){app.graphicsDevice.maxPixelRatio=Math.max(1,app.graphicsDevice.maxPixelRatio-.1);$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}
 fpsAcc=0;fpsCount=0;fpsLast=now;}});
+
+/* OBJ editor UI auto-hide: based on per-block-size-scope-fixed, so size fix is preserved. */
+let objUiAutoHideTimer=null;
+let objUiKeepVisibleUntil=0;
+function setObjEditorUiHidden(hidden){
+  try{
+    document.body.classList.toggle('objUiHidden', !!hidden);
+    const b=$('objUiToggle');
+    if(b) b.textContent='OBJ UI';
+  }catch{}
+}
+function cancelObjEditorUiAutoHide(){
+  if(objUiAutoHideTimer){clearTimeout(objUiAutoHideTimer);objUiAutoHideTimer=null;}
+}
+function scheduleObjEditorUiAutoHide(delay){
+  cancelObjEditorUiAutoHide();
+  if(!state || !state.editingObject) return;
+  objUiAutoHideTimer=setTimeout(()=>{
+    objUiAutoHideTimer=null;
+    if(!state || !state.editingObject) return;
+    if(Date.now()<objUiKeepVisibleUntil){
+      scheduleObjEditorUiAutoHide(Math.max(600,objUiKeepVisibleUntil-Date.now()));
+      return;
+    }
+    setObjEditorUiHidden(true);
+  }, Math.max(600, Number(delay)||2800));
+}
+function keepObjEditorUiVisible(ms){
+  objUiKeepVisibleUntil=Date.now()+(Number(ms)||2500);
+  if(state && state.editingObject){
+    setObjEditorUiHidden(false);
+    scheduleObjEditorUiAutoHide(Math.max(1000,Number(ms)||2500));
+  }
+}
+function bindObjEditorUiAutoHide(){
+  const toggle=$('objUiToggle');
+  if(toggle && !toggle.__objUiBound){
+    toggle.__objUiBound=true;
+    toggle.onclick=()=>keepObjEditorUiVisible(5200);
+  }
+  const editor=$('objectEditor');
+  if(editor && !editor.__objUiAutoHideBound){
+    editor.__objUiAutoHideBound=true;
+    ['pointerdown','touchstart','mousedown','input','change','click'].forEach(ev=>{
+      editor.addEventListener(ev,()=>keepObjEditorUiVisible(ev==='input'||ev==='change'?4200:2600),{passive:true});
+    });
+  }
+}
+const __objUiAutoHideOpenObjectEditor=openObjectEditor;
+openObjectEditor=function(){
+  const r=__objUiAutoHideOpenObjectEditor.apply(this,arguments);
+  document.body.classList.add('objEditing');
+  bindObjEditorUiAutoHide();
+  keepObjEditorUiVisible(4200);
+  return r;
+};
+const __objUiAutoHideCloseObjectEditor=closeObjectEditor;
+closeObjectEditor=function(){
+  cancelObjEditorUiAutoHide();
+  document.body.classList.remove('objEditing','objUiHidden');
+  return __objUiAutoHideCloseObjectEditor.apply(this,arguments);
+};
+const __objUiAutoHideFinishObjectEditor=finishObjectEditor;
+finishObjectEditor=function(){
+  cancelObjEditorUiAutoHide();
+  document.body.classList.remove('objEditing','objUiHidden');
+  return __objUiAutoHideFinishObjectEditor.apply(this,arguments);
+};
+try{bindObjEditorUiAutoHide();}catch{}
+
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
+
+
 </script>
 </body>
 </html>
