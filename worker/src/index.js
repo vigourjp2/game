@@ -50,7 +50,8 @@ export class Room {
       grid,
       scale: Math.max(0.03, Math.min(0.8, Number(def.scale) || 0.16)),
       cells,
-      createdAt: Number(def.createdAt) || Date.now()
+      createdAt: Number(def.createdAt) || Date.now(),
+      updatedAt: Number(def.updatedAt) || Date.now()
     };
   }
 
@@ -109,8 +110,9 @@ export class Room {
       for (const d of msg.objects) {
         const clean = this.cleanObject(d);
         if (!clean) continue;
-        if (this.objects.some(o => o.id === clean.id)) continue;
-        this.objects.push(clean);
+        const idx = this.objects.findIndex(o => o.id === clean.id);
+        if (idx >= 0) this.objects[idx] = clean;
+        else this.objects.push(clean);
         changed = true;
       }
       if (changed) {
@@ -121,14 +123,25 @@ export class Room {
       return;
     }
 
+    if (msg.type === 'objectDelete') {
+      const objectId = String(msg.objectId || msg.id || '').slice(0, 96);
+      if (!objectId) return;
+      const before = this.objects.length;
+      this.objects = this.objects.filter(o => o.id !== objectId);
+      if (this.objects.length !== before) await this.saveObjects();
+      this.broadcast({ type: 'objectDelete', objectId, clientId, time: Date.now() }, null);
+      try { ws.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() })); } catch {}
+      return;
+    }
+
     if (msg.type === 'objectRegister') {
       const clean = this.cleanObject(msg.object || msg.def || msg);
       if (!clean) return;
-      if (!this.objects.some(o => o.id === clean.id)) {
-        this.objects.push(clean);
-        this.objects = this.objects.slice(-100);
-        await this.saveObjects();
-      }
+      const idx = this.objects.findIndex(o => o.id === clean.id);
+      if (idx >= 0) this.objects[idx] = clean;
+      else this.objects.push(clean);
+      this.objects = this.objects.slice(-100);
+      await this.saveObjects();
       this.broadcast({ type: 'objectRegister', object: clean, clientId, time: Date.now() }, ws);
       try { ws.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() })); } catch {}
       return;
