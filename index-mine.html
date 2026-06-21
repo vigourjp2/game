@@ -825,6 +825,8 @@ let objPaintColor = '#22c55e';
 let objPointerDown = false;
 let customObjectTickAcc = 0;
 const objVoxels = new Map(); // key: x,y,z -> hex
+// key: x,y,z -> block size fixed at placement time. Size slider changes only future blocks.
+const objVoxelSizes = new Map();
 const objPlanePixels = new Map(); // key: x,y -> hex
 
 function setObjHud(){ const el=$('objHud'); if(el) el.textContent=String(customObjectDefs.size); }
@@ -849,6 +851,14 @@ function ensureCustomMat(hex){
  customColorMats.set(hex,m);
  return m;
 }
+function clampObjCellSize(v, fallback){
+ const fb=Number(fallback)||.10;
+ const n=Number(v);
+ return Math.max(.03,Math.min(.70,Number.isFinite(n)?n:fb));
+}
+function storedObjCellSize(key, fallback){
+ return clampObjCellSize(objVoxelSizes.get(String(key)), fallback!==undefined?fallback:currentObjScale());
+}
 function compactObjectCells(){
  if(objMode==='plane'){
    const cells=[];
@@ -856,7 +866,10 @@ function compactObjectCells(){
    return cells.slice(0,512);
  }
  const cells=[];
- for(const [k,color] of objVoxels){const [x,y,z]=k.split(',').map(Number);cells.push({x,y,z,color:normalizeHexColor(color)});}
+ for(const [k,color] of objVoxels){
+   const [x,y,z]=k.split(',').map(Number);
+   cells.push({x,y,z,color:normalizeHexColor(color),size:storedObjCellSize(k,.10)});
+ }
  return cells.slice(0,1536);
 }
 function validateObjectDef(def){
@@ -870,7 +883,7 @@ function validateObjectDef(def){
    const z=kind==='plane' ? 0 : Math.trunc(Number(c.z));
    if(x<0||x>=OBJECT_GRID||y<0||y>=OBJECT_GRID) continue;
    if(kind==='voxel3d' && (z<0||z>=OBJECT_GRID)) continue;
-   const cell = kind==='plane' ? {x,y,color:normalizeHexColor(c.color)} : {x,y,z,color:normalizeHexColor(c.color)};
+   const cell = kind==='plane' ? {x,y,color:normalizeHexColor(c.color)} : {x,y,z,color:normalizeHexColor(c.color),size:clampObjCellSize(c.size, Number(def.scale)||.16)};
    cells.push(cell);
  }
  if(!cells.length) return null;
@@ -948,10 +961,12 @@ function placeCustomObject(def, x, y, z, yaw, instanceKey){
    const used=def.cells.slice(0,768);
    for(const c of used){
      const mat=ensureCustomMat(c.color);
-     const lx=(c.x-(OBJECT_GRID-1)/2)*s;
-     const ly=(c.y+.5)*s;
-     const lz=(c.z-(OBJECT_GRID-1)/2)*s;
-     addCustomBox(root, mat, lx, ly, lz, s*1.01, s*1.01, s*1.01);
+     const cs=clampObjCellSize(c.size,s);
+     const lx=(c.x-(OBJECT_GRID-1)/2)*cs;
+     const ly=(c.y+.5)*cs;
+     const lz=(c.z-(OBJECT_GRID-1)/2)*cs;
+     const e=addCustomBox(root, mat, lx, ly, lz, cs*1.01, cs*1.01, cs*1.01);
+     if(e) e.data=Object.assign({},e.data||{},{objectCellSize:cs,objectCellKey:objKey3(c.x,c.y,c.z)});
    }
  }
  root.setPosition(x,y,z);
@@ -1443,12 +1458,13 @@ function addObjectBuilderCellEntity(x,y,z,color){
  if(!objBuildRoot) return;
  const key=objKey3(x,y,z);
  const old=objBuildCellEntities.get(key); if(old){try{old.destroy();}catch{}}
- const s=currentObjScale();
+ const s=storedObjCellSize(key,currentObjScale());
  const e=new pc.Entity('builder_cell');
  e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
  e.render.material=ensureCustomMat(color);
  e.setLocalScale(s*1.045,s*1.045,s*1.045); // 微妙に重ねて隙間を殺す
  e.setLocalPosition(objectCellLocal(x,y,z,s));
+ e.data={customObjectCell:true,objectCellSize:s,objectCellKey:key};
  objBuildRoot.addChild(e);
  objBuildCellEntities.set(key,e);
 }
@@ -1515,9 +1531,10 @@ function objectBuilderPlace(){
  }
  const c=aim.place || aim.hit;
  if(!c||!insideObjectCell(c.x,c.y,c.z)) return true;
+ objVoxelSizes.set(c.key,currentObjScale());
  objVoxels.set(c.key,objPaintColor);
  addObjectBuilderCellEntity(c.x,c.y,c.z,objPaintColor);
- setMsg('OBJ配置: ['+c.x+','+c.y+','+c.z+']','good');
+ setMsg('OBJ配置: ['+c.x+','+c.y+','+c.z+'] / size '+currentObjScale().toFixed(2),'good');
  return true;
 }
 function objectBuilderBreak(){
@@ -1527,6 +1544,7 @@ function objectBuilderBreak(){
  const c=aim.hit;
  if(c&&objVoxels.has(c.key)){
    objVoxels.delete(c.key);
+   objVoxelSizes.delete(c.key);
    removeObjectBuilderCellEntity(c.key);
    setMsg('OBJ削除: ['+c.x+','+c.y+','+c.z+']','good');
  } else setMsg('削除対象OBJブロックなし','bad');
@@ -1587,19 +1605,19 @@ function openObjectManager(){
 }
 function closeObjectManager(){ const el=$('objectManager'); if(el) el.style.display='none'; }
 function loadDefIntoEditor(def){
- objVoxels.clear(); objPlanePixels.clear(); objBuildCellEntities.clear();
+ objVoxels.clear(); objVoxelSizes.clear(); objPlanePixels.clear(); objBuildCellEntities.clear();
  def=validateObjectDef(def); if(!def) return false;
  setObjMode(def.kind==='plane'?'plane':'voxel3d');
  const sc=$('objScale'); if(sc){sc.value=String(Math.max(.03,Math.min(.70,Number(def.scale)||.10))); const t=$('objScaleText'); if(t)t.textContent=Number(sc.value).toFixed(2);}
  for(const c of def.cells||[]){
    if(def.kind==='plane') objPlanePixels.set(objKey2(c.x,c.y),normalizeHexColor(c.color));
-   else objVoxels.set(objKey3(c.x,c.y,c.z),normalizeHexColor(c.color));
+   else { const key=objKey3(c.x,c.y,c.z); objVoxels.set(key,normalizeHexColor(c.color)); objVoxelSizes.set(key,clampObjCellSize(c.size,def.scale||.10)); }
  }
  return true;
 }
 function startNewObjectEditor(){
  objEditingId=null;
- objVoxels.clear(); objPlanePixels.clear(); objBuildCellEntities.clear();
+ objVoxels.clear(); objVoxelSizes.clear(); objPlanePixels.clear(); objBuildCellEntities.clear();
  const sc=$('objScale'); if(sc){sc.value='0.10'; const t=$('objScaleText'); if(t)t.textContent='0.10';}
  setObjColor('#22c55e'); setObjMode('voxel3d');
  openObjectEditor();
@@ -1632,6 +1650,7 @@ function closeObjectEditor(){
  document.body.classList.remove('objEditing');
  const el=$('objectEditor'); if(el)el.style.display='none';
  objEditingId=null;
+ objVoxelSizes.clear();
  destroyObjectBuildRoot();
  leaveObjectEditorWorld(null);
  setMsg('OBJ作成をキャンセルして元フィールドへ復帰','info');
@@ -1645,6 +1664,7 @@ function finishObjectEditor(){
  const def={id,name:(old&&old.name)||('OBJ-'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'})),kind:'voxel3d',grid:OBJECT_GRID,scale,cells,createdAt:(old&&old.createdAt)||Date.now(),updatedAt:Date.now()};
  registerCustomObjectDef(def,objEditingId?'localUpdate':'localCreate');
  objEditingId=null;
+ objVoxelSizes.clear();
  destroyObjectBuildRoot();
  state.editingObject=false;
  document.body.classList.remove('objEditing');
@@ -1667,7 +1687,7 @@ function bindObjectEditorUi(){
  const hx=$('cpHex'); if(hx)hx.oninput=()=>syncObjColorPanelFromHex(hx.value);
  const caColor=$('cpCancel'); if(caColor)caColor.onclick=closeObjColorPanel;
  const apColor=$('cpApply'); if(apColor)apColor.onclick=applyObjColorPanel;
- const sc=$('objScale'); if(sc)sc.oninput=()=>{const t=$('objScaleText');if(t)t.textContent=Number(sc.value).toFixed(2); if(state.editingObject){rebuildObjectBuildEntities(); setObjStatus('サイズ変更: 視点・移動感もサイズに合わせて調整');}};
+ const sc=$('objScale'); if(sc)sc.oninput=()=>{const t=$('objScaleText');if(t)t.textContent=Number(sc.value).toFixed(2); if(state.editingObject){if(objBuildCursor){const s=currentObjScale();objBuildCursor.setLocalScale(s*1.07,s*1.07,s*1.07);} setObjStatus('次に置くブロックサイズ: '+currentObjScale().toFixed(2)+' / 既存ブロックは変更しない');}};
  const vb=$('objVoxelBtn'); if(vb)vb.onclick=()=>setObjMode('voxel3d');
  const pl=$('objPlaneBtn'); if(pl)pl.onclick=()=>{setObjMode('plane');setObjStatus('平面テクスチャは後で草・看板用。今は立体ブロック作成が本命。');};
  const pk=$('objPickBtn'); if(pk)pk.onclick=()=>sampleObjColorAtAim();
@@ -1678,7 +1698,7 @@ function bindObjectEditorUi(){
  const orr=$('objOrbitRight'); if(orr){orr.addEventListener('pointerdown',e=>{e.preventDefault();objectEditorOrbitDir=1;});orr.addEventListener('pointerup',e=>{e.preventDefault();objectEditorOrbitDir=0;});orr.addEventListener('pointercancel',e=>{e.preventDefault();objectEditorOrbitDir=0;});}
  const fu=$('objFlyUp'); if(fu){fu.addEventListener('pointerdown',e=>{e.preventDefault();input.jump=true;});}
  const fd=$('objFlyDown'); if(fd){fd.addEventListener('pointerdown',e=>{e.preventDefault();objectEditorFlyDown=true;});fd.addEventListener('pointerup',e=>{e.preventDefault();objectEditorFlyDown=false;});fd.addEventListener('pointercancel',e=>{e.preventDefault();objectEditorFlyDown=false;});}
- const caa=$('objClearBtn'); if(caa)caa.onclick=()=>{objVoxels.clear();objPlanePixels.clear();rebuildObjectBuildEntities();setObjStatus('全消し完了');};
+ const caa=$('objClearBtn'); if(caa)caa.onclick=()=>{objVoxels.clear();objVoxelSizes.clear();objPlanePixels.clear();rebuildObjectBuildEntities();setObjStatus('全消し完了');};
  const dn=$('objDoneBtn'); if(dn)dn.onclick=finishObjectEditor;
  const ca=$('objCancelBtn'); if(ca)ca.onclick=closeObjectEditor;
  window.addEventListener('keydown',e=>{if(e.key==='o'||e.key==='O')openObjectEditor(); if(e.key==='Escape'&&state.editingObject)closeObjectEditor();});
@@ -2050,7 +2070,7 @@ function pasteSelectedPlaneTextureToBuilder(){
    if(!col) continue;
    const x=startX+xx, y=startY+(stamp-1-yy);
    if(!insideObjectCell(x,y,z)) continue;
-   const key=objKey3(x,y,z); objVoxels.set(key,col); addObjectBuilderCellEntity(x,y,z,col); placed++;
+   const key=objKey3(x,y,z); objVoxelSizes.set(key,currentObjScale()); objVoxels.set(key,col); addObjectBuilderCellEntity(x,y,z,col); placed++;
  }
  setMsg('テクスチャ貼付: '+placed+' cells / 倍率 '+objPasteScale.toFixed(2),'good');
 }
@@ -2197,9 +2217,10 @@ function rebuildObjectBuilderDecals(){
  if(!objBuildRoot) return;
  for(const e of objBuildDecalEntities.values()){try{e.destroy();}catch{}}
  objBuildDecalEntities.clear();
- const s=currentObjScale();
  for(let i=0;i<objSurfaceDecals.length;i++){
-   const e=addSurfaceDecalEntity(objBuildRoot,objSurfaceDecals[i],s,'builder_surface_texture');
+   const d=objSurfaceDecals[i];
+   const s=storedObjCellSize(objKey3(d.x,d.y,d.z),currentObjScale());
+   const e=addSurfaceDecalEntity(objBuildRoot,d,s,'builder_surface_texture');
    if(e) objBuildDecalEntities.set(String(i),e);
  }
 }
@@ -2229,8 +2250,9 @@ placeCustomObject = function(def,x,y,z,yaw,instanceKey){
  def=validateObjectDef(def); if(!def) return null;
  const root=__surfaceBasePlaceCustomObject2(def,x,y,z,yaw,instanceKey);
  if(root && def.kind==='voxel3d' && Array.isArray(def.decals) && def.decals.length){
-   const s=def.scale||.10;
-   for(const d of def.decals){ addSurfaceDecalEntity(root,d,s,'obj_surface_texture'); }
+   const baseS=clampObjCellSize(def.scale,.10);
+   const sizeByKey=new Map((def.cells||[]).map(c=>[objKey3(c.x,c.y,c.z),clampObjCellSize(c.size,baseS)]));
+   for(const d of def.decals){ addSurfaceDecalEntity(root,d,sizeByKey.get(objKey3(d.x,d.y,d.z))||baseS,'obj_surface_texture'); }
  }
  return root;
 };
