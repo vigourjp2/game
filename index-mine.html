@@ -837,6 +837,11 @@ function sendBlockEditMultiplayer(x,y,z,block) {
 // ===== 3D Online Custom Object Editor / Shared random object catalog =====
 const OBJECT_GRID = 16;
 const OBJECT_STORAGE_KEY = 'voxelStudyWorld.customObjects3d.v2';
+// 情報テクスチャIDは、OBJ一覧カウント(setObjHud)が初期ロード中に先に参照するため、
+// TDZを避けてここで先に初期化する。
+var INFO_TEXTURE_CAT_ID = 'info-cat';
+var INFO_CARRIER_CAT_ID = 'builtin-info-carrier-cat';
+var INFO_BP_PREFIX = 'bp-';
 const customObjectDefs = new Map();
 const customObjectEntities = new Map();
 // OBJ呼出同期で、相手端末がまだOBJ定義を持っていない場合に一時保留する。
@@ -1117,7 +1122,7 @@ function removeCustomObjectInstance(instanceKey,broadcast){
  return true;
 }
 function spawnCustomObjectForChunk(ch){
- const defs=Array.from(customObjectDefs.values()).filter(def=>typeof shouldWorldSpawnObjectDef==='function'?shouldWorldSpawnObjectDef(def):true);
+ const defs=Array.from(customObjectDefs.values()).filter(shouldWorldSpawnObjectDef);
  if(!defs.length||!ch||!ch.done) return;
  const spawnKey='chunk:'+ch.key+':'+defs.map(d=>d.id).join('|');
  if(customSpawned.has(spawnKey)) return;
@@ -1660,7 +1665,7 @@ function blueprintThumb(def){
 }
 function renderObjectManager(){
  const list=$('bpList'); if(!list) return;
- const defs=Array.from(customObjectDefs.values()).filter(def=>typeof shouldShowObjectDefInManager==='function'?shouldShowObjectDefInManager(def):true).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
+ const defs=Array.from(customObjectDefs.values()).filter(shouldShowObjectDefInManager).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
  if(!defs.length){list.innerHTML='<div class="bpEmpty">登録OBJなし。まず「新規OBJ作成」で作れ。</div>'; return;}
  list.innerHTML='';
  for(const def of defs){
@@ -1669,7 +1674,17 @@ function renderObjectManager(){
    const name=document.createElement('div'); name.className='bpName'; name.textContent=def.name||def.id; card.appendChild(name);
    const meta=document.createElement('div'); meta.className='bpMeta'; meta.textContent=(def.kind==='plane'?'平面':'立体')+' / '+(def.cells?def.cells.length:0)+' cells / size '+Number(def.scale||0).toFixed(2); card.appendChild(meta);
    const btns=document.createElement('div'); btns.className='bpBtns';
-   const bCall=document.createElement('button'); bCall.textContent='呼出'; bCall.onclick=()=>{closeObjectManager(); placeObjectInFront(def); setMsg('OBJ呼出: '+(def.name||def.id),'good');};
+   const canCallObject = !(def && def.infoTexture);
+   const bCall=document.createElement('button');
+   if(canCallObject){
+     bCall.textContent='呼出';
+     bCall.onclick=()=>{closeObjectManager(); placeObjectInFront(def); setMsg('OBJ呼出: '+(def.name||def.id),'good');};
+   }else{
+     bCall.textContent='呼出不可';
+     bCall.disabled=true;
+     bCall.title='情報テクスチャ単体は呼び出せません。3Dエディターでブロック面に貼って使います。';
+     bCall.style.opacity='.48';
+   }
    const bEdit=document.createElement('button'); bEdit.textContent='編集'; bEdit.onclick=()=>{closeObjectManager(); startEditObjectEditor(def.id,false);};
    const bCopy=document.createElement('button'); bCopy.textContent='複製編集'; bCopy.onclick=()=>{closeObjectManager(); startEditObjectEditor(def.id,true);};
    const bDel=document.createElement('button'); bDel.textContent='削除'; bDel.className='badBtn'; bDel.onclick=()=>{if(confirm('このOBJを削除する？\n'+(def.name||def.id))){deleteCustomObjectDef(def.id,true); renderObjectManager();}};
@@ -2125,6 +2140,7 @@ function updateTexturePasteOptions(){
  sel.innerHTML='<option value="">なし</option>';
  for(const def of customObjectDefs.values()){
    if(def.kind!=='plane') continue;
+   if(def.infoTexture && typeof isInfoTextureDefUnlocked==='function' && !isInfoTextureDefUnlocked(def)) continue;
    const opt=document.createElement('option'); opt.value=def.id; opt.textContent=(def.name||def.id)+' / '+(def.grid||64)+'px'; sel.appendChild(opt);
  }
  sel.value=customObjectDefs.has(keep)?keep:'';
@@ -2984,9 +3000,8 @@ if(typeof placeCustomObject==='function'){
 // ===== Info Texture / Cat behavior / Combat / Blueprint v1 =====
 // 情報テクスチャは「平面テクスチャ定義」だが、voxel3d OBJ の decal / infoTextureIds に入ると
 // そのOBJ全体へ仕様を付与する。まず疎通用に「ねこ」を内蔵する。
-const INFO_TEXTURE_CAT_ID = 'info-cat';
-const INFO_CARRIER_CAT_ID = 'builtin-info-carrier-cat';
-const INFO_BP_PREFIX = 'bp-';
+// INFO_TEXTURE_CAT_ID / INFO_CARRIER_CAT_ID / INFO_BP_PREFIX は初期ロード前に参照されるため、
+// ファイル前方で var 初期化済み。ここで const 再宣言しない。
 let playerHp = 20;
 let playerLastDamagedAt = 0;
 const INFO_TEXTURE_GRANTED_KEY = 'mineInfoTextureGranted.v1';
@@ -3022,7 +3037,7 @@ function catIconCells(){
  return cells;
 }
 function ensureCatInfoTexture(){
- const def={id:INFO_TEXTURE_CAT_ID,name:'情報テクスチャ:ねこ',kind:'plane',grid:16,scale:.085,cells:catIconCells(),infoTexture:true,infoType:'cat',createdAt:1,updatedAt:Date.now()};
+ const def={id:INFO_TEXTURE_CAT_ID,name:'情報テクスチャ:ねこ',kind:'plane',grid:16,scale:.085,cells:catIconCells(),infoTexture:true,infoType:'cat',infoPhysics:{massKg:4.2,gravityScale:1,terminalVelocity:18,bounce:0},hp:10,createdAt:1,updatedAt:Date.now()};
  if(!customObjectDefs.has(INFO_TEXTURE_CAT_ID)) customObjectDefs.set(INFO_TEXTURE_CAT_ID, validateObjectDef(def)||def);
  return customObjectDefs.get(INFO_TEXTURE_CAT_ID);
 }
@@ -3038,7 +3053,7 @@ function isInfoTextureDefUnlocked(def){
 }
 function shouldShowObjectDefInManager(def){
  if(!def) return false;
- if(String(def.id||'')==='builtin-info-carrier-cat') return false;
+ if(String(def.id||'')===INFO_CARRIER_CAT_ID) return false;
  // 情報テクスチャ単体だけ、討伐入手まではOBJ一覧に出さない。
  // その情報テクスチャを含む複合OBJは def.infoTexture ではないので隠さない。
  if(def.infoTexture && !isInfoTextureDefUnlocked(def)) return false;
@@ -3046,7 +3061,9 @@ function shouldShowObjectDefInManager(def){
 }
 function shouldWorldSpawnObjectDef(def){
  if(!def) return false;
- if(String(def.id||'')==='builtin-info-carrier-cat') return false;
+ if(String(def.id||'')===INFO_CARRIER_CAT_ID) return false;
+ // 情報テクスチャ単体は通常OBJランダム枠には混ぜない。野生個体は専用スポーンで出す。
+ if(def.infoTexture) return false;
  return true;
 }
 
@@ -3063,6 +3080,15 @@ validateObjectDef = function(def){
  if(def.infoTexture) clean.infoTexture=true;
  if(def.infoType) clean.infoType=String(def.infoType).slice(0,40);
  if(def.infoCarrier) clean.infoCarrier=String(def.infoCarrier).slice(0,40);
+ if(def.infoPhysics){
+   const ph=def.infoPhysics||{};
+   clean.infoPhysics={
+     massKg:Math.max(.05,Math.min(500,Number(ph.massKg)||1)),
+     gravityScale:Math.max(0,Math.min(5,Number(ph.gravityScale)||1)),
+     terminalVelocity:Math.max(1,Math.min(80,Number(ph.terminalVelocity)||18)),
+     bounce:Math.max(0,Math.min(.8,Number(ph.bounce)||0))
+   };
+ }
  if(def.worldSpawn) clean.worldSpawn=true;
  if(def.hp) clean.hp=Math.max(1,Math.min(200,Math.trunc(Number(def.hp)||1)));
  return clean;
@@ -3073,14 +3099,113 @@ function rootHasInfo(root, infoId){
  const ids=(root.data&&root.data.infoTextureIds)||[];
  if(ids.includes(infoId)) return true;
  const def=customObjectDefs.get(root.data&&root.data.defId);
+ if(def && def.infoTexture && String(def.id)===String(infoId)) return true;
  return !!(def && Array.isArray(def.infoTextureIds) && def.infoTextureIds.includes(infoId));
+}
+
+function infoTexturePhysicsForId(infoId){
+ infoId=String(infoId||'');
+ const def=customObjectDefs.get(infoId);
+ const src=(def&&def.infoPhysics)||((infoId===INFO_TEXTURE_CAT_ID)?{massKg:4.2,gravityScale:1,terminalVelocity:18,bounce:0}:null);
+ if(!src) return {massKg:1,gravityScale:1,terminalVelocity:18,bounce:0};
+ return {
+   massKg:Math.max(.05,Math.min(500,Number(src.massKg)||1)),
+   gravityScale:Math.max(0,Math.min(5,Number(src.gravityScale)||1)),
+   terminalVelocity:Math.max(1,Math.min(80,Number(src.terminalVelocity)||18)),
+   bounce:Math.max(0,Math.min(.8,Number(src.bounce)||0))
+ };
+}
+function computeInfoTexturePhysics(ids){
+ ids=(ids||[]).map(String).filter(Boolean);
+ if(!ids.length) return null;
+ let massKg=0, gravityScale=0, terminalVelocity=18, bounce=0;
+ for(const id of ids){
+   const ph=infoTexturePhysicsForId(id);
+   massKg += ph.massKg;
+   gravityScale = Math.max(gravityScale, ph.gravityScale);
+   terminalVelocity = Math.max(terminalVelocity, ph.terminalVelocity);
+   bounce = Math.max(bounce, ph.bounce);
+ }
+ return {massKg:Math.max(.05,massKg),gravityScale:Math.max(0,gravityScale||1),terminalVelocity,bounce};
+}
+function applyInfoTexturePhysicsToRoot(root,def){
+ if(!root) return null;
+ const ids=[]; const add=id=>{id=String(id||''); if(id&&!ids.includes(id)) ids.push(id);};
+ if(root.data&&Array.isArray(root.data.infoTextureIds)) root.data.infoTextureIds.forEach(add);
+ if(def){
+   if(def.infoTexture) add(def.id);
+   if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
+   if(Array.isArray(def.decals)) for(const d of def.decals){ if(String(d&&d.textureId)===INFO_TEXTURE_CAT_ID) add(INFO_TEXTURE_CAT_ID); }
+ }
+ const ph=computeInfoTexturePhysics(ids);
+ root.data=root.data||{};
+ if(ph){
+   root.data.infoPhysics=ph;
+   root.data.massKg=ph.massKg;
+   if(!Number.isFinite(Number(root.data.vy))) root.data.vy=0;
+ }else{
+   delete root.data.infoPhysics;
+ }
+ return ph;
+}
+function infoRootGroundY(root){
+ try{
+   const p=root.getPosition();
+   const by=heightAt(p.x,p.z,16);
+   if(by>-900) return by+1;
+   return terrainHeight(p.x,p.z)+1;
+ }catch(e){ return 0; }
+}
+function updateInfoTexturePhysics(dt){
+ dt=Math.min(.05,Math.max(0,Number(dt)||0));
+ if(!dt) return;
+ const gravity=9.8;
+ const heldKeys=(ultraHeld&&ultraHeld.instanceKey&&typeof ultraConnectedKeys==='function')?ultraConnectedKeys(ultraHeld.instanceKey):[];
+ const heldSet=new Set(heldKeys.map(String));
+ const now=performance.now();
+ for(const [ik,root] of customObjectEntities){
+   if(!root||!root.getPosition||heldSet.has(String(ik))) continue;
+   const def=customObjectDefs.get(root.data&&root.data.defId);
+   const ph=applyInfoTexturePhysicsToRoot(root,def);
+   if(!ph || ph.gravityScale<=0) continue;
+   const b=ultraObjectBounds(root);
+   const groundY=infoRootGroundY(root);
+   const bottom=b.min.y;
+   root.data=root.data||{};
+   let vy=Number(root.data.vy)||0;
+   if(bottom<=groundY+.025 && vy<=0){
+     if(bottom<groundY-.05){ const p=root.getPosition(); root.setPosition(p.x,p.y+(groundY-bottom),p.z); }
+     root.data.vy=0; root.data.onGround=true;
+     continue;
+   }
+   root.data.onGround=false;
+   vy = Math.max(-ph.terminalVelocity, vy - gravity*ph.gravityScale*dt);
+   let dy=vy*dt;
+   if(bottom+dy<=groundY){
+     dy=groundY-bottom;
+     vy = ph.bounce>0 ? Math.abs(vy)*ph.bounce : 0;
+     if(Math.abs(vy)<.35) vy=0;
+     root.data.onGround=true;
+   }
+   const p=root.getPosition();
+   root.setPosition(p.x,p.y+dy,p.z);
+   root.data.vy=vy;
+   // 自分が作った/動かした情報物理OBJはたまに座標同期。過剰送信はしない。
+   if(root.data.instanceKey && (!root.data.lastPhysicsSyncAt || now-root.data.lastPhysicsSyncAt>550)){
+     root.data.lastPhysicsSyncAt=now;
+     try{ if(typeof ultraBroadcastTransform==='function') ultraBroadcastTransform(root); }catch{}
+   }
+ }
 }
 function hydrateRootRuntime(root, def){
  if(!root||!def) return root;
  const ids=[];
- if(Array.isArray(def.infoTextureIds)) ids.push(...def.infoTextureIds);
- if(Array.isArray(def.decals)) for(const d of def.decals) if(String(d.textureId)===INFO_TEXTURE_CAT_ID && !ids.includes(INFO_TEXTURE_CAT_ID)) ids.push(INFO_TEXTURE_CAT_ID);
+ const addInfoId=id=>{id=String(id||''); if(id&&!ids.includes(id)) ids.push(id);};
+ if(def.infoTexture) addInfoId(def.id);
+ if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(addInfoId);
+ if(Array.isArray(def.decals)) for(const d of def.decals) if(String(d.textureId)===INFO_TEXTURE_CAT_ID) addInfoId(INFO_TEXTURE_CAT_ID);
  root.data=Object.assign({},root.data||{},{infoTextureIds:ids,hp:Number(def.hp)||(ids.includes(INFO_TEXTURE_CAT_ID)?10:undefined),maxHp:Number(def.hp)||(ids.includes(INFO_TEXTURE_CAT_ID)?10:undefined),aiPhase:hash2((root.data&&root.data.instanceKey||'x').length, Date.now()%999),aiNextMeow:1+Math.random()*4});
+ applyInfoTexturePhysicsToRoot(root,def);
  if(ids.includes(INFO_TEXTURE_CAT_ID)) addCatLook(root);
  return root;
 }
@@ -3089,6 +3214,12 @@ placeCustomObject = function(def,x,y,z,yaw,instanceKey){
  def=validateObjectDef(def); if(!def) return null;
  const root=__infoPlaceCustomObject(def,x,y,z,yaw,instanceKey);
  return hydrateRootRuntime(root,def);
+};
+const __infoNoCallPlaceObjectInFront = placeObjectInFront;
+placeObjectInFront = function(def,broadcastInstance){
+ const clean=validateObjectDef(def);
+ if(clean && clean.infoTexture){ setMsg('情報テクスチャ単体は呼出不可。3Dエディターでブロックに貼れ','bad'); return null; }
+ return __infoNoCallPlaceObjectInFront(def,broadcastInstance);
 };
 
 function addCatLook(root){
@@ -3112,7 +3243,7 @@ function grantInfoTexture(infoId){
  infoTextureGranted.add(infoId);
  try{ localStorage.setItem(INFO_TEXTURE_GRANTED_KEY, JSON.stringify(Array.from(infoTextureGranted))); }catch{}
  if(first) setMsg('情報テクスチャ入手: '+label+' / OBJ編集で面に貼れば仕様付与','good');
- saveCustomObjectsLocal(); renderObjectManager(); setObjHud();
+ saveCustomObjectsLocal(); renderObjectManager(); if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); setObjHud();
 }
 function rootInfoTextureIds(root){
  const out=[]; const add=id=>{id=String(id||''); if(id&&!out.includes(id)) out.push(id);};
@@ -3184,6 +3315,7 @@ function updateCats(dt){
    const p=root.getPosition(); const dx=p.x-player.x, dz=p.z-player.z; const dist=Math.hypot(dx,dz);
    root.data=root.data||{}; root.data.aiNextMeow=(root.data.aiNextMeow||2)-step;
    if(root.data.aiNextMeow<=0){ root.data.aiNextMeow=3+Math.random()*8; if(dist<9) catMeow(root, Math.random()<.18?'angry':'cute'); }
+   if(root.data.infoPhysics && root.data.onGround===false) continue;
    let vx=0,vz=0;
    if(dist<1.35){ damagePlayer(2,'猫パンチ'); vx=dx/(dist||1)*1.8; vz=dz/(dist||1)*1.8; }
    else if(dist<4.2){ vx=dx/(dist||1)*2.0; vz=dz/(dist||1)*2.0; }
@@ -3595,7 +3727,7 @@ ultraApplyTransform = function(msg){
 };
 
 const __infoUpdateCustomObjectRuntime = updateCustomObjectRuntime;
-updateCustomObjectRuntime=function(dt){ __infoUpdateCustomObjectRuntime(dt); updateCats(dt); updateInfoHud(); };
+updateCustomObjectRuntime=function(dt){ __infoUpdateCustomObjectRuntime(dt); updateInfoTexturePhysics(dt); updateCats(dt); updateInfoHud(); };
 function initInfoTextureSystem(){ ensureInfoHud(); ensureCatInfoTexture(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); }
 try{initInfoTextureSystem();}catch(e){console.warn('info texture init failed',e);}
 
