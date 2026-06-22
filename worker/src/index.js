@@ -12,6 +12,8 @@ export class Room {
     this.links = [];
     this.worldEditsLoaded = false;
     this.worldEdits = [];
+    this.worldStateLoaded = false;
+    this.worldState = null;
     this.instancesSaveTimer = null;
     this.linksSaveTimer = null;
     this.worldEditsSaveTimer = null;
@@ -60,6 +62,36 @@ export class Room {
   async saveWorldEdits() {
     await this.state.storage.put('worldEdits', this.worldEdits.slice(-5000));
   }
+
+  async loadWorldState() {
+    if (this.worldStateLoaded) return;
+    this.worldStateLoaded = true;
+    const saved = await this.state.storage.get('sharedWorldState');
+    if (saved && typeof saved === 'object' && Number.isFinite(Number(saved.startEpochMs))) {
+      this.worldState = saved;
+      return;
+    }
+    this.worldState = {
+      type: 'worldState',
+      version: 'v12-shared-time-weather-spawn',
+      startEpochMs: Date.now(),
+      dayLengthMs: 720000,
+      weatherPeriodMs: 240000,
+      weatherSeed: Math.floor(Math.random() * 1000000000),
+      updatedAt: Date.now()
+    };
+    await this.state.storage.put('sharedWorldState', this.worldState);
+  }
+
+  worldStateMessage() {
+    return {
+      type: 'worldState',
+      state: this.worldState,
+      serverNow: Date.now(),
+      time: Date.now()
+    };
+  }
+
 
   scheduleSaveInstances() {
     if (this.instancesSaveTimer) return;
@@ -255,9 +287,10 @@ export class Room {
     await this.loadInstances();
     await this.loadLinks();
     await this.loadWorldEdits();
+    await this.loadWorldState();
 
     if (request.headers.get('Upgrade') !== 'websocket') {
-      return new Response('mine-server-git2 WebSocket server OK / decals + per-cell-size + ultrahand sync enabled', {
+      return new Response('mine-server-git2 WebSocket server OK / worldState + shared info-texture spawn sync enabled', {
         headers: { 'content-type': 'text/plain; charset=utf-8' }
       });
     }
@@ -275,6 +308,7 @@ export class Room {
     server.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() }));
     server.send(JSON.stringify({ type: 'objectInstanceLinks', links: this.links, time: Date.now() }));
     server.send(JSON.stringify({ type: 'worldEdits', edits: this.worldEdits.slice(-5000), time: Date.now() }));
+    server.send(JSON.stringify(this.worldStateMessage()));
     server.send(JSON.stringify({ type: 'players', players: Array.from(this.players.values()), time: Date.now() }));
 
     server.addEventListener('message', async (event) => {
@@ -303,11 +337,17 @@ export class Room {
       return;
     }
 
+    if (msg.type === 'worldStateReq') {
+      try { ws.send(JSON.stringify(this.worldStateMessage())); } catch {}
+      return;
+    }
+
     if (msg.type === 'objectCatalogReq') {
       try { ws.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() })); } catch {}
       try { ws.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() })); } catch {}
       try { ws.send(JSON.stringify({ type: 'objectInstanceLinks', links: this.links, time: Date.now() })); } catch {}
       try { ws.send(JSON.stringify({ type: 'worldEdits', edits: this.worldEdits.slice(-5000), time: Date.now() })); } catch {}
+      try { ws.send(JSON.stringify(this.worldStateMessage())); } catch {}
       try { ws.send(JSON.stringify({ type: 'players', players: Array.from(this.players.values()), time: Date.now() })); } catch {}
       return;
     }
