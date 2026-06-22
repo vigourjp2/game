@@ -931,8 +931,9 @@ function registerCustomObjectDef(def, source){
  if(!clean) return false;
  const existed=customObjectDefs.has(clean.id);
  customObjectDefs.set(clean.id, clean);
- // 編集更新時は既存ランダム配置もいったん消して、次周期で新定義を反映する
- if(existed){removeCustomObjectInstancesByDef(clean.id);}
+ // ローカルで明示更新した時だけ既存表示を作り直す。
+ // remote/catalog受信で毎回消すと、共有済みインスタンスが一瞬または永久に消える。
+ if(existed && source==='localUpdate'){removeCustomObjectInstancesByDef(clean.id);}
  saveCustomObjectsLocal();
  setObjStatus((existed?'更新済み: ':'登録済み: ')+customObjectDefs.size+'個 / '+(clean.kind==='plane'?'平面':'立体'));
  if(source==='localCreate'||source==='localUpdate') sendMultiplayer({type:'objectRegister', object:clean});
@@ -1188,6 +1189,12 @@ function handleObjectCatalogMessage(msg){
  if(msg.type==='objectDelete'){deleteCustomObjectDef(msg.objectId||msg.id,false);return true;}
  if(msg.type==='objectInstanceRemove'){removeCustomObjectInstance(msg.instanceKey,false);return true;}
  if(msg.type==='objectInstancePlace') return applyObjectInstancePlaceMessage(msg);
+ if(msg.type==='objectInstances' && Array.isArray(msg.instances)){
+   let n=0;
+   for(const inst of msg.instances){ if(applyObjectInstancePlaceMessage(inst)) n++; }
+   if(n) setMsg('共有OBJ配置を同期: '+n+'件','good');
+   return true;
+ }
  if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){
    msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));
    flushPendingObjectInstancePlaces();
