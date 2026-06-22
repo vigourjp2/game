@@ -96,6 +96,8 @@
   #ultraHint{position:fixed;left:50%;top:58%;transform:translate(-50%,-50%);z-index:18;display:none;max-width:78vw;padding:10px 14px;border-radius:999px;background:rgba(6,78,59,.78);border:1px solid rgba(187,247,208,.62);color:#dcfce7;font-size:13px;font-weight:1000;text-shadow:0 2px 5px #000;pointer-events:none}
   body.ultraActive #ultraHint{display:block}
 
+  body.objEditing #ultraHandBtn{display:none!important}
+
 </style>
 </head>
 <body>
@@ -2564,6 +2566,7 @@ let ultraHeld=null;
 let ultraLine=null;
 let ultraAttachLine=null;
 let ultraLastSync=0;
+let ultraEditorHeldEntity=null;
 const ultraLinks=new Map(); // instanceKey -> [{other, ox, oy, oz}]
 function setUltraHint(t){const e=$('ultraHint'); if(e)e.textContent=t||'ウルトラハンド';}
 function setUltraButtons(on){
@@ -2583,7 +2586,7 @@ function ultraMakeLine(name,color,opacity){
  const m=new pc.StandardMaterial();
  m.diffuse=new pc.Color(color[0],color[1],color[2]);
  m.emissive=new pc.Color(color[0]*.45,color[1]*.45,color[2]*.45);
- m.opacity=opacity==null?.78:opacity;
+ m.opacity=opacity==null?.82:opacity;
  m.blendType=pc.BLEND_NORMAL;
  m.depthWrite=false;
  m.update();
@@ -2592,7 +2595,7 @@ function ultraMakeLine(name,color,opacity){
  app.root.addChild(e);
  return e;
 }
-function ultraEnsureLine(){ if(!ultraLine) ultraLine=ultraMakeLine('ultrahand_control_line',[0.0,1.0,.86],.86); return ultraLine; }
+function ultraEnsureLine(){ if(!ultraLine) ultraLine=ultraMakeLine('ultrahand_control_line',[0.0,1.0,.86],.88); return ultraLine; }
 function ultraEnsureAttachLine(){ if(!ultraAttachLine) ultraAttachLine=ultraMakeLine('ultrahand_attach_line',[.1,1,.35],.72); return ultraAttachLine; }
 function ultraObjectBounds(root){
  if(!root||!root.children||!root.children.length||!root.getPosition){
@@ -2616,7 +2619,6 @@ function ultraObjectBounds(root){
 function ultraEyePoint(){
  const dir=forwardVec();
  const right=new pc.Vec3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
- // 画面上はプレイヤーの右手っぽい位置から線を出す。ローカル/Pagesどちらでも同じ。
  return new pc.Vec3(player.x,player.y+1.22,player.z).add(right.scale(.28)).add(dir.clone().scale(.34));
 }
 function ultraShowLinePoints(line,a,b,thick){
@@ -2624,10 +2626,41 @@ function ultraShowLinePoints(line,a,b,thick){
  const dist=a.distance(b);
  if(!Number.isFinite(dist)||dist<.03){line.enabled=false;return;}
  const mid=a.clone().add(b).scale(.5);
- line.enabled=true;
- line.setPosition(mid);
- line.setLocalScale(thick||.055,thick||.055,Math.max(.06,dist));
- line.lookAt(b);
+ line.enabled=true; line.setPosition(mid); line.setLocalScale(thick||.055,thick||.055,Math.max(.06,dist)); line.lookAt(b);
+}
+function ultraShowLine(a,b){
+ const line=ultraEnsureLine();
+ if(!a||!b){line.enabled=false;return;}
+ ultraShowLinePoints(line, ultraObjectBounds(a).center, ultraObjectBounds(b).center, .05);
+}
+function ultraShowVecLine(pa,pb){
+ ultraShowLinePoints(ultraEnsureLine(),pa,pb,.055);
+}
+function ultraEyePos(){
+ return new pc.Vec3(player.x, player.y+currentEditorEyeHeight(), player.z);
+}
+function destroyUltraEditorHeldEntity(){
+ if(ultraEditorHeldEntity){try{ultraEditorHeldEntity.destroy();}catch{} ultraEditorHeldEntity=null;}
+}
+function makeUltraEditorHeldEntity(color,size,localPos){
+ destroyUltraEditorHeldEntity();
+ if(!objBuildRoot) return null;
+ const e=new pc.Entity('editor_ultrahand_held_cell');
+ e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ e.render.material=ensureCustomMat(color);
+ e.setLocalScale(size*1.045,size*1.045,size*1.045);
+ e.setLocalPosition(localPos.x,localPos.y,localPos.z);
+ e.data={ultraEditorHeld:true,objectCellSize:size};
+ objBuildRoot.addChild(e);
+ ultraEditorHeldEntity=e;
+ return e;
+}
+function localToObjCellNearest(local,size){
+ const s=Math.max(.03, Number(size)||currentObjScale());
+ const x=Math.round(local.x/s+(OBJECT_GRID-1)/2);
+ const y=Math.round(local.y/s-.5);
+ const z=Math.round(local.z/s+(OBJECT_GRID-1)/2);
+ return {x,y,z,key:objKey3(x,y,z)};
 }
 function nearestUltraAttachTarget(root){
  if(!root||!root.getPosition) return null;
@@ -2671,8 +2704,8 @@ function startUltraField(){
  ultraHeld={mode:'field',root,instanceKey:r.objectHit.instanceKey,defId:r.objectHit.defId,distance:Math.max(1.8,Math.min(8.5,d||4)),yaw:root.data&&Number(root.data.yaw)||0,rootCenterOffset:centerOffset};
  setUltraButtons(true); setUltraHint('ウルトラハンド: 青緑ラインで操作中 / 視点で移動 / PLACEで接着 / BREAKで解除 / ULTRAで離す');
  setMsg('ウルトラハンド: OBJを掴んだ','good');
- // 掴んだ瞬間から「手元→OBJ」線を必ず出す。対象が消えたように見えるのを防ぐ。
  ultraShowLinePoints(ultraEnsureLine(), ultraEyePoint(), bounds.center, .065);
+ if(ultraAttachLine) ultraAttachLine.enabled=false;
  return true;
 }
 function startUltraEditor(){
@@ -2680,26 +2713,39 @@ function startUltraEditor(){
  const aim=objectBuilderAim(); const h=aim&&aim.hit;
  if(!h||!objVoxels.has(h.key)){setMsg('ウルトラハンド対象なし: 立体エディタのブロックに照準を合わせて押す','bad');return false;}
  const color=objVoxels.get(h.key); const size=storedObjCellSize(h.key,currentObjScale());
+ const oldEntity=objBuildCellEntities.get(h.key);
+ const startLocal=oldEntity&&oldEntity.getLocalPosition ? oldEntity.getLocalPosition().clone() : objectCellLocal(h.x,h.y,h.z,size);
+ const rootPos=objBuildRoot.getPosition();
+ const worldStart=rootPos.clone().add(startLocal);
+ const eye=ultraEyePos();
+ const dist=Math.max(.55,Math.min(8,eye.distance(worldStart)||2.2));
  objVoxels.delete(h.key); objVoxelSizes.delete(h.key); removeObjectBuilderCellEntity(h.key);
- ultraHeld={mode:'editorCell',x:h.x,y:h.y,z:h.z,key:h.key,color,size};
- setUltraButtons(true); setUltraHint('エディタULTRA: 掴み中 / 照準位置へ移動 / PLACEかULTRAで接着 / BREAKで元に戻す');
+ const heldEnt=makeUltraEditorHeldEntity(color,size,startLocal);
+ ultraHeld={mode:'editorCell',x:h.x,y:h.y,z:h.z,key:h.key,color,size,startLocal:startLocal.clone(),distance:dist,heldEntity:heldEnt};
+ setUltraButtons(true);
+ document.body.classList.remove('ultraActive');
+ setUltraHint('');
  setMsg('ウルトラハンド: エディタブロックを掴んだ','good');
  return true;
 }
 function stopUltraHand(drop){
  if(!ultraHeld){setUltraButtons(false);return false;}
  if(ultraHeld.mode==='editorCell'){
-   const aim=objectBuilderAim(); const t=(aim&&(aim.place||aim.hit))||ultraHeld;
+   const ent=ultraHeld.heldEntity||ultraEditorHeldEntity;
+   const local=ent&&ent.getLocalPosition ? ent.getLocalPosition().clone() : (ultraHeld.startLocal||objectCellLocal(ultraHeld.x,ultraHeld.y,ultraHeld.z,ultraHeld.size));
+   const t = drop===false ? {x:ultraHeld.x,y:ultraHeld.y,z:ultraHeld.z,key:ultraHeld.key} : localToObjCellNearest(local,ultraHeld.size);
    const k=objKey3(t.x,t.y,t.z);
    if(drop===false){
      const ok=objKey3(ultraHeld.x,ultraHeld.y,ultraHeld.z);
+     destroyUltraEditorHeldEntity();
      objVoxels.set(ok,ultraHeld.color); objVoxelSizes.set(ok,ultraHeld.size); addObjectBuilderCellEntity(ultraHeld.x,ultraHeld.y,ultraHeld.z,ultraHeld.color);
      setMsg('ウルトラハンド: 元の位置へ戻した','info');
    } else if(!insideObjectCell(t.x,t.y,t.z)){
-     setMsg('ウルトラハンド: 範囲外なので保持中','bad'); return true;
+     setMsg('ウルトラハンド: 範囲外。少し内側へ動かせ','bad'); return true;
    } else if(objVoxels.has(k)){
-     setMsg('ウルトラハンド: そこは埋まってる。別位置に合わせろ','bad'); return true;
+     setMsg('ウルトラハンド: そこは埋まってる。少しずらせ','bad'); return true;
    } else {
+     destroyUltraEditorHeldEntity();
      objVoxels.set(k,ultraHeld.color); objVoxelSizes.set(k,ultraHeld.size); addObjectBuilderCellEntity(t.x,t.y,t.z,ultraHeld.color);
      setMsg('ウルトラハンド: 接着 ['+t.x+','+t.y+','+t.z+']','good');
    }
@@ -2708,10 +2754,8 @@ function stopUltraHand(drop){
    ultraBroadcastTransform(ultraHeld.root);
    setMsg('ウルトラハンド: OBJを離した','good');
  }
- ultraHeld=null;
- if(ultraLine) ultraLine.enabled=false;
- if(ultraAttachLine) ultraAttachLine.enabled=false;
- setUltraButtons(false); setUltraHint('ウルトラハンド: OBJを掴む');
+ destroyUltraEditorHeldEntity();
+ ultraHeld=null; if(ultraLine) ultraLine.enabled=false; if(ultraAttachLine) ultraAttachLine.enabled=false; setUltraButtons(false); setUltraHint('ウルトラハンド: OBJを掴む');
  return true;
 }
 function toggleUltraHand(){
@@ -2742,16 +2786,25 @@ function ultraDetachHeld(){
 function updateUltraHand(dt){
  if(!ultraHeld) return;
  if(ultraHeld.mode==='field' && ultraHeld.root){
-   const dir=forwardVec(); const d=ultraHeld.distance;
+   const dir=forwardVec();
+   const d=Math.max(1.2,Math.min(9,Number(ultraHeld.distance)||4));
    const eye=new pc.Vec3(player.x,player.y+1.45,player.z);
    const targetCenter=eye.clone().add(dir.clone().scale(d));
-   // rootの原点ではなく「見た目の中心」を照準前方に置く。これで掴んだ瞬間に地面下/画面外へ飛ばない。
-   const rootPos=targetCenter.clone().add(ultraHeld.rootCenterOffset||new pc.Vec3());
-   ultraHeld.root.setPosition(rootPos.x,rootPos.y,rootPos.z);
+   // フィールドULTRAは、掴んだOBJの「見た目中心」を常に照準前方へ固定する。
+   // 旧処理はroot原点や初回offsetに依存していたため、視点回転・歩行でOBJが置いてきぼりに見えた。
+   // まず大まかにrootを置き、yaw反映後にbounds中心のズレを補正して、必ず中心がtargetCenterへ来るようにする。
+   const roughRootPos=targetCenter.clone().add(ultraHeld.rootCenterOffset||new pc.Vec3());
+   ultraHeld.root.setPosition(roughRootPos.x,roughRootPos.y,roughRootPos.z);
    ultraHeld.yaw=player.yaw;
    ultraHeld.root.setEulerAngles(0,ultraHeld.yaw*180/Math.PI,0);
    ultraHeld.root.data=Object.assign({},ultraHeld.root.data||{},{yaw:ultraHeld.yaw});
-   const b=ultraObjectBounds(ultraHeld.root);
+   let b=ultraObjectBounds(ultraHeld.root);
+   const fix=targetCenter.clone().sub(b.center);
+   if(Number.isFinite(fix.x)&&Number.isFinite(fix.y)&&Number.isFinite(fix.z)){
+     const rp=ultraHeld.root.getPosition().clone().add(fix);
+     ultraHeld.root.setPosition(rp.x,rp.y,rp.z);
+     b=ultraObjectBounds(ultraHeld.root);
+   }
    ultraShowLinePoints(ultraEnsureLine(), ultraEyePoint(), b.center, .065);
    const near=nearestUltraAttachTarget(ultraHeld.root);
    if(near) ultraShowLinePoints(ultraEnsureAttachLine(), b.center, ultraObjectBounds(near.root).center, .05);
@@ -2761,13 +2814,24 @@ function updateUltraHand(dt){
    if(now-ultraLastSync>150){ultraLastSync=now; ultraBroadcastTransform(ultraHeld.root);}
  }
  if(ultraHeld.mode==='editorCell'){
-   const aim=objectBuilderAim(); const t=aim&&(aim.place||aim.hit);
-   if(objBuildCursor&&t){
-     objBuildCursor.enabled=true;
-     const s=ultraHeld.size||currentObjScale();
-     objBuildCursor.setLocalScale(s*1.18,s*1.18,s*1.18);
-     objBuildCursor.setLocalPosition(objectCellLocal(t.x,t.y,t.z,s));
-   }
+   ensureObjectBuildRoot();
+   const dir=forwardVec();
+   const d=Math.max(.45,Number(ultraHeld.distance)||2.0);
+   const eye=ultraEyePos();
+   const world=new pc.Vec3(eye.x+dir.x*d, eye.y+dir.y*d, eye.z+dir.z*d);
+   const rootPos=objBuildRoot.getPosition();
+   const local=world.clone().sub(rootPos);
+   const s=ultraHeld.size||currentObjScale();
+   const total=OBJECT_GRID*s;
+   local.x=Math.max(-total*.55,Math.min(total*.55,local.x));
+   local.y=Math.max(s*.35,Math.min(total+s*.6,local.y));
+   local.z=Math.max(-total*.55,Math.min(total*.55,local.z));
+   const ent=ultraHeld.heldEntity||ultraEditorHeldEntity||makeUltraEditorHeldEntity(ultraHeld.color,s,local);
+   if(ent){ent.enabled=true; ent.setLocalScale(s*1.045,s*1.045,s*1.045); ent.setLocalPosition(local.x,local.y,local.z);}
+   if(objBuildCursor)objBuildCursor.enabled=false;
+   const heldWorld=rootPos.clone().add(local);
+   ultraShowVecLine(eye,heldWorld);
+   document.body.classList.remove('ultraActive');
  }
 }
 const __ultraUpdateMultiplayer=updateMultiplayer;
@@ -2777,7 +2841,7 @@ placeBlock=function(){if(ultraHeld)return ultraAttachOrRelease();return __ultraP
 const __ultraBreakBlock=breakBlock;
 breakBlock=function(){if(ultraHeld)return ultraDetachHeld();return __ultraBreakBlock.apply(this,arguments);};
 const __ultraCloseObjectEditor=closeObjectEditor;
-closeObjectEditor=function(){if(ultraHeld&&ultraHeld.mode==='editorCell')stopUltraHand(false);return __ultraCloseObjectEditor.apply(this,arguments);};
+closeObjectEditor=function(){if(ultraHeld&&ultraHeld.mode==='editorCell')stopUltraHand(false);destroyUltraEditorHeldEntity();return __ultraCloseObjectEditor.apply(this,arguments);};
 window.addEventListener('keydown',e=>{if(e.key==='u'||e.key==='U'){e.preventDefault();toggleUltraHand();} if(ultraHeld&&ultraHeld.mode==='field'){ if(e.key==='q'||e.key==='Q')ultraHeld.distance=Math.max(1.2,ultraHeld.distance-.25); if(e.key==='e'||e.key==='E')ultraHeld.distance=Math.min(9,ultraHeld.distance+.25); }});
 try{ensureUltraUi();}catch{}
 
