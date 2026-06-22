@@ -3054,9 +3054,9 @@ function isInfoTextureDefUnlocked(def){
 function shouldShowObjectDefInManager(def){
  if(!def) return false;
  if(String(def.id||'')===INFO_CARRIER_CAT_ID) return false;
- // 情報テクスチャ単体だけ、討伐入手まではOBJ一覧に出さない。
- // その情報テクスチャを含む複合OBJは def.infoTexture ではないので隠さない。
- if(def.infoTexture && !isInfoTextureDefUnlocked(def)) return false;
+ // 情報テクスチャ単体は3Dオブジェクト一覧からは常に呼出不可なので、一覧にも出さない。
+ // ただし、その情報テクスチャを貼った複合OBJ/ブループリントは def.infoTexture ではないため表示する。
+ if(def.infoTexture) return false;
  return true;
 }
 function shouldWorldSpawnObjectDef(def){
@@ -3075,7 +3075,7 @@ validateObjectDef = function(def){
  const add=id=>{id=String(id||''); if(id&&!ids.includes(id)) ids.push(id);};
  if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
  if(def.infoType==='cat'||def.infoCarrier==='cat') add(INFO_TEXTURE_CAT_ID);
- if(Array.isArray(def.decals)) for(const d of def.decals){ if(String(d&&d.textureId)===INFO_TEXTURE_CAT_ID) add(INFO_TEXTURE_CAT_ID); }
+ if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(tid===INFO_TEXTURE_CAT_ID || (tdef&&tdef.infoTexture)) add(tid); }
  if(ids.length) clean.infoTextureIds=ids;
  if(def.infoTexture) clean.infoTexture=true;
  if(def.infoType) clean.infoType=String(def.infoType).slice(0,40);
@@ -3135,7 +3135,7 @@ function applyInfoTexturePhysicsToRoot(root,def){
  if(def){
    if(def.infoTexture) add(def.id);
    if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
-   if(Array.isArray(def.decals)) for(const d of def.decals){ if(String(d&&d.textureId)===INFO_TEXTURE_CAT_ID) add(INFO_TEXTURE_CAT_ID); }
+   if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(tid===INFO_TEXTURE_CAT_ID || (tdef&&tdef.infoTexture)) add(tid); }
  }
  const ph=computeInfoTexturePhysics(ids);
  root.data=root.data||{};
@@ -3203,7 +3203,7 @@ function hydrateRootRuntime(root, def){
  const addInfoId=id=>{id=String(id||''); if(id&&!ids.includes(id)) ids.push(id);};
  if(def.infoTexture) addInfoId(def.id);
  if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(addInfoId);
- if(Array.isArray(def.decals)) for(const d of def.decals) if(String(d.textureId)===INFO_TEXTURE_CAT_ID) addInfoId(INFO_TEXTURE_CAT_ID);
+ if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(tid===INFO_TEXTURE_CAT_ID || (tdef&&tdef.infoTexture)) addInfoId(tid); }
  root.data=Object.assign({},root.data||{},{infoTextureIds:ids,hp:Number(def.hp)||(ids.includes(INFO_TEXTURE_CAT_ID)?10:undefined),maxHp:Number(def.hp)||(ids.includes(INFO_TEXTURE_CAT_ID)?10:undefined),aiPhase:hash2((root.data&&root.data.instanceKey||'x').length, Date.now()%999),aiNextMeow:1+Math.random()*4});
  applyInfoTexturePhysicsToRoot(root,def);
  if(ids.includes(INFO_TEXTURE_CAT_ID)) addCatLook(root);
@@ -3253,7 +3253,7 @@ function rootInfoTextureIds(root){
    if(def.infoTexture) add(def.id);
    if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
    if(def.infoType==='cat') add(INFO_TEXTURE_CAT_ID);
-   if(Array.isArray(def.decals)) for(const d of def.decals){ if(String(d&&d.textureId)===INFO_TEXTURE_CAT_ID) add(INFO_TEXTURE_CAT_ID); }
+   if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(tid===INFO_TEXTURE_CAT_ID || (tdef&&tdef.infoTexture)) add(tid); }
  }
  return out;
 }
@@ -3326,9 +3326,19 @@ function updateCats(dt){
      if(od<1.1 && Math.random()<.035){ catMeow(root,'angry'); damageObjectRoot(other,.75); }
    }
    if(vx||vz){
-     const nx=p.x+vx*step, nz=p.z+vz*step; const gy=terrainHeight(nx,nz)+1;
-     const hop=(Math.abs(gy-p.y)>.25 && Math.abs(gy-p.y)<1.25)?Math.min(gy,p.y+.18):gy;
-     root.setPosition(nx,hop,nz); root.setEulerAngles(0,Math.atan2(vx,vz)*180/Math.PI,0); root.data.yaw=Math.atan2(vx,vz);
+     const nx=p.x+vx*step, nz=p.z+vz*step;
+     // 猫AIの地上移動は「root中心をterrain+1へ戻す」のではなく、現在の複合OBJ下面を地面へ合わせる。
+     // これで、情報物理で着地した直後にAIがY座標を壊して、また空から落ち直すループを防ぐ。
+     let targetBottom=heightAt(nx,nz,16);
+     if(targetBottom<=-900) targetBottom=terrainHeight(nx,nz);
+     targetBottom += 1;
+     const b=ultraObjectBounds(root);
+     const bottom=b.min.y;
+     let ny=p.y+(targetBottom-bottom);
+     const climb=targetBottom-bottom;
+     if(climb>.35 && climb<1.35) ny=Math.min(ny,p.y+.28);
+     if(climb>=1.35) ny=p.y;
+     root.setPosition(nx,ny,nz); root.setEulerAngles(0,Math.atan2(vx,vz)*180/Math.PI,0); root.data.yaw=Math.atan2(vx,vz); root.data.onGround=true; root.data.vy=0;
    }else if(dist<10){ root.setEulerAngles(0,Math.atan2(-dx,-dz)*180/Math.PI,0); root.data.yaw=Math.atan2(-dx,-dz); }
  }
 }
@@ -3475,7 +3485,7 @@ function entityCellsForBlueprint(root, origin, outCells, outDecals, infoIds){
  const def=customObjectDefs.get(root.data&&root.data.defId);
  if(def){
    if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(id=>infoIds.add(id));
-   if(Array.isArray(def.decals)) for(const d of def.decals){ if(d.textureId===INFO_TEXTURE_CAT_ID) infoIds.add(INFO_TEXTURE_CAT_ID); }
+   if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(tid===INFO_TEXTURE_CAT_ID || (tdef&&tdef.infoTexture)) infoIds.add(tid); }
  }
  if(root.data&&Array.isArray(root.data.infoTextureIds)) root.data.infoTextureIds.forEach(id=>infoIds.add(id));
 }
