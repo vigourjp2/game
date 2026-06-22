@@ -858,7 +858,7 @@ const objVoxelSizes = new Map();
 const objVoxelOffsets = new Map();
 const objPlanePixels = new Map(); // key: x,y -> hex
 
-function setObjHud(){ const el=$('objHud'); if(el) el.textContent=String(customObjectDefs.size); }
+function setObjHud(){ const el=$('objHud'); if(el){ const vals=Array.from(customObjectDefs.values()); const n=(typeof shouldShowObjectDefInManager==='function')?vals.filter(shouldShowObjectDefInManager).length:vals.length; el.textContent=String(n); } }
 function setObjStatus(t){ const el=$('objStatus'); if(el) el.textContent=t; }
 function setObjEditBar(t){ const el=$('objEditBar'); if(el) el.innerHTML=t; }
 function objKey3(x,y,z){return x+','+y+','+z;}
@@ -1117,7 +1117,7 @@ function removeCustomObjectInstance(instanceKey,broadcast){
  return true;
 }
 function spawnCustomObjectForChunk(ch){
- const defs=Array.from(customObjectDefs.values());
+ const defs=Array.from(customObjectDefs.values()).filter(def=>typeof shouldWorldSpawnObjectDef==='function'?shouldWorldSpawnObjectDef(def):true);
  if(!defs.length||!ch||!ch.done) return;
  const spawnKey='chunk:'+ch.key+':'+defs.map(d=>d.id).join('|');
  if(customSpawned.has(spawnKey)) return;
@@ -1660,7 +1660,7 @@ function blueprintThumb(def){
 }
 function renderObjectManager(){
  const list=$('bpList'); if(!list) return;
- const defs=Array.from(customObjectDefs.values()).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
+ const defs=Array.from(customObjectDefs.values()).filter(def=>typeof shouldShowObjectDefInManager==='function'?shouldShowObjectDefInManager(def):true).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
  if(!defs.length){list.innerHTML='<div class="bpEmpty">登録OBJなし。まず「新規OBJ作成」で作れ。</div>'; return;}
  list.innerHTML='';
  for(const def of defs){
@@ -2989,7 +2989,9 @@ const INFO_CARRIER_CAT_ID = 'builtin-info-carrier-cat';
 const INFO_BP_PREFIX = 'bp-';
 let playerHp = 20;
 let playerLastDamagedAt = 0;
+const INFO_TEXTURE_GRANTED_KEY = 'mineInfoTextureGranted.v1';
 let infoTextureGranted = new Set();
+try{ infoTextureGranted = new Set(JSON.parse(localStorage.getItem(INFO_TEXTURE_GRANTED_KEY)||'[]').map(String)); }catch{}
 let catAiAcc = 0;
 let catAudioCtx = null;
 let blueprintBtn = null;
@@ -3025,17 +3027,27 @@ function ensureCatInfoTexture(){
  return customObjectDefs.get(INFO_TEXTURE_CAT_ID);
 }
 function ensureCatInfoCarrierDef(){
- ensureCatInfoTexture();
- if(customObjectDefs.has(INFO_CARRIER_CAT_ID)) return customObjectDefs.get(INFO_CARRIER_CAT_ID);
- const cells=[];
- const colors=['#475569','#64748b','#334155','#1e293b'];
- for(let x=5;x<=10;x++) for(let y=0;y<=5;y++) for(let z=5;z<=10;z++){
-   const edge=(x===5||x===10||y===0||y===5||z===5||z===10); if(edge || hash2(x*13+y*17,z*19)>.38) cells.push({x,y,z,size:.16,color:colors[(x+y+z)%colors.length]});
- }
- const def={id:INFO_CARRIER_CAT_ID,name:'野生の情報箱:ねこ',kind:'voxel3d',grid:OBJECT_GRID,scale:.16,cells,decals:[{x:8,y:5,z:10,face:'pz',textureId:INFO_TEXTURE_CAT_ID,grid:16,cells:catIconCells()}],infoCarrier:'cat',hp:8,worldSpawn:true,createdAt:2,updatedAt:Date.now()};
- const clean=validateObjectDef(def)||def;
- customObjectDefs.set(INFO_CARRIER_CAT_ID,clean);
- return clean;
+ // 廃止: 情報箱ではなく、情報テクスチャそのものを野生出現させる。
+ // 旧ローカル/旧カタログに残った箱は一覧・ランダム出現から除外する。
+ try{ customObjectDefs.delete(INFO_CARRIER_CAT_ID); }catch{}
+ return null;
+}
+function isInfoTextureDefUnlocked(def){
+ if(!def || !def.infoTexture) return true;
+ return infoTextureGranted.has(String(def.id));
+}
+function shouldShowObjectDefInManager(def){
+ if(!def) return false;
+ if(String(def.id||'')==='builtin-info-carrier-cat') return false;
+ // 情報テクスチャ単体だけ、討伐入手まではOBJ一覧に出さない。
+ // その情報テクスチャを含む複合OBJは def.infoTexture ではないので隠さない。
+ if(def.infoTexture && !isInfoTextureDefUnlocked(def)) return false;
+ return true;
+}
+function shouldWorldSpawnObjectDef(def){
+ if(!def) return false;
+ if(String(def.id||'')==='builtin-info-carrier-cat') return false;
+ return true;
 }
 
 const __infoValidateObjectDef = validateObjectDef;
@@ -3091,14 +3103,32 @@ function addCatLook(root){
  box('cat_tail',dark,w*.95,b.center.y-c.y,w*.08,w*.18,w*.18,w*.78);
 }
 function grantInfoTexture(infoId){
- if(infoId!==INFO_TEXTURE_CAT_ID) return;
- ensureCatInfoTexture();
- if(!infoTextureGranted.has(infoId)) setMsg('情報テクスチャ入手: ねこ / OBJ編集で面に貼れば猫化する','good');
+ infoId=String(infoId||'');
+ if(!infoId) return;
+ if(infoId===INFO_TEXTURE_CAT_ID) ensureCatInfoTexture();
+ const def=customObjectDefs.get(infoId);
+ const label=(def&&def.name)?String(def.name).replace(/^情報テクスチャ[:：]?/,''):infoId;
+ const first=!infoTextureGranted.has(infoId);
  infoTextureGranted.add(infoId);
- saveCustomObjectsLocal(); renderObjectManager();
+ try{ localStorage.setItem(INFO_TEXTURE_GRANTED_KEY, JSON.stringify(Array.from(infoTextureGranted))); }catch{}
+ if(first) setMsg('情報テクスチャ入手: '+label+' / OBJ編集で面に貼れば仕様付与','good');
+ saveCustomObjectsLocal(); renderObjectManager(); setObjHud();
+}
+function rootInfoTextureIds(root){
+ const out=[]; const add=id=>{id=String(id||''); if(id&&!out.includes(id)) out.push(id);};
+ if(root&&root.data&&Array.isArray(root.data.infoTextureIds)) root.data.infoTextureIds.forEach(add);
+ const def=customObjectDefs.get(root&&root.data&&root.data.defId);
+ if(def){
+   if(def.infoTexture) add(def.id);
+   if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
+   if(def.infoType==='cat') add(INFO_TEXTURE_CAT_ID);
+   if(Array.isArray(def.decals)) for(const d of def.decals){ if(String(d&&d.textureId)===INFO_TEXTURE_CAT_ID) add(INFO_TEXTURE_CAT_ID); }
+ }
+ return out;
 }
 function dropInfoFromRoot(root){
- if(rootHasInfo(root,INFO_TEXTURE_CAT_ID) || (root&&root.data&&root.data.defId===INFO_CARRIER_CAT_ID)) grantInfoTexture(INFO_TEXTURE_CAT_ID);
+ const ids=rootInfoTextureIds(root);
+ for(const id of ids) grantInfoTexture(id);
 }
 function damagePlayer(amount, label){
  const now=performance.now(); if(now-playerLastDamagedAt<650) return;
@@ -3126,7 +3156,7 @@ breakBlock = function(){
  const r=rayBlock();
  if(r && r.objectHit && r.objectHit.root){
    const root=r.objectHit.root;
-   if(rootHasInfo(root,INFO_TEXTURE_CAT_ID) || (root.data&&root.data.defId===INFO_CARRIER_CAT_ID)) return damageObjectRoot(root,4);
+   if(rootHasInfo(root,INFO_TEXTURE_CAT_ID)) return damageObjectRoot(root,4);
    dropInfoFromRoot(root);
  }
  return __infoBreakBlock.apply(this,arguments);
@@ -3392,20 +3422,25 @@ handleObjectCatalogMessage=function(msg){
 };
 const __infoSpawnCustomObjectForChunk = spawnCustomObjectForChunk;
 spawnCustomObjectForChunk=function(ch){
- ensureCatInfoCarrierDef();
- if(!ch||!ch.done) return;
- const spawnKey='infoChunk:'+ch.key;
- if(customSpawned.has(spawnKey)) return;
+ // 既存のユーザーOBJランダム出現は維持。
+ const r=__infoSpawnCustomObjectForChunk.apply(this,arguments);
+ // 情報箱は廃止。ねこ情報テクスチャそのものを、低確率で野生個体として生息させる。
+ ensureCatInfoTexture();
+ try{ customObjectDefs.delete(INFO_CARRIER_CAT_ID); }catch{}
+ if(!ch||!ch.done) return r;
+ const spawnKey='infoTextureWild:'+ch.key+':cat';
+ if(customSpawned.has(spawnKey)) return r;
  customSpawned.add(spawnKey);
  const chance=hash2(ch.cx*911+41,ch.cz*919-73);
  if(chance<.18){
-   const def=ensureCatInfoCarrierDef();
+   const def=ensureCatInfoTexture();
    const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*929+3,ch.cz*937+4)*CHUNK_SIZE);
    const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*941+5,ch.cz*947+6)*CHUNK_SIZE);
-   const y=terrainHeight(x,z)+1;
-   placeCustomObject(def,x,y,z,Math.floor(hash2(ch.cx*953,ch.cz*967)*4)*(Math.PI/2),'info:'+ch.key+':cat');
+   const y=terrainHeight(x,z)+1.05;
+   const yaw=Math.floor(hash2(ch.cx*953,ch.cz*967)*4)*(Math.PI/2);
+   placeCustomObject(def,x,y,z,yaw,'infoTexture:'+ch.key+':cat');
  }
- return __infoSpawnCustomObjectForChunk.apply(this,arguments);
+ return r;
 };
 
 
@@ -3561,7 +3596,7 @@ ultraApplyTransform = function(msg){
 
 const __infoUpdateCustomObjectRuntime = updateCustomObjectRuntime;
 updateCustomObjectRuntime=function(dt){ __infoUpdateCustomObjectRuntime(dt); updateCats(dt); updateInfoHud(); };
-function initInfoTextureSystem(){ ensureInfoHud(); ensureCatInfoTexture(); ensureCatInfoCarrierDef(); updateInfoHud(); setObjHud(); }
+function initInfoTextureSystem(){ ensureInfoHud(); ensureCatInfoTexture(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); }
 try{initInfoTextureSystem();}catch(e){console.warn('info texture init failed',e);}
 
 setMsg('PlayCanvas Engine読込完了','good');
