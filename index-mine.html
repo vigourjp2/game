@@ -4865,13 +4865,15 @@ app.on('update',function(){ __smoothFrameNo++; });
       let vx = 0, vz = 0;
       const avoidNear = Math.min(4.5, Math.max(2.0, sense*0.55));
       const hasAggro = root.data.angryUntil > now;
+      const ownAlly = (typeof isOwnSummonedFriendlyV5==='function') ? isOwnSummonedFriendlyV5(root) : false;
+      const canHurtLocal = (typeof rootIsHostileToLocalV5==='function') ? rootIsHostileToLocalV5(root, meta, now) : (meta.role==='hostile' || hasAggro);
       const hostileNearby = findNearestByRoleV4(root, ['hostile'], 8.5);
-      const targetForHelper = hostileNearby.root;
+      const targetForHelper = (hostileNearby.root && !(typeof isOwnSummonedFriendlyV5==='function' && isOwnSummonedFriendlyV5(hostileNearby.root))) ? hostileNearby.root : null;
 
       if(meta.type==='armadillo' && dist<3.2){ root.data.curlUntil = now + 1400; }
       if(root.data.curlUntil && root.data.curlUntil>now){ vx = vz = 0; try{ root.setEulerAngles(0, root.data.yaw*180/Math.PI||0, 0); }catch(e){} continue; }
 
-      if(meta.role==='hostile' || hasAggro){
+      if(canHurtLocal || (hasAggro && !ownAlly)){
         if(dist < sense){
           root.data.mood = 'attack';
           vx = towardX * speed * (meta.type==='creeper'?0.92:1);
@@ -4914,8 +4916,8 @@ app.on('update',function(){ __smoothFrameNo++; });
       }
 
       if(meta.type==='goat' && dist>2.7 && dist<6 && (!root.data.ramAt || now > root.data.ramAt) && Math.random()<0.08){ root.data.ramAt = now + 2800; vx = towardX * speed * 2.1; vz = towardZ * speed * 2.1; playMobVoiceV4(root,'angry'); }
-      if(meta.type==='llama' && hasAggro && dist<5.5 && dist>1.8 && (!root.data.nextSpitAt || now > root.data.nextSpitAt)){ root.data.nextSpitAt = now + 1800; damagePlayer(Math.max(1,dmg), meta.name+'の唾吐き'); playMobVoiceV4(root,'angry'); vx = dirx * speed * 0.35; vz = dirz * speed * 0.35; }
-      if(meta.type==='pufferfish' && dist<1.5 && (!root.data.nextPuffAt || now > root.data.nextPuffAt)){ root.data.nextPuffAt = now + 900; damagePlayer(Math.max(1,dmg), meta.name+'の毒針'); }
+      if(meta.type==='llama' && hasAggro && !ownAlly && dist<5.5 && dist>1.8 && (!root.data.nextSpitAt || now > root.data.nextSpitAt)){ root.data.nextSpitAt = now + 1800; damagePlayer(Math.max(1,dmg), meta.name+'の唾吐き'); playMobVoiceV4(root,'angry'); vx = dirx * speed * 0.35; vz = dirz * speed * 0.35; }
+      if(meta.type==='pufferfish' && !ownAlly && dist<1.5 && (!root.data.nextPuffAt || now > root.data.nextPuffAt)){ root.data.nextPuffAt = now + 900; damagePlayer(Math.max(1,dmg), meta.name+'の毒針'); }
       if(/rabbit|frog|goat/.test(meta.type) && root.data.onGround && Math.random()<0.11){ root.data.vy = Math.max(Number(root.data.vy)||0, /goat/.test(meta.type)?4.2:3.5); }
       if(/bee|bat|parrot|allay|happy_ghast|squid|glow_squid|dolphin|cod|salmon|tropical_fish|axolotl|tadpole|nautilus|zombie_nautilus/.test(meta.type)) root.data.vy=(Number(root.data.vy)||0)+Math.sin(now*0.003+(root.data.aiPhase||0))*.03;
       if(meta.type==='cat'){
@@ -4938,6 +4940,248 @@ app.on('update',function(){ __smoothFrameNo++; });
   app.on('update', function(){ try{ updateInfoScanHudV4(); }catch(e){} });
   setMsg('情報テクスチャ Pro Pack: 画像化/音強化/AI強化/撃破入手制 を適用','good');
 })();
+
+
+// ===== Summoned owner affinity + hostile/friendly aura patch =====
+// 自分が呼び出した情報Mobは、自分に対して敵意を持たない。
+// ランダム生成や他プレイヤー由来の敵対Mobは従来通り敵として扱い、赤/青の視覚エフェクトで判別できるようにする。
+const AFFINITY_AURA_MATS_V5 = {};
+function affinityMatV5(kind){
+ const k = kind === 'friend' ? 'friend' : 'hostile';
+ if(AFFINITY_AURA_MATS_V5[k]) return AFFINITY_AURA_MATS_V5[k];
+ const m = new pc.StandardMaterial();
+ if(k === 'friend'){
+   m.diffuse = new pc.Color(0.12,0.45,1.0);
+   m.emissive = new pc.Color(0.04,0.20,0.85);
+ }else{
+   m.diffuse = new pc.Color(1.0,0.08,0.05);
+   m.emissive = new pc.Color(0.85,0.02,0.01);
+ }
+ m.opacity = 0.34;
+ m.blendType = pc.BLEND_NORMAL;
+ m.depthWrite = false;
+ m.update();
+ AFFINITY_AURA_MATS_V5[k] = m;
+ return m;
+}
+function markSummonedOwnerV5(root, ownerId, ownerName){
+ if(!root) return root;
+ ownerId = String(ownerId || multiplayerClientId || 'local');
+ root.data = Object.assign({}, root.data||{}, {
+   ownerClientId: ownerId,
+   ownerName: String(ownerName || multiplayerName || 'player').slice(0,40),
+   summonedByPlayer: true
+ });
+ return root;
+}
+function isOwnSummonedFriendlyV5(root){
+ return !!(root && root.data && root.data.summonedByPlayer && String(root.data.ownerClientId||'') === String(multiplayerClientId||''));
+}
+function rootIsHostileToLocalV5(root, meta, now){
+ if(!root || !meta) return false;
+ if(isOwnSummonedFriendlyV5(root)) return false;
+ now = now || performance.now();
+ return meta.role === 'hostile' || (Number(root.data && root.data.angryUntil)||0) > now;
+}
+function rootIsFriendlyToLocalV5(root, meta){
+ if(!root || !meta) return false;
+ return isOwnSummonedFriendlyV5(root) || meta.role === 'helper';
+}
+function ensureAffinityAuraV5(root){
+ if(!root) return null;
+ let e = root.__affinityAuraV5;
+ if(e && !e.destroyed) return e;
+ e = new pc.Entity('affinity_aura_v5');
+ e.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false});
+ e.data = {affinityAura:true};
+ e.setLocalPosition(0,1.25,0);
+ e.setLocalScale(.34,.34,.34);
+ root.addChild(e);
+ root.__affinityAuraV5 = e;
+ return e;
+}
+function updateAffinityAurasV5(){
+ const now = performance.now();
+ for(const [,root] of customObjectEntities){
+   if(!root || !root.getPosition) continue;
+   const meta = rootInfoMetaV3(root);
+   const hostile = rootIsHostileToLocalV5(root, meta, now);
+   const friendly = rootIsFriendlyToLocalV5(root, meta);
+   const aura = ensureAffinityAuraV5(root);
+   if(!aura) continue;
+   if(hostile){ aura.enabled = true; aura.render.material = affinityMatV5('hostile'); }
+   else if(friendly){ aura.enabled = true; aura.render.material = affinityMatV5('friend'); }
+   else { aura.enabled = false; continue; }
+   const pulse = 1 + Math.sin(now*.007 + (root.data&&root.data.aiPhase||0))*.16;
+   const base = hostile ? .46 : .40;
+   aura.setLocalScale(base*pulse, base*pulse, base*pulse);
+   aura.setLocalPosition(0, hostile ? 1.38 : 1.18, 0);
+ }
+}
+const __affinityPlaceObjectInFrontV5 = placeObjectInFront;
+placeObjectInFront = function(def, broadcastInstance=true){
+ const clean = validateObjectDef(def);
+ if(!clean) return null;
+ if(clean.infoTexture){ setMsg('情報テクスチャ単体は呼出不可。3Dエディターでブロックに貼れ','bad'); return null; }
+ const dir = forwardVec();
+ const x = Math.round(player.x + dir.x*4), z = Math.round(player.z + dir.z*4);
+ const y = terrainHeight(x,z)+1;
+ const yaw = player.yaw;
+ const instanceKey = 'front-'+clean.id+'-'+Date.now()+'-'+Math.floor(Math.random()*99999).toString(36);
+ const root = placeCustomObject(clean,x,y,z,yaw,instanceKey);
+ markSummonedOwnerV5(root, multiplayerClientId, multiplayerName);
+ if(root && broadcastInstance){
+   sendMultiplayer({
+     type:'objectInstancePlace', objectId:clean.id, defId:clean.id, instanceKey,
+     x,y,z,yaw, object:clean,
+     ownerClientId:multiplayerClientId, ownerName:multiplayerName, summonedByPlayer:true
+   });
+   setMsg('OBJ呼出: 自分の召喚物として登録 / 敵対しない青オーラ対象','good');
+ }
+ return root;
+};
+const __affinityApplyObjectInstancePlaceMessageV5 = applyObjectInstancePlaceMessage;
+applyObjectInstancePlaceMessage = function(msg){
+ const defId=String(msg&& (msg.objectId||msg.defId||msg.id) || '');
+ let def=customObjectDefs.get(defId);
+ if(!def && msg && msg.object){
+   registerCustomObjectDef(msg.object,'remoteCatalog');
+   def=customObjectDefs.get(String((msg.object&&msg.object.id)||defId));
+ }
+ if(!def){
+   queueObjectInstancePlace(defId,msg);
+   sendMultiplayer({type:'objectCatalogReq'});
+   setMsg('OBJ呼出同期: 定義待ち '+defId,'info');
+   return true;
+ }
+ const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
+ if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)){
+   const ik=String(msg.instanceKey||('remote-'+def.id+'-'+Date.now()));
+   if(customObjectEntities.has(ik)) return true;
+   const root=placeCustomObject(def,x,y,z,yaw,ik);
+   const ownerId=String(msg.ownerClientId || msg.clientId || '');
+   if(root && (msg.summonedByPlayer===true || ownerId)) markSummonedOwnerV5(root, ownerId, msg.ownerName || msg.name);
+   setMsg('他プレイヤーOBJ呼出: '+(def.name||def.id),'good');
+ }
+ return true;
+};
+app.on('update', function(){ try{ updateAffinityAurasV5(); }catch(e){} });
+
+
+// ===== Affinity aura / info-mob ground snap v6 =====
+// 赤/青オーラをOBJ本体の子にすると、当たり判定・接地判定の bounds に混ざり、
+// 本体が浮いたり、オーラだけ地面に残るように見える。オーラはワールド直下の独立表示にし、
+// 情報Mob本体は「見た目の最下面」を地面へスナップする。
+function affinityVisualBoundsV6(root){
+ if(!root || !root.children || !root.children.length || !root.getPosition){
+   const p=(root&&root.getPosition)?root.getPosition().clone():new pc.Vec3();
+   return {center:p,min:p.clone(),max:p.clone(),radius:.5};
+ }
+ let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity,hit=false;
+ for(const c of root.children){
+   if(!c || !c.getPosition || !c.getLocalScale) continue;
+   if(c.data && (c.data.affinityAura || c.data.ignoreObjectBounds)) continue;
+   const p=c.getPosition(), sc=c.getLocalScale();
+   const hx=Math.max(Math.abs(sc.x),.04)*.55;
+   const hy=Math.max(Math.abs(sc.y),.04)*.55;
+   const hz=Math.max(Math.abs(sc.z),.04)*.55;
+   minX=Math.min(minX,p.x-hx); maxX=Math.max(maxX,p.x+hx);
+   minY=Math.min(minY,p.y-hy); maxY=Math.max(maxY,p.y+hy);
+   minZ=Math.min(minZ,p.z-hz); maxZ=Math.max(maxZ,p.z+hz);
+   hit=true;
+ }
+ if(!hit){ const p=root.getPosition().clone(); return {center:p,min:p.clone(),max:p.clone(),radius:.5}; }
+ const center=new pc.Vec3((minX+maxX)/2,(minY+maxY)/2,(minZ+maxZ)/2);
+ const radius=Math.max(.35,center.distance(new pc.Vec3(maxX,maxY,maxZ)));
+ return {center,min:new pc.Vec3(minX,minY,minZ),max:new pc.Vec3(maxX,maxY,maxZ),radius};
+}
+const __ultraObjectBoundsV6 = ultraObjectBounds;
+ultraObjectBounds = function(root){
+ if(root && root.children){
+   for(const c of root.children){ if(c && c.data && (c.data.affinityAura || c.data.ignoreObjectBounds)) return affinityVisualBoundsV6(root); }
+ }
+ return __ultraObjectBoundsV6(root);
+};
+function groundTopAtV6(x,z){
+ let g=-999;
+ try{ g=heightAt(x,z,16); }catch{}
+ if(!Number.isFinite(g) || g<=-900){ try{ g=terrainHeight(x,z); }catch{ g=0; } }
+ return g+1;
+}
+function infoMobShouldGroundSnapV6(root, def, meta){
+ meta = meta || rootInfoMetaV3(root) || {};
+ const role=String(meta.role || (def&&def.infoRole) || '');
+ const type=String(meta.type || (def&&def.infoType) || '');
+ // 明確な飛行/水棲だけは自然な上下動を許す。それ以外は必ず地面を歩かせる。
+ if(/aquatic/.test(role)) return false;
+ if(/bee|bat|parrot|allay|happy_ghast|squid|glow_squid|dolphin|cod|salmon|pufferfish|tropical_fish|axolotl|tadpole|nautilus|zombie_nautilus/.test(type)) return false;
+ return !!(root && (meta.type || (def && (def.infoTexture || def.infoRole || def.infoType))));
+}
+function snapInfoMobToGroundV6(root, def){
+ if(!root || !root.getPosition) return root;
+ const meta=rootInfoMetaV3(root) || null;
+ if(!infoMobShouldGroundSnapV6(root, def, meta)) return root;
+ const p=root.getPosition();
+ const g=groundTopAtV6(p.x,p.z);
+ const b=affinityVisualBoundsV6(root);
+ const dy=g-b.min.y;
+ if(Number.isFinite(dy) && Math.abs(dy)>.015){ root.setPosition(p.x,p.y+dy,p.z); }
+ root.data=root.data||{};
+ root.data.onGround=true;
+ root.data.vy=0;
+ return root;
+}
+const __placeCustomObjectGroundV6 = placeCustomObject;
+placeCustomObject = function(def,x,y,z,yaw,instanceKey){
+ const root=__placeCustomObjectGroundV6.apply(this,arguments);
+ try{ snapInfoMobToGroundV6(root, def); }catch(e){}
+ return root;
+};
+ensureAffinityAuraV5 = function(root){
+ if(!root || !app || !app.root) return null;
+ let e = root.__affinityAuraV5;
+ // 旧実装の子オーラは bounds に混ざるので破棄して、ワールド直下へ作り直す。
+ if(e && !e.destroyed && e.parent !== app.root){ try{ e.destroy(); }catch{} e=null; root.__affinityAuraV5=null; }
+ if(e && !e.destroyed) return e;
+ e = new pc.Entity('affinity_aura_v6_world');
+ e.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false});
+ e.data = {affinityAura:true, ignoreObjectBounds:true};
+ e.enabled=false;
+ app.root.addChild(e);
+ root.__affinityAuraV5 = e;
+ return e;
+};
+updateAffinityAurasV5 = function(){
+ const now=performance.now();
+ for(const [,root] of customObjectEntities){
+   if(!root || !root.getPosition) continue;
+   const meta=rootInfoMetaV3(root);
+   const hostile=rootIsHostileToLocalV5(root, meta, now);
+   const friendly=rootIsFriendlyToLocalV5(root, meta);
+   const aura=ensureAffinityAuraV5(root);
+   if(!aura) continue;
+   if(hostile){ aura.enabled=true; aura.render.material=affinityMatV5('hostile'); }
+   else if(friendly){ aura.enabled=true; aura.render.material=affinityMatV5('friend'); }
+   else { aura.enabled=false; continue; }
+   const b=affinityVisualBoundsV6(root);
+   const h=Math.max(.35, b.max.y-b.min.y);
+   const pulse=1+Math.sin(now*.007 + ((root.data&&root.data.aiPhase)||0))*.14;
+   const base=(hostile?.30:.27) * Math.max(.75, Math.min(1.55, h));
+   aura.setLocalScale(base*pulse, base*pulse, base*pulse);
+   // 本体の上端より少し上。地面ではなく「オブジェクト上方」に表示する。
+   aura.setPosition(b.center.x, b.max.y + Math.max(.16, base*.85), b.center.z);
+ }
+};
+// AI移動後にも非飛行Mobは地面へ再スナップ。坂・段差・同期補正で浮いた時の保険。
+app.on('update', function(){
+ try{
+   for(const [,root] of customObjectEntities){
+     if(!root || !root.getPosition) continue;
+     const def=customObjectDefs.get(root.data&&root.data.defId);
+     snapInfoMobToGroundV6(root, def);
+   }
+ }catch(e){}
+});
 
 
 setMsg('PlayCanvas Engine読込完了','good');
