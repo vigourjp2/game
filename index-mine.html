@@ -2202,7 +2202,8 @@ function updateTexturePasteOptions(){
    if(def.infoTexture && typeof isInfoTextureDefUnlocked==='function' && !isInfoTextureDefUnlocked(def)) continue;
    const opt=document.createElement('option'); opt.value=def.id; opt.textContent=(def.name||def.id)+' / '+(def.grid||64)+'px'; sel.appendChild(opt);
  }
- sel.value=customObjectDefs.has(keep)?keep:'';
+ const keepDef=customObjectDefs.get(keep);
+ sel.value=(keepDef && keepDef.kind==='plane' && (!keepDef.infoTexture || isInfoTextureDefUnlocked(keepDef)))?keep:'';
  objPasteTextureId=sel.value;
 }
 function pasteSelectedPlaneTextureToBuilder(){
@@ -3069,7 +3070,7 @@ if(typeof placeCustomObject==='function'){
 // ファイル前方で var 初期化済み。ここで const 再宣言しない。
 let playerHp = 20;
 let playerLastDamagedAt = 0;
-const INFO_TEXTURE_GRANTED_KEY = 'mineInfoTextureGranted.v1';
+const INFO_TEXTURE_GRANTED_KEY = 'mineInfoTextureDefeatedByPlayer.v2';
 let infoTextureGranted = new Set();
 try{ infoTextureGranted = new Set(JSON.parse(localStorage.getItem(INFO_TEXTURE_GRANTED_KEY)||'[]').map(String)); }catch{}
 let catAiAcc = 0;
@@ -3119,9 +3120,10 @@ function isInfoTextureDefUnlocked(def){
 function shouldShowObjectDefInManager(def){
  if(!def) return false;
  if(String(def.id||'')===INFO_CARRIER_CAT_ID) return false;
- // 情報テクスチャ単体は3Dオブジェクト一覧からは常に呼出不可なので、一覧にも出さない。
- // ただし、その情報テクスチャを貼った複合OBJ/ブループリントは def.infoTexture ではないため表示する。
- if(def.infoTexture) return false;
+ // 情報テクスチャ単体は「倒す前」は非表示。
+ // プレイヤー攻撃で倒して入手済みになった後だけOBJ管理に表示する。
+ // ただし renderObjectManager 側で呼出ボタンは無効化されるため、単体呼び出しは不可のまま。
+ if(def.infoTexture) return isInfoTextureDefUnlocked(def);
  return true;
 }
 function shouldWorldSpawnObjectDef(def){
@@ -4507,7 +4509,7 @@ app.on('update',function(){ __smoothFrameNo++; });
 // ===== Info Texture Pro Pack v4 =====
 // 目的:
 // - 抽象ドットではなく「アイコン画像→平面テクスチャ化」へ変更
-// - 全情報テクスチャを最初から使用可能にする
+// - 情報テクスチャは撃破入手制を維持する（自動全解放しない）
 // - 音/動き/テキスト/攻撃性/習性を強化する
 (function(){
   const ROLE_LABEL = { passive:'友好', neutral:'中立', hostile:'敵対', aquatic:'水棲', helper:'支援', npc:'NPC' };
@@ -4747,13 +4749,9 @@ app.on('update',function(){ __smoothFrameNo++; });
   };
 
   function unlockAllInfoTexturesV4(){
-    try{
-      const ids = INFO_TEXTURE_PACK_V3.map(m=>String(m.id||infoTextureIdFromTypeV3(m.type)));
-      let changed = false;
-      for(const id of ids){ if(!infoTextureGranted.has(id)){ infoTextureGranted.add(id); changed=true; } }
-      if(changed){ localStorage.setItem(INFO_TEXTURE_GRANTED_KEY, JSON.stringify(Array.from(infoTextureGranted))); }
-      if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions();
-    }catch(err){ console.warn('unlockAllInfoTexturesV4 failed', err); }
+    // 自動全解放は禁止。
+    // 情報テクスチャは、野生Mob個体をプレイヤー攻撃で撃破した時だけ grantInfoTexture() で解放する。
+    try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch(err){ console.warn('unlockAllInfoTexturesV4 skipped', err); }
   }
 
   function ensureNoiseV4(ctx){
@@ -4938,7 +4936,7 @@ app.on('update',function(){ __smoothFrameNo++; });
   unlockAllInfoTexturesV4();
   for(const meta of INFO_TEXTURE_PACK_V3) bakeInfoTextureVisualV4(meta);
   app.on('update', function(){ try{ updateInfoScanHudV4(); }catch(e){} });
-  setMsg('情報テクスチャ Pro Pack: 画像化/音強化/AI強化/全種解放 を適用','good');
+  setMsg('情報テクスチャ Pro Pack: 画像化/音強化/AI強化/撃破入手制 を適用','good');
 })();
 
 
