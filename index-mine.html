@@ -839,6 +839,8 @@ const OBJECT_GRID = 16;
 const OBJECT_STORAGE_KEY = 'voxelStudyWorld.customObjects3d.v2';
 const customObjectDefs = new Map();
 const customObjectEntities = new Map();
+// OBJ呼出同期で、相手端末がまだOBJ定義を持っていない場合に一時保留する。
+const pendingObjectInstancePlaces = new Map();
 // フィールド上でBREAK破壊したOBJインスタンス。ランダムOBJが即復活しないように記録する。
 const customObjectRemovedInstances = new Set();
 const customColorMats = new Map();
@@ -1016,7 +1018,9 @@ function placeObjectInFront(def, broadcastInstance=true){
      objectId:def.id,
      defId:def.id,
      instanceKey,
-     x,y,z,yaw
+     x,y,z,yaw,
+     // 相手端末がまだ catalog を受けていなくても、その場で生成できるように定義も同送する。
+     object:def
    });
  }
  return root;
@@ -1134,32 +1138,61 @@ function updateCustomObjectRuntime(dt){
  unloadFarCustomObjects();
 }
 function broadcastObjectCatalog(){ if(customObjectDefs.size) sendMultiplayer({type:'objectCatalog', objects:Array.from(customObjectDefs.values()).slice(-100)}); }
+function queueObjectInstancePlace(defId,msg){
+ defId=String(defId||'');
+ if(!defId) return;
+ const arr=pendingObjectInstancePlaces.get(defId)||[];
+ // 同じinstanceKeyの多重保留を避ける
+ const ik=String(msg.instanceKey||'');
+ if(ik && arr.some(m=>String(m.instanceKey||'')===ik)) return;
+ arr.push(Object.assign({},msg));
+ pendingObjectInstancePlaces.set(defId, arr.slice(-20));
+}
+function applyObjectInstancePlaceMessage(msg){
+ const defId=String(msg.objectId||msg.defId||msg.id||'');
+ let def=customObjectDefs.get(defId);
+ if(!def && msg.object){
+   registerCustomObjectDef(msg.object,'remoteCatalog');
+   def=customObjectDefs.get(String((msg.object&&msg.object.id)||defId));
+ }
+ if(!def){
+   queueObjectInstancePlace(defId,msg);
+   sendMultiplayer({type:'objectCatalogReq'});
+   setMsg('OBJ呼出同期: 定義待ち '+defId,'info');
+   return true;
+ }
+ const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
+ if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)){
+   const ik=String(msg.instanceKey||('remote-'+def.id+'-'+Date.now()));
+   if(customObjectEntities.has(ik)) return true;
+   placeCustomObject(def,x,y,z,yaw,ik);
+   setMsg('他プレイヤーOBJ呼出: '+(def.name||def.id),'good');
+ }
+ return true;
+}
+function flushPendingObjectInstancePlaces(){
+ for(const [defId,arr] of Array.from(pendingObjectInstancePlaces.entries())){
+   if(!customObjectDefs.has(defId)) continue;
+   pendingObjectInstancePlaces.delete(defId);
+   for(const msg of arr) applyObjectInstancePlaceMessage(msg);
+ }
+}
 function handleObjectCatalogMessage(msg){
  if(!msg) return false;
  if(msg.type==='objectCatalogReq'){broadcastObjectCatalog();return true;}
- if(msg.type==='objectRegister'){registerCustomObjectDef(msg.object||msg.def||msg,'remote');return true;}
- if(msg.type==='objectDelete'){deleteCustomObjectDef(msg.objectId||msg.id,false);return true;}
- if(msg.type==='objectInstanceRemove'){removeCustomObjectInstance(msg.instanceKey,false);return true;}
- if(msg.type==='objectInstancePlace'){
-   const defId=String(msg.objectId||msg.defId||msg.id||'');
-   let def=customObjectDefs.get(defId);
-   if(!def && msg.object){
-     registerCustomObjectDef(msg.object,'remoteCatalog');
-     def=customObjectDefs.get(String((msg.object&&msg.object.id)||defId));
-   }
-   if(!def){
-     sendMultiplayer({type:'objectCatalogReq'});
-     setMsg('OBJ呼出同期: 定義待ち '+defId,'info');
-     return true;
-   }
-   const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
-   if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)){
-     placeCustomObject(def,x,y,z,yaw,String(msg.instanceKey||('remote-'+def.id+'-'+Date.now())));
-     setMsg('他プレイヤーOBJ呼出: '+(def.name||def.id),'good');
-   }
+ if(msg.type==='objectRegister'){
+   registerCustomObjectDef(msg.object||msg.def||msg,'remote');
+   flushPendingObjectInstancePlaces();
    return true;
  }
- if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));return true;}
+ if(msg.type==='objectDelete'){deleteCustomObjectDef(msg.objectId||msg.id,false);return true;}
+ if(msg.type==='objectInstanceRemove'){removeCustomObjectInstance(msg.instanceKey,false);return true;}
+ if(msg.type==='objectInstancePlace') return applyObjectInstancePlaceMessage(msg);
+ if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){
+   msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));
+   flushPendingObjectInstancePlaces();
+   return true;
+ }
  return false;
 }
 function drawObjectPalette(){
