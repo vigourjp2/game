@@ -3775,6 +3775,139 @@ updateCustomObjectRuntime=function(dt){
 function initInfoTextureSystem(){ ensureInfoHud(); ensureCatInfoTexture(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); }
 try{initInfoTextureSystem();}catch(e){console.warn('info texture init failed',e);}
 
+
+// ===== Ultra Hand live compound sync patch =====
+// 他プレイヤー視点で、接着グループの「掴んでいない側」が止まる問題を修正。
+// 単体OBJのtransformだけではなく、接着グループ全メンバーのtransformを1メッセージで同期する。
+let ultraCompoundLiveLastSync = 0;
+const ultraCompoundRemoteSeq = new Map();
+function ultraCompoundGroupKeysFromRoot(root){
+ if(!root||!root.data) return [];
+ const baseKey=ultraLinkKey(root.data.instanceKey);
+ if(!baseKey) return [];
+ const keys=ultraConnectedKeys(baseKey).filter(k=>!!getObjRootByInstanceKey(k));
+ return keys.length ? keys : [baseKey];
+}
+function ultraCompoundLinkPayload(keys){
+ const keySet=new Set((keys||[]).map(k=>String(k)));
+ const seen=new Set(), links=[];
+ for(const a of keySet){
+   for(const l of (ultraLinks.get(a)||[])){
+     const b=String(l&&l.other||'');
+     if(!keySet.has(b)) continue;
+     const pk=ultraPairKey(a,b);
+     if(seen.has(pk)) continue;
+     seen.add(pk);
+     links.push({a,b});
+   }
+ }
+ return links;
+}
+function ultraCompoundTransformPayload(root){
+ const keys=ultraCompoundGroupKeysFromRoot(root);
+ const members=[];
+ for(const key of keys){
+   const r=getObjRootByInstanceKey(key);
+   if(!r||!r.getPosition) continue;
+   const p=r.getPosition();
+   members.push({
+     instanceKey:key,
+     defId:r.data&&r.data.defId,
+     x:p.x,y:p.y,z:p.z,
+     yaw:ultraYawOf(r)
+   });
+ }
+ return {keys,members,links:ultraCompoundLinkPayload(keys)};
+}
+function ultraBroadcastCompoundTransform(root, force){
+ if(!root||!root.data) return false;
+ const payload=ultraCompoundTransformPayload(root);
+ if(payload.members.length<=1) return false;
+ const now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+ if(!force && now-ultraCompoundLiveLastSync<75) return false;
+ ultraCompoundLiveLastSync=now;
+ sendMultiplayer({
+   type:'objectInstanceCompoundTransform',
+   base:ultraLinkKey(root.data.instanceKey),
+   t:now,
+   members:payload.members,
+   links:payload.links
+ });
+ return true;
+}
+function ultraApplySingleTransformOnly(msg){
+ const root=getObjRootByInstanceKey(msg&&msg.instanceKey);
+ if(!root) return false;
+ const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
+ if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return true;
+ root.setPosition(x,y,z);
+ root.setEulerAngles(0,yaw*180/Math.PI,0);
+ root.data=Object.assign({},root.data||{},{yaw});
+ try{ultraRefreshGlueVisuals();}catch{}
+ return true;
+}
+function ultraApplyCompoundTransformMessage(msg){
+ const base=ultraLinkKey(msg&&msg.base);
+ const t=Number(msg&&msg.t)||0;
+ if(base){
+   const prev=ultraCompoundRemoteSeq.get(base)||0;
+   if(t && prev && t<prev) return true;
+   if(t) ultraCompoundRemoteSeq.set(base,t);
+ }
+ const members=Array.isArray(msg&&msg.members)?msg.members:[];
+ if(!members.length) return true;
+ if(Array.isArray(msg.links)){
+   for(const l of msg.links){
+     const a=getObjRootByInstanceKey(l&&l.a), b=getObjRootByInstanceKey(l&&l.b);
+     if(a&&b) attachUltraRoots(a,b,false);
+   }
+ }
+ for(const m of members){
+   const root=getObjRootByInstanceKey(m&&m.instanceKey);
+   if(!root||!root.setPosition) continue;
+   const x=Number(m.x), y=Number(m.y), z=Number(m.z), yaw=Number(m.yaw)||0;
+   if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) continue;
+   root.setPosition(x,y,z);
+   root.setEulerAngles(0,yaw*180/Math.PI,0);
+   root.data=Object.assign({},root.data||{},{yaw});
+ }
+ try{refreshUltraAllPairOffsets(); ultraRefreshGlueVisuals();}catch{}
+ return true;
+}
+// 単体transformから接着グループを推測して動かす旧補正は、リモート側で相対位置を誤学習していた。
+// 今後は単体transformは単体だけ、接着グループは compoundTransform で同期する。
+ultraApplyTransform = ultraApplySingleTransformOnly;
+const __liveCompoundHandleObjectCatalogMessage = handleObjectCatalogMessage;
+handleObjectCatalogMessage = function(msg){
+ if(msg&&msg.type==='objectInstanceCompoundTransform') return ultraApplyCompoundTransformMessage(msg);
+ return __liveCompoundHandleObjectCatalogMessage.apply(this,arguments);
+};
+const __liveCompoundUpdateUltraHand = updateUltraHand;
+updateUltraHand = function(dt){
+ __liveCompoundUpdateUltraHand(dt);
+ if(ultraHeld&&ultraHeld.mode==='field'&&ultraHeld.root){
+   if(ultraCompoundSnapshot) applyUltraCompoundSnapshot(ultraHeld.root,false);
+   ultraBroadcastCompoundTransform(ultraHeld.root,false);
+ }
+};
+const __liveCompoundStopUltraHand = stopUltraHand;
+stopUltraHand = function(drop){
+ if(ultraHeld&&ultraHeld.mode==='field'&&ultraHeld.root){
+   if(ultraCompoundSnapshot) applyUltraCompoundSnapshot(ultraHeld.root,false);
+   ultraBroadcastCompoundTransform(ultraHeld.root,true);
+ }
+ return __liveCompoundStopUltraHand.apply(this,arguments);
+};
+const __liveCompoundAttachUltraRoots = attachUltraRoots;
+attachUltraRoots = function(a,b,broadcast){
+ const ok=__liveCompoundAttachUltraRoots.apply(this,arguments);
+ if(ok){
+   const base=(ultraHeld&&ultraHeld.root)||a;
+   if(base) ultraBroadcastCompoundTransform(base,true);
+ }
+ return ok;
+};
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
