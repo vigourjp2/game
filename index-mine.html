@@ -854,6 +854,8 @@ let customObjectTickAcc = 0;
 const objVoxels = new Map(); // key: x,y,z -> hex
 // key: x,y,z -> block size fixed at placement time. Size slider changes only future blocks.
 const objVoxelSizes = new Map();
+// key: x,y,z -> precise local position from Ultra Hand. Keeps sub-cell placement instead of snapping back to cell centers.
+const objVoxelOffsets = new Map();
 const objPlanePixels = new Map(); // key: x,y -> hex
 
 function setObjHud(){ const el=$('objHud'); if(el) el.textContent=String(customObjectDefs.size); }
@@ -895,7 +897,12 @@ function compactObjectCells(){
  const cells=[];
  for(const [k,color] of objVoxels){
    const [x,y,z]=k.split(',').map(Number);
-   cells.push({x,y,z,color:normalizeHexColor(color),size:storedObjCellSize(k,.10)});
+   const cell={x,y,z,color:normalizeHexColor(color),size:storedObjCellSize(k,.10)};
+   const off=objVoxelOffsets.get(String(k));
+   if(off && Number.isFinite(off.lx) && Number.isFinite(off.ly) && Number.isFinite(off.lz)){
+     cell.lx=Number(off.lx); cell.ly=Number(off.ly); cell.lz=Number(off.lz);
+   }
+   cells.push(cell);
  }
  return cells.slice(0,1536);
 }
@@ -911,6 +918,10 @@ function validateObjectDef(def){
    if(x<0||x>=OBJECT_GRID||y<0||y>=OBJECT_GRID) continue;
    if(kind==='voxel3d' && (z<0||z>=OBJECT_GRID)) continue;
    const cell = kind==='plane' ? {x,y,color:normalizeHexColor(c.color)} : {x,y,z,color:normalizeHexColor(c.color),size:clampObjCellSize(c.size, Number(def.scale)||.16)};
+   if(kind==='voxel3d'){
+     const lx=Number(c.lx), ly=Number(c.ly), lz=Number(c.lz);
+     if(Number.isFinite(lx)&&Number.isFinite(ly)&&Number.isFinite(lz)){cell.lx=lx; cell.ly=ly; cell.lz=lz;}
+   }
    cells.push(cell);
  }
  if(!cells.length) return null;
@@ -990,9 +1001,9 @@ function placeCustomObject(def, x, y, z, yaw, instanceKey){
    for(const c of used){
      const mat=ensureCustomMat(c.color);
      const cs=clampObjCellSize(c.size,s);
-     const lx=(c.x-(OBJECT_GRID-1)/2)*cs;
-     const ly=(c.y+.5)*cs;
-     const lz=(c.z-(OBJECT_GRID-1)/2)*cs;
+     const lx=Number.isFinite(Number(c.lx))?Number(c.lx):(c.x-(OBJECT_GRID-1)/2)*cs;
+     const ly=Number.isFinite(Number(c.ly))?Number(c.ly):(c.y+.5)*cs;
+     const lz=Number.isFinite(Number(c.lz))?Number(c.lz):(c.z-(OBJECT_GRID-1)/2)*cs;
      const e=addCustomBox(root, mat, lx, ly, lz, cs*1.01, cs*1.01, cs*1.01);
      if(e) e.data=Object.assign({},e.data||{},{objectCellSize:cs,objectCellKey:objKey3(c.x,c.y,c.z)});
    }
@@ -1528,7 +1539,9 @@ function addObjectBuilderCellEntity(x,y,z,color){
  e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
  e.render.material=ensureCustomMat(color);
  e.setLocalScale(s*1.045,s*1.045,s*1.045); // 微妙に重ねて隙間を殺す
- e.setLocalPosition(objectCellLocal(x,y,z,s));
+ const off=objVoxelOffsets.get(key);
+ if(off && Number.isFinite(off.lx)&&Number.isFinite(off.ly)&&Number.isFinite(off.lz)) e.setLocalPosition(off.lx,off.ly,off.lz);
+ else e.setLocalPosition(objectCellLocal(x,y,z,s));
  e.data={customObjectCell:true,objectCellSize:s,objectCellKey:key};
  objBuildRoot.addChild(e);
  objBuildCellEntities.set(key,e);
@@ -1597,6 +1610,7 @@ function objectBuilderPlace(){
  const c=aim.place || aim.hit;
  if(!c||!insideObjectCell(c.x,c.y,c.z)) return true;
  objVoxelSizes.set(c.key,currentObjScale());
+ objVoxelOffsets.delete(c.key);
  objVoxels.set(c.key,objPaintColor);
  addObjectBuilderCellEntity(c.x,c.y,c.z,objPaintColor);
  setMsg('OBJ配置: ['+c.x+','+c.y+','+c.z+'] / size '+currentObjScale().toFixed(2),'good');
@@ -1610,6 +1624,7 @@ function objectBuilderBreak(){
  if(c&&objVoxels.has(c.key)){
    objVoxels.delete(c.key);
    objVoxelSizes.delete(c.key);
+   objVoxelOffsets.delete(c.key);
    removeObjectBuilderCellEntity(c.key);
    setMsg('OBJ削除: ['+c.x+','+c.y+','+c.z+']','good');
  } else setMsg('削除対象OBJブロックなし','bad');
@@ -1763,7 +1778,7 @@ function bindObjectEditorUi(){
  const orr=$('objOrbitRight'); if(orr){orr.addEventListener('pointerdown',e=>{e.preventDefault();objectEditorOrbitDir=1;});orr.addEventListener('pointerup',e=>{e.preventDefault();objectEditorOrbitDir=0;});orr.addEventListener('pointercancel',e=>{e.preventDefault();objectEditorOrbitDir=0;});}
  const fu=$('objFlyUp'); if(fu){fu.addEventListener('pointerdown',e=>{e.preventDefault();input.jump=true;});}
  const fd=$('objFlyDown'); if(fd){fd.addEventListener('pointerdown',e=>{e.preventDefault();objectEditorFlyDown=true;});fd.addEventListener('pointerup',e=>{e.preventDefault();objectEditorFlyDown=false;});fd.addEventListener('pointercancel',e=>{e.preventDefault();objectEditorFlyDown=false;});}
- const caa=$('objClearBtn'); if(caa)caa.onclick=()=>{objVoxels.clear();objVoxelSizes.clear();objPlanePixels.clear();rebuildObjectBuildEntities();setObjStatus('全消し完了');};
+ const caa=$('objClearBtn'); if(caa)caa.onclick=()=>{objVoxels.clear();objVoxelSizes.clear();objVoxelOffsets.clear();objPlanePixels.clear();rebuildObjectBuildEntities();setObjStatus('全消し完了');};
  const dn=$('objDoneBtn'); if(dn)dn.onclick=finishObjectEditor;
  const ca=$('objCancelBtn'); if(ca)ca.onclick=closeObjectEditor;
  window.addEventListener('keydown',e=>{if(e.key==='o'||e.key==='O')openObjectEditor(); if(e.key==='Escape'&&state.editingObject)closeObjectEditor();});
@@ -2135,7 +2150,7 @@ function pasteSelectedPlaneTextureToBuilder(){
    if(!col) continue;
    const x=startX+xx, y=startY+(stamp-1-yy);
    if(!insideObjectCell(x,y,z)) continue;
-   const key=objKey3(x,y,z); objVoxelSizes.set(key,currentObjScale()); objVoxels.set(key,col); addObjectBuilderCellEntity(x,y,z,col); placed++;
+   const key=objKey3(x,y,z); objVoxelSizes.set(key,currentObjScale()); objVoxelOffsets.delete(key); objVoxels.set(key,col); addObjectBuilderCellEntity(x,y,z,col); placed++;
  }
  setMsg('テクスチャ貼付: '+placed+' cells / 倍率 '+objPasteScale.toFixed(2),'good');
 }
@@ -2778,7 +2793,7 @@ function stopUltraHand(drop){
    if(drop===false){
      const ok=objKey3(ultraHeld.x,ultraHeld.y,ultraHeld.z);
      destroyUltraEditorHeldEntity();
-     objVoxels.set(ok,ultraHeld.color); objVoxelSizes.set(ok,ultraHeld.size); addObjectBuilderCellEntity(ultraHeld.x,ultraHeld.y,ultraHeld.z,ultraHeld.color);
+     objVoxels.set(ok,ultraHeld.color); objVoxelSizes.set(ok,ultraHeld.size); objVoxelOffsets.set(ok,{lx:(ultraHeld.startLocal&&ultraHeld.startLocal.x)||local.x,ly:(ultraHeld.startLocal&&ultraHeld.startLocal.y)||local.y,lz:(ultraHeld.startLocal&&ultraHeld.startLocal.z)||local.z}); addObjectBuilderCellEntity(ultraHeld.x,ultraHeld.y,ultraHeld.z,ultraHeld.color);
      setMsg('ウルトラハンド: 元の位置へ戻した','info');
    } else if(!insideObjectCell(t.x,t.y,t.z)){
      setMsg('ウルトラハンド: 範囲外。少し内側へ動かせ','bad'); return true;
@@ -2786,8 +2801,8 @@ function stopUltraHand(drop){
      setMsg('ウルトラハンド: そこは埋まってる。少しずらせ','bad'); return true;
    } else {
      destroyUltraEditorHeldEntity();
-     objVoxels.set(k,ultraHeld.color); objVoxelSizes.set(k,ultraHeld.size); addObjectBuilderCellEntity(t.x,t.y,t.z,ultraHeld.color);
-     setMsg('ウルトラハンド: 接着 ['+t.x+','+t.y+','+t.z+']','good');
+     objVoxels.set(k,ultraHeld.color); objVoxelSizes.set(k,ultraHeld.size); objVoxelOffsets.set(k,{lx:local.x,ly:local.y,lz:local.z}); addObjectBuilderCellEntity(t.x,t.y,t.z,ultraHeld.color);
+     setMsg('ウルトラハンド: 接着 ['+t.x+','+t.y+','+t.z+'] / 微調整位置保持','good');
    }
  }
  if(ultraHeld.mode==='field' && ultraHeld.root){
@@ -2884,6 +2899,86 @@ const __ultraCloseObjectEditor=closeObjectEditor;
 closeObjectEditor=function(){if(ultraHeld&&ultraHeld.mode==='editorCell')stopUltraHand(false);destroyUltraEditorHeldEntity();return __ultraCloseObjectEditor.apply(this,arguments);};
 window.addEventListener('keydown',e=>{if(e.key==='u'||e.key==='U'){e.preventDefault();toggleUltraHand();} if(ultraHeld&&ultraHeld.mode==='field'){ if(e.key==='q'||e.key==='Q')ultraHeld.distance=Math.max(1.2,ultraHeld.distance-.25); if(e.key==='e'||e.key==='E')ultraHeld.distance=Math.min(9,ultraHeld.distance+.25); }});
 try{ensureUltraUi();}catch{}
+
+
+// ===== Ultra Hand precise-position patch for surface texture decals =====
+// テクスチャ貼付がセル中心を参照して宙に浮く/ズレる問題を潰す。
+// ブロック本体と同じ lx/ly/lz をデカールにも使い、面だけを薄く外へ出す。
+function objPreciseLocalForCell(x,y,z,s,maybeCell){
+ const lx=maybeCell&&Number(maybeCell.lx), ly=maybeCell&&Number(maybeCell.ly), lz=maybeCell&&Number(maybeCell.lz);
+ if(Number.isFinite(lx)&&Number.isFinite(ly)&&Number.isFinite(lz)) return new pc.Vec3(lx,ly,lz);
+ const key=objKey3(x,y,z);
+ const off=objVoxelOffsets&&objVoxelOffsets.get(String(key));
+ if(off&&Number.isFinite(off.lx)&&Number.isFinite(off.ly)&&Number.isFinite(off.lz)) return new pc.Vec3(off.lx,off.ly,off.lz);
+ return objectCellLocal(x,y,z,s);
+}
+if(typeof decalLocalTransform==='function'){
+ decalLocalTransform = function(decal,s){
+   const p=objPreciseLocalForCell(decal.x,decal.y,decal.z,s,decal);
+   const thin=Math.max(.003,s*.012);
+   const over=s*1.018;
+   const off=s*.515 + thin*.55;
+   let pos=new pc.Vec3(p.x,p.y,p.z), scale=new pc.Vec3(over,over,thin);
+   switch(decal.face){
+     case 'px': pos.x+=off; scale.set(thin,over,over); break;
+     case 'nx': pos.x-=off; scale.set(thin,over,over); break;
+     case 'py': pos.y+=off; scale.set(over,thin,over); break;
+     case 'ny': pos.y-=off; scale.set(over,thin,over); break;
+     case 'pz': pos.z+=off; scale.set(over,over,thin); break;
+     case 'nz': pos.z-=off; scale.set(over,over,thin); break;
+   }
+   return {pos,scale};
+ };
+}
+
+// 保存済みOBJに入ったデカールにも、対象セルの精密座標を同梱する。
+if(typeof normalizeSurfaceDecal==='function'){
+ const __preciseNormalizeSurfaceDecal = normalizeSurfaceDecal;
+ normalizeSurfaceDecal = function(d){
+   const nd=__preciseNormalizeSurfaceDecal(d);
+   if(!nd) return null;
+   const lx=Number(d&&d.lx), ly=Number(d&&d.ly), lz=Number(d&&d.lz);
+   if(Number.isFinite(lx)&&Number.isFinite(ly)&&Number.isFinite(lz)){nd.lx=lx; nd.ly=ly; nd.lz=lz;}
+   return nd;
+ };
+}
+
+// 旧finishObjectEditorを包んで、登録直前の decals に現在の精密座標を付与する。
+if(typeof finishObjectEditor==='function'){
+ const __preciseFinishObjectEditor = finishObjectEditor;
+ finishObjectEditor = function(){
+   if(Array.isArray(objSurfaceDecals)){
+     objSurfaceDecals = objSurfaceDecals.map(d=>{
+       const key=objKey3(d.x,d.y,d.z);
+       const off=objVoxelOffsets.get(String(key));
+       if(off&&Number.isFinite(off.lx)&&Number.isFinite(off.ly)&&Number.isFinite(off.lz)) return Object.assign({},d,{lx:off.lx,ly:off.ly,lz:off.lz});
+       return d;
+     });
+   }
+   return __preciseFinishObjectEditor.apply(this,arguments);
+ };
+}
+
+// フィールド描画時、デカールへセル側 lx/ly/lz を補完してから貼る。
+if(typeof placeCustomObject==='function'){
+ const __precisePlaceCustomObject = placeCustomObject;
+ placeCustomObject = function(def,x,y,z,yaw,instanceKey){
+   if(def && def.kind==='voxel3d' && Array.isArray(def.decals) && Array.isArray(def.cells)){
+     const offByKey=new Map();
+     for(const c of def.cells){
+       const lx=Number(c.lx),ly=Number(c.ly),lz=Number(c.lz);
+       if(Number.isFinite(lx)&&Number.isFinite(ly)&&Number.isFinite(lz)) offByKey.set(objKey3(c.x,c.y,c.z),{lx,ly,lz});
+     }
+     if(offByKey.size){
+       def=Object.assign({},def,{decals:def.decals.map(d=>{
+         const off=offByKey.get(objKey3(d.x,d.y,d.z));
+         return off?Object.assign({},d,off):d;
+       })});
+     }
+   }
+   return __precisePlaceCustomObject.apply(this,arguments);
+ };
+}
 
 setMsg('PlayCanvas Engine読込完了','good');
 })();
