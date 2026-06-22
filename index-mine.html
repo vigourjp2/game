@@ -94,7 +94,7 @@
   .objQuickBtn.ultra{background:linear-gradient(180deg,#22c55e,#15803d)!important;border-color:rgba(187,247,208,.8)!important}
   .objQuickBtn.ultra.on{outline:3px solid #facc15!important;box-shadow:0 0 22px rgba(34,197,94,.75)!important}
   #ultraHint{position:fixed;left:50%;top:58%;transform:translate(-50%,-50%);z-index:18;display:none;max-width:78vw;padding:10px 14px;border-radius:999px;background:rgba(6,78,59,.78);border:1px solid rgba(187,247,208,.62);color:#dcfce7;font-size:13px;font-weight:1000;text-shadow:0 2px 5px #000;pointer-events:none}
-  body.ultraActive #ultraHint{display:block}
+  body.ultraActive #ultraHint{display:none!important}
 
   body.objEditing #ultraHandBtn{display:none!important}
 
@@ -1116,12 +1116,6 @@ function removeCustomObjectInstance(instanceKey,broadcast){
  if(broadcast) sendMultiplayer({type:'objectInstanceRemove', instanceKey});
  return true;
 }
-
-const __ultraCleanupRemoveCustomObjectInstance=removeCustomObjectInstance;
-removeCustomObjectInstance=function(instanceKey,broadcast){
- try{ if(typeof ultraRemoveLinksFor==='function') ultraRemoveLinksFor(instanceKey,!!broadcast); }catch{}
- return __ultraCleanupRemoveCustomObjectInstance.apply(this,arguments);
-};
 function spawnCustomObjectForChunk(ch){
  const defs=Array.from(customObjectDefs.values());
  if(!defs.length||!ch||!ch.done) return;
@@ -2697,166 +2691,6 @@ function ultraShowLine(a,b){
 function ultraShowVecLine(pa,pb){
  ultraShowLinePoints(ultraEnsureLine(),pa,pb,.055);
 }
-
-function ultraPairKey(a,b){
- a=String(a||''); b=String(b||'');
- return a<b ? (a+'|'+b) : (b+'|'+a);
-}
-function ultraLinkList(k){
- k=String(k||'');
- if(!ultraLinks.has(k)) ultraLinks.set(k,[]);
- return ultraLinks.get(k);
-}
-function ultraHasLink(a,b){
- const list=ultraLinks.get(String(a||''))||[];
- return list.some(v=>String(v.other)===String(b));
-}
-function ultraGetYaw(root){return root&&root.data?Number(root.data.yaw)||0:0;}
-function ultraSetYaw(root,yaw){
- if(!root) return;
- root.setEulerAngles(0,(Number(yaw)||0)*180/Math.PI,0);
- root.data=Object.assign({},root.data||{},{yaw:Number(yaw)||0});
-}
-function ultraRotY(v,ang){
- const c=Math.cos(ang), s=Math.sin(ang);
- return new pc.Vec3(v.x*c+v.z*s, v.y, -v.x*s+v.z*c);
-}
-let ultraGlueMat=null;
-const ultraGlueEntities=new Map();
-function ultraEnsureGlueMat(){
- if(ultraGlueMat) return ultraGlueMat;
- ultraGlueMat=new pc.StandardMaterial();
- ultraGlueMat.diffuse=new pc.Color(.02,1,.62);
- ultraGlueMat.emissive=new pc.Color(.0,.42,.24);
- ultraGlueMat.opacity=.86;
- ultraGlueMat.blendType=pc.BLEND_NORMAL;
- ultraGlueMat.depthWrite=false;
- ultraGlueMat.update();
- return ultraGlueMat;
-}
-function ultraCreateGlueEntity(pairKey){
- const root=new pc.Entity('ultrahand_glue_'+pairKey);
- const bar=new pc.Entity('glue_bar');
- bar.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
- bar.render.material=ultraEnsureGlueMat();
- root.addChild(bar);
- for(let i=0;i<2;i++){
-   const pad=new pc.Entity('glue_pad');
-   pad.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
-   pad.render.material=ultraEnsureGlueMat();
-   root.addChild(pad);
- }
- app.root.addChild(root);
- return root;
-}
-function ultraUpdateGlueVisual(aKey,bKey){
- const a=getObjRootByInstanceKey(aKey), b=getObjRootByInstanceKey(bKey);
- const pair=ultraPairKey(aKey,bKey);
- if(!a||!b){
-   const old=ultraGlueEntities.get(pair); if(old){try{old.destroy();}catch{}}
-   ultraGlueEntities.delete(pair); return;
- }
- const ga=ultraObjectBounds(a).center, gb=ultraObjectBounds(b).center;
- const ent=ultraGlueEntities.get(pair)||ultraCreateGlueEntity(pair);
- ultraGlueEntities.set(pair,ent);
- ent.enabled=true;
- const kids=ent.children||[];
- if(kids[0]) ultraShowLinePoints(kids[0],ga,gb,.09);
- if(kids[1]){kids[1].enabled=true;kids[1].setPosition(ga);kids[1].setLocalScale(.28,.28,.28);}
- if(kids[2]){kids[2].enabled=true;kids[2].setPosition(gb);kids[2].setLocalScale(.28,.28,.28);}
-}
-function ultraUpdateAllGlueVisuals(){
- const done=new Set();
- for(const [a,list] of ultraLinks){
-   for(const l of list||[]){
-     const pair=ultraPairKey(a,l.other); if(done.has(pair)) continue;
-     done.add(pair); ultraUpdateGlueVisual(a,l.other);
-   }
- }
-}
-function ultraDestroyGlueBetween(a,b){
- const pair=ultraPairKey(a,b);
- const g=ultraGlueEntities.get(pair); if(g){try{g.destroy();}catch{}}
- ultraGlueEntities.delete(pair);
-}
-function ultraAddLink(aKey,bKey,broadcast){
- aKey=String(aKey||''); bKey=String(bKey||'');
- if(!aKey||!bKey||aKey===bKey) return false;
- const a=getObjRootByInstanceKey(aKey), b=getObjRootByInstanceKey(bKey);
- if(!a||!b) return false;
- if(!ultraHasLink(aKey,bKey)){
-   const ap=a.getPosition().clone(), bp=b.getPosition().clone();
-   const ay=ultraGetYaw(a), by=ultraGetYaw(b);
-   ultraLinkList(aKey).push({other:bKey});
-   ultraLinkList(bKey).push({other:aKey});
- }
- ultraUpdateGlueVisual(aKey,bKey);
- if(broadcast) sendMultiplayer({type:'objectInstanceAttach',a:aKey,b:bKey});
- return true;
-}
-function ultraRemoveLink(a,b,broadcast){
- a=String(a||''); b=String(b||'');
- if(!a||!b) return false;
- ultraLinks.set(a,(ultraLinks.get(a)||[]).filter(v=>String(v.other)!==b));
- ultraLinks.set(b,(ultraLinks.get(b)||[]).filter(v=>String(v.other)!==a));
- if((ultraLinks.get(a)||[]).length===0) ultraLinks.delete(a);
- if((ultraLinks.get(b)||[]).length===0) ultraLinks.delete(b);
- ultraDestroyGlueBetween(a,b);
- if(broadcast) sendMultiplayer({type:'objectInstanceDetach',a:a,b:b});
- return true;
-}
-function ultraRemoveLinksFor(key,broadcast){
- key=String(key||'');
- const list=(ultraLinks.get(key)||[]).slice();
- for(const l of list){
-   const other=String(l.other||'');
-   ultraLinks.set(other,(ultraLinks.get(other)||[]).filter(v=>String(v.other)!==key));
-   ultraDestroyGlueBetween(key,other);
-   if(broadcast) sendMultiplayer({type:'objectInstanceDetach',a:key,b:other});
- }
- ultraLinks.delete(key);
-}
-function ultraConnectedKeys(startKey){
- startKey=String(startKey||'');
- const out=[]; const seen=new Set(); const q=[startKey];
- while(q.length){
-   const k=q.shift(); if(!k||seen.has(k)) continue;
-   if(!getObjRootByInstanceKey(k)) continue;
-   seen.add(k); out.push(k);
-   for(const l of ultraLinks.get(k)||[]) if(!seen.has(String(l.other))) q.push(String(l.other));
- }
- return out;
-}
-function ultraBuildHeldGroup(root){
- const baseKey=root&&root.data&&root.data.instanceKey;
- const basePos=root.getPosition().clone();
- const baseYaw=ultraGetYaw(root);
- const members=[];
- for(const k of ultraConnectedKeys(baseKey)){
-   const r=getObjRootByInstanceKey(k); if(!r) continue;
-   members.push({key:k,root:r,offset:r.getPosition().clone().sub(basePos),yawDelta:ultraGetYaw(r)-baseYaw});
- }
- return {baseKey,baseYaw,members};
-}
-function ultraApplyHeldGroup(){
- if(!ultraHeld||!ultraHeld.group||!ultraHeld.root) return;
- const root=ultraHeld.root;
- const basePos=root.getPosition().clone();
- const yaw=ultraGetYaw(root);
- const delta=yaw-(ultraHeld.group.baseYaw||0);
- for(const m of ultraHeld.group.members||[]){
-   if(!m||m.root===root||!m.root) continue;
-   const off=ultraRotY(m.offset,delta);
-   const np=basePos.clone().add(off);
-   m.root.setPosition(np.x,np.y,np.z);
-   ultraSetYaw(m.root,yaw+(Number(m.yawDelta)||0));
- }
- ultraUpdateAllGlueVisuals();
-}
-function ultraBroadcastHeldGroup(){
- if(!ultraHeld||!ultraHeld.group) return;
- for(const m of ultraHeld.group.members||[]) ultraBroadcastTransform(m.root);
-}
 function ultraEyePos(){
  return new pc.Vec3(player.x, player.y+currentEditorEyeHeight(), player.z);
 }
@@ -2904,14 +2738,13 @@ function ultraApplyTransform(msg){
  const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return true;
  root.setPosition(x,y,z); root.setEulerAngles(0,yaw*180/Math.PI,0); root.data.yaw=yaw;
- try{ultraUpdateAllGlueVisuals();}catch{}
  return true;
 }
 const __ultraHandleObjectCatalogMessage=handleObjectCatalogMessage;
 handleObjectCatalogMessage=function(msg){
  if(msg && msg.type==='objectInstanceTransform') return ultraApplyTransform(msg);
- if(msg && msg.type==='objectInstanceDetach'){ultraRemoveLink(msg.a||msg.instanceKey,msg.b||msg.other,false); return true;}
- if(msg && msg.type==='objectInstanceAttach'){ultraAddLink(msg.a||msg.from||msg.instanceKey,msg.b||msg.to||msg.other,false); return true;}
+ if(msg && msg.type==='objectInstanceDetach'){return true;}
+ if(msg && msg.type==='objectInstanceAttach'){return true;}
  return __ultraHandleObjectCatalogMessage(msg);
 };
 function startUltraField(){
@@ -2924,7 +2757,6 @@ function startUltraField(){
  const rootPos=root.getPosition().clone();
  const centerOffset=rootPos.clone().sub(bounds.center);
  ultraHeld={mode:'field',root,instanceKey:r.objectHit.instanceKey,defId:r.objectHit.defId,distance:Math.max(1.8,Math.min(8.5,d||4)),yaw:root.data&&Number(root.data.yaw)||0,rootCenterOffset:centerOffset};
- ultraHeld.group=ultraBuildHeldGroup(root);
  setUltraButtons(true); setUltraHint('ウルトラハンド: 青緑ラインで操作中 / 視点で移動 / PLACEで接着 / BREAKで解除 / ULTRAで離す');
  setMsg('ウルトラハンド: OBJを掴んだ','good');
  ultraShowLinePoints(ultraEnsureLine(), ultraEyePoint(), bounds.center, .065);
@@ -2974,8 +2806,7 @@ function stopUltraHand(drop){
    }
  }
  if(ultraHeld.mode==='field' && ultraHeld.root){
-   ultraApplyHeldGroup();
-   ultraBroadcastHeldGroup();
+   ultraBroadcastTransform(ultraHeld.root);
    setMsg('ウルトラハンド: OBJを離した','good');
  }
  destroyUltraEditorHeldEntity();
@@ -2993,14 +2824,9 @@ function ultraAttachOrRelease(){
  if(ultraHeld.mode==='field'){
    const near=nearestUltraAttachTarget(ultraHeld.root);
    if(near){
-     const a=ultraHeld.instanceKey || (ultraHeld.root.data&&ultraHeld.root.data.instanceKey);
-     const b=near.key || (near.root&&near.root.data&&near.root.data.instanceKey);
-     const ok=ultraAddLink(a,b,true);
-     ultraHeld.group=ultraBuildHeldGroup(ultraHeld.root);
-     ultraBroadcastHeldGroup();
-     const r=stopUltraHand(true);
-     setMsg(ok?'ウルトラハンド: 接着完了。接着剤で連結したOBJ全体を次から掴める':'ウルトラハンド: 接着失敗','good');
-     return r;
+     setMsg('ウルトラハンド: '+(ultraHeld.defId||'OBJ')+' を近くのOBJへ接着位置に固定','good');
+     ultraBroadcastTransform(ultraHeld.root);
+     return stopUltraHand(true);
    }
    return stopUltraHand(true);
  }
@@ -3009,10 +2835,6 @@ function ultraAttachOrRelease(){
 function ultraDetachHeld(){
  if(!ultraHeld) return false;
  if(ultraHeld.mode==='editorCell') return stopUltraHand(false);
- if(ultraHeld.mode==='field'){
-   const key=ultraHeld.instanceKey || (ultraHeld.root&&ultraHeld.root.data&&ultraHeld.root.data.instanceKey);
-   ultraRemoveLinksFor(key,true);
- }
  setMsg('ウルトラハンド: 接着解除/離す','info');
  return stopUltraHand(true);
 }
@@ -3044,8 +2866,7 @@ function updateUltraHand(dt){
    else if(ultraAttachLine) ultraAttachLine.enabled=false;
    setUltraHint(near?'ウルトラハンド: 青緑で操作中 / PLACEで接着':'ウルトラハンド: 青緑ラインで操作中 / 視点で移動 / ULTRAで離す');
    const now=performance.now();
-   ultraApplyHeldGroup();
-   if(now-ultraLastSync>150){ultraLastSync=now; ultraBroadcastHeldGroup();}
+   if(now-ultraLastSync>150){ultraLastSync=now; ultraBroadcastTransform(ultraHeld.root);}
  }
  if(ultraHeld.mode==='editorCell'){
    ensureObjectBuildRoot();
@@ -3158,6 +2979,590 @@ if(typeof placeCustomObject==='function'){
    return __precisePlaceCustomObject.apply(this,arguments);
  };
 }
+
+
+// ===== Info Texture / Cat behavior / Combat / Blueprint v1 =====
+// 情報テクスチャは「平面テクスチャ定義」だが、voxel3d OBJ の decal / infoTextureIds に入ると
+// そのOBJ全体へ仕様を付与する。まず疎通用に「ねこ」を内蔵する。
+const INFO_TEXTURE_CAT_ID = 'info-cat';
+const INFO_CARRIER_CAT_ID = 'builtin-info-carrier-cat';
+const INFO_BP_PREFIX = 'bp-';
+let playerHp = 20;
+let playerLastDamagedAt = 0;
+let infoTextureGranted = new Set();
+let catAiAcc = 0;
+let catAudioCtx = null;
+let blueprintBtn = null;
+
+function ensureInfoHud(){
+ if($('combatHpHud')) return;
+ const st=document.createElement('style');
+ st.textContent = '#combatHpHud{position:fixed;right:10px;top:82px;z-index:14;padding:8px 12px;border-radius:14px;background:rgba(15,23,42,.72);border:1px solid rgba(248,113,113,.55);color:#fecaca;font-weight:1000;text-shadow:0 2px 5px #000;box-shadow:0 10px 25px rgba(0,0,0,.25)}#blueprintCaptureBtn{position:fixed;left:10px;bottom:364px;z-index:13;width:74px;height:54px;border-radius:16px;border:2px solid rgba(96,165,250,.82);background:rgba(37,99,235,.82);color:white;font-size:10px;font-weight:1000;text-shadow:0 2px 5px #000;box-shadow:0 10px 25px rgba(0,0,0,.25);touch-action:manipulation;display:none}#blueprintCaptureBtn.on{display:block;background:linear-gradient(180deg,#60a5fa,#2563eb)}body.objEditing #blueprintCaptureBtn{display:none!important}body.ultraActive #ultraHint{display:none!important}';
+ document.head.appendChild(st);
+ const hp=document.createElement('div'); hp.id='combatHpHud'; hp.textContent='HP '+playerHp+'/20'; document.body.appendChild(hp);
+ blueprintBtn=document.createElement('button'); blueprintBtn.id='blueprintCaptureBtn'; blueprintBtn.innerHTML='BLUE<br>PRINT';
+ blueprintBtn.addEventListener('pointerdown',e=>{e.preventDefault();captureHeldBlueprint();});
+ document.body.appendChild(blueprintBtn);
+}
+function updateInfoHud(){ const h=$('combatHpHud'); if(h) h.textContent='HP '+Math.max(0,Math.round(playerHp))+'/20'; if(blueprintBtn) blueprintBtn.classList.toggle('on', !!(ultraHeld&&ultraHeld.mode==='field')); }
+
+function catIconCells(){
+ const g=16, cells=[];
+ const put=(x,y,c)=>{ if(x>=0&&x<g&&y>=0&&y<g) cells.push({x,y,color:c}); };
+ const fur='#f59e0b', dark='#78350f', pink='#fb7185', eye='#111827', white='#fff7ed';
+ for(let y=4;y<=12;y++) for(let x=3;x<=12;x++){ const dx=x-7.5, dy=y-8; if((dx*dx)/28+(dy*dy)/22<=1) put(x,y,fur); }
+ [[4,3],[5,2],[6,4],[10,4],[11,2],[12,3]].forEach(([x,y])=>put(x,y,fur));
+ [[5,3],[11,3]].forEach(([x,y])=>put(x,y,pink));
+ [[6,7],[10,7]].forEach(([x,y])=>put(x,y,eye));
+ [[6,6],[10,6]].forEach(([x,y])=>put(x,y,white));
+ [[8,9],[7,10],[8,10],[9,10]].forEach(([x,y])=>put(x,y,dark));
+ [[3,9],[2,8],[2,10],[12,9],[13,8],[13,10]].forEach(([x,y])=>put(x,y,dark));
+ return cells;
+}
+function ensureCatInfoTexture(){
+ const def={id:INFO_TEXTURE_CAT_ID,name:'情報テクスチャ:ねこ',kind:'plane',grid:16,scale:.085,cells:catIconCells(),infoTexture:true,infoType:'cat',createdAt:1,updatedAt:Date.now()};
+ if(!customObjectDefs.has(INFO_TEXTURE_CAT_ID)) customObjectDefs.set(INFO_TEXTURE_CAT_ID, validateObjectDef(def)||def);
+ return customObjectDefs.get(INFO_TEXTURE_CAT_ID);
+}
+function ensureCatInfoCarrierDef(){
+ ensureCatInfoTexture();
+ if(customObjectDefs.has(INFO_CARRIER_CAT_ID)) return customObjectDefs.get(INFO_CARRIER_CAT_ID);
+ const cells=[];
+ const colors=['#475569','#64748b','#334155','#1e293b'];
+ for(let x=5;x<=10;x++) for(let y=0;y<=5;y++) for(let z=5;z<=10;z++){
+   const edge=(x===5||x===10||y===0||y===5||z===5||z===10); if(edge || hash2(x*13+y*17,z*19)>.38) cells.push({x,y,z,size:.16,color:colors[(x+y+z)%colors.length]});
+ }
+ const def={id:INFO_CARRIER_CAT_ID,name:'野生の情報箱:ねこ',kind:'voxel3d',grid:OBJECT_GRID,scale:.16,cells,decals:[{x:8,y:5,z:10,face:'pz',textureId:INFO_TEXTURE_CAT_ID,grid:16,cells:catIconCells()}],infoCarrier:'cat',hp:8,worldSpawn:true,createdAt:2,updatedAt:Date.now()};
+ const clean=validateObjectDef(def)||def;
+ customObjectDefs.set(INFO_CARRIER_CAT_ID,clean);
+ return clean;
+}
+
+const __infoValidateObjectDef = validateObjectDef;
+validateObjectDef = function(def){
+ const clean=__infoValidateObjectDef(def);
+ if(!clean) return clean;
+ const ids=[];
+ const add=id=>{id=String(id||''); if(id&&!ids.includes(id)) ids.push(id);};
+ if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
+ if(def.infoType==='cat'||def.infoCarrier==='cat') add(INFO_TEXTURE_CAT_ID);
+ if(Array.isArray(def.decals)) for(const d of def.decals){ if(String(d&&d.textureId)===INFO_TEXTURE_CAT_ID) add(INFO_TEXTURE_CAT_ID); }
+ if(ids.length) clean.infoTextureIds=ids;
+ if(def.infoTexture) clean.infoTexture=true;
+ if(def.infoType) clean.infoType=String(def.infoType).slice(0,40);
+ if(def.infoCarrier) clean.infoCarrier=String(def.infoCarrier).slice(0,40);
+ if(def.worldSpawn) clean.worldSpawn=true;
+ if(def.hp) clean.hp=Math.max(1,Math.min(200,Math.trunc(Number(def.hp)||1)));
+ return clean;
+};
+
+function rootHasInfo(root, infoId){
+ if(!root) return false;
+ const ids=(root.data&&root.data.infoTextureIds)||[];
+ if(ids.includes(infoId)) return true;
+ const def=customObjectDefs.get(root.data&&root.data.defId);
+ return !!(def && Array.isArray(def.infoTextureIds) && def.infoTextureIds.includes(infoId));
+}
+function hydrateRootRuntime(root, def){
+ if(!root||!def) return root;
+ const ids=[];
+ if(Array.isArray(def.infoTextureIds)) ids.push(...def.infoTextureIds);
+ if(Array.isArray(def.decals)) for(const d of def.decals) if(String(d.textureId)===INFO_TEXTURE_CAT_ID && !ids.includes(INFO_TEXTURE_CAT_ID)) ids.push(INFO_TEXTURE_CAT_ID);
+ root.data=Object.assign({},root.data||{},{infoTextureIds:ids,hp:Number(def.hp)||(ids.includes(INFO_TEXTURE_CAT_ID)?10:undefined),maxHp:Number(def.hp)||(ids.includes(INFO_TEXTURE_CAT_ID)?10:undefined),aiPhase:hash2((root.data&&root.data.instanceKey||'x').length, Date.now()%999),aiNextMeow:1+Math.random()*4});
+ if(ids.includes(INFO_TEXTURE_CAT_ID)) addCatLook(root);
+ return root;
+}
+const __infoPlaceCustomObject = placeCustomObject;
+placeCustomObject = function(def,x,y,z,yaw,instanceKey){
+ def=validateObjectDef(def); if(!def) return null;
+ const root=__infoPlaceCustomObject(def,x,y,z,yaw,instanceKey);
+ return hydrateRootRuntime(root,def);
+};
+
+function addCatLook(root){
+ if(!root || root.__catLookAdded) return; root.__catLookAdded=true;
+ const mat=ensureCustomMat('#f59e0b'), dark=ensureCustomMat('#78350f'), pink=ensureCustomMat('#fb7185');
+ const b=ultraObjectBounds(root), c=root.getPosition();
+ const w=Math.max(.28,Math.min(1.2,b.radius*.42));
+ function box(name,matr,lx,ly,lz,sx,sy,sz){ const e=new pc.Entity(name); e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false}); e.render.material=matr; e.setLocalPosition(lx,ly,lz); e.setLocalScale(sx,sy,sz); e.data={catDecor:true,customObjectCell:false}; root.addChild(e); return e; }
+ box('cat_ear_l',mat,-w*.55,b.max.y-c.y+.10,w*.24,w*.22,w*.35,w*.18);
+ box('cat_ear_r',mat,w*.55,b.max.y-c.y+.10,w*.24,w*.22,w*.35,w*.18);
+ box('cat_nose',pink,0,b.center.y-c.y,w*.56,w*.15,w*.10,w*.08);
+ box('cat_tail',dark,w*.95,b.center.y-c.y,w*.08,w*.18,w*.18,w*.78);
+}
+function grantInfoTexture(infoId){
+ if(infoId!==INFO_TEXTURE_CAT_ID) return;
+ ensureCatInfoTexture();
+ if(!infoTextureGranted.has(infoId)) setMsg('情報テクスチャ入手: ねこ / OBJ編集で面に貼れば猫化する','good');
+ infoTextureGranted.add(infoId);
+ saveCustomObjectsLocal(); renderObjectManager();
+}
+function dropInfoFromRoot(root){
+ if(rootHasInfo(root,INFO_TEXTURE_CAT_ID) || (root&&root.data&&root.data.defId===INFO_CARRIER_CAT_ID)) grantInfoTexture(INFO_TEXTURE_CAT_ID);
+}
+function damagePlayer(amount, label){
+ const now=performance.now(); if(now-playerLastDamagedAt<650) return;
+ playerLastDamagedAt=now; playerHp=Math.max(0,playerHp-amount); updateInfoHud();
+ setMsg((label||'攻撃')+'を受けた: HP '+Math.round(playerHp)+'/20','bad');
+ if(playerHp<=0){ playerHp=20; player.x=0; player.y=terrainHeight(0,0)+4; player.z=-8; player.vy=0; setMsg('倒された。初期地点へリスポーン','bad'); updateInfoHud(); }
+}
+function damageObjectRoot(root, amount){
+ if(!root) return false;
+ root.data=root.data||{}; root.data.maxHp=root.data.maxHp||root.data.hp||10; root.data.hp=Math.max(0,(Number(root.data.hp)||root.data.maxHp)-amount);
+ setMsg('攻撃: '+(rootHasInfo(root,INFO_TEXTURE_CAT_ID)?'ねこ ':'OBJ ')+'HP '+Math.ceil(root.data.hp)+'/'+root.data.maxHp,'info');
+ catMeow(root, root.data.hp<=0?'hurt':'angry');
+ if(root.data.hp<=0){
+   dropInfoFromRoot(root);
+   const ik=root.data.instanceKey;
+   removeCustomObjectInstance(ik,true);
+   setMsg('撃破: 情報テクスチャをドロップ/登録した','good');
+ }
+ return true;
+}
+const __infoBreakBlock = breakBlock;
+breakBlock = function(){
+ if(ultraHeld) return ultraDetachHeld();
+ if(state.editingObject) return __infoBreakBlock.apply(this,arguments);
+ const r=rayBlock();
+ if(r && r.objectHit && r.objectHit.root){
+   const root=r.objectHit.root;
+   if(rootHasInfo(root,INFO_TEXTURE_CAT_ID) || (root.data&&root.data.defId===INFO_CARRIER_CAT_ID)) return damageObjectRoot(root,4);
+   dropInfoFromRoot(root);
+ }
+ return __infoBreakBlock.apply(this,arguments);
+};
+
+function catMeow(root, kind){
+ try{
+   catAudioCtx = catAudioCtx || new (window.AudioContext||window.webkitAudioContext)();
+   if(catAudioCtx.state==='suspended') catAudioCtx.resume();
+   const ctx=catAudioCtx, now=ctx.currentTime;
+   const osc=ctx.createOscillator(), gain=ctx.createGain();
+   osc.type=kind==='angry'?'sawtooth':'triangle';
+   const base=kind==='hurt'?720:(kind==='angry'?420:560);
+   osc.frequency.setValueAtTime(base,now);
+   osc.frequency.exponentialRampToValueAtTime(kind==='angry'?260:base*1.55,now+(kind==='angry'?.32:.22));
+   gain.gain.setValueAtTime(.0001,now); gain.gain.exponentialRampToValueAtTime(kind==='angry'?.11:.07,now+.035); gain.gain.exponentialRampToValueAtTime(.0001,now+(kind==='angry'?.42:.30));
+   osc.connect(gain).connect(ctx.destination); osc.start(now); osc.stop(now+(kind==='angry'?.46:.34));
+ }catch{}
+}
+function updateCats(dt){
+ catAiAcc+=dt; if(catAiAcc<.12) return; const step=catAiAcc; catAiAcc=0;
+ for(const [ik,root] of customObjectEntities){
+   if(!root||!root.getPosition||!rootHasInfo(root,INFO_TEXTURE_CAT_ID)) continue;
+   if(ultraHeld && ultraConnectedKeys(ultraHeld.instanceKey).includes(ik)) continue;
+   const p=root.getPosition(); const dx=p.x-player.x, dz=p.z-player.z; const dist=Math.hypot(dx,dz);
+   root.data=root.data||{}; root.data.aiNextMeow=(root.data.aiNextMeow||2)-step;
+   if(root.data.aiNextMeow<=0){ root.data.aiNextMeow=3+Math.random()*8; if(dist<9) catMeow(root, Math.random()<.18?'angry':'cute'); }
+   let vx=0,vz=0;
+   if(dist<1.35){ damagePlayer(2,'猫パンチ'); vx=dx/(dist||1)*1.8; vz=dz/(dist||1)*1.8; }
+   else if(dist<4.2){ vx=dx/(dist||1)*2.0; vz=dz/(dist||1)*2.0; }
+   else if(dist<7.5){ const side=Math.sin(performance.now()*.0015+(root.data.aiPhase||0)); vx=(-dz/(dist||1))*side*.7; vz=(dx/(dist||1))*side*.7; }
+   for(const [ok,other] of customObjectEntities){
+     if(ok===ik||!other||!rootHasInfo(other,INFO_TEXTURE_CAT_ID)) continue;
+     const op=other.getPosition(); const od=Math.hypot(op.x-p.x,op.z-p.z);
+     if(od<1.1 && Math.random()<.035){ catMeow(root,'angry'); damageObjectRoot(other,.75); }
+   }
+   if(vx||vz){
+     const nx=p.x+vx*step, nz=p.z+vz*step; const gy=terrainHeight(nx,nz)+1;
+     const hop=(Math.abs(gy-p.y)>.25 && Math.abs(gy-p.y)<1.25)?Math.min(gy,p.y+.18):gy;
+     root.setPosition(nx,hop,nz); root.setEulerAngles(0,Math.atan2(vx,vz)*180/Math.PI,0); root.data.yaw=Math.atan2(vx,vz);
+   }else if(dist<10){ root.setEulerAngles(0,Math.atan2(-dx,-dz)*180/Math.PI,0); root.data.yaw=Math.atan2(-dx,-dz); }
+ }
+}
+
+function ultraLinkKey(k){ return String(k||''); }
+function ultraPairKey(a,b){ a=ultraLinkKey(a); b=ultraLinkKey(b); return a<b ? a+'|'+b : b+'|'+a; }
+const ultraGlueEntities = new Map();
+function hexFromRgb01(r,g,b){
+ const c=n=>Math.max(0,Math.min(255,Math.round((Number(n)||0)*255))).toString(16).padStart(2,'0');
+ return '#'+c(r)+c(g)+c(b);
+}
+function hexFromCellEntity(ent){
+ try{
+   const mat=ent&&ent.render&&ent.render.material;
+   const col=mat&&(mat.diffuse||mat.emissive);
+   if(col) return hexFromRgb01(col.r,col.g,col.b);
+ }catch{}
+ return '#94a3b8';
+}
+function ultraConnectedKeys(startKey){
+ startKey=ultraLinkKey(startKey); const seen=new Set(), q=[startKey];
+ while(q.length){ const k=q.shift(); if(!k||seen.has(k)) continue; seen.add(k); for(const l of (ultraLinks.get(k)||[])){ if(l&&l.other&&!seen.has(l.other)) q.push(l.other); } }
+ return Array.from(seen);
+}
+function ultraSetDirectedLink(from,to,ox,oy,oz){
+ from=ultraLinkKey(from); to=ultraLinkKey(to); if(!from||!to||from===to) return false;
+ const arr=ultraLinks.get(from)||[]; const ex=arr.find(l=>String(l.other)===to);
+ const v={other:to,ox:Number(ox)||0,oy:Number(oy)||0,oz:Number(oz)||0};
+ if(ex) Object.assign(ex,v); else arr.push(v);
+ ultraLinks.set(from,arr); return true;
+}
+function ultraMakeGlueLine(aKey,bKey){
+ const pk=ultraPairKey(aKey,bKey);
+ let e=ultraGlueEntities.get(pk);
+ if(e) return e;
+ e=new pc.Entity('ultrahand_glue_'+pk);
+ e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ const m=new pc.StandardMaterial();
+ m.diffuse=new pc.Color(.10,.95,.62);
+ m.emissive=new pc.Color(.02,.35,.18);
+ m.opacity=.78; m.blendType=pc.BLEND_NORMAL; m.depthWrite=false; m.update();
+ e.render.material=m; e.enabled=false;
+ app.root.addChild(e);
+ ultraGlueEntities.set(pk,e);
+ return e;
+}
+function ultraUpdateGluePair(aKey,bKey){
+ const a=getObjRootByInstanceKey(aKey), b=getObjRootByInstanceKey(bKey);
+ const e=ultraMakeGlueLine(aKey,bKey);
+ if(!a||!b){ if(e)e.enabled=false; return; }
+ const ac=ultraObjectBounds(a).center, bc=ultraObjectBounds(b).center;
+ ultraShowLinePoints(e,ac,bc,.075);
+}
+function ultraRefreshGlueVisuals(){
+ const alive=new Set();
+ for(const [a,arr] of ultraLinks){
+   for(const l of arr||[]){
+     const b=String(l.other||''); if(!a||!b||a>=b) continue;
+     const pk=ultraPairKey(a,b); alive.add(pk); ultraUpdateGluePair(a,b);
+   }
+ }
+ for(const [pk,e] of Array.from(ultraGlueEntities.entries())){
+   if(!alive.has(pk)){ try{e.destroy();}catch{} ultraGlueEntities.delete(pk); }
+ }
+}
+function refreshUltraOffsetsFrom(root){
+ if(!root||!root.data) return;
+ const base=root.getPosition(); const baseKey=ultraLinkKey(root.data.instanceKey);
+ for(const key of ultraConnectedKeys(baseKey)){
+   if(key===baseKey) continue; const other=getObjRootByInstanceKey(key); if(!other) continue;
+   const p=other.getPosition();
+   ultraSetDirectedLink(baseKey,key,p.x-base.x,p.y-base.y,p.z-base.z);
+ }
+ ultraRefreshGlueVisuals();
+}
+function moveUltraLinkedGroup(root){
+ if(!root||!root.data) return;
+ const base=root.getPosition(), baseKey=ultraLinkKey(root.data.instanceKey);
+ const direct=(ultraLinks.get(baseKey)||[]).slice();
+ for(const l of direct){
+   const other=getObjRootByInstanceKey(l.other); if(!other||other===root) continue;
+   other.setPosition(base.x+(Number(l.ox)||0),base.y+(Number(l.oy)||0),base.z+(Number(l.oz)||0));
+   if(root.data.yaw!=null){ other.setEulerAngles(0,root.data.yaw*180/Math.PI,0); other.data=Object.assign({},other.data||{},{yaw:root.data.yaw}); }
+ }
+ ultraRefreshGlueVisuals();
+}
+function propagateInfoAcrossUltraGroup(seedKey){
+ const keys=ultraConnectedKeys(seedKey); const ids=new Set(); let hp=10;
+ for(const k of keys){
+   const r=getObjRootByInstanceKey(k); if(!r) continue;
+   ((r.data&&r.data.infoTextureIds)||[]).forEach(id=>ids.add(id));
+   const def=customObjectDefs.get(r.data&&r.data.defId);
+   if(def&&Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(id=>ids.add(id));
+   if(def&&Number(def.hp)) hp=Math.max(hp,Number(def.hp));
+ }
+ if(ids.size){
+   for(const k of keys){ const r=getObjRootByInstanceKey(k); if(!r) continue; r.data=Object.assign({},r.data||{},{infoTextureIds:Array.from(ids),hp:r.data.hp||hp,maxHp:r.data.maxHp||hp}); if(ids.has(INFO_TEXTURE_CAT_ID)) addCatLook(r); }
+ }
+}
+function attachUltraRoots(a,b,broadcast){
+ if(!a||!b||!a.data||!b.data) return false;
+ const ak=ultraLinkKey(a.data.instanceKey), bk=ultraLinkKey(b.data.instanceKey); if(!ak||!bk||ak===bk) return false;
+ const ap=a.getPosition(), bp=b.getPosition();
+ ultraSetDirectedLink(ak,bk,bp.x-ap.x,bp.y-ap.y,bp.z-ap.z);
+ ultraSetDirectedLink(bk,ak,ap.x-bp.x,ap.y-bp.y,ap.z-bp.z);
+ propagateInfoAcrossUltraGroup(ak);
+ ultraUpdateGluePair(ak,bk);
+ if(broadcast!==false) sendMultiplayer({type:'objectInstanceAttach',a:ak,b:bk,ox:bp.x-ap.x,oy:bp.y-ap.y,oz:bp.z-ap.z});
+ return true;
+}
+const __infoUltraAttachOrRelease = ultraAttachOrRelease;
+ultraAttachOrRelease = function(){
+ if(!ultraHeld || ultraHeld.mode!=='field') return __infoUltraAttachOrRelease.apply(this,arguments);
+ const near=nearestUltraAttachTarget(ultraHeld.root);
+ if(near && attachUltraRoots(ultraHeld.root,near.root,true)){
+   refreshUltraOffsetsFrom(ultraHeld.root); ultraBroadcastTransform(ultraHeld.root);
+   setMsg('接着完了: 接着剤ライン付きで一連OBJ化 / 情報テクスチャも全体へ継承','good');
+   return stopUltraHand(true);
+ }
+ return stopUltraHand(true);
+};
+const __infoUpdateUltraHand = updateUltraHand;
+updateUltraHand = function(dt){ __infoUpdateUltraHand(dt); if(ultraHeld&&ultraHeld.mode==='field') moveUltraLinkedGroup(ultraHeld.root); else ultraRefreshGlueVisuals(); updateInfoHud(); };
+const __infoStartUltraField = startUltraField;
+startUltraField = function(){ const ok=__infoStartUltraField.apply(this,arguments); if(ok&&ultraHeld&&ultraHeld.root) refreshUltraOffsetsFrom(ultraHeld.root); updateInfoHud(); return ok; };
+const __infoStopUltraHand = stopUltraHand;
+stopUltraHand = function(drop){ const r=__infoStopUltraHand.apply(this,arguments); ultraRefreshGlueVisuals(); updateInfoHud(); return r; };
+
+function entityCellsForBlueprint(root, origin, outCells, outDecals, infoIds){
+ if(!root||!root.children) return;
+ const baseS=.16;
+ for(const ch of root.children){
+   if(!ch||!ch.getPosition||!ch.getLocalScale||ch.data&&ch.data.catDecor) continue;
+   if(ch.data&&ch.data.customSurfaceDecal){
+     const def=customObjectDefs.get(ch.data.textureId); if(def&&def.kind==='plane') infoIds.add(ch.data.textureId);
+     continue;
+   }
+   if(ch.name!=='obj_cell') continue;
+   const p=ch.getPosition(), sc=ch.getLocalScale();
+   const lx=p.x-origin.x, ly=p.y-origin.y, lz=p.z-origin.z;
+   const size=clampObjCellSize(Math.max(Math.abs(sc.x),Math.abs(sc.y),Math.abs(sc.z)),baseS);
+   outCells.push({x:8,y:0,z:8,lx,ly,lz,size,color:hexFromCellEntity(ch)});
+ }
+ const def=customObjectDefs.get(root.data&&root.data.defId);
+ if(def){
+   if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(id=>infoIds.add(id));
+   if(Array.isArray(def.decals)) for(const d of def.decals){ if(d.textureId===INFO_TEXTURE_CAT_ID) infoIds.add(INFO_TEXTURE_CAT_ID); }
+ }
+ if(root.data&&Array.isArray(root.data.infoTextureIds)) root.data.infoTextureIds.forEach(id=>infoIds.add(id));
+}
+function addGlueCellsForBlueprint(keys, origin, cells){
+ const seen=new Set();
+ for(const a of keys){
+   for(const l of (ultraLinks.get(a)||[])){
+     const b=String(l.other||''); if(!keys.includes(b)) continue;
+     const pk=ultraPairKey(a,b); if(seen.has(pk)) continue; seen.add(pk);
+     const ar=getObjRootByInstanceKey(a), br=getObjRootByInstanceKey(b); if(!ar||!br) continue;
+     const ac=ultraObjectBounds(ar).center, bc=ultraObjectBounds(br).center;
+     const dx=bc.x-ac.x, dy=bc.y-ac.y, dz=bc.z-ac.z;
+     const len=Math.max(.001,Math.sqrt(dx*dx+dy*dy+dz*dz));
+     const steps=Math.max(2,Math.min(28,Math.ceil(len/.18)));
+     for(let i=1;i<steps;i++){
+       const t=i/steps;
+       cells.push({x:8,y:0,z:8,lx:ac.x+dx*t-origin.x,ly:ac.y+dy*t-origin.y,lz:ac.z+dz*t-origin.z,size:.075,color:'#22c55e',glue:true});
+     }
+   }
+ }
+}
+function captureHeldBlueprint(){
+ if(!ultraHeld||ultraHeld.mode!=='field'||!ultraHeld.root){setMsg('ブループリント対象なし: ULTRAで一連OBJを掴め','bad');return false;}
+ refreshUltraOffsetsFrom(ultraHeld.root);
+ const keys=ultraConnectedKeys(ultraHeld.instanceKey||ultraHeld.root.data.instanceKey);
+ const origin=ultraObjectBounds(ultraHeld.root).center;
+ const cells=[], decals=[], infoIds=new Set();
+ for(const k of keys){ entityCellsForBlueprint(getObjRootByInstanceKey(k),origin,cells,decals,infoIds); }
+ addGlueCellsForBlueprint(keys,origin,cells);
+ if(!cells.length){setMsg('ブループリント化できるセルがない','bad');return false;}
+ const def={id:INFO_BP_PREFIX+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36),name:'BP一連OBJ-'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),kind:'voxel3d',grid:OBJECT_GRID,scale:.16,cells:cells.slice(0,1536),decals,infoTextureIds:Array.from(infoIds),hp:infoIds.has(INFO_TEXTURE_CAT_ID)?10:undefined,createdAt:Date.now(),updatedAt:Date.now()};
+ registerCustomObjectDef(def,'localCreate');
+ setMsg('ブループリント登録: '+keys.length+'個の接着OBJを、接着剤で繋がった見た目ごと登録','good');
+ return true;
+}
+
+function detachUltraPair(aKey,bKey,broadcast){
+ aKey=ultraLinkKey(aKey); bKey=ultraLinkKey(bKey); if(!aKey||!bKey) return false;
+ ultraLinks.set(aKey,(ultraLinks.get(aKey)||[]).filter(l=>String(l.other)!==bKey));
+ ultraLinks.set(bKey,(ultraLinks.get(bKey)||[]).filter(l=>String(l.other)!==aKey));
+ if(!(ultraLinks.get(aKey)||[]).length) ultraLinks.delete(aKey);
+ if(!(ultraLinks.get(bKey)||[]).length) ultraLinks.delete(bKey);
+ const pk=ultraPairKey(aKey,bKey), ge=ultraGlueEntities.get(pk);
+ if(ge){try{ge.destroy();}catch{} ultraGlueEntities.delete(pk);}
+ if(broadcast!==false) sendMultiplayer({type:'objectInstanceDetach',a:aKey,b:bKey});
+ return true;
+}
+function detachUltraGroup(key,broadcast){
+ key=ultraLinkKey(key); if(!key) return false;
+ const list=(ultraLinks.get(key)||[]).slice();
+ for(const l of list) detachUltraPair(key,l.other,broadcast);
+ ultraRefreshGlueVisuals();
+ return !!list.length;
+}
+const __infoUltraDetachHeld = ultraDetachHeld;
+ultraDetachHeld=function(){
+ if(ultraHeld&&ultraHeld.mode==='field'){
+   const key=ultraHeld.instanceKey || (ultraHeld.root&&ultraHeld.root.data&&ultraHeld.root.data.instanceKey);
+   if(detachUltraGroup(key,true)) setMsg('ウルトラハンド: 接着リンク解除','info');
+ }
+ return __infoUltraDetachHeld.apply(this,arguments);
+};
+const __infoHandleObjectCatalogMessage = handleObjectCatalogMessage;
+handleObjectCatalogMessage=function(msg){
+ if(msg&&msg.type==='objectInstanceAttach'){
+   const a=getObjRootByInstanceKey(msg.a), b=getObjRootByInstanceKey(msg.b);
+   if(a&&b) attachUltraRoots(a,b,false);
+   return true;
+ }
+ if(msg&&msg.type==='objectInstanceDetach'){ detachUltraPair(msg.a||msg.instanceKey,msg.b||msg.other,false); return true; }
+ if(msg&&msg.type==='objectInstanceLinks'&&Array.isArray(msg.links)){
+   msg.links.forEach(l=>{ const a=getObjRootByInstanceKey(l.a), b=getObjRootByInstanceKey(l.b); if(a&&b) attachUltraRoots(a,b,false); });
+   return true;
+ }
+ return __infoHandleObjectCatalogMessage(msg);
+};
+const __infoSpawnCustomObjectForChunk = spawnCustomObjectForChunk;
+spawnCustomObjectForChunk=function(ch){
+ ensureCatInfoCarrierDef();
+ if(!ch||!ch.done) return;
+ const spawnKey='infoChunk:'+ch.key;
+ if(customSpawned.has(spawnKey)) return;
+ customSpawned.add(spawnKey);
+ const chance=hash2(ch.cx*911+41,ch.cz*919-73);
+ if(chance<.18){
+   const def=ensureCatInfoCarrierDef();
+   const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*929+3,ch.cz*937+4)*CHUNK_SIZE);
+   const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*941+5,ch.cz*947+6)*CHUNK_SIZE);
+   const y=terrainHeight(x,z)+1;
+   placeCustomObject(def,x,y,z,Math.floor(hash2(ch.cx*953,ch.cz*967)*4)*(Math.PI/2),'info:'+ch.key+':cat');
+ }
+ return __infoSpawnCustomObjectForChunk.apply(this,arguments);
+};
+
+
+
+// ===== Ultra Hand compound-object safety patch =====
+// 既存の「接着された複合OBJを一連として掴む」挙動を守るため、
+// 掴んだ瞬間の接着グループ全体の相対位置・相対向きをスナップショットして、
+// 移動中はその形を崩さずに全メンバーへ反映する。
+let ultraCompoundSnapshot = null;
+function ultraYawOf(root){
+ try{
+   if(root&&root.data&&Number.isFinite(Number(root.data.yaw))) return Number(root.data.yaw);
+   const e=root&&root.getEulerAngles&&root.getEulerAngles();
+   if(e) return (Number(e.y)||0)*Math.PI/180;
+ }catch{}
+ return 0;
+}
+function ultraRotOffset(v,yaw){
+ const c=Math.cos(yaw), s=Math.sin(yaw);
+ return new pc.Vec3(v.x*c + v.z*s, v.y, -v.x*s + v.z*c);
+}
+function ultraInvRotOffset(v,yaw){
+ return ultraRotOffset(v,-yaw);
+}
+function buildUltraCompoundSnapshot(root){
+ if(!root||!root.data||!root.getPosition) return null;
+ const baseKey=ultraLinkKey(root.data.instanceKey);
+ if(!baseKey) return null;
+ const keys=ultraConnectedKeys(baseKey).filter(k=>!!getObjRootByInstanceKey(k));
+ const basePos=root.getPosition().clone();
+ const baseYaw=ultraYawOf(root);
+ const members=[];
+ for(const key of keys){
+   const r=getObjRootByInstanceKey(key); if(!r||!r.getPosition) continue;
+   const p=r.getPosition().clone();
+   const worldOff=p.clone().sub(basePos);
+   members.push({
+     key,
+     localOff:ultraInvRotOffset(worldOff,baseYaw),
+     yawOff:ultraYawOf(r)-baseYaw
+   });
+ }
+ return {baseKey,baseYaw,members};
+}
+function applyUltraCompoundSnapshot(root, broadcast){
+ if(!root||!root.data||!ultraCompoundSnapshot) return false;
+ const baseKey=ultraLinkKey(root.data.instanceKey);
+ if(baseKey!==ultraCompoundSnapshot.baseKey) return false;
+ const basePos=root.getPosition().clone();
+ const baseYaw=ultraYawOf(root);
+ for(const m of ultraCompoundSnapshot.members||[]){
+   if(!m||m.key===baseKey) continue;
+   const r=getObjRootByInstanceKey(m.key); if(!r||!r.setPosition) continue;
+   const off=ultraRotOffset(m.localOff||new pc.Vec3(),baseYaw);
+   r.setPosition(basePos.x+off.x,basePos.y+off.y,basePos.z+off.z);
+   const yy=baseYaw+(Number(m.yawOff)||0);
+   r.setEulerAngles(0,yy*180/Math.PI,0);
+   r.data=Object.assign({},r.data||{},{yaw:yy});
+   if(broadcast===true) ultraBroadcastTransform(r);
+ }
+ ultraRefreshGlueVisuals();
+ return true;
+}
+function refreshUltraAllPairOffsets(){
+ for(const [a,arr] of Array.from(ultraLinks.entries())){
+   const ar=getObjRootByInstanceKey(a); if(!ar||!ar.getPosition) continue;
+   const ap=ar.getPosition();
+   for(const l of arr||[]){
+     const b=String(l.other||''); const br=getObjRootByInstanceKey(b); if(!br||!br.getPosition) continue;
+     const bp=br.getPosition();
+     l.ox=bp.x-ap.x; l.oy=bp.y-ap.y; l.oz=bp.z-ap.z;
+   }
+ }
+ ultraRefreshGlueVisuals();
+}
+
+const __compoundStartUltraField = startUltraField;
+startUltraField = function(){
+ const ok=__compoundStartUltraField.apply(this,arguments);
+ if(ok&&ultraHeld&&ultraHeld.mode==='field'&&ultraHeld.root){
+   ultraCompoundSnapshot=buildUltraCompoundSnapshot(ultraHeld.root);
+ }
+ return ok;
+};
+
+const __compoundUpdateUltraHand = updateUltraHand;
+updateUltraHand = function(dt){
+ __compoundUpdateUltraHand(dt);
+ if(ultraHeld&&ultraHeld.mode==='field'&&ultraHeld.root){
+   applyUltraCompoundSnapshot(ultraHeld.root,false);
+ }
+};
+
+const __compoundStopUltraHand = stopUltraHand;
+stopUltraHand = function(drop){
+ if(ultraHeld&&ultraHeld.mode==='field'&&ultraHeld.root){
+   applyUltraCompoundSnapshot(ultraHeld.root,true);
+   refreshUltraAllPairOffsets();
+ }
+ const r=__compoundStopUltraHand.apply(this,arguments);
+ ultraCompoundSnapshot=null;
+ return r;
+};
+
+const __compoundAttachUltraRoots = attachUltraRoots;
+attachUltraRoots = function(a,b,broadcast){
+ const ok=__compoundAttachUltraRoots.apply(this,arguments);
+ if(ok){
+   const base=(ultraHeld&&ultraHeld.root)||a;
+   ultraCompoundSnapshot=buildUltraCompoundSnapshot(base);
+   refreshUltraAllPairOffsets();
+ }
+ return ok;
+};
+
+// ブループリントは「接着剤そのもの」をセル化しない。
+// 複合OBJの各セル位置だけを一体OBJとして保存するので、呼出後は一体で動き、解除もできない。
+captureHeldBlueprint = function(){
+ if(!ultraHeld||ultraHeld.mode!=='field'||!ultraHeld.root){setMsg('ブループリント対象なし: ULTRAで一連OBJを掴め','bad');return false;}
+ const snap=ultraCompoundSnapshot||buildUltraCompoundSnapshot(ultraHeld.root);
+ if(snap) applyUltraCompoundSnapshot(ultraHeld.root,false);
+ refreshUltraAllPairOffsets();
+ const keys=ultraConnectedKeys(ultraHeld.instanceKey||ultraHeld.root.data.instanceKey);
+ const origin=ultraObjectBounds(ultraHeld.root).center;
+ const cells=[], decals=[], infoIds=new Set();
+ for(const k of keys){ entityCellsForBlueprint(getObjRootByInstanceKey(k),origin,cells,decals,infoIds); }
+ if(!cells.length){setMsg('ブループリント化できるセルがない','bad');return false;}
+ const def={
+   id:INFO_BP_PREFIX+Date.now().toString(36)+'-'+Math.floor(Math.random()*99999).toString(36),
+   name:'BP一連OBJ-'+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}),
+   kind:'voxel3d',grid:OBJECT_GRID,scale:.16,cells:cells.slice(0,1536),decals,
+   infoTextureIds:Array.from(infoIds),hp:infoIds.has(INFO_TEXTURE_CAT_ID)?10:undefined,
+   createdAt:Date.now(),updatedAt:Date.now()
+ };
+ registerCustomObjectDef(def,'localCreate');
+ setMsg('ブループリント登録: '+keys.length+'個の接着OBJを一体登録（接着剤は保存しない）','good');
+ return true;
+};
+
+// リモート transform でも、リンク情報がある場合は複合OBJの形を崩さず追従させる。
+const __compoundUltraApplyTransform = ultraApplyTransform;
+ultraApplyTransform = function(msg){
+ const r=__compoundUltraApplyTransform.apply(this,arguments);
+ const root=getObjRootByInstanceKey(msg&&msg.instanceKey);
+ if(root&&ultraConnectedKeys(msg.instanceKey).length>1){
+   const old=ultraCompoundSnapshot;
+   ultraCompoundSnapshot=buildUltraCompoundSnapshot(root)||old;
+   applyUltraCompoundSnapshot(root,false);
+   ultraCompoundSnapshot=old;
+ }
+ return r;
+};
+
+const __infoUpdateCustomObjectRuntime = updateCustomObjectRuntime;
+updateCustomObjectRuntime=function(dt){ __infoUpdateCustomObjectRuntime(dt); updateCats(dt); updateInfoHud(); };
+function initInfoTextureSystem(){ ensureInfoHud(); ensureCatInfoTexture(); ensureCatInfoCarrierDef(); updateInfoHud(); setObjHud(); }
+try{initInfoTextureSystem();}catch(e){console.warn('info texture init failed',e);}
 
 setMsg('PlayCanvas Engine読込完了','good');
 })();
