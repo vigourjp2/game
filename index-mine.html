@@ -894,6 +894,7 @@ const OBJECT_STORAGE_KEY = 'voxelStudyWorld.customObjects3d.v2';
 // 情報テクスチャIDは、OBJ一覧カウント(setObjHud)が初期ロード中に先に参照するため、
 // TDZを避けてここで先に初期化する。
 var INFO_TEXTURE_CAT_ID = 'info-cat';
+var INFO_TEXTURE_PREFIX = 'info-';
 var INFO_CARRIER_CAT_ID = 'builtin-info-carrier-cat';
 var INFO_BP_PREFIX = 'bp-';
 const customObjectDefs = new Map();
@@ -3815,6 +3816,183 @@ updateCustomObjectRuntime=function(dt){
 };
 function initInfoTextureSystem(){ ensureInfoHud(); ensureCatInfoTexture(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); }
 try{initInfoTextureSystem();}catch(e){console.warn('info texture init failed',e);}
+// ===== Info Texture Pack v3 / user Mob TOC expansion =====
+// 目次ベースで「情報」種類の平面テクスチャを大量追加。単体OBJ一覧には出さず、3Dエディターの面貼り専用。
+const INFO_TEXTURE_PACK_V3 = [
+ {type:'pig',name:'ブタ',role:'passive',hp:10,damage:0,massKg:90,speed:1.45,sense:6.5,attackRange:1.1,soundBase:260,palette:{body:'#fb7185',dark:'#9f1239',accent:'#fda4af'},behavior:'鼻を鳴らして歩く。近づくと逃げる'},
+ {type:'cow',name:'ウシ',role:'passive',hp:18,damage:0,massKg:420,speed:1.05,sense:6.0,attackRange:1.4,soundBase:150,palette:{body:'#f8fafc',dark:'#111827',accent:'#78350f'},behavior:'重くゆっくり移動。押されにくい'},
+ {type:'mooshroom',name:'ムーシュルーム',role:'passive',hp:18,damage:0,massKg:430,speed:1.0,sense:6.0,attackRange:1.4,soundBase:155,palette:{body:'#ef4444',dark:'#7f1d1d',light:'#fff7ed'},behavior:'キノコ牛。ゆっくり逃げる'},
+ {type:'sheep',name:'ヒツジ',role:'passive',hp:12,damage:0,massKg:70,speed:1.15,sense:6.5,attackRange:1.1,soundBase:430,palette:{body:'#e5e7eb',dark:'#111827',light:'#ffffff'},behavior:'群れっぽく寄る。近づくと離れる'},
+ {type:'chicken',name:'ニワトリ',role:'passive',hp:4,damage:0,massKg:2,speed:1.35,sense:6.5,attackRange:.8,soundBase:760,palette:{body:'#f8fafc',dark:'#991b1b',accent:'#ef4444'},behavior:'小走りで逃げる。軽い'},
+ {type:'rabbit',name:'ウサギ',role:'passive',hp:3,damage:0,massKg:2.2,speed:2.8,sense:8.0,attackRange:.75,soundBase:920,palette:{body:'#f3f4f6',dark:'#6b7280',accent:'#f9a8d4'},behavior:'跳ねて逃げる。段差を越えやすい'},
+ {type:'bat',name:'コウモリ',role:'passive',hp:6,damage:0,massKg:.03,gravityScale:.15,speed:2.0,sense:7.0,attackRange:.8,soundBase:980,palette:{body:'#1f2937',dark:'#020617',accent:'#64748b'},behavior:'ふわふわ飛んでプレイヤーを避ける'},
+ {type:'wolf',name:'オオカミ',role:'neutral',hp:16,damage:4,massKg:30,speed:2.35,sense:9.5,attackRange:1.55,soundBase:300,palette:{body:'#cbd5e1',dark:'#475569',accent:'#dc2626'},behavior:'普段はうろつく。攻撃されると追撃'},
+ {type:'ocelot',name:'ヤマネコ',role:'passive',hp:10,damage:1,massKg:8,speed:2.45,sense:9.0,attackRange:1.15,soundBase:610,palette:{body:'#d97706',dark:'#451a03',accent:'#fde68a'},behavior:'警戒心が強く、距離を取ってこちらを見る'},
+ {type:'cat',id:INFO_TEXTURE_CAT_ID,name:'ネコ',role:'passive',hp:10,damage:2,massKg:4.2,speed:2.0,sense:8.5,attackRange:1.35,soundBase:560,palette:{body:'#f59e0b',dark:'#78350f',accent:'#fb7185'},behavior:'逃げる/距離を取って見る/段差ピョン/猫パンチ/猫同士喧嘩'},
+ {type:'horse',name:'ウマ',role:'passive',hp:24,damage:0,massKg:420,speed:2.55,sense:7.0,attackRange:1.6,soundBase:220,palette:{body:'#92400e',dark:'#451a03',accent:'#fde68a'},behavior:'速く走る。近づくと距離を取る'},
+ {type:'donkey',name:'ロバ',role:'passive',hp:20,damage:0,massKg:260,speed:1.85,sense:6.8,attackRange:1.4,soundBase:210,palette:{body:'#78716c',dark:'#292524',accent:'#d6d3d1'},behavior:'ゆっくり移動して逃げる'},
+ {type:'mule',name:'ラバ',role:'passive',hp:22,damage:0,massKg:310,speed:1.95,sense:6.8,attackRange:1.4,soundBase:215,palette:{body:'#a16207',dark:'#3f2a0a',accent:'#d6d3d1'},behavior:'ロバと馬の中間速度'},
+ {type:'skeleton_horse',name:'スケルトンホース',role:'neutral',hp:15,damage:2,massKg:160,speed:2.2,sense:8.0,attackRange:1.5,soundBase:260,palette:{body:'#e5e7eb',dark:'#111827',light:'#ffffff'},behavior:'骨の馬。刺激で反応'},
+ {type:'zombie_horse',name:'ゾンビホース',role:'neutral',hp:15,damage:2,massKg:180,speed:2.0,sense:8.0,attackRange:1.5,soundBase:110,palette:{body:'#22c55e',dark:'#14532d',accent:'#78716c'},behavior:'腐った馬。近いと低く唸る'},
+ {type:'polar_bear',name:'シロクマ',role:'neutral',hp:30,damage:6,massKg:450,speed:1.7,sense:9.0,attackRange:1.8,soundBase:120,palette:{body:'#f8fafc',dark:'#475569',light:'#ffffff'},behavior:'普段は鈍いが、怒ると強い'},
+ {type:'llama',name:'ラマ',role:'neutral',hp:15,damage:2,massKg:150,speed:1.45,sense:7.0,attackRange:4.0,soundBase:310,palette:{body:'#d6d3d1',dark:'#57534e',accent:'#fbbf24'},behavior:'距離を取って唾吐き風の遠距離反撃'},
+ {type:'parrot',name:'オウム',role:'passive',hp:6,damage:0,massKg:.35,gravityScale:.25,speed:2.1,sense:7.0,attackRange:.8,soundBase:880,palette:{body:'#22c55e',dark:'#14532d',accent:'#ef4444'},behavior:'飛び回って鳴く'},
+ {type:'panda',name:'パンダ',role:'neutral',hp:20,damage:4,massKg:110,speed:1.05,sense:6.5,attackRange:1.5,soundBase:190,palette:{body:'#f8fafc',dark:'#020617',light:'#ffffff'},behavior:'のんびり。攻撃されると反撃'},
+ {type:'fox',name:'キツネ',role:'passive',hp:10,damage:2,massKg:7,speed:2.7,sense:8.5,attackRange:1.1,soundBase:650,palette:{body:'#f97316',dark:'#7c2d12',light:'#ffedd5'},behavior:'すばやく逃げ、横移動が多い'},
+ {type:'bee',name:'ミツバチ',role:'neutral',hp:10,damage:2,massKg:.2,gravityScale:.25,speed:2.1,sense:7.5,attackRange:1.25,soundBase:190,palette:{body:'#facc15',dark:'#111827',light:'#e0f2fe'},behavior:'ふわふわ飛ぶ。刺激すると刺す'},
+ {type:'goat',name:'ヤギ',role:'neutral',hp:10,damage:3,massKg:80,speed:2.15,sense:8.0,attackRange:1.5,soundBase:360,palette:{body:'#f5f5f4',dark:'#44403c',accent:'#94a3b8'},behavior:'離れてから突進する'},
+ {type:'strider',name:'ストライダー',role:'passive',hp:20,damage:0,massKg:70,speed:1.3,sense:6.0,attackRange:1.2,soundBase:170,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fca5a5'},behavior:'のそのそ歩く。水場は苦手風'},
+ {type:'camel',name:'ラクダ',role:'passive',hp:32,damage:0,massKg:500,speed:1.7,sense:7.0,attackRange:1.8,soundBase:180,palette:{body:'#d97706',dark:'#78350f',accent:'#fde68a'},behavior:'大きくゆっくり。時々ダッシュ'},
+ {type:'camel_husk',name:'ラクダハスク',role:'neutral',hp:28,damage:3,massKg:480,speed:1.55,sense:8.0,attackRange:1.8,soundBase:115,palette:{body:'#92400e',dark:'#422006',accent:'#a3a3a3'},behavior:'荒れたラクダ。近づくと威嚇'},
+ {type:'sniffer',name:'スニッファー',role:'passive',hp:28,damage:0,massKg:220,speed:1.0,sense:5.5,attackRange:1.5,soundBase:130,palette:{body:'#7c2d12',dark:'#431407',accent:'#22c55e'},behavior:'地面を嗅ぎながら歩く'},
+ {type:'armadillo',name:'アルマジロ',role:'passive',hp:12,damage:0,massKg:6,speed:1.35,sense:7.0,attackRange:1.0,soundBase:520,palette:{body:'#a16207',dark:'#422006',accent:'#f59e0b'},behavior:'驚くと丸まる風に停止'},
+ {type:'squid',name:'イカ',role:'aquatic',hp:10,damage:0,massKg:8,gravityScale:.12,speed:1.8,sense:7.0,attackRange:1.1,soundBase:240,palette:{body:'#475569',dark:'#0f172a',accent:'#93c5fd'},behavior:'水棲。ふわっと逃げる'},
+ {type:'glow_squid',name:'ヒカリイカ',role:'aquatic',hp:10,damage:0,massKg:8,gravityScale:.1,speed:1.7,sense:7.0,attackRange:1.1,soundBase:520,palette:{body:'#06b6d4',dark:'#164e63',accent:'#cffafe'},behavior:'光るイカ。ふわふわ発光風'},
+ {type:'dolphin',name:'イルカ',role:'aquatic',hp:10,damage:3,massKg:160,gravityScale:.08,speed:3.0,sense:9.0,attackRange:1.4,soundBase:700,palette:{body:'#64748b',dark:'#1e293b',light:'#e2e8f0'},behavior:'水棲。プレイヤー周囲を回遊'},
+ {type:'turtle',name:'カメ',role:'passive',hp:30,damage:0,massKg:100,speed:.65,sense:5.5,attackRange:1.2,soundBase:320,palette:{body:'#16a34a',dark:'#14532d',accent:'#facc15'},behavior:'かなり遅い。水辺っぽく移動'},
+ {type:'cod',name:'タラ',role:'aquatic',hp:3,damage:0,massKg:2,gravityScale:.08,speed:1.9,sense:6.0,attackRange:.8,soundBase:640,palette:{body:'#94a3b8',dark:'#475569',light:'#f8fafc'},behavior:'水棲の小魚。群れ移動'},
+ {type:'salmon',name:'サケ',role:'aquatic',hp:3,damage:0,massKg:3,gravityScale:.08,speed:2.0,sense:6.0,attackRange:.8,soundBase:600,palette:{body:'#fb7185',dark:'#9f1239',light:'#fecdd3'},behavior:'水棲の魚。直線移動'},
+ {type:'pufferfish',name:'フグ',role:'neutral',hp:3,damage:2,massKg:1,gravityScale:.08,speed:1.2,sense:5.5,attackRange:1.15,soundBase:460,palette:{body:'#facc15',dark:'#713f12',accent:'#f97316'},behavior:'近づくと膨らんで毒ダメージ風'},
+ {type:'tropical_fish',name:'熱帯魚',role:'aquatic',hp:3,damage:0,massKg:1,gravityScale:.08,speed:2.1,sense:6.0,attackRange:.8,soundBase:720,palette:{body:'#22d3ee',dark:'#155e75',accent:'#f97316'},behavior:'カラフルに泳ぐ'},
+ {type:'axolotl',name:'ウーパールーパー',role:'neutral',hp:14,damage:2,massKg:2,gravityScale:.18,speed:1.6,sense:7.0,attackRange:1.1,soundBase:690,palette:{body:'#f9a8d4',dark:'#831843',accent:'#fef3c7'},behavior:'水棲寄り。敵に反撃'},
+ {type:'frog',name:'カエル',role:'passive',hp:10,damage:1,massKg:.6,speed:1.7,sense:6.0,attackRange:1.0,soundBase:300,palette:{body:'#22c55e',dark:'#14532d',accent:'#facc15'},behavior:'跳ねる。近づくと逃げる'},
+ {type:'tadpole',name:'オタマジャクシ',role:'aquatic',hp:6,damage:0,massKg:.05,gravityScale:.05,speed:1.25,sense:5.0,attackRange:.6,soundBase:820,palette:{body:'#64748b',dark:'#0f172a',light:'#cbd5e1'},behavior:'水棲。小さく泳ぐ'},
+ {type:'nautilus',name:'オウムガイ',role:'neutral',hp:16,damage:3,massKg:6,gravityScale:.1,speed:1.8,sense:8.0,attackRange:1.45,soundBase:340,palette:{body:'#f5f5dc',dark:'#92400e',accent:'#60a5fa'},behavior:'中立水棲。挑発されるとダッシュ攻撃'},
+ {type:'zombie_nautilus',name:'ゾンビオウムガイ',role:'hostile',hp:18,damage:4,massKg:7,gravityScale:.12,speed:1.65,sense:9.0,attackRange:1.45,soundBase:110,palette:{body:'#22c55e',dark:'#14532d',accent:'#60a5fa'},behavior:'敵対水棲。ゆっくり追跡'},
+ {type:'allay',name:'アレイ',role:'helper',hp:20,damage:0,massKg:.3,gravityScale:.18,speed:2.2,sense:9.0,attackRange:.8,soundBase:900,palette:{body:'#60a5fa',dark:'#1d4ed8',light:'#dbeafe'},behavior:'プレイヤーの近くをふわふわ追従'},
+ {type:'snow_golem',name:'スノウゴーレム',role:'helper',hp:8,damage:1,massKg:40,speed:1.3,sense:9.5,attackRange:5.0,soundBase:500,palette:{body:'#f8fafc',dark:'#111827',accent:'#f97316'},behavior:'敵に雪玉風の遠距離攻撃'},
+ {type:'iron_golem',name:'アイアンゴーレム',role:'helper',hp:100,damage:10,massKg:700,speed:1.15,sense:10.0,attackRange:1.9,soundBase:90,palette:{body:'#d1d5db',dark:'#374151',accent:'#22c55e'},behavior:'強い守護Mob。敵対相手へ高火力パンチ'},
+ {type:'villager',name:'村人',role:'npc',hp:20,damage:0,massKg:70,speed:1.25,sense:7.0,attackRange:1.0,soundBase:210,palette:{body:'#a16207',dark:'#451a03',accent:'#22c55e'},behavior:'うろつく。近づくとこちらを見る'},
+ {type:'wandering_trader',name:'行商人',role:'npc',hp:20,damage:0,massKg:70,speed:1.25,sense:8.0,attackRange:1.0,soundBase:230,palette:{body:'#2563eb',dark:'#1e3a8a',accent:'#fbbf24'},behavior:'旅商人。少し距離を取る'},
+ {type:'happy_ghast',name:'ハッピーガスト',role:'helper',hp:40,damage:0,massKg:120,gravityScale:.08,speed:1.7,sense:10.0,attackRange:1.8,soundBase:160,palette:{body:'#f8fafc',dark:'#94a3b8',accent:'#fb7185'},behavior:'大きく空中浮遊。友好的'},
+ {type:'copper_golem',name:'カッパーゴーレム',role:'helper',hp:25,damage:3,massKg:120,speed:1.2,sense:7.0,attackRange:1.3,soundBase:180,palette:{body:'#b45309',dark:'#451a03',accent:'#14b8a6'},behavior:'銅の小型ゴーレム。カチカチ歩く'}
+];
+const INFO_TEXTURE_META_V3 = {};
+function infoTextureIdFromTypeV3(type){ return INFO_TEXTURE_PREFIX + String(type||'').replace(/^info-/,'').replace(/[^a-z0-9_-]/gi,'').toLowerCase(); }
+INFO_TEXTURE_PACK_V3.forEach(m=>{ m.id=m.id||infoTextureIdFromTypeV3(m.type); INFO_TEXTURE_META_V3[m.id]=m; INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(m.type)]=m; });
+function infoMetaForIdV3(id){ return INFO_TEXTURE_META_V3[String(id||'')] || null; }
+function makeInfoIconCellsV3(seed,palette){
+ const g=16,cells=[]; const put=(x,y,c)=>{ if(x>=0&&x<g&&y>=0&&y<g) cells.push({x,y,color:c}); };
+ const p=Object.assign({body:'#94a3b8',dark:'#111827',light:'#f8fafc',accent:'#f97316',eye:'#020617'},palette||{});
+ const s=String(seed||'x'); let h=2166136261; for(const ch of s){ h=((h^ch.charCodeAt(0))*16777619)>>>0; }
+ const aquatic=/squid|dolphin|cod|salmon|fish|axolotl|tadpole|nautilus/.test(s), bird=/chicken|parrot|allay|bee|bat|ghast/.test(s), golem=/golem/.test(s), horse=/horse|donkey|mule|camel|llama/.test(s);
+ if(aquatic){ for(let y=5;y<=10;y++) for(let x=3;x<=12;x++){ const dx=x-7.5,dy=y-7.5; if((dx*dx)/22+(dy*dy)/10<=1) put(x,y,p.body); } [[2,7],[13,5],[13,9]].forEach(([x,y])=>put(x,y,p.accent)); }
+ else if(bird){ for(let y=4;y<=11;y++) for(let x=4;x<=11;x++){ const dx=x-7.5,dy=y-7.5; if((dx*dx)/18+(dy*dy)/18<=1) put(x,y,p.body); } [[2,6],[2,7],[13,6],[13,7]].forEach(([x,y])=>put(x,y,p.light)); }
+ else if(golem){ for(let y=3;y<=12;y++) for(let x=4;x<=11;x++) put(x,y,p.body); for(let x=3;x<=12;x++){ put(x,5,p.dark); put(x,12,p.dark); } }
+ else if(horse){ for(let y=5;y<=11;y++) for(let x=2;x<=12;x++) put(x,y,p.body); for(let y=3;y<=7;y++) for(let x=9;x<=13;x++) put(x,y,p.body); }
+ else { const rx=4.2+((h%7)*.18), ry=4.0+(((h>>3)%7)*.16); for(let y=4;y<=12;y++) for(let x=3;x<=12;x++){ const dx=x-7.5,dy=y-8.2; if((dx*dx)/(rx*rx)+(dy*dy)/(ry*ry)<=1) put(x,y,p.body); } }
+ if(/cat|ocelot|fox|wolf|rabbit|goat/.test(s)) [[4,3],[5,2],[10,2],[11,3]].forEach(([x,y])=>put(x,y,p.body));
+ if(/bee/.test(s)){ for(let y=5;y<=11;y++) for(let x=3;x<=12;x++) put(x,y,(x%4<2)?p.body:p.dark); }
+ if(/squid|oct/.test(s)){ for(let x=4;x<=11;x++) put(x,12,p.dark); for(let x=5;x<=10;x+=2) put(x,13,p.dark); }
+ if(/turtle|armadillo/.test(s)){ for(let y=5;y<=11;y++) for(let x=4;x<=11;x++) if((x+y)%2) put(x,y,p.dark); }
+ if(/panda|cow|mooshroom/.test(s)){ [[4,5],[7,8],[10,6],[6,11]].forEach(([x,y])=>{put(x,y,p.dark); put(x+1,y,p.dark);}); }
+ if(/creeper/.test(s)){ for(let y=3;y<=13;y++) for(let x=4;x<=11;x++) put(x,y,p.body); [[6,6],[9,6],[7,9],[8,9],[6,10],[9,10]].forEach(([x,y])=>put(x,y,p.dark)); }
+ if(/skeleton/.test(s)){ for(let y=4;y<=11;y++) for(let x=4;x<=11;x++) put(x,y,p.light); }
+ if(/zombie/.test(s)){ for(let y=4;y<=11;y++) for(let x=4;x<=11;x++) put(x,y,p.body); for(let y=11;y<=13;y++) for(let x=5;x<=10;x++) put(x,y,p.accent); }
+ if(/spider/.test(s)){ for(let y=6;y<=10;y++) for(let x=4;x<=11;x++) put(x,y,p.dark); for(let y=5;y<=11;y++){ put(2,y,p.dark); put(13,y,p.dark); } }
+ [[6,7],[10,7]].forEach(([x,y])=>put(x,y,p.eye)); put(8,9,p.dark);
+ return cells;
+}
+function ensureInfoTextureDefV3(meta){
+ if(!meta) return null; const id=String(meta.id||infoTextureIdFromTypeV3(meta.type));
+ const def={id,name:'情報テクスチャ:'+meta.name,kind:'plane',grid:16,scale:.085,cells:makeInfoIconCellsV3(meta.type,meta.palette),infoTexture:true,infoType:meta.type,infoPhysics:{massKg:meta.massKg||1,gravityScale:(meta.gravityScale==null?1:meta.gravityScale),terminalVelocity:18,bounce:meta.bounce||0},hp:meta.hp||8,infoRole:meta.role,infoBehavior:meta.behavior,createdAt:1,updatedAt:Date.now()};
+ customObjectDefs.set(id, validateObjectDef(def)||def); return customObjectDefs.get(id);
+}
+function ensureAllInfoTexturesV3(){ INFO_TEXTURE_PACK_V3.forEach(ensureInfoTextureDefV3); return INFO_TEXTURE_PACK_V3.map(m=>customObjectDefs.get(m.id)).filter(Boolean); }
+ensureCatInfoTexture=function(){ return ensureInfoTextureDefV3(INFO_TEXTURE_META_V3[INFO_TEXTURE_CAT_ID]||INFO_TEXTURE_PACK_V3.find(m=>m.type==='cat')); };
+const __v3ValidateObjectDef = validateObjectDef;
+validateObjectDef=function(def){
+ const clean=__v3ValidateObjectDef(def); if(!clean) return clean;
+ const ids=[]; const add=id=>{id=String(id||''); if(id&&!ids.includes(id)) ids.push(id);};
+ if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
+ if(def.infoType){ const m=INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(def.infoType)] || Object.values(INFO_TEXTURE_META_V3).find(x=>x.type===def.infoType); if(m) add(m.id); }
+ if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(infoMetaForIdV3(tid)||(tdef&&tdef.infoTexture)) add(tid); }
+ if(ids.length) clean.infoTextureIds=ids;
+ if(def.infoRole) clean.infoRole=String(def.infoRole).slice(0,40);
+ if(def.infoBehavior) clean.infoBehavior=String(def.infoBehavior).slice(0,140);
+ return clean;
+};
+function rootInfoTextureIdsV3(root){
+ const out=[]; const add=id=>{id=String(id||''); if(id&&!out.includes(id)) out.push(id);};
+ if(root&&root.data&&Array.isArray(root.data.infoTextureIds)) root.data.infoTextureIds.forEach(add);
+ const def=customObjectDefs.get(root&&root.data&&root.data.defId);
+ if(def){ if(def.infoTexture) add(def.id); if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add); if(def.infoType){ const m=INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(def.infoType)]; if(m) add(m.id); } if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(infoMetaForIdV3(tid)||(tdef&&tdef.infoTexture)) add(tid); } }
+ return out;
+}
+rootHasInfo=function(root,infoId){ return rootInfoTextureIdsV3(root).includes(String(infoId||'')); };
+function rootInfoMetaV3(root){ return rootInfoTextureIdsV3(root).map(infoMetaForIdV3).find(Boolean)||null; }
+const __v3HydrateRootRuntime = hydrateRootRuntime;
+hydrateRootRuntime=function(root,def){
+ root=__v3HydrateRootRuntime(root,def); if(!root||!def) return root;
+ const ids=rootInfoTextureIdsV3(root); const meta=ids.map(infoMetaForIdV3).find(Boolean); const hp=Number(def.hp)||(meta&&meta.hp)||10;
+ root.data=Object.assign({},root.data||{},{infoTextureIds:ids,hp:root.data.hp||hp,maxHp:root.data.maxHp||hp,aiPhase:root.data.aiPhase||Math.random()*99,aiNextMeow:root.data.aiNextMeow||1+Math.random()*4});
+ applyInfoTexturePhysicsToRoot(root,def); if(ids.includes(INFO_TEXTURE_CAT_ID)) addCatLook(root); return root;
+};
+catMeow=function(root,kind){
+ try{ catAudioCtx=catAudioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(catAudioCtx.state==='suspended') catAudioCtx.resume();
+   const ctx=catAudioCtx, now=ctx.currentTime, meta=rootInfoMetaV3(root), base0=(meta&&meta.soundBase)||560; const base=kind==='hurt'?Math.max(120,base0*1.35):(kind==='angry'?Math.max(80,base0*.82):base0);
+   const osc=ctx.createOscillator(), gain=ctx.createGain(); osc.type=kind==='angry'?'sawtooth':'triangle'; osc.frequency.setValueAtTime(base,now); osc.frequency.exponentialRampToValueAtTime(kind==='angry'?Math.max(70,base*.65):base*1.45,now+(kind==='angry'?.32:.22));
+   gain.gain.setValueAtTime(.0001,now); gain.gain.exponentialRampToValueAtTime(kind==='angry'?.11:.07,now+.035); gain.gain.exponentialRampToValueAtTime(.0001,now+(kind==='angry'?.42:.30)); osc.connect(gain).connect(ctx.destination); osc.start(now); osc.stop(now+(kind==='angry'?.46:.34));
+ }catch{}
+};
+const __v3DamageObjectRoot = damageObjectRoot;
+damageObjectRoot=function(root,amount){
+ if(!root) return false; root.data=root.data||{}; root.data.maxHp=root.data.maxHp||root.data.hp||10; root.data.hp=Math.max(0,(Number(root.data.hp)||root.data.maxHp)-amount);
+ const meta=rootInfoMetaV3(root); setMsg('攻撃: '+(meta?meta.name:'OBJ')+' HP '+Math.ceil(root.data.hp)+'/'+root.data.maxHp,'info'); catMeow(root,root.data.hp<=0?'hurt':'angry');
+ if(root.data.hp<=0){ dropInfoFromRoot(root); const ik=root.data.instanceKey; removeCustomObjectInstance(ik,true); setMsg('撃破: '+(meta?meta.name:'情報')+'テクスチャを登録','good'); }
+ return true;
+};
+const __v3BreakBlock = breakBlock;
+breakBlock=function(){
+ if(ultraHeld) return ultraDetachHeld();
+ if(state.editingObject) return __v3BreakBlock.apply(this,arguments);
+ const r=rayBlock(); if(r&&r.objectHit&&r.objectHit.root&&rootInfoMetaV3(r.objectHit.root)) return damageObjectRoot(r.objectHit.root,4);
+ return __v3BreakBlock.apply(this,arguments);
+};
+updateCats=function(dt){
+ catAiAcc+=dt; if(catAiAcc<.10) return; const step=Math.min(catAiAcc,.28); catAiAcc=0;
+ for(const [ik,root] of customObjectEntities){
+   if(!root||!root.getPosition) continue; const meta=rootInfoMetaV3(root); if(!meta) continue;
+   if(ultraHeld && ultraConnectedKeys(ultraHeld.instanceKey).includes(ik)) continue;
+   const p=root.getPosition(), dx=p.x-player.x, dz=p.z-player.z, dist=Math.hypot(dx,dz), dirx=dx/(dist||1), dirz=dz/(dist||1);
+   root.data=root.data||{}; root.data.aiNextMeow=(root.data.aiNextMeow||2)-step;
+   if(root.data.aiNextMeow<=0){ root.data.aiNextMeow=2.5+Math.random()*7; if(dist<(meta.sense||8)+2) catMeow(root,Math.random()<.2?'angry':'cute'); }
+   if(root.data.infoPhysics && root.data.onGround===false && !/aquatic|helper/.test(meta.role||'')) continue;
+   let vx=0,vz=0, speed=Number(meta.speed)||1.5, atk=Number(meta.attackRange)||1.2, sense=Number(meta.sense)||8;
+   if(meta.role==='hostile' || (meta.role==='neutral' && root.data.angryUntil && root.data.angryUntil>performance.now())){
+     if(dist<sense){ vx=-dirx*speed; vz=-dirz*speed; if(dist<atk){ damagePlayer(Number(meta.damage)||2,meta.name+'の攻撃'); if(meta.type==='creeper'){ root.data.hp=0; damageObjectRoot(root,999); } } }
+   }else if(meta.role==='helper'){
+     if(dist>3.2 && dist<sense+7){ vx=-dirx*speed*.65; vz=-dirz*speed*.65; }
+   }else if(meta.role==='npc'){
+     if(dist<2.2){ vx=dirx*speed*.55; vz=dirz*speed*.55; }
+     else if(dist<sense){ const side=Math.sin(performance.now()*.001+(root.data.aiPhase||0)); vx=(-dirz)*side*.35; vz=(dirx)*side*.35; }
+   }else{ // passive / aquatic / neutral idle
+     if(dist<Math.min(4.5,sense)){ vx=dirx*speed; vz=dirz*speed; }
+     else if(dist<sense){ const side=Math.sin(performance.now()*.0015+(root.data.aiPhase||0)); vx=(-dirz)*side*speed*.35; vz=(dirx)*side*speed*.35; }
+   }
+   if(meta.type==='goat' && dist<5 && Math.random()<.035){ vx=-dirx*speed*1.8; vz=-dirz*speed*1.8; }
+   if(/rabbit|frog|goat/.test(meta.type) && root.data.onGround && Math.random()<.08) root.data.vy=Math.max(Number(root.data.vy)||0,3.8);
+   if(/bee|bat|parrot|allay|happy_ghast|aquatic|squid|fish|dolphin|nautilus|axolotl|tadpole/.test(meta.type+' '+meta.role)) root.data.vy=(Number(root.data.vy)||0)+Math.sin(performance.now()*.003+(root.data.aiPhase||0))*.03;
+   if(meta.type==='cat') for(const [ok,other] of customObjectEntities){ if(ok===ik||!other||!rootHasInfo(other,INFO_TEXTURE_CAT_ID)) continue; const op=other.getPosition(); const od=Math.hypot(op.x-p.x,op.z-p.z); if(od<1.1&&Math.random()<.035){ catMeow(root,'angry'); damageObjectRoot(other,.75); } }
+   if(vx||vz){
+     const nx=p.x+vx*step, nz=p.z+vz*step; let targetBottom=heightAt(nx,nz,16); if(targetBottom<=-900) targetBottom=terrainHeight(nx,nz); targetBottom+=1;
+     const b=ultraObjectBounds(root), bottom=b.min.y; let ny=p.y+(targetBottom-bottom); const climb=targetBottom-bottom; if(climb>.35&&climb<1.35) ny=Math.min(ny,p.y+.28); if(climb>=1.35) ny=p.y;
+     if(/aquatic|bee|bat|parrot|allay|happy_ghast/.test(meta.role+' '+meta.type)) ny=p.y+Math.sin(performance.now()*.002+(root.data.aiPhase||0))*0.012;
+     root.setPosition(nx,ny,nz); root.setEulerAngles(0,Math.atan2(vx,vz)*180/Math.PI,0); root.data.yaw=Math.atan2(vx,vz); if(!/aquatic|bee|bat|parrot|allay|happy_ghast/.test(meta.role+' '+meta.type)){ root.data.onGround=true; root.data.vy=0; }
+   }else if(dist<10){ root.setEulerAngles(0,Math.atan2(-dx,-dz)*180/Math.PI,0); root.data.yaw=Math.atan2(-dx,-dz); }
+ }
+};
+const __v3SpawnCustomObjectForChunk = spawnCustomObjectForChunk;
+spawnCustomObjectForChunk=function(ch){
+ const r=__v3SpawnCustomObjectForChunk.apply(this,arguments); ensureAllInfoTexturesV3(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{}
+ if(!ch||!ch.done) return r; const slot=Math.floor(hash2(ch.cx*773+17,ch.cz*797-31)*INFO_TEXTURE_PACK_V3.length); const meta=INFO_TEXTURE_PACK_V3[slot]; const spawnKey='infoTextureWildV3:'+ch.key+':'+meta.type; if(customSpawned.has(spawnKey)) return r; customSpawned.add(spawnKey);
+ const baseChance=(meta.role==='hostile')?.06:(meta.role==='aquatic'?.10:.14); if(hash2(ch.cx*811+slot,ch.cz*823-slot)>=baseChance) return r;
+ const def=ensureInfoTextureDefV3(meta); const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*829+slot,ch.cz*839)*CHUNK_SIZE); const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*853,ch.cz*857+slot)*CHUNK_SIZE); const y=terrainHeight(x,z)+1.05; const yaw=Math.floor(hash2(ch.cx*859,ch.cz*863)*4)*(Math.PI/2);
+ placeCustomObject(def,x,y,z,yaw,'infoTextureV3:'+ch.key+':'+meta.type); return r;
+};
+initInfoTextureSystem=function(){ ensureInfoHud(); ensureAllInfoTexturesV3(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); };
+try{ initInfoTextureSystem(); setMsg('情報テクスチャ大量パック: '+INFO_TEXTURE_PACK_V3.length+'種を内蔵','good'); }catch(e){ console.warn('info texture v3 init failed',e); }
+
 
 
 // ===== Ultra Hand live compound sync patch =====
