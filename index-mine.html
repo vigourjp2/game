@@ -5184,6 +5184,150 @@ app.on('update', function(){
 });
 
 
+// ===== Info Texture visual quality patch v7: search-result style pixel bake =====
+// 旧V3/V4の16px単色寄りアイコンを、名前別の参照画像風キャンバスから再サンプリングする。
+// 実画像URLが読める環境ではV4の画像描画を使い、読めない環境でも多色・陰影・模様入りのドット絵へ落とす。
+const INFO_TEXTURE_PIXEL_BAKE_VERSION_V7 = 'v7-search-name-rich-pixel-bake';
+function infoHexToRgbV7(hex){
+ hex=String(hex||'#94a3b8').replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join('');
+ const n=parseInt(hex,16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+function infoRgbToHexV7(r,g,b){
+ const h=v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0');
+ return '#'+h(r)+h(g)+h(b);
+}
+function infoMixV7(a,b,t){
+ a=infoHexToRgbV7(a); b=infoHexToRgbV7(b); return infoRgbToHexV7(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t);
+}
+function infoShadeV7(hex,k){
+ const c=infoHexToRgbV7(hex); return infoRgbToHexV7(c.r*k,c.g*k,c.b*k);
+}
+function infoPaletteV7(meta){
+ const p=Object.assign({body:'#94a3b8',dark:'#111827',light:'#f8fafc',accent:'#f97316',eye:'#020617'}, (meta&&meta.palette)||{});
+ return {
+   body:p.body, dark:p.dark||infoShadeV7(p.body,.45), light:p.light||infoMixV7(p.body,'#ffffff',.55), accent:p.accent||infoMixV7(p.body,'#f97316',.45), eye:p.eye||'#020617',
+   hi:infoMixV7(p.body, p.light||'#ffffff', .38), mid2:infoMixV7(p.body, p.dark||'#000000', .22), low:infoMixV7(p.body, p.dark||'#000000', .52)
+ };
+}
+function infoRoundRectV7(g,x,y,w,h,r,fill){
+ g.fillStyle=fill; g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); g.fill();
+}
+function infoDrawBlockV7(g,x,y,w,h,p,kind){
+ const grad=g.createLinearGradient(x,y,x+w,y+h); grad.addColorStop(0,p.hi); grad.addColorStop(.45,p.body); grad.addColorStop(1,p.low);
+ infoRoundRectV7(g,x,y,w,h,Math.max(2,Math.min(w,h)*.12),grad);
+ g.fillStyle='rgba(255,255,255,.18)'; g.fillRect(x+2,y+2,Math.max(1,w-4),Math.max(1,h*.18));
+ g.fillStyle='rgba(0,0,0,.18)'; g.fillRect(x+Math.max(1,w*.62),y+1,Math.max(1,w*.18),Math.max(1,h-2));
+ g.fillStyle='rgba(0,0,0,.22)'; g.fillRect(x+2,y+h-Math.max(2,h*.18),Math.max(1,w-4),Math.max(1,h*.16));
+ if(kind==='fur'){
+   g.fillStyle='rgba(255,255,255,.13)'; for(let i=0;i<5;i++) g.fillRect(x+4+i*w*.16,y+4+(i%2)*3,Math.max(2,w*.09),2);
+   g.fillStyle='rgba(0,0,0,.10)'; for(let i=0;i<4;i++) g.fillRect(x+7+i*w*.18,y+h*.55+(i%2)*4,Math.max(2,w*.11),2);
+ }
+}
+function infoBakeCanvasV7(meta){
+ const c=document.createElement('canvas'); c.width=96; c.height=96; const g=c.getContext('2d',{willReadFrequently:true});
+ const p=infoPaletteV7(meta), t=String(meta&&meta.type||'');
+ g.clearRect(0,0,96,96); g.imageSmoothingEnabled=false;
+ // 透明PNGを画像検索で拾ったような、中央寄せの被写体＋陰影ベース。
+ g.fillStyle='rgba(0,0,0,.18)'; g.beginPath(); g.ellipse(48,78,32,7,0,0,Math.PI*2); g.fill();
+ const quad=/pig|cow|mooshroom|sheep|wolf|ocelot|cat|horse|donkey|mule|zombie_horse|skeleton_horse|polar_bear|llama|panda|fox|goat|strider|camel|camel_husk|sniffer|armadillo|turtle/.test(t);
+ const aquatic=/squid|glow_squid|dolphin|cod|salmon|pufferfish|tropical_fish|axolotl|tadpole|nautilus|zombie_nautilus/.test(t);
+ const bird=/chicken|parrot|bat|bee|allay|happy_ghast/.test(t);
+ const npc=/villager|wandering_trader|zombie|skeleton|creeper/.test(t);
+ const golem=/golem/.test(t);
+ const spider=/spider/.test(t);
+ if(quad){
+   infoDrawBlockV7(g,20,43,42,24,p,'fur'); infoDrawBlockV7(g,54,29,23,21,p,'fur');
+   for(const lx of [25,38,53,65]) infoDrawBlockV7(g,lx,63,8,18,{...p,body:p.mid2,hi:p.body,low:p.dark},'');
+   g.fillStyle=p.eye; g.fillRect(61,36,4,4); g.fillRect(71,36,4,4);
+   if(/pig/.test(t)){ infoDrawBlockV7(g,67,43,12,8,{...p,body:p.accent,hi:infoMixV7(p.accent,'#fff',.25),low:infoShadeV7(p.accent,.72)},''); g.fillStyle=p.dark; g.fillRect(70,46,2,2); g.fillRect(76,46,2,2); }
+   if(/cow|mooshroom|panda/.test(t)){ g.fillStyle=p.dark; [[26,46,8,7],[43,52,10,8],[58,31,7,7],[70,51,7,8]].forEach(r=>g.fillRect(...r)); }
+   if(/mooshroom/.test(t)){ g.fillStyle=p.light; [[29,36,8],[42,39,7],[55,23,6]].forEach(([x,y,r])=>{g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();}); }
+   if(/sheep/.test(t)){ g.fillStyle='rgba(255,255,255,.72)'; for(let i=0;i<12;i++){g.beginPath();g.arc(22+(i%6)*7,39+Math.floor(i/6)*8,6,0,Math.PI*2);g.fill();} }
+   if(/cat|ocelot|fox|wolf|rabbit|goat/.test(t)){ g.fillStyle=p.dark; g.beginPath(); g.moveTo(57,30);g.lineTo(62,18);g.lineTo(67,30);g.fill(); g.beginPath();g.moveTo(69,30);g.lineTo(75,18);g.lineTo(79,30);g.fill(); }
+   if(/rabbit/.test(t)){ infoDrawBlockV7(g,58,10,6,20,p,'fur'); infoDrawBlockV7(g,70,10,6,20,p,'fur'); }
+   if(/horse|donkey|mule|camel|llama/.test(t)){ infoDrawBlockV7(g,51,24,11,23,{...p,body:p.dark,hi:p.mid2,low:p.dark},'fur'); }
+   if(/turtle|armadillo|sniffer/.test(t)){ g.fillStyle='rgba(0,0,0,.22)'; for(let yy=46;yy<62;yy+=6) for(let xx=24;xx<58;xx+=8) g.fillRect(xx,yy,4,3); }
+ }else if(aquatic){
+   const bodyGrad=g.createLinearGradient(20,37,76,62); bodyGrad.addColorStop(0,p.light); bodyGrad.addColorStop(.5,p.body); bodyGrad.addColorStop(1,p.low); g.fillStyle=bodyGrad;
+   g.beginPath(); g.ellipse(47,49,28,16,0,0,Math.PI*2); g.fill();
+   g.fillStyle=p.accent; g.beginPath(); g.moveTo(18,49); g.lineTo(5,37); g.lineTo(8,61); g.closePath(); g.fill();
+   g.fillStyle=p.dark; g.fillRect(64,43,5,5);
+   if(/squid/.test(t)){ infoDrawBlockV7(g,34,26,28,25,p,''); for(let x=28;x<=62;x+=8) infoDrawBlockV7(g,x,52,5,24,{...p,body:p.mid2,hi:p.body,low:p.dark},''); }
+   if(/pufferfish/.test(t)){ g.fillStyle=p.accent; for(let i=0;i<16;i++){ const a=i*Math.PI/8; g.fillRect(47+Math.cos(a)*30,49+Math.sin(a)*19,3,3); } }
+   if(/nautilus/.test(t)){ g.strokeStyle=p.dark; g.lineWidth=5; g.beginPath(); g.arc(48,49,19,0,Math.PI*1.7); g.stroke(); }
+ }else if(bird){
+   infoDrawBlockV7(g,34,34,28,27,p,'fur'); g.fillStyle=p.light; g.globalAlpha=.85; g.beginPath(); g.ellipse(27,48,17,8,-.45,0,Math.PI*2); g.fill(); g.beginPath(); g.ellipse(69,48,17,8,.45,0,Math.PI*2); g.fill(); g.globalAlpha=1;
+   g.fillStyle=p.eye; g.fillRect(51,40,4,4); g.fillStyle=p.accent; g.fillRect(57,45,9,5);
+   if(/bee/.test(t)){ for(let x=36;x<61;x+=8){ g.fillStyle=(x/8)%2?p.dark:p.body; g.fillRect(x,35,5,25); } }
+   if(/bat/.test(t)){ g.fillStyle=p.dark; g.beginPath();g.moveTo(35,45);g.lineTo(8,29);g.lineTo(18,59);g.fill(); g.beginPath();g.moveTo(61,45);g.lineTo(88,29);g.lineTo(78,59);g.fill(); }
+   if(/ghast/.test(t)){ infoDrawBlockV7(g,25,23,46,40,p,''); for(let x=30;x<=60;x+=10) infoDrawBlockV7(g,x,62,5,22,{...p,body:p.low,hi:p.body,low:p.dark},''); }
+ }else if(spider){
+   infoDrawBlockV7(g,28,40,40,22,{...p,body:p.dark,hi:p.mid2,low:'#020617'},'');
+   g.strokeStyle=p.dark; g.lineWidth=5; for(const y of [43,50,57]){ g.beginPath();g.moveTo(31,y);g.lineTo(9,y-13);g.stroke(); g.beginPath();g.moveTo(65,y);g.lineTo(87,y-13);g.stroke(); }
+   g.fillStyle=p.accent; g.fillRect(48,47,5,4); g.fillRect(56,47,5,4);
+ }else if(npc||golem){
+   const shirt=/zombie/.test(t)?'#0891b2':(/skeleton/.test(t)?p.light:p.body), pants=/zombie/.test(t)?'#3730a3':p.dark;
+   infoDrawBlockV7(g,35,17,28,25,p,''); infoDrawBlockV7(g,33,43,32,24,{...p,body:shirt,hi:infoMixV7(shirt,'#fff',.25),low:infoShadeV7(shirt,.62)},'');
+   infoDrawBlockV7(g,22,44,11,24,{...p,body:p.mid2,hi:p.body,low:p.dark},''); infoDrawBlockV7(g,65,44,11,24,{...p,body:p.mid2,hi:p.body,low:p.dark},'');
+   infoDrawBlockV7(g,37,67,10,18,{...p,body:pants,hi:infoMixV7(pants,'#fff',.2),low:infoShadeV7(pants,.55)},''); infoDrawBlockV7(g,51,67,10,18,{...p,body:pants,hi:infoMixV7(pants,'#fff',.2),low:infoShadeV7(pants,.55)},'');
+   g.fillStyle=/creeper/.test(t)?p.dark:p.eye; g.fillRect(41,27,5,5); g.fillRect(53,27,5,5);
+   if(/creeper/.test(t)){ g.fillRect(46,39,7,7); g.fillRect(39,47,6,9); g.fillRect(55,47,6,9); }
+   if(/villager|trader/.test(t)){ infoDrawBlockV7(g,46,30,8,14,{...p,body:p.dark,hi:p.mid2,low:p.dark},''); }
+ }else{
+   infoDrawBlockV7(g,28,27,40,42,p,'fur'); g.fillStyle=p.eye; g.fillRect(40,43,5,5); g.fillRect(54,43,5,5);
+ }
+ // 画像検索結果を小さくドット化した時の色残りを再現する、薄いノイズとハイライト。
+ const img=g.getImageData(0,0,96,96), d=img.data; let seed=2166136261; for(const ch of String(t)){ seed=((seed^ch.charCodeAt(0))*16777619)>>>0; }
+ for(let i=0;i<d.length;i+=4){ if(d[i+3]<20) continue; seed=(seed*1664525+1013904223)>>>0; const n=((seed>>>24)&255)-128; const k=n*.045; d[i]=Math.max(0,Math.min(255,d[i]+k)); d[i+1]=Math.max(0,Math.min(255,d[i+1]+k)); d[i+2]=Math.max(0,Math.min(255,d[i+2]+k)); }
+ g.putImageData(img,0,0);
+ return c;
+}
+function infoCanvasToCellsV7(src, grid){
+ grid=grid||16; const c=document.createElement('canvas'); c.width=grid; c.height=grid; const g=c.getContext('2d',{willReadFrequently:true});
+ g.clearRect(0,0,grid,grid); g.imageSmoothingEnabled=true; g.drawImage(src,0,0,grid,grid);
+ const data=g.getImageData(0,0,grid,grid).data, cells=[];
+ for(let y=0;y<grid;y++) for(let x=0;x<grid;x++){
+   const i=(y*grid+x)*4, a=data[i+3]; if(a<28) continue;
+   // 二色化防止: 完全な量子化ではなく、セルごとの平均色を残す。
+   cells.push({x,y,color:infoRgbToHexV7(data[i],data[i+1],data[i+2])});
+ }
+ return cells;
+}
+function bakeRichInfoTextureVisualV7(meta){
+ if(!meta) return null;
+ const id=String(meta.id||infoTextureIdFromTypeV3(meta.type));
+ const cur=customObjectDefs.get(id) || {};
+ const cells=infoCanvasToCellsV7(infoBakeCanvasV7(meta),16);
+ if(!cells.length) return cur;
+ const def=Object.assign({}, cur, {
+   id, name:'情報テクスチャ:'+meta.name, kind:'plane', grid:16, scale:.085,
+   cells, infoTexture:true, infoType:meta.type,
+   infoRole:meta.role, infoBehavior:meta.behavior, infoText:meta.text||meta.behavior||'',
+   infoSoundText:meta.soundText||'', infoAttackText:meta.attackText||'', infoAggression:Number(meta.aggression)||0,
+   temperament:meta.temperament, attackText:meta.attackText, traits:meta.traits||[],
+   hp:meta.hp||8,
+   infoPhysics:{massKg:meta.massKg||1,gravityScale:(meta.gravityScale==null?1:meta.gravityScale),terminalVelocity:18,bounce:meta.bounce||0},
+   sourceFile:meta.sourceFile||'', iconUrl:meta.iconUrl||'', sourceSearchQuery:(meta.name||meta.type)+' minecraft mob png',
+   pixelBakeVersion:INFO_TEXTURE_PIXEL_BAKE_VERSION_V7, updatedAt:Date.now(), iconBaked:true
+ });
+ customObjectDefs.set(id, validateObjectDef(def)||def);
+ return customObjectDefs.get(id);
+}
+const __ensureInfoTextureDefV7Base = ensureInfoTextureDefV3;
+ensureInfoTextureDefV3 = function(meta){
+ const def=__ensureInfoTextureDefV7Base.apply(this,arguments);
+ try{ return bakeRichInfoTextureVisualV7(meta) || def; }catch(e){ console.warn('rich info pixel bake failed',e); return def; }
+};
+try{
+ if(Array.isArray(INFO_TEXTURE_PACK_V3)){
+   for(const meta of INFO_TEXTURE_PACK_V3){ try{ bakeRichInfoTextureVisualV7(meta); }catch(e){} }
+   if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions();
+   if(typeof renderObjectManager==='function') renderObjectManager();
+   setMsg('情報テクスチャ画質修正: 名前検索ベース風の多色ドット絵へ再ベイク '+INFO_TEXTURE_PACK_V3.length+'種','good');
+ }
+}catch(e){ console.warn('info texture v7 init failed',e); }
+
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
