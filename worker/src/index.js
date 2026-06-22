@@ -312,6 +312,22 @@ export class Room {
       return;
     }
 
+    if (msg.type === 'worldReset') {
+      this.worldEdits = [];
+      await this.saveWorldEdits();
+      this.broadcast({ type: 'worldReset', clientId, time: Date.now() }, null);
+      return;
+    }
+
+    if (msg.type === 'objectWorldReset') {
+      this.instances = [];
+      this.links = [];
+      await this.saveInstances();
+      await this.saveLinks();
+      this.broadcast({ type: 'objectWorldReset', clientId, time: Date.now() }, null);
+      return;
+    }
+
     if (msg.type === 'objectCatalog' && Array.isArray(msg.objects)) {
       let changed = false;
       for (const d of msg.objects) {
