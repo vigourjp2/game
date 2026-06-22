@@ -3908,6 +3908,204 @@ attachUltraRoots = function(a,b,broadcast){
  return ok;
 };
 
+
+// ===== 60fps smooth runtime patch =====
+// 目的: 描画は毎フレーム維持しつつ、重い生成・同期・当たり判定だけをフレーム予算内へ分散する。
+let __smoothFrameNo = 0;
+let __smoothLastAimAt = 0;
+let __smoothCachedRay = null;
+let __smoothLastChunkUi = '';
+
+function __smoothNow(){ return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
+function __smoothRootBounds(root){
+ if(!root || !root.getPosition) return null;
+ const p=root.getPosition();
+ const yaw=(root.data&&Number(root.data.yaw))||0;
+ const childCount=(root.children&&root.children.length)||0;
+ const c=root.__smoothBoundsCache;
+ if(c && c.frame===__smoothFrameNo && c.childCount===childCount && c.x===p.x && c.y===p.y && c.z===p.z && c.yaw===yaw) return c.bounds;
+ let b=null;
+ try{ b=ultraObjectBounds(root); }catch{}
+ if(!b) return null;
+ root.__smoothBoundsCache={frame:__smoothFrameNo,childCount,x:p.x,y:p.y,z:p.z,yaw,bounds:b};
+ return b;
+}
+function __smoothBoundsHitPoint(b,px,py,pz,pad){
+ pad=pad||0;
+ return !!(b && px>=b.min.x-pad && px<=b.max.x+pad && py>=b.min.y-pad && py<=b.max.y+pad && pz>=b.min.z-pad && pz<=b.max.z+pad);
+}
+function __smoothBoundsHitColumn(b,px,pz,pad){
+ pad=pad||0;
+ return !!(b && px>=b.min.x-pad && px<=b.max.x+pad && pz>=b.min.z-pad && pz<=b.max.z+pad);
+}
+
+// OBJ当たり判定は、先にroot全体AABBで弾く。セル総当たりを大幅削減する。
+customObjectCellAtPoint = function(px,py,pz){
+ for(const [instanceKey,root] of customObjectEntities){
+   if(!root || !root.children) continue;
+   const rb=__smoothRootBounds(root);
+   if(!__smoothBoundsHitPoint(rb,px,py,pz,.08)) continue;
+   for(const cell of root.children){
+     const a=customObjectCellAabb(cell);
+     if(!a) continue;
+     if(px>=a.minX && px<=a.maxX && py>=a.minY && py<=a.maxY && pz>=a.minZ && pz<=a.maxZ){
+       return {root,cell,instanceKey,defId:root.data&&root.data.defId,aabb:a};
+     }
+   }
+ }
+ return null;
+};
+customObjectTopBelow = function(px,pz,feetY){
+ let best=-999;
+ const rr=(player&&player.radius?player.radius:.28)*0.92;
+ for(const [,root] of customObjectEntities){
+   if(!root || !root.children) continue;
+   const rb=__smoothRootBounds(root);
+   if(!__smoothBoundsHitColumn(rb,px,pz,rr+.08)) continue;
+   if(feetY < rb.min.y-1.35 || feetY > rb.max.y+1.35) continue;
+   for(const cell of root.children){
+     const a=customObjectCellAabb(cell);
+     if(!a) continue;
+     if(px>=a.minX-rr && px<=a.maxX+rr && pz>=a.minZ-rr && pz<=a.maxZ+rr){
+       const top=a.maxY;
+       if(top<=feetY+0.46 && top>=feetY-1.25 && top>best) best=top;
+     }
+   }
+ }
+ return best;
+};
+customObjectCeilingAbove = function(px,pz,feetY,headY){
+ let best=999999;
+ const rr=(player&&player.radius?player.radius:.28)*0.88;
+ for(const [,root] of customObjectEntities){
+   if(!root || !root.children) continue;
+   const rb=__smoothRootBounds(root);
+   if(!__smoothBoundsHitColumn(rb,px,pz,rr+.08)) continue;
+   if(headY < rb.min.y-.2 || feetY > rb.max.y+.2) continue;
+   for(const cell of root.children){
+     const a=customObjectCellAabb(cell);
+     if(!a) continue;
+     if(px>=a.minX-rr && px<=a.maxX+rr && pz>=a.minZ-rr && pz<=a.maxZ+rr){
+       const bottom=a.minY;
+       if(bottom>=feetY+0.15 && headY>=bottom-0.10 && headY<=a.maxY+0.22 && bottom<best) best=bottom;
+     }
+   }
+ }
+ return best<999999?best:null;
+};
+
+// 照準rayは60fps描画の足を引っ張りやすいので、通常時は30Hz、ウルトラハンド中は60Hz相当に近づける。
+const __smoothBaseRayBlock = rayBlock;
+rayBlock = function(force){
+ const now=__smoothNow();
+ const interval=(ultraHeld||state.editingObject)?8:33;
+ if(!force && __smoothCachedRay && now-__smoothLastAimAt<interval) return __smoothCachedRay;
+ __smoothLastAimAt=now;
+ __smoothCachedRay=__smoothBaseRayBlock();
+ return __smoothCachedRay;
+};
+
+// チャンク生成は描画予算を最優先。1フレームで作りすぎず、近いチャンクから少しずつ出す。
+processChunkJobs = function(){
+ const start=__smoothNow();
+ const budget=state.started ? (state.mobile?0.75:1.15) : (state.mobile?1.2:1.8);
+ const maxCols=state.started ? (state.mobile?44:76) : (state.mobile?90:150);
+ const list=Array.from(chunks.values()).filter(ch=>ch.pending.length);
+ if(!list.length)return;
+ const pcx=chunkOf(player.x),pcz=chunkOf(player.z);
+ list.sort((a,b)=>(Math.abs(a.cx-pcx)+Math.abs(a.cz-pcz))-(Math.abs(b.cx-pcx)+Math.abs(b.cz-pcz)));
+ let made=0;
+ while(list.length && made<maxCols && (__smoothNow()-start)<budget){
+   const ch=list[0];
+   const col=ch.pending.shift();
+   if(!col){ch.done=true;restoreEditsForChunk(ch);list.shift();continue;}
+   for(const b of columnBlocks(col[0],col[1]))addBlock(b[0],b[1],b[2],b[3],false);
+   made++;
+   if(ch.pending.length===0){ch.done=true;restoreEditsForChunk(ch);list.shift();}
+   if(world.size>MAX_ACTIVE_BLOCKS)break;
+ }
+};
+
+// 初期生成も一気に詰め込まない。起動直後のカクつきを抑える。
+buildWorld = function(){
+ ensureChunksAroundPlayer(true);
+ for(let i=0;i<(state.mobile?14:24);i++)processChunkJobs();
+};
+
+// 受信処理はshift()をやめて、配列詰め替えコストを削減する。
+let __smoothRxHead=0;
+processMultiplayerRxQueue = function(){
+ const start=__smoothNow();
+ let n=0;
+ const budget=state.mobile?0.75:1.15;
+ const max=state.mobile?8:14;
+ while(__smoothRxHead<multiplayerRxQueue.length && n<max && __smoothNow()-start<budget){
+   const raw=multiplayerRxQueue[__smoothRxHead++];
+   handleMultiplayerMessage(raw);
+   n++;
+ }
+ if(__smoothRxHead>80){ multiplayerRxQueue.splice(0,__smoothRxHead); __smoothRxHead=0; }
+ if(n) setMultiplayerRxCount();
+};
+
+// 顔キャプチャはtoDataURLが重いので、ゲーム中はさらに低頻度化。手触り優先。
+const __smoothBaseCaptureFaceSnapshot = captureFaceSnapshot;
+captureFaceSnapshot = function(force=false){
+ if(!force && state.started){
+   const now=__smoothNow();
+   if(now-faceLastCapture < 5200) return false;
+ }
+ return __smoothBaseCaptureFaceSnapshot(force);
+};
+const __smoothBaseSetRemoteFaceImage = setRemoteFaceImage;
+setRemoteFaceImage = function(id,dataUrl){
+ const r=multiplayerRemotes.get(id);
+ if(r && r.faceDecodeBusy) return;
+ if(r) r.faceDecodeBusy=true;
+ try{ return __smoothBaseSetRemoteFaceImage(id,dataUrl); }
+ finally{ if(r) setTimeout(()=>{try{r.faceDecodeBusy=false;}catch{}},900); }
+};
+
+// 情報テクスチャ物理/猫AI/HUDもフレーム直結をやめる。AIは見た目より60fps優先。
+const __smoothInfoUpdateCustomObjectRuntime = (typeof __infoUpdateCustomObjectRuntime==='function') ? __infoUpdateCustomObjectRuntime : updateCustomObjectRuntime;
+let __smoothInfoAcc=0;
+updateCustomObjectRuntime=function(dt){
+ __smoothInfoUpdateCustomObjectRuntime(dt);
+ __smoothInfoAcc += dt;
+ const interval=state.mobile?.22:.16;
+ if(__smoothInfoAcc>=interval){
+   const step=Math.min(__smoothInfoAcc,.28); __smoothInfoAcc=0;
+   try{ updateInfoTexturePhysics(step); }catch{}
+   try{ updateCats(step); }catch{}
+   try{ updateInfoHud(); }catch{}
+ }
+};
+
+// 接着グループ同期は10〜12Hz程度にして、掴んだ側の滑らかさと送信負荷のバランスを取る。
+ultraBroadcastCompoundTransform = function(root, force){
+ if(!root||!root.data) return false;
+ const payload=ultraCompoundTransformPayload(root);
+ if(payload.members.length<=1) return false;
+ const now=__smoothNow();
+ if(!force && now-ultraCompoundLiveLastSync<(state.mobile?105:88)) return false;
+ ultraCompoundLiveLastSync=now;
+ sendMultiplayer({type:'objectInstanceCompoundTransform',base:ultraLinkKey(root.data.instanceKey),t:now,members:payload.members,links:payload.links});
+ return true;
+};
+
+// PlayCanvas側も低遅延設定。端末が重い時は解像度を早めに下げる。
+try{
+ if(app.graphicsDevice){
+   app.graphicsDevice.maxPixelRatio=Math.min(app.graphicsDevice.maxPixelRatio||1, state.mobile?1.0:1.25);
+   const pr=$('pr'); if(pr) pr.textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);
+ }
+ if(app.graphicsDevice && app.graphicsDevice.gl){ app.graphicsDevice.gl.disable(app.graphicsDevice.gl.SAMPLE_ALPHA_TO_COVERAGE); }
+}catch{}
+
+// updateの先頭で使うフレーム番号だけ進める。描画自体はPlayCanvas標準のまま。
+app.on('update',function(){ __smoothFrameNo++; });
+
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
