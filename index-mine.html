@@ -1116,6 +1116,12 @@ function removeCustomObjectInstance(instanceKey,broadcast){
  if(broadcast) sendMultiplayer({type:'objectInstanceRemove', instanceKey});
  return true;
 }
+
+const __ultraCleanupRemoveCustomObjectInstance=removeCustomObjectInstance;
+removeCustomObjectInstance=function(instanceKey,broadcast){
+ try{ if(typeof ultraRemoveLinksFor==='function') ultraRemoveLinksFor(instanceKey,!!broadcast); }catch{}
+ return __ultraCleanupRemoveCustomObjectInstance.apply(this,arguments);
+};
 function spawnCustomObjectForChunk(ch){
  const defs=Array.from(customObjectDefs.values());
  if(!defs.length||!ch||!ch.done) return;
@@ -2691,6 +2697,166 @@ function ultraShowLine(a,b){
 function ultraShowVecLine(pa,pb){
  ultraShowLinePoints(ultraEnsureLine(),pa,pb,.055);
 }
+
+function ultraPairKey(a,b){
+ a=String(a||''); b=String(b||'');
+ return a<b ? (a+'|'+b) : (b+'|'+a);
+}
+function ultraLinkList(k){
+ k=String(k||'');
+ if(!ultraLinks.has(k)) ultraLinks.set(k,[]);
+ return ultraLinks.get(k);
+}
+function ultraHasLink(a,b){
+ const list=ultraLinks.get(String(a||''))||[];
+ return list.some(v=>String(v.other)===String(b));
+}
+function ultraGetYaw(root){return root&&root.data?Number(root.data.yaw)||0:0;}
+function ultraSetYaw(root,yaw){
+ if(!root) return;
+ root.setEulerAngles(0,(Number(yaw)||0)*180/Math.PI,0);
+ root.data=Object.assign({},root.data||{},{yaw:Number(yaw)||0});
+}
+function ultraRotY(v,ang){
+ const c=Math.cos(ang), s=Math.sin(ang);
+ return new pc.Vec3(v.x*c+v.z*s, v.y, -v.x*s+v.z*c);
+}
+let ultraGlueMat=null;
+const ultraGlueEntities=new Map();
+function ultraEnsureGlueMat(){
+ if(ultraGlueMat) return ultraGlueMat;
+ ultraGlueMat=new pc.StandardMaterial();
+ ultraGlueMat.diffuse=new pc.Color(.02,1,.62);
+ ultraGlueMat.emissive=new pc.Color(.0,.42,.24);
+ ultraGlueMat.opacity=.86;
+ ultraGlueMat.blendType=pc.BLEND_NORMAL;
+ ultraGlueMat.depthWrite=false;
+ ultraGlueMat.update();
+ return ultraGlueMat;
+}
+function ultraCreateGlueEntity(pairKey){
+ const root=new pc.Entity('ultrahand_glue_'+pairKey);
+ const bar=new pc.Entity('glue_bar');
+ bar.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+ bar.render.material=ultraEnsureGlueMat();
+ root.addChild(bar);
+ for(let i=0;i<2;i++){
+   const pad=new pc.Entity('glue_pad');
+   pad.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+   pad.render.material=ultraEnsureGlueMat();
+   root.addChild(pad);
+ }
+ app.root.addChild(root);
+ return root;
+}
+function ultraUpdateGlueVisual(aKey,bKey){
+ const a=getObjRootByInstanceKey(aKey), b=getObjRootByInstanceKey(bKey);
+ const pair=ultraPairKey(aKey,bKey);
+ if(!a||!b){
+   const old=ultraGlueEntities.get(pair); if(old){try{old.destroy();}catch{}}
+   ultraGlueEntities.delete(pair); return;
+ }
+ const ga=ultraObjectBounds(a).center, gb=ultraObjectBounds(b).center;
+ const ent=ultraGlueEntities.get(pair)||ultraCreateGlueEntity(pair);
+ ultraGlueEntities.set(pair,ent);
+ ent.enabled=true;
+ const kids=ent.children||[];
+ if(kids[0]) ultraShowLinePoints(kids[0],ga,gb,.09);
+ if(kids[1]){kids[1].enabled=true;kids[1].setPosition(ga);kids[1].setLocalScale(.28,.28,.28);}
+ if(kids[2]){kids[2].enabled=true;kids[2].setPosition(gb);kids[2].setLocalScale(.28,.28,.28);}
+}
+function ultraUpdateAllGlueVisuals(){
+ const done=new Set();
+ for(const [a,list] of ultraLinks){
+   for(const l of list||[]){
+     const pair=ultraPairKey(a,l.other); if(done.has(pair)) continue;
+     done.add(pair); ultraUpdateGlueVisual(a,l.other);
+   }
+ }
+}
+function ultraDestroyGlueBetween(a,b){
+ const pair=ultraPairKey(a,b);
+ const g=ultraGlueEntities.get(pair); if(g){try{g.destroy();}catch{}}
+ ultraGlueEntities.delete(pair);
+}
+function ultraAddLink(aKey,bKey,broadcast){
+ aKey=String(aKey||''); bKey=String(bKey||'');
+ if(!aKey||!bKey||aKey===bKey) return false;
+ const a=getObjRootByInstanceKey(aKey), b=getObjRootByInstanceKey(bKey);
+ if(!a||!b) return false;
+ if(!ultraHasLink(aKey,bKey)){
+   const ap=a.getPosition().clone(), bp=b.getPosition().clone();
+   const ay=ultraGetYaw(a), by=ultraGetYaw(b);
+   ultraLinkList(aKey).push({other:bKey});
+   ultraLinkList(bKey).push({other:aKey});
+ }
+ ultraUpdateGlueVisual(aKey,bKey);
+ if(broadcast) sendMultiplayer({type:'objectInstanceAttach',a:aKey,b:bKey});
+ return true;
+}
+function ultraRemoveLink(a,b,broadcast){
+ a=String(a||''); b=String(b||'');
+ if(!a||!b) return false;
+ ultraLinks.set(a,(ultraLinks.get(a)||[]).filter(v=>String(v.other)!==b));
+ ultraLinks.set(b,(ultraLinks.get(b)||[]).filter(v=>String(v.other)!==a));
+ if((ultraLinks.get(a)||[]).length===0) ultraLinks.delete(a);
+ if((ultraLinks.get(b)||[]).length===0) ultraLinks.delete(b);
+ ultraDestroyGlueBetween(a,b);
+ if(broadcast) sendMultiplayer({type:'objectInstanceDetach',a:a,b:b});
+ return true;
+}
+function ultraRemoveLinksFor(key,broadcast){
+ key=String(key||'');
+ const list=(ultraLinks.get(key)||[]).slice();
+ for(const l of list){
+   const other=String(l.other||'');
+   ultraLinks.set(other,(ultraLinks.get(other)||[]).filter(v=>String(v.other)!==key));
+   ultraDestroyGlueBetween(key,other);
+   if(broadcast) sendMultiplayer({type:'objectInstanceDetach',a:key,b:other});
+ }
+ ultraLinks.delete(key);
+}
+function ultraConnectedKeys(startKey){
+ startKey=String(startKey||'');
+ const out=[]; const seen=new Set(); const q=[startKey];
+ while(q.length){
+   const k=q.shift(); if(!k||seen.has(k)) continue;
+   if(!getObjRootByInstanceKey(k)) continue;
+   seen.add(k); out.push(k);
+   for(const l of ultraLinks.get(k)||[]) if(!seen.has(String(l.other))) q.push(String(l.other));
+ }
+ return out;
+}
+function ultraBuildHeldGroup(root){
+ const baseKey=root&&root.data&&root.data.instanceKey;
+ const basePos=root.getPosition().clone();
+ const baseYaw=ultraGetYaw(root);
+ const members=[];
+ for(const k of ultraConnectedKeys(baseKey)){
+   const r=getObjRootByInstanceKey(k); if(!r) continue;
+   members.push({key:k,root:r,offset:r.getPosition().clone().sub(basePos),yawDelta:ultraGetYaw(r)-baseYaw});
+ }
+ return {baseKey,baseYaw,members};
+}
+function ultraApplyHeldGroup(){
+ if(!ultraHeld||!ultraHeld.group||!ultraHeld.root) return;
+ const root=ultraHeld.root;
+ const basePos=root.getPosition().clone();
+ const yaw=ultraGetYaw(root);
+ const delta=yaw-(ultraHeld.group.baseYaw||0);
+ for(const m of ultraHeld.group.members||[]){
+   if(!m||m.root===root||!m.root) continue;
+   const off=ultraRotY(m.offset,delta);
+   const np=basePos.clone().add(off);
+   m.root.setPosition(np.x,np.y,np.z);
+   ultraSetYaw(m.root,yaw+(Number(m.yawDelta)||0));
+ }
+ ultraUpdateAllGlueVisuals();
+}
+function ultraBroadcastHeldGroup(){
+ if(!ultraHeld||!ultraHeld.group) return;
+ for(const m of ultraHeld.group.members||[]) ultraBroadcastTransform(m.root);
+}
 function ultraEyePos(){
  return new pc.Vec3(player.x, player.y+currentEditorEyeHeight(), player.z);
 }
@@ -2738,13 +2904,14 @@ function ultraApplyTransform(msg){
  const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return true;
  root.setPosition(x,y,z); root.setEulerAngles(0,yaw*180/Math.PI,0); root.data.yaw=yaw;
+ try{ultraUpdateAllGlueVisuals();}catch{}
  return true;
 }
 const __ultraHandleObjectCatalogMessage=handleObjectCatalogMessage;
 handleObjectCatalogMessage=function(msg){
  if(msg && msg.type==='objectInstanceTransform') return ultraApplyTransform(msg);
- if(msg && msg.type==='objectInstanceDetach'){return true;}
- if(msg && msg.type==='objectInstanceAttach'){return true;}
+ if(msg && msg.type==='objectInstanceDetach'){ultraRemoveLink(msg.a||msg.instanceKey,msg.b||msg.other,false); return true;}
+ if(msg && msg.type==='objectInstanceAttach'){ultraAddLink(msg.a||msg.from||msg.instanceKey,msg.b||msg.to||msg.other,false); return true;}
  return __ultraHandleObjectCatalogMessage(msg);
 };
 function startUltraField(){
@@ -2757,6 +2924,7 @@ function startUltraField(){
  const rootPos=root.getPosition().clone();
  const centerOffset=rootPos.clone().sub(bounds.center);
  ultraHeld={mode:'field',root,instanceKey:r.objectHit.instanceKey,defId:r.objectHit.defId,distance:Math.max(1.8,Math.min(8.5,d||4)),yaw:root.data&&Number(root.data.yaw)||0,rootCenterOffset:centerOffset};
+ ultraHeld.group=ultraBuildHeldGroup(root);
  setUltraButtons(true); setUltraHint('ウルトラハンド: 青緑ラインで操作中 / 視点で移動 / PLACEで接着 / BREAKで解除 / ULTRAで離す');
  setMsg('ウルトラハンド: OBJを掴んだ','good');
  ultraShowLinePoints(ultraEnsureLine(), ultraEyePoint(), bounds.center, .065);
@@ -2806,7 +2974,8 @@ function stopUltraHand(drop){
    }
  }
  if(ultraHeld.mode==='field' && ultraHeld.root){
-   ultraBroadcastTransform(ultraHeld.root);
+   ultraApplyHeldGroup();
+   ultraBroadcastHeldGroup();
    setMsg('ウルトラハンド: OBJを離した','good');
  }
  destroyUltraEditorHeldEntity();
@@ -2824,9 +2993,14 @@ function ultraAttachOrRelease(){
  if(ultraHeld.mode==='field'){
    const near=nearestUltraAttachTarget(ultraHeld.root);
    if(near){
-     setMsg('ウルトラハンド: '+(ultraHeld.defId||'OBJ')+' を近くのOBJへ接着位置に固定','good');
-     ultraBroadcastTransform(ultraHeld.root);
-     return stopUltraHand(true);
+     const a=ultraHeld.instanceKey || (ultraHeld.root.data&&ultraHeld.root.data.instanceKey);
+     const b=near.key || (near.root&&near.root.data&&near.root.data.instanceKey);
+     const ok=ultraAddLink(a,b,true);
+     ultraHeld.group=ultraBuildHeldGroup(ultraHeld.root);
+     ultraBroadcastHeldGroup();
+     const r=stopUltraHand(true);
+     setMsg(ok?'ウルトラハンド: 接着完了。接着剤で連結したOBJ全体を次から掴める':'ウルトラハンド: 接着失敗','good');
+     return r;
    }
    return stopUltraHand(true);
  }
@@ -2835,6 +3009,10 @@ function ultraAttachOrRelease(){
 function ultraDetachHeld(){
  if(!ultraHeld) return false;
  if(ultraHeld.mode==='editorCell') return stopUltraHand(false);
+ if(ultraHeld.mode==='field'){
+   const key=ultraHeld.instanceKey || (ultraHeld.root&&ultraHeld.root.data&&ultraHeld.root.data.instanceKey);
+   ultraRemoveLinksFor(key,true);
+ }
  setMsg('ウルトラハンド: 接着解除/離す','info');
  return stopUltraHand(true);
 }
@@ -2866,7 +3044,8 @@ function updateUltraHand(dt){
    else if(ultraAttachLine) ultraAttachLine.enabled=false;
    setUltraHint(near?'ウルトラハンド: 青緑で操作中 / PLACEで接着':'ウルトラハンド: 青緑ラインで操作中 / 視点で移動 / ULTRAで離す');
    const now=performance.now();
-   if(now-ultraLastSync>150){ultraLastSync=now; ultraBroadcastTransform(ultraHeld.root);}
+   ultraApplyHeldGroup();
+   if(now-ultraLastSync>150){ultraLastSync=now; ultraBroadcastHeldGroup();}
  }
  if(ultraHeld.mode==='editorCell'){
    ensureObjectBuildRoot();
