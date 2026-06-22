@@ -8,6 +8,8 @@ export class Room {
     this.objects = [];
     this.instancesLoaded = false;
     this.instances = [];
+    this.linksLoaded = false;
+    this.links = [];
   }
 
   async loadObjects() {
@@ -30,6 +32,26 @@ export class Room {
 
   async saveInstances() {
     await this.state.storage.put('customObjectInstances', this.instances.slice(-300));
+  }
+
+  async loadLinks() {
+    if (this.linksLoaded) return;
+    this.linksLoaded = true;
+    const saved = await this.state.storage.get('customObjectLinks');
+    this.links = Array.isArray(saved) ? saved.slice(-500) : [];
+  }
+
+  async saveLinks() {
+    await this.state.storage.put('customObjectLinks', this.links.slice(-500));
+  }
+
+  cleanLink(msg) {
+    const a = String(msg && (msg.a || msg.instanceKey || msg.from) || '').slice(0, 160);
+    const b = String(msg && (msg.b || msg.other || msg.to) || '').slice(0, 160);
+    if (!a || !b || a === b) return null;
+    const aa = a < b ? a : b;
+    const bb = a < b ? b : a;
+    return { type: 'objectInstanceAttach', a: aa, b: bb, updatedAt: Date.now() };
   }
 
   cleanInstance(msg) {
@@ -126,8 +148,12 @@ export class Room {
         const size = Math.max(0.03, Math.min(0.70, Number(c.size) || Number(def.scale) || 0.16));
         const cell = { x, y, z, color, size };
         const lx = Number(c.lx), ly = Number(c.ly), lz = Number(c.lz);
-        if (Number.isFinite(lx) && Number.isFinite(ly) && Number.isFinite(lz)) {
-          cell.lx = lx; cell.ly = ly; cell.lz = lz;
+        const lim = grid * Math.max(0.03, Number(def.scale) || size || 0.16) * 1.2;
+        if (Number.isFinite(lx) && Number.isFinite(ly) && Number.isFinite(lz)
+            && Math.abs(lx) <= lim && ly >= -0.5 && ly <= lim && Math.abs(lz) <= lim) {
+          cell.lx = Math.round(lx * 10000) / 10000;
+          cell.ly = Math.round(ly * 10000) / 10000;
+          cell.lz = Math.round(lz * 10000) / 10000;
         }
         cells.push(cell);
       }
@@ -157,12 +183,26 @@ export class Room {
       if (decals.length) clean.decals = decals;
     }
 
+    const infoTextureIds = [];
+    const pushInfo = (v) => {
+      const id = String(v || '').slice(0, 96);
+      if (id && !infoTextureIds.includes(id)) infoTextureIds.push(id);
+    };
+    if (Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(pushInfo);
+    if (def.infoTexture) clean.infoTexture = true;
+    if (def.infoType) clean.infoType = String(def.infoType).slice(0, 40);
+    if (def.infoCarrier) clean.infoCarrier = String(def.infoCarrier).slice(0, 40);
+    if (def.worldSpawn) clean.worldSpawn = true;
+    if (Number.isFinite(Number(def.hp))) clean.hp = Math.max(1, Math.min(200, Math.trunc(Number(def.hp))));
+    if (infoTextureIds.length) clean.infoTextureIds = infoTextureIds;
+
     return clean;
   }
 
   async fetch(request) {
     await this.loadObjects();
     await this.loadInstances();
+    await this.loadLinks();
 
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('mine-server-git2 WebSocket server OK / decals + per-cell-size + ultrahand sync enabled', {
@@ -181,6 +221,7 @@ export class Room {
     server.send(JSON.stringify({ type: 'welcome', playerId: serverPlayerId, time: Date.now() }));
     server.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() }));
     server.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() }));
+    server.send(JSON.stringify({ type: 'objectInstanceLinks', links: this.links, time: Date.now() }));
 
     server.addEventListener('message', async (event) => {
       await this.onMessage(server, event.data);
@@ -210,6 +251,7 @@ export class Room {
     if (msg.type === 'objectCatalogReq') {
       try { ws.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() })); } catch {}
       try { ws.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() })); } catch {}
+      try { ws.send(JSON.stringify({ type: 'objectInstanceLinks', links: this.links, time: Date.now() })); } catch {}
       return;
     }
 
@@ -304,7 +346,29 @@ export class Room {
       return;
     }
 
-    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit' || msg.type === 'objectInstanceAttach' || msg.type === 'objectInstanceDetach') {
+    if (msg.type === 'objectInstanceAttach') {
+      const link = this.cleanLink(msg);
+      if (!link) return;
+      const idx = this.links.findIndex(l => (l.a === link.a && l.b === link.b));
+      if (idx >= 0) this.links[idx] = link;
+      else this.links.push(link);
+      this.links = this.links.slice(-500);
+      await this.saveLinks();
+      this.broadcast({ ...link, clientId, time: Date.now() }, ws);
+      return;
+    }
+
+    if (msg.type === 'objectInstanceDetach') {
+      const link = this.cleanLink(msg);
+      if (!link) return;
+      const before = this.links.length;
+      this.links = this.links.filter(l => !(l.a === link.a && l.b === link.b));
+      if (this.links.length !== before) await this.saveLinks();
+      this.broadcast({ type: 'objectInstanceDetach', a: link.a, b: link.b, clientId, time: Date.now() }, ws);
+      return;
+    }
+
+    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit') {
       if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate') {
         this.players.set(clientId, {
           clientId,
