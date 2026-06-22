@@ -124,7 +124,12 @@ export class Room {
       if (kind === 'plane') cells.push({ x, y, color });
       else {
         const size = Math.max(0.03, Math.min(0.70, Number(c.size) || Number(def.scale) || 0.16));
-        cells.push({ x, y, z, color, size });
+        const cell = { x, y, z, color, size };
+        const lx = Number(c.lx), ly = Number(c.ly), lz = Number(c.lz);
+        if (Number.isFinite(lx) && Number.isFinite(ly) && Number.isFinite(lz)) {
+          cell.lx = lx; cell.ly = ly; cell.lz = lz;
+        }
+        cells.push(cell);
       }
     }
 
