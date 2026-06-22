@@ -839,8 +839,6 @@ const OBJECT_GRID = 16;
 const OBJECT_STORAGE_KEY = 'voxelStudyWorld.customObjects3d.v2';
 const customObjectDefs = new Map();
 const customObjectEntities = new Map();
-// OBJ呼出同期で、相手端末がまだOBJ定義を持っていない場合に一時保留する。
-const pendingObjectInstancePlaces = new Map();
 // フィールド上でBREAK破壊したOBJインスタンス。ランダムOBJが即復活しないように記録する。
 const customObjectRemovedInstances = new Set();
 const customColorMats = new Map();
@@ -1018,9 +1016,7 @@ function placeObjectInFront(def, broadcastInstance=true){
      objectId:def.id,
      defId:def.id,
      instanceKey,
-     x,y,z,yaw,
-     // 相手端末がまだ catalog を受けていなくても、その場で生成できるように定義も同送する。
-     object:def
+     x,y,z,yaw
    });
  }
  return root;
@@ -1138,61 +1134,32 @@ function updateCustomObjectRuntime(dt){
  unloadFarCustomObjects();
 }
 function broadcastObjectCatalog(){ if(customObjectDefs.size) sendMultiplayer({type:'objectCatalog', objects:Array.from(customObjectDefs.values()).slice(-100)}); }
-function queueObjectInstancePlace(defId,msg){
- defId=String(defId||'');
- if(!defId) return;
- const arr=pendingObjectInstancePlaces.get(defId)||[];
- // 同じinstanceKeyの多重保留を避ける
- const ik=String(msg.instanceKey||'');
- if(ik && arr.some(m=>String(m.instanceKey||'')===ik)) return;
- arr.push(Object.assign({},msg));
- pendingObjectInstancePlaces.set(defId, arr.slice(-20));
-}
-function applyObjectInstancePlaceMessage(msg){
- const defId=String(msg.objectId||msg.defId||msg.id||'');
- let def=customObjectDefs.get(defId);
- if(!def && msg.object){
-   registerCustomObjectDef(msg.object,'remoteCatalog');
-   def=customObjectDefs.get(String((msg.object&&msg.object.id)||defId));
- }
- if(!def){
-   queueObjectInstancePlace(defId,msg);
-   sendMultiplayer({type:'objectCatalogReq'});
-   setMsg('OBJ呼出同期: 定義待ち '+defId,'info');
-   return true;
- }
- const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
- if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)){
-   const ik=String(msg.instanceKey||('remote-'+def.id+'-'+Date.now()));
-   if(customObjectEntities.has(ik)) return true;
-   placeCustomObject(def,x,y,z,yaw,ik);
-   setMsg('他プレイヤーOBJ呼出: '+(def.name||def.id),'good');
- }
- return true;
-}
-function flushPendingObjectInstancePlaces(){
- for(const [defId,arr] of Array.from(pendingObjectInstancePlaces.entries())){
-   if(!customObjectDefs.has(defId)) continue;
-   pendingObjectInstancePlaces.delete(defId);
-   for(const msg of arr) applyObjectInstancePlaceMessage(msg);
- }
-}
 function handleObjectCatalogMessage(msg){
  if(!msg) return false;
  if(msg.type==='objectCatalogReq'){broadcastObjectCatalog();return true;}
- if(msg.type==='objectRegister'){
-   registerCustomObjectDef(msg.object||msg.def||msg,'remote');
-   flushPendingObjectInstancePlaces();
-   return true;
- }
+ if(msg.type==='objectRegister'){registerCustomObjectDef(msg.object||msg.def||msg,'remote');return true;}
  if(msg.type==='objectDelete'){deleteCustomObjectDef(msg.objectId||msg.id,false);return true;}
  if(msg.type==='objectInstanceRemove'){removeCustomObjectInstance(msg.instanceKey,false);return true;}
- if(msg.type==='objectInstancePlace') return applyObjectInstancePlaceMessage(msg);
- if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){
-   msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));
-   flushPendingObjectInstancePlaces();
+ if(msg.type==='objectInstancePlace'){
+   const defId=String(msg.objectId||msg.defId||msg.id||'');
+   let def=customObjectDefs.get(defId);
+   if(!def && msg.object){
+     registerCustomObjectDef(msg.object,'remoteCatalog');
+     def=customObjectDefs.get(String((msg.object&&msg.object.id)||defId));
+   }
+   if(!def){
+     sendMultiplayer({type:'objectCatalogReq'});
+     setMsg('OBJ呼出同期: 定義待ち '+defId,'info');
+     return true;
+   }
+   const x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0;
+   if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)){
+     placeCustomObject(def,x,y,z,yaw,String(msg.instanceKey||('remote-'+def.id+'-'+Date.now())));
+     setMsg('他プレイヤーOBJ呼出: '+(def.name||def.id),'good');
+   }
    return true;
  }
+ if(msg.type==='objectCatalog' && Array.isArray(msg.objects)){msg.objects.forEach(d=>registerCustomObjectDef(d,'remoteCatalog'));return true;}
  return false;
 }
 function drawObjectPalette(){
@@ -2877,6 +2844,128 @@ const __ultraCloseObjectEditor=closeObjectEditor;
 closeObjectEditor=function(){if(ultraHeld&&ultraHeld.mode==='editorCell')stopUltraHand(false);destroyUltraEditorHeldEntity();return __ultraCloseObjectEditor.apply(this,arguments);};
 window.addEventListener('keydown',e=>{if(e.key==='u'||e.key==='U'){e.preventDefault();toggleUltraHand();} if(ultraHeld&&ultraHeld.mode==='field'){ if(e.key==='q'||e.key==='Q')ultraHeld.distance=Math.max(1.2,ultraHeld.distance-.25); if(e.key==='e'||e.key==='E')ultraHeld.distance=Math.min(9,ultraHeld.distance+.25); }});
 try{ensureUltraUi();}catch{}
+
+
+// ===== Custom Object Collision Regression Fixed =====
+// OBJ呼出同期やULTRA HAND統合で、見た目だけ残って customObjectEntities / obj_cell 名依存から漏れるケースを吸収する。
+// 当たり判定は「customObjectEntities + scene上のcustomObject root」から毎回実体のboxを走査して判定する。
+function isCustomObjectCollisionCell(e){
+ if(!e || e.enabled===false) return false;
+ const d=e.data||{};
+ if(d.customSurfaceDecal) return false;          // 表面テクスチャは絵なので当たり判定なし
+ if(d.customObjectCell===false) return false;
+ if(d.customObjectCell===true) return true;
+ if(d.planeTexture===true) return true;
+ if(e.name==='obj_cell') return true;
+ // 古い/デグレ版でdataが落ちたboxも、customObject root配下なら衝突対象に戻す
+ if(e.render && e.render.type==='box' && e.parent && e.parent.data && e.parent.data.customObject) return true;
+ return false;
+}
+function eachCustomObjectRoot(cb){
+ const seen=new Set();
+ try{
+   for(const [k,r] of customObjectEntities){
+     if(!r || seen.has(r)) continue;
+     seen.add(r); cb(r,k);
+   }
+ }catch{}
+ // Mapから漏れてもsceneには残る場合があるため、app.rootも保険で走査
+ try{
+   const stack=[...(app.root.children||[])];
+   while(stack.length){
+     const e=stack.pop();
+     if(!e) continue;
+     if(e.data && e.data.customObject && !seen.has(e)){
+       seen.add(e); cb(e, e.data.instanceKey||e.name||'sceneObj');
+     }
+     if(e.children && e.children.length) for(const ch of e.children) stack.push(ch);
+   }
+ }catch{}
+}
+function eachCustomObjectCollisionCell(root, cb){
+ if(!root) return;
+ const stack=[...(root.children||[])];
+ while(stack.length){
+   const e=stack.pop();
+   if(!e) continue;
+   if(isCustomObjectCollisionCell(e)) cb(e);
+   if(e.children && e.children.length) for(const ch of e.children) stack.push(ch);
+ }
+}
+function customObjectCellAabb(cell){
+ if(!cell || !cell.getPosition || !cell.getLocalScale) return null;
+ if(!isCustomObjectCollisionCell(cell)) return null;
+ const cp=cell.getPosition();
+ let sc=cell.getLocalScale();
+ try{
+   const wt=cell.getWorldTransform && cell.getWorldTransform();
+   if(wt && wt.getScale){ const ws=wt.getScale(); if(ws) sc=ws; }
+ }catch{}
+ const sx=Math.abs(sc.x||0), sy=Math.abs(sc.y||0), sz=Math.abs(sc.z||0);
+ // yaw回転や微小誤差で抜けないよう、水平は大きい方を半径にする。
+ const hx=Math.max(sx,sz,0.10)*0.56;
+ const hy=Math.max(sy,0.10)*0.56;
+ const hz=Math.max(sx,sz,0.10)*0.56;
+ return {cp,hx,hy,hz,minX:cp.x-hx,maxX:cp.x+hx,minY:cp.y-hy,maxY:cp.y+hy,minZ:cp.z-hz,maxZ:cp.z+hz,cell};
+}
+function customObjectCellAtPoint(px,py,pz){
+ let hit=null;
+ eachCustomObjectRoot((root,instanceKey)=>{
+   if(hit) return;
+   eachCustomObjectCollisionCell(root,(cell)=>{
+     if(hit) return;
+     const a=customObjectCellAabb(cell);
+     if(!a) return;
+     if(px>=a.minX && px<=a.maxX && py>=a.minY && py<=a.maxY && pz>=a.minZ && pz<=a.maxZ){
+       hit={root,cell,instanceKey:root.data&&root.data.instanceKey||instanceKey,defId:root.data&&root.data.defId,aabb:a};
+     }
+   });
+ });
+ return hit;
+}
+function customObjectTopBelow(px,pz,feetY){
+ let best=-999;
+ const rr=(player&&player.radius?player.radius:.28)*0.95;
+ eachCustomObjectRoot((root)=>{
+   eachCustomObjectCollisionCell(root,(cell)=>{
+     const a=customObjectCellAabb(cell); if(!a) return;
+     if(px>=a.minX-rr && px<=a.maxX+rr && pz>=a.minZ-rr && pz<=a.maxZ+rr){
+       const top=a.maxY;
+       if(top<=feetY+0.50 && top>=feetY-1.30 && top>best) best=top;
+     }
+   });
+ });
+ return best;
+}
+function customObjectCeilingAbove(px,pz,feetY,headY){
+ let best=999999;
+ const rr=(player&&player.radius?player.radius:.28)*0.90;
+ eachCustomObjectRoot((root)=>{
+   eachCustomObjectCollisionCell(root,(cell)=>{
+     const a=customObjectCellAabb(cell); if(!a) return;
+     if(px>=a.minX-rr && px<=a.maxX+rr && pz>=a.minZ-rr && pz<=a.maxZ+rr){
+       const bottom=a.minY;
+       if(bottom>=feetY+0.12 && headY>=bottom-0.12 && headY<=a.maxY+0.25 && bottom<best) best=bottom;
+     }
+   });
+ });
+ return best<999999?best:null;
+}
+function collision(nx,ny,nz){
+ const r=(player&&player.radius?player.radius:.28);
+ const checks=[
+  [nx-r,ny+.1,nz-r],[nx+r,ny+.1,nz-r],[nx-r,ny+.1,nz+r],[nx+r,ny+.1,nz+r],
+  [nx-r,ny+player.height*.9,nz-r],[nx+r,ny+player.height*.9,nz-r],[nx-r,ny+player.height*.9,nz+r],[nx+r,ny+player.height*.9,nz+r],
+  [nx,ny+player.height*.48,nz]
+ ];
+ for(const p of checks){
+   const bx=Math.floor(p[0]+.5),by=Math.floor(p[1]),bz=Math.floor(p[2]+.5);
+   if(isSolidAt(bx,by,bz)) return true;
+   if(customObjectCellAtPoint(p[0],p[1],p[2])) return true;
+ }
+ return false;
+}
+
 
 setMsg('PlayCanvas Engine読込完了','good');
 })();
