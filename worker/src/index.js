@@ -10,6 +10,11 @@ export class Room {
     this.instances = [];
     this.linksLoaded = false;
     this.links = [];
+    this.worldEditsLoaded = false;
+    this.worldEdits = [];
+    this.instancesSaveTimer = null;
+    this.linksSaveTimer = null;
+    this.worldEditsSaveTimer = null;
   }
 
   async loadObjects() {
@@ -43,6 +48,52 @@ export class Room {
 
   async saveLinks() {
     await this.state.storage.put('customObjectLinks', this.links.slice(-500));
+  }
+
+  async loadWorldEdits() {
+    if (this.worldEditsLoaded) return;
+    this.worldEditsLoaded = true;
+    const saved = await this.state.storage.get('worldEdits');
+    this.worldEdits = Array.isArray(saved) ? saved.slice(-5000) : [];
+  }
+
+  async saveWorldEdits() {
+    await this.state.storage.put('worldEdits', this.worldEdits.slice(-5000));
+  }
+
+  scheduleSaveInstances() {
+    if (this.instancesSaveTimer) return;
+    this.instancesSaveTimer = setTimeout(async () => {
+      this.instancesSaveTimer = null;
+      try { await this.saveInstances(); } catch {}
+    }, 650);
+  }
+
+  scheduleSaveLinks() {
+    if (this.linksSaveTimer) return;
+    this.linksSaveTimer = setTimeout(async () => {
+      this.linksSaveTimer = null;
+      try { await this.saveLinks(); } catch {}
+    }, 350);
+  }
+
+  scheduleSaveWorldEdits() {
+    if (this.worldEditsSaveTimer) return;
+    this.worldEditsSaveTimer = setTimeout(async () => {
+      this.worldEditsSaveTimer = null;
+      try { await this.saveWorldEdits(); } catch {}
+    }, 450);
+  }
+
+  cleanBlockEdit(msg) {
+    if (!msg) return null;
+    const x = Math.trunc(Number(msg.x));
+    const y = Math.trunc(Number(msg.y));
+    const z = Math.trunc(Number(msg.z));
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    const isBreak = msg.block === null || msg.type === 'break';
+    const block = isBreak ? null : String(msg.block || msg.blockType || msg.kind || 'grass').slice(0, 30);
+    return { type:'blockEdit', x, y, z, block, updatedAt: Date.now() };
   }
 
   cleanLink(msg) {
@@ -203,6 +254,7 @@ export class Room {
     await this.loadObjects();
     await this.loadInstances();
     await this.loadLinks();
+    await this.loadWorldEdits();
 
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('mine-server-git2 WebSocket server OK / decals + per-cell-size + ultrahand sync enabled', {
@@ -222,6 +274,8 @@ export class Room {
     server.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() }));
     server.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() }));
     server.send(JSON.stringify({ type: 'objectInstanceLinks', links: this.links, time: Date.now() }));
+    server.send(JSON.stringify({ type: 'worldEdits', edits: this.worldEdits.slice(-5000), time: Date.now() }));
+    server.send(JSON.stringify({ type: 'players', players: Array.from(this.players.values()), time: Date.now() }));
 
     server.addEventListener('message', async (event) => {
       await this.onMessage(server, event.data);
@@ -240,7 +294,8 @@ export class Room {
     const session = this.sessions.get(ws);
     if (!session) return;
 
-    const clientId = String(msg.clientId || session.playerId);
+    const clientId = String(msg.clientId || session.clientId || session.playerId);
+    session.clientId = clientId;
     const base = { ...msg, clientId, serverTime: Date.now() };
 
     if (msg.type === 'ping') {
@@ -252,6 +307,8 @@ export class Room {
       try { ws.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() })); } catch {}
       try { ws.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() })); } catch {}
       try { ws.send(JSON.stringify({ type: 'objectInstanceLinks', links: this.links, time: Date.now() })); } catch {}
+      try { ws.send(JSON.stringify({ type: 'worldEdits', edits: this.worldEdits.slice(-5000), time: Date.now() })); } catch {}
+      try { ws.send(JSON.stringify({ type: 'players', players: Array.from(this.players.values()), time: Date.now() })); } catch {}
       return;
     }
 
@@ -339,7 +396,7 @@ export class Room {
           existing.z = Math.round(z * 1000) / 1000;
           existing.yaw = Math.round(yaw * 1000000) / 1000000;
           existing.updatedAt = Date.now();
-          await this.saveInstances();
+          this.scheduleSaveInstances();
         }
       }
       this.broadcast(base, ws);
@@ -353,7 +410,7 @@ export class Room {
       if (idx >= 0) this.links[idx] = link;
       else this.links.push(link);
       this.links = this.links.slice(-500);
-      await this.saveLinks();
+      this.scheduleSaveLinks();
       this.broadcast({ ...link, clientId, time: Date.now() }, ws);
       return;
     }
@@ -363,12 +420,25 @@ export class Room {
       if (!link) return;
       const before = this.links.length;
       this.links = this.links.filter(l => !(l.a === link.a && l.b === link.b));
-      if (this.links.length !== before) await this.saveLinks();
+      if (this.links.length !== before) this.scheduleSaveLinks();
       this.broadcast({ type: 'objectInstanceDetach', a: link.a, b: link.b, clientId, time: Date.now() }, ws);
       return;
     }
 
-    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit') {
+    if (msg.type === 'blockEdit') {
+      const edit = this.cleanBlockEdit(msg);
+      if (!edit) return;
+      const k = `${edit.x},${edit.y},${edit.z}`;
+      const idx = this.worldEdits.findIndex(e => `${e.x},${e.y},${e.z}` === k);
+      if (idx >= 0) this.worldEdits[idx] = edit;
+      else this.worldEdits.push(edit);
+      this.worldEdits = this.worldEdits.slice(-5000);
+      this.scheduleSaveWorldEdits();
+      this.broadcast({ ...edit, clientId, time: Date.now() }, ws);
+      return;
+    }
+
+    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot') {
       if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate') {
         this.players.set(clientId, {
           clientId,
@@ -392,7 +462,7 @@ export class Room {
     const session = this.sessions.get(ws);
     if (!session) return;
     this.sessions.delete(ws);
-    const id = session.playerId;
+    const id = session.clientId || session.playerId;
     this.players.delete(id);
     this.broadcast({ type: 'leave', playerId: id, clientId: id, time: Date.now() }, ws);
   }
