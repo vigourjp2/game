@@ -112,6 +112,7 @@
   <div class="hudLine">通信: <span id="mp" class="info">OFF</span> / 受信: <span id="mpRx" class="info">0</span> / 他人: <span id="mpRemote" class="info">0</span></div>
   <div class="hudLine">顔: <span id="faceCam" class="info">OFF</span></div>
   <div class="hudLine">OBJ: <span id="objHud" class="info">0</span></div>
+  <div class="hudLine" id="infoEcoHud">探索: <span class="info">読込中</span> / 天気: <span class="good">--</span> / 図鑑: <span class="gold">--</span></div>
   <div class="hudLine">操作: <span class="info">WASD/タッチ</span>　中央照準で破壊/配置</div>
   <div class="hudLine"><span id="msg" class="gold">地下充填ロジック / 60FPS優先</span></div>
 </div>
@@ -227,9 +228,10 @@ if(!window.pc){showError('PlayCanvas Engineを読み込めませんでした。�
 
 const state={started:false,qualityHigh:true,selected:'grass',target:null,lastMsg:'',mobile:/Android|iPhone|iPad|iPod/i.test(navigator.userAgent),pointerLocked:false};
 const blockDefs={
- grass:{label:'草',color:'#37b34a'},dirt:{label:'土',color:'#805033'},stone:{label:'石',color:'#858b91'},wood:{label:'木',color:'#8b5728'},water:{label:'水',color:'#2490ff'},leaves:{label:'葉',color:'#2f9e44'}
+ grass:{label:'草',color:'#37b34a'},dirt:{label:'土',color:'#805033'},stone:{label:'石',color:'#858b91'},wood:{label:'木',color:'#8b5728'},water:{label:'水',color:'#2490ff'},leaves:{label:'葉',color:'#2f9e44'},
+ sand:{label:'砂',color:'#d8c177'},snow:{label:'雪',color:'#e8f4ff'},ice:{label:'氷',color:'#9be7ff'},ore:{label:'鉱',color:'#b68cff'}
 };
-const order=['grass','dirt','stone','wood','water'];
+const order=['grass','dirt','stone','wood','water','sand','snow','ice','ore'];
 
 const app=new pc.Application(canvas,{mouse:new pc.Mouse(canvas),keyboard:new pc.Keyboard(window),touch:new pc.TouchDevice(canvas),graphicsDeviceOptions:{antialias:!state.mobile,powerPreference:'high-performance',alpha:false,stencil:false,preserveDrawingBuffer:false}});
 app.start();
@@ -277,7 +279,11 @@ const mats={
  stone:makeMat('stone','#777e86','#4c535a','stone',1),
  wood:makeMat('wood','#845124','#5a2c12','wood',1),
  leaves:makeMat('leaves','#2f9e44','#66d26f','grass',.92),
- water:makeMat('water','#1384ff','#8ed8ff','water',.72)
+ water:makeMat('water','#1384ff','#8ed8ff','water',.72),
+ sand:makeMat('sand','#d8c177','#a98f42','dirt',1),
+ snow:makeMat('snow','#e8f4ff','#a9c9e8','grass',1),
+ ice:makeMat('ice','#9be7ff','#3fb7e8','water',.82),
+ ore:makeMat('ore','#6e647d','#d2b7ff','stone',1)
 };
 
 const world=new Map();
@@ -319,13 +325,20 @@ function terrainHeight(x,z){
 function baseTerrainType(x,y,z){
  const h=terrainHeight(x,z);
  const lake=smoothNoise(x*.032+400,z*.032-600);
+ const cold=smoothNoise(x*.028-900,z*.028+240)>0.62 || h>=7;
+ const beach=lake>.585 && lake<=.70;
  if(y<WORLD_BOTTOM)return null;
  if(y===WORLD_BOTTOM)return 'stone';
- if(lake>.66&&y===1)return 'water';
+ if(lake>.66&&y===1)return (cold&&lake>.72)?'ice':'water';
  if(y>h)return null;
  if(h<=0)return y<=0?'stone':null;
- if(y===h)return h>6?'stone':'grass';
- if(y>=h-3)return 'dirt';
+ if(y===h){
+   if(cold&&h>=5)return 'snow';
+   if(beach&&h<=3)return 'sand';
+   return h>7?'stone':'grass';
+ }
+ if(y>=h-3)return (beach&&h<=3)?'sand':'dirt';
+ if(y<-6 && hash2(x*43+y*7,z*47-y*11)>.986)return 'ore';
  return 'stone';
 }
 function logicalTypeAt(x,y,z){
@@ -2587,7 +2600,7 @@ canvas.addEventListener('pointerdown',e=>{
  if(e.button===2)placeBlock();
 });
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('keydown',e=>{if(e.code==='Space')input.jump=true;if(e.key>='1'&&e.key<='5'){state.selected=order[Number(e.key)-1]||state.selected;updateToolbar();}});
+window.addEventListener('keydown',e=>{if(e.code==='Space')input.jump=true;if(e.key>='1'&&e.key<='9'){state.selected=order[Number(e.key)-1]||state.selected;updateToolbar();}});
 
 $('startBtn').onclick=()=>{state.started=true;$('start').style.display='none';if(!state.mobile){canvas.focus();canvas.requestPointerLock&&canvas.requestPointerLock();}startFaceCamera();connectMultiplayer();setMsg('起動成功。PlayCanvas Engineで描画中 / オンライン接続開始','good');};
 $('qualityBtn').onclick=()=>{state.qualityHigh=!state.qualityHigh;$('qualityBtn').textContent='画質: '+(state.qualityHigh?'HIGH':'LIGHT');if(app.graphicsDevice){app.graphicsDevice.maxPixelRatio=targetPixelRatio();$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}setMsg('画質変更: 再読込でテクスチャ解像度も反映','info');};
@@ -5326,6 +5339,720 @@ try{
    setMsg('情報テクスチャ画質修正: 名前検索ベース風の多色ドット絵へ再ベイク '+INFO_TEXTURE_PACK_V3.length+'種','good');
  }
 }catch(e){ console.warn('info texture v7 init failed',e); }
+
+
+// ===== Info Texture Ecology Spawn v8: biome/time/weather/collection loop =====
+// 旧「猫だけ18%」とV3の地形無視スポーンを、図鑑コンプ向けの生態系スポーンへ置き換える。
+// 通常ユーザーOBJのランダム生成だけは __infoSpawnCustomObjectForChunk で維持する。
+const INFO_ECO_VERSION_V8 = 'v8-ecology-time-weather-collection';
+const INFO_ECO_DAY_SECONDS_V8 = 720;      // 12分で1日。探索中に朝昼晩夜が回る。
+const INFO_ECO_WEATHER_SECONDS_V8 = 240;  // 4分ごとに天気抽選。図鑑レア探しの変化を出す。
+const INFO_ECO_SEEN_KEY_V8 = 'voxelInfoTextureSeen:'+INFO_ECO_VERSION_V8;
+let infoEcoWeatherV8 = 'clear';
+let infoEcoHudTimerV8 = 0;
+let infoEcoEnvTimerV8 = 0;
+let infoEcoSeenV8 = new Set();
+try{ infoEcoSeenV8 = new Set(JSON.parse(localStorage.getItem(INFO_ECO_SEEN_KEY_V8)||'[]').map(String)); }catch(e){ infoEcoSeenV8 = new Set(); }
+function infoEcoNowV8(){ return performance.now()/1000; }
+function infoEcoDayV8(){
+ const f=((infoEcoNowV8()/INFO_ECO_DAY_SECONDS_V8)%1+1)%1;
+ let phase='day', light=1;
+ if(f<.18){ phase='morning'; light=.78+f/.18*.22; }
+ else if(f<.58){ phase='day'; light=1; }
+ else if(f<.72){ phase='evening'; light=.92-(f-.58)/.14*.34; }
+ else { phase='night'; light=.34; }
+ return {f,phase,light,isDay:phase==='morning'||phase==='day',isNight:phase==='night',isEvening:phase==='evening'};
+}
+function infoEcoWeatherAtV8(){
+ const bucket=Math.floor(infoEcoNowV8()/INFO_ECO_WEATHER_SECONDS_V8);
+ const r=hash2(bucket*19+4109, bucket*37-9021);
+ if(r<.52) return 'clear';
+ if(r<.72) return 'cloudy';
+ if(r<.88) return 'rain';
+ if(r<.96) return 'fog';
+ return 'snow';
+}
+function infoEcoWeatherLabelV8(w){ return ({clear:'晴れ',cloudy:'くもり',rain:'雨',fog:'霧',snow:'雪'})[w]||w; }
+function infoEcoPhaseLabelV8(p){ return ({morning:'朝',day:'昼',evening:'夕方',night:'夜'})[p]||p; }
+function infoEcoSaveSeenV8(){ try{ localStorage.setItem(INFO_ECO_SEEN_KEY_V8, JSON.stringify(Array.from(infoEcoSeenV8).slice(-300))); }catch(e){} }
+function infoEcoSlopeV8(x,z){
+ const h=terrainHeight(x,z); let mn=h,mx=h;
+ for(const d of [[4,0],[-4,0],[0,4],[0,-4],[3,3],[-3,3],[3,-3],[-3,-3]]){ const hh=terrainHeight(x+d[0],z+d[1]); mn=Math.min(mn,hh); mx=Math.max(mx,hh); }
+ return mx-mn;
+}
+function infoEcoWaterScoreV8(x,z){
+ let c=0,total=0;
+ for(let dz=-3;dz<=3;dz+=3) for(let dx=-3;dx<=3;dx+=3){ total++; try{ if(logicalTypeAt(Math.floor(x+dx),1,Math.floor(z+dz))==='water') c++; }catch(e){} }
+ return total?c/total:0;
+}
+function infoEcoForestScoreV8(x,z){
+ // 実木の発生式と、広域ノイズを合わせて「森っぽい場所」を安定生成する。
+ let tree=0,total=0;
+ for(let dz=-10;dz<=10;dz+=5) for(let dx=-10;dx<=10;dx+=5){
+   total++; const xx=Math.floor(x+dx), zz=Math.floor(z+dz);
+   if(terrainHeight(xx,zz)>=1 && hash2(xx*17+3,zz*17-9)>.990) tree++;
+ }
+ const grove=smoothNoise(x*.045+1100,z*.045-310);
+ return Math.max(tree/Math.max(1,total), Math.max(0,grove-.55)*1.8);
+}
+function infoEcoSettlementScoreV8(x,z,ch){
+ const distOrigin=Math.hypot(x,z), distPlayer=Math.hypot(x-player.x,z-player.z);
+ let score=0;
+ if(distOrigin<42) score=Math.max(score,1-(distOrigin/42));
+ if(distPlayer>12 && distPlayer<52) score=Math.max(score,.34); // プレイヤー周辺に低確率の出会いを作る。
+ if(ch && hash2(ch.cx*101-7,ch.cz*109+13)>.935) score=Math.max(score,.58); // 擬似村/拠点チャンク。
+ return score;
+}
+function infoEcoClassifyV8(x,z,ch){
+ const h=terrainHeight(x,z), slope=infoEcoSlopeV8(x,z), water=infoEcoWaterScoreV8(x,z), forest=infoEcoForestScoreV8(x,z), settle=infoEcoSettlementScoreV8(x,z,ch);
+ const day=infoEcoDayV8(), weather=infoEcoWeatherV8();
+ const distPlayer=Math.hypot(x-player.x,z-player.z);
+ const topType=baseTerrainType(Math.floor(x),h,Math.floor(z));
+ const tags=new Set();
+ if(topType==='grass' && h>=1 && h<=4) tags.add('grassLow');
+ if(day.isDay && topType==='grass' && h>=1) tags.add('brightGround');
+ if(settle>.45) tags.add('settlement');
+ if(water>.28) tags.add('water');
+ if(water>.05 && topType==='grass') tags.add('waterside');
+ if(day.isNight || weather==='fog' || h<=0) tags.add('dark');
+ if(h<=0 || (slope>=5 && h<=3) || hash2((ch?ch.cx:chunkOf(x))*211+5,(ch?ch.cz:chunkOf(z))*223-9)>.965) tags.add('cave');
+ if(h>=7 || (weather==='snow' && h>=5)) tags.add('coldHigh');
+ if(day.isNight && distPlayer>22 && settle<.35) tags.add('nightFar');
+ if(forest>.18) tags.add('forest');
+ if(slope>=5 || h>=7) tags.add('mountain');
+ if(weather==='rain') tags.add('rain');
+ if(weather==='snow') tags.add('snow');
+ if(weather==='fog') tags.add('fog');
+ return {x,z,h,slope,water,forest,settle,distPlayer,topType,tags,day,weather};
+}
+function infoEcoProfileV8(meta){
+ const t=String(meta&&meta.type||''), role=String(meta&&meta.role||'');
+ const p={tags:[], weight:8, chance:.105, yMode:'ground', rarity:'common', hint:'地上でよく見つかる'};
+ if(/pig|cow|mooshroom|sheep|chicken|rabbit|horse|donkey|mule|sniffer|armadillo|camel$/.test(t)) Object.assign(p,{tags:['grassLow','brightGround'],weight:18,chance:.13,hint:'草地/低地/明るい地上'});
+ if(/cat|villager|wandering_trader|iron_golem|copper_golem|allay/.test(t)) Object.assign(p,{tags:['settlement'],weight:t==='cat'?4:(t==='wandering_trader'?2:5),chance:t==='cat'?.045:.035,rarity:t==='wandering_trader'?'rare':'uncommon',hint:'村・拠点・プレイヤー周辺に低確率'});
+ if(/squid|glow_squid|dolphin|cod|salmon|tropical_fish|tadpole|nautilus|zombie_nautilus/.test(t) || role==='aquatic') Object.assign(p,{tags:['water'],weight:16,chance:.16,yMode:'water',hint:'水判定ありの場所のみ'});
+ if(/pufferfish|axolotl|frog|turtle/.test(t)) Object.assign(p,{tags:['water','waterside'],weight:11,chance:.115,yMode:/frog|turtle/.test(t)?'shore':'water',hint:'水辺/水中'});
+ if(/bat/.test(t)) Object.assign(p,{tags:['cave','dark'],weight:14,chance:.12,yMode:'fly',hint:'地下/暗所/洞窟っぽい場所'});
+ if(/polar_bear|snow_golem/.test(t)) Object.assign(p,{tags:['coldHigh'],weight:11,chance:.105,rarity:'uncommon',hint:'雪・高地・寒冷地'});
+ if(/zombie|creeper|skeleton|spider|zombie_horse|skeleton_horse|camel_husk/.test(t) || role==='hostile') Object.assign(p,{tags:['nightFar'],weight:15,chance:.11,rarity:'uncommon',hint:'夜/暗所/遠方'});
+ if(/bee|parrot|ocelot|panda|fox|wolf/.test(t)) Object.assign(p,{tags:['forest'],weight:14,chance:.12,rarity:/panda|ocelot/.test(t)?'uncommon':'common',hint:'森っぽい場所'});
+ if(/goat|llama/.test(t)) Object.assign(p,{tags:['mountain'],weight:15,chance:.13,rarity:'uncommon',hint:'高低差のある山地'});
+ if(/happy_ghast/.test(t)) Object.assign(p,{tags:['mountain','fog'],weight:2,chance:.025,yMode:'sky',rarity:'rare',hint:'霧/山地の空に超低確率'});
+ if(/glow_squid|zombie_nautilus|wandering_trader|happy_ghast/.test(t)) p.rarity='rare';
+ return p;
+}
+function infoEcoCandidateScoreV8(meta,env){
+ const prof=infoEcoProfileV8(meta); let ok=false, matched=0;
+ for(const tag of prof.tags){ if(env.tags.has(tag)){ ok=true; matched++; } }
+ if(!ok) return 0;
+ let w=prof.weight * (1 + Math.max(0,matched-1)*.35);
+ if(env.weather==='rain' && (prof.tags.includes('water') || prof.tags.includes('waterside'))) w*=1.55;
+ if(env.weather==='snow' && prof.tags.includes('coldHigh')) w*=1.75;
+ if(env.weather==='fog' && (prof.tags.includes('dark') || prof.tags.includes('nightFar') || meta.type==='happy_ghast')) w*=1.35;
+ if(env.day.isNight && /fox|bat|zombie|creeper|skeleton|spider/.test(meta.type)) w*=1.45;
+ if(env.day.isDay && /zombie|creeper|skeleton|spider/.test(meta.type)) w*=.25;
+ if(meta.type==='cat') w*=.45; // 旧猫地獄の反省。猫は出るが主役にしない。
+ return w;
+}
+function infoEcoWeightedPickV8(list,ch,env){
+ let total=0; for(const it of list) total+=it.w;
+ if(total<=0) return null;
+ let r=hash2(ch.cx*1999+Math.floor(env.h*31),ch.cz*2011+Math.floor(env.slope*17))*total;
+ for(const it of list){ r-=it.w; if(r<=0) return it.meta; }
+ return list[list.length-1].meta;
+}
+function infoEcoSpawnPositionV8(meta,env,ch,slot){
+ const prof=infoEcoProfileV8(meta);
+ let x=env.x, z=env.z, y=env.h+1.05;
+ if(prof.yMode==='water') y=1.35 + hash2(ch.cx*3011+slot,ch.cz*3023-slot)*.55;
+ else if(prof.yMode==='shore') y=terrainHeight(x,z)+1.05;
+ else if(prof.yMode==='fly') y=terrainHeight(x,z)+2.1+hash2(ch.cx*3037,ch.cz*3041)*1.8;
+ else if(prof.yMode==='sky') y=terrainHeight(x,z)+6.0+hash2(ch.cx*3049,ch.cz*3061)*4.0;
+ return {x,y,z};
+}
+function infoEcoSpawnForChunkV8(ch){
+ if(!ch||!ch.done||!Array.isArray(INFO_TEXTURE_PACK_V3)) return false;
+ ensureAllInfoTexturesV3(); try{ customObjectDefs.delete(INFO_CARRIER_CAT_ID); }catch(e){}
+ const day=infoEcoDayV8(), weather=infoEcoWeatherAtV8(); infoEcoWeatherV8=weather;
+ // チャンク内を4点見る。水/森/山など、端っこに条件があるだけでも拾えるようにする。
+ const samples=[];
+ for(let i=0;i<4;i++){
+   const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*(3301+i*17)+11,ch.cz*(3313+i*19)-7)*CHUNK_SIZE);
+   const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*(3329+i*23)+5,ch.cz*(3343+i*29)+13)*CHUNK_SIZE);
+   const env=infoEcoClassifyV8(x,z,ch); env.day=day; env.weather=weather; samples.push(env);
+ }
+ samples.sort((a,b)=>(b.tags.size+b.water+b.forest+b.slope*.05)-(a.tags.size+a.water+a.forest+a.slope*.05));
+ const env=samples[0];
+ const envKey=Array.from(env.tags).sort().join('-')||'plain';
+ const spawnKey='infoEcoV8:'+ch.key+':'+envKey+':'+day.phase+':'+weather;
+ if(customSpawned.has(spawnKey)) return false;
+ customSpawned.add(spawnKey);
+ const candidates=[];
+ for(const meta of INFO_TEXTURE_PACK_V3){
+   const w=infoEcoCandidateScoreV8(meta,env);
+   if(w>0) candidates.push({meta,w});
+ }
+ if(!candidates.length) return false;
+ const meta=infoEcoWeightedPickV8(candidates,ch,env); if(!meta) return false;
+ const prof=infoEcoProfileV8(meta);
+ let chance=prof.chance;
+ if(prof.rarity==='rare') chance*=.62;
+ if(env.tags.has('settlement') && /cat|villager|wandering_trader/.test(meta.type)) chance*=.72;
+ if(env.distPlayer<10 && meta.role==='hostile') chance*=.25;
+ if(hash2(ch.cx*3371+candidates.length,ch.cz*3389-Math.floor(env.h*7))>=chance) return false;
+ const def=ensureInfoTextureDefV3(meta); if(!def) return false;
+ const pos=infoEcoSpawnPositionV8(meta,env,ch,candidates.length);
+ const yaw=Math.floor(hash2(ch.cx*3407,ch.cz*3413)*4)*(Math.PI/2);
+ const instanceKey='infoEcoV8:'+ch.key+':'+meta.type+':'+day.phase+':'+weather;
+ if(customObjectEntities.has(instanceKey)) return false;
+ placeCustomObject(def,pos.x,pos.y,pos.z,yaw,instanceKey);
+ const seenKey=String(meta.type||meta.id);
+ const first=!infoEcoSeenV8.has(seenKey); infoEcoSeenV8.add(seenKey); if(first) infoEcoSaveSeenV8();
+ const rareMark=prof.rarity==='rare'?'★レア ':prof.rarity==='uncommon'?'◇ ':'◆ ';
+ setMsg(rareMark+'情報テクスチャ発見: '+meta.name+' / '+infoEcoPhaseLabelV8(day.phase)+'・'+infoEcoWeatherLabelV8(weather)+' / '+prof.hint+' / 図鑑 '+infoEcoSeenV8.size+'/'+INFO_TEXTURE_PACK_V3.length, first?'good':'info');
+ return true;
+}
+function infoEcoEnsureHudV8(){
+ let el=document.getElementById('infoEcoHud');
+ if(!el){
+   const hud=document.getElementById('hud'); if(!hud) return null;
+   el=document.createElement('div'); el.id='infoEcoHud'; el.className='hudLine';
+   const msg=document.getElementById('msg'); if(msg&&msg.parentNode) msg.parentNode.parentNode.insertBefore(el,msg.parentNode); else hud.appendChild(el);
+ }
+ return el;
+}
+function updateInfoEcoHudV8(force){
+ const now=performance.now(); if(!force && now-infoEcoHudTimerV8<850) return; infoEcoHudTimerV8=now;
+ const el=infoEcoEnsureHudV8(); if(!el) return;
+ const d=infoEcoDayV8(), w=infoEcoWeatherAtV8();
+ const x=Math.floor(player.x), z=Math.floor(player.z); const env=infoEcoClassifyV8(x,z,{cx:chunkOf(x),cz:chunkOf(z)});
+ const tagLabel=Array.from(env.tags).slice(0,3).join('/')||'平地';
+ el.innerHTML='探索: <span class="info">'+infoEcoPhaseLabelV8(d.phase)+'・'+infoEcoWeatherLabelV8(w)+'</span> / 地形: <span class="good">'+tagLabel+'</span> / 図鑑: <span class="gold">'+infoEcoSeenV8.size+'/'+(INFO_TEXTURE_PACK_V3?INFO_TEXTURE_PACK_V3.length:'--')+'</span>';
+}
+function updateInfoEcoEnvironmentV8(dt){
+ infoEcoEnvTimerV8 += dt; if(infoEcoEnvTimerV8<1.0) return; infoEcoEnvTimerV8=0;
+ const d=infoEcoDayV8(), w=infoEcoWeatherAtV8(); infoEcoWeatherV8=w;
+ try{
+   const light=d.light;
+   app.scene.ambientLight = new pc.Color(.30+.28*light,.34+.30*light,.42+.35*light);
+   if(w==='rain'){ app.scene.fogColor=new pc.Color(.42,.50,.58); app.scene.fogStart=18; app.scene.fogEnd=46; }
+   else if(w==='fog'){ app.scene.fogColor=new pc.Color(.66,.70,.74); app.scene.fogStart=10; app.scene.fogEnd=34; }
+   else if(w==='snow'){ app.scene.fogColor=new pc.Color(.78,.86,.95); app.scene.fogStart=16; app.scene.fogEnd=48; }
+   else if(d.isNight){ app.scene.fogColor=new pc.Color(.08,.10,.18); app.scene.fogStart=18; app.scene.fogEnd=44; }
+   else { app.scene.fogColor=new pc.Color(.64,.80,1.0); app.scene.fogStart=28; app.scene.fogEnd=62; }
+ }catch(e){}
+ updateInfoEcoHudV8(false);
+}
+// ここが重要: 現在の spawnCustomObjectForChunk は旧猫/V3雑湧きを内包しているため呼ばない。
+// 初期の通常OBJスポーンだけ呼び、情報テクスチャは v8 生態系スポーンだけにする。
+spawnCustomObjectForChunk=function(ch){
+ let r;
+ try{ r=(typeof __infoSpawnCustomObjectForChunk==='function') ? __infoSpawnCustomObjectForChunk.apply(this,arguments) : undefined; }catch(e){ console.warn('base custom spawn failed',e); }
+ try{ infoEcoSpawnForChunkV8(ch); }catch(e){ console.warn('info ecology spawn failed',e); }
+ return r;
+};
+try{
+ app.on('update', function(dt){ try{ updateInfoEcoEnvironmentV8(dt||0); }catch(e){} });
+ updateInfoEcoHudV8(true);
+ if(Array.isArray(INFO_TEXTURE_PACK_V3)){
+   for(const meta of INFO_TEXTURE_PACK_V3){ const prof=infoEcoProfileV8(meta); meta.spawnHint=prof.hint; meta.rarity=prof.rarity; meta.spawnVersion=INFO_ECO_VERSION_V8; }
+ }
+ setMsg('情報テクスチャ生態系v8: 旧猫湧き削除 / 地形・朝昼晩夜・天気・図鑑探索スポーン化','good');
+}catch(e){ console.warn('info ecology v8 init failed',e); }
+
+
+// ===== Visible Ecology Fix v9: HUD always visible + stronger discovery spawn + terrain toolbar =====
+// v8は低確率すぎて初期画面で「何も変わってない」に見えるため、見えるHUDと初期発見保証を追加する。
+const INFO_ECO_VERSION_V9 = 'v9-visible-ecology-spawn';
+let infoEcoPulseTimerV9 = 0;
+let infoEcoLastGuaranteedV9 = 0;
+function infoEcoEnsureHudV9(){
+ let el=document.getElementById('infoEcoHud');
+ if(!el){
+   const hud=document.getElementById('hud'); if(!hud) return null;
+   el=document.createElement('div'); el.id='infoEcoHud'; el.className='hudLine';
+   const obj=document.getElementById('objHud'); const objLine=obj&&obj.closest?obj.closest('.hudLine'):null;
+   if(objLine&&objLine.parentNode)objLine.parentNode.insertBefore(el,objLine.nextSibling); else hud.appendChild(el);
+ }
+ return el;
+}
+function infoEcoHudTagsTextV9(){
+ try{
+   const x=Math.floor(player.x), z=Math.floor(player.z);
+   const env=infoEcoClassifyV8(x,z,{cx:chunkOf(x),cz:chunkOf(z)});
+   const map={grassLow:'草地',brightGround:'明地上',settlement:'拠点',water:'水場',waterside:'水辺',dark:'暗所',cave:'洞窟',coldHigh:'寒冷高地',nightFar:'夜遠方',forest:'森',mountain:'山',rain:'雨補正',snow:'雪補正',fog:'霧補正'};
+   return Array.from(env.tags).slice(0,4).map(t=>map[t]||t).join('/') || '平地';
+ }catch(e){ return '判定中'; }
+}
+function updateInfoEcoHudV9(force){
+ const el=infoEcoEnsureHudV9(); if(!el) return;
+ let d,w,total='--';
+ try{ d=infoEcoDayV8(); }catch(e){ d={phase:'day'}; }
+ try{ w=infoEcoWeatherAtV8(); }catch(e){ w='clear'; }
+ try{ total=Array.isArray(INFO_TEXTURE_PACK_V3)?INFO_TEXTURE_PACK_V3.length:'--'; }catch(e){}
+ const seen=(typeof infoEcoSeenV8!=='undefined'&&infoEcoSeenV8&&infoEcoSeenV8.size)||0;
+ el.innerHTML='探索: <span class="info">'+infoEcoPhaseLabelV8(d.phase)+'・'+infoEcoWeatherLabelV8(w)+'</span> / 地形: <span class="good">'+infoEcoHudTagsTextV9()+'</span> / 図鑑: <span class="gold">'+seen+'/'+total+'</span>';
+}
+function infoEcoTrySpawnNearbyV9(force){
+ if(!Array.isArray(INFO_TEXTURE_PACK_V3)) return 0;
+ let spawned=0;
+ const pcx=chunkOf(player.x), pcz=chunkOf(player.z);
+ const loaded=Array.from(chunks.values()).filter(ch=>ch&&ch.done).sort((a,b)=>(Math.abs(a.cx-pcx)+Math.abs(a.cz-pcz))-(Math.abs(b.cx-pcx)+Math.abs(b.cz-pcz)));
+ for(const ch of loaded.slice(0,12)){
+   try{
+     // 通常の生態系スポーン。v8側は天気/時間/地形キーで多様化する。
+     if(infoEcoSpawnForChunkV8(ch)){ spawned++; if(!force && spawned>=1) break; }
+   }catch(e){ console.warn('info eco v9 nearby spawn failed',e); }
+ }
+ // 初回・近場に何も出ていない時の保険。図鑑探しが始まらないのが一番つまらないので、草地系を1体だけ可視範囲へ出す。
+ const now=performance.now();
+ if((force || now-infoEcoLastGuaranteedV9>18000) && spawned===0){
+   const nearby=Array.from(customObjectEntities.values()).some(e=>{try{const p=e.getPosition(); return Math.hypot(p.x-player.x,p.z-player.z)<34 && e.data && (e.data.infoTexture||String(e.data.defId||'').includes('infoTexture'));}catch(_){return false;}});
+   if(!nearby){
+     const pool=INFO_TEXTURE_PACK_V3.filter(m=>/pig|cow|sheep|chicken|rabbit|bee|parrot|fox|wolf|cat/.test(String(m.type||'')) && m.type!=='cat').concat(INFO_TEXTURE_PACK_V3.filter(m=>String(m.type)==='cat'));
+     const meta=pool[Math.floor(hash2(Math.floor(player.x)*17+Date.now()%997,Math.floor(player.z)*19)*pool.length)]||INFO_TEXTURE_PACK_V3[0];
+     const def=ensureInfoTextureDefV3(meta);
+     if(def){
+       const ang=hash2(Math.floor(player.x)*31,Math.floor(player.z)*37)*Math.PI*2, dist=10+hash2(Math.floor(player.x)*41,Math.floor(player.z)*43)*10;
+       const x=player.x+Math.cos(ang)*dist, z=player.z+Math.sin(ang)*dist, y=terrainHeight(x,z)+1.05;
+       const key='infoEcoV9:near:'+Math.floor(now/18000)+':'+String(meta.type||meta.id);
+       if(!customObjectEntities.has(key)){ placeCustomObject(def,x,y,z,0,key); spawned++; infoEcoLastGuaranteedV9=now; setMsg('情報テクスチャ発見開始: '+meta.name+' / 近くに出現 / 図鑑を集めろ','good'); }
+     }
+   }
+ }
+ return spawned;
+}
+try{
+ updateToolbar();
+ updateInfoEcoHudV9(true);
+ // 読み込み直後にも、チャンク生成完了後にも見えるように数回叩く。
+ setTimeout(()=>{try{updateInfoEcoHudV9(true); infoEcoTrySpawnNearbyV9(true);}catch(e){}},800);
+ setTimeout(()=>{try{updateInfoEcoHudV9(true); infoEcoTrySpawnNearbyV9(true);}catch(e){}},2200);
+ setTimeout(()=>{try{updateInfoEcoHudV9(true); infoEcoTrySpawnNearbyV9(true);}catch(e){}},5200);
+ app.on('update', function(dt){
+   try{
+     infoEcoPulseTimerV9 += dt||0;
+     if(infoEcoPulseTimerV9>.9){ infoEcoPulseTimerV9=0; updateInfoEcoHudV9(false); infoEcoTrySpawnNearbyV9(false); }
+   }catch(e){}
+ });
+ console.log('Info Texture Ecology v9 active: HUD + terrain blocks + visible spawn');
+}catch(e){ console.warn('info ecology v9 init failed',e); }
+
+
+// ===== Ecology Visual & Fair Spawn v10: visible weather/time + all-info-texture spawn chances + anti-stutter =====
+// v9の弱点: HUDだけで天候演出が薄い / 近場保証が動物寄り / 0.9秒ごとの近傍チャンク総当たりで周期カクつき。
+// v10は「見た目」「全種の出番」「軽量化」をまとめて上書きする。
+const INFO_ECO_VERSION_V10 = 'v10-effects-fairspawn-stutterfix';
+let infoEcoFxCanvasV10=null, infoEcoFxCtxV10=null, infoEcoFxLastDrawV10=0, infoEcoFxAccV10=0;
+let infoEcoSpawnAccV10=0, infoEcoSpawnCursorV10=0, infoEcoForcedAccV10=0, infoEcoLastNoticeV10=0;
+let infoEcoLastWeatherV10='', infoEcoLastPhaseV10='';
+function infoEcoEnsureFxV10(){
+ if(infoEcoFxCanvasV10) return infoEcoFxCanvasV10;
+ const c=document.createElement('canvas'); c.id='infoEcoFxCanvas';
+ c.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;z-index:4;pointer-events:none;mix-blend-mode:normal;';
+ document.body.insertBefore(c, document.body.firstChild ? document.body.firstChild.nextSibling : null);
+ infoEcoFxCanvasV10=c; infoEcoFxCtxV10=c.getContext('2d',{alpha:true});
+ const resize=()=>{ const r=window.devicePixelRatio||1; c.width=Math.max(1,Math.floor(innerWidth*r)); c.height=Math.max(1,Math.floor(innerHeight*r)); c.dataset.ratio=String(r); };
+ resize(); window.addEventListener('resize',resize,{passive:true});
+ return c;
+}
+function infoEcoColorLerpV10(a,b,t){ return new pc.Color(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t); }
+function infoEcoApplySkyV10(){
+ const d=infoEcoDayV8(), w=infoEcoWeatherAtV8(); infoEcoWeatherV8=w;
+ let skyTop=new pc.Color(.45,.68,1.0), skyFog=new pc.Color(.64,.80,1.0), amb=new pc.Color(.55,.62,.76), sunColor=new pc.Color(1,.96,.86), sunInt=1.35, fogStart=28, fogEnd=62;
+ if(d.phase==='morning'){
+   skyTop=new pc.Color(.95,.72,.46); skyFog=new pc.Color(.88,.70,.58); amb=new pc.Color(.58,.50,.44); sunColor=new pc.Color(1,.72,.38); sunInt=1.05; fogStart=22; fogEnd=58;
+ }else if(d.phase==='evening'){
+   skyTop=new pc.Color(.96,.42,.24); skyFog=new pc.Color(.78,.42,.42); amb=new pc.Color(.46,.34,.42); sunColor=new pc.Color(1,.45,.22); sunInt=.80; fogStart=18; fogEnd=52;
+ }else if(d.phase==='night'){
+   skyTop=new pc.Color(.03,.05,.13); skyFog=new pc.Color(.06,.08,.17); amb=new pc.Color(.10,.13,.24); sunColor=new pc.Color(.45,.55,1); sunInt=.12; fogStart=15; fogEnd=42;
+ }
+ if(w==='cloudy'){ skyFog=infoEcoColorLerpV10(skyFog,new pc.Color(.46,.52,.62),.55); amb=infoEcoColorLerpV10(amb,new pc.Color(.35,.39,.45),.35); sunInt*=.72; }
+ if(w==='rain'){ skyFog=new pc.Color(.32,.39,.49); amb=infoEcoColorLerpV10(amb,new pc.Color(.25,.31,.39),.50); fogStart=12; fogEnd=42; sunInt*=.55; }
+ if(w==='fog'){ skyFog=new pc.Color(.62,.66,.70); amb=infoEcoColorLerpV10(amb,new pc.Color(.48,.50,.54),.65); fogStart=5; fogEnd=26; sunInt*=.42; }
+ if(w==='snow'){ skyFog=new pc.Color(.76,.85,.96); amb=infoEcoColorLerpV10(amb,new pc.Color(.62,.72,.86),.45); fogStart=12; fogEnd=44; sunInt*=.75; }
+ try{
+   app.scene.ambientLight=amb;
+   app.scene.fog=pc.FOG_LINEAR; app.scene.fogColor=skyFog; app.scene.fogStart=fogStart; app.scene.fogEnd=fogEnd;
+   if(typeof sun!=='undefined' && sun && sun.light){ sun.light.color=sunColor; sun.light.intensity=sunInt; sun.setEulerAngles(d.phase==='morning'?18:(d.phase==='evening'?155:(d.phase==='night'?220:48)),35,0); }
+   if(typeof hemi!=='undefined' && hemi && hemi.light){ hemi.light.intensity=d.phase==='night'?.06:.13; hemi.light.color=amb; }
+   document.body.style.background = d.phase==='night' ? '#050816' : (d.phase==='evening' ? '#e96b45' : (d.phase==='morning' ? '#f2b36b' : '#79b7ff'));
+ }catch(e){}
+ if(w!==infoEcoLastWeatherV10 || d.phase!==infoEcoLastPhaseV10){
+   infoEcoLastWeatherV10=w; infoEcoLastPhaseV10=d.phase;
+   const now=performance.now();
+   if(now-infoEcoLastNoticeV10>4500){ infoEcoLastNoticeV10=now; setMsg('空模様: '+infoEcoPhaseLabelV8(d.phase)+'・'+infoEcoWeatherLabelV8(w)+' / 出やすい情報テクスチャが変化','info'); }
+ }
+}
+function infoEcoDrawFxV10(dt){
+ const c=infoEcoEnsureFxV10(), g=infoEcoFxCtxV10; if(!g) return;
+ const now=performance.now(); if(now-infoEcoFxLastDrawV10<50) return; infoEcoFxLastDrawV10=now;
+ const r=Number(c.dataset.ratio||1), wpx=c.width, hpx=c.height, vw=wpx/r, vh=hpx/r;
+ const d=infoEcoDayV8(), weather=infoEcoWeatherAtV8(); infoEcoFxAccV10 += Math.min(.08,dt||.016);
+ g.setTransform(r,0,0,r,0,0); g.clearRect(0,0,vw,vh);
+ // 時間帯の空色オーバーレイ。朝日/夕焼け/夜をまず必ず見える化。
+ let grad=g.createLinearGradient(0,0,0,vh);
+ if(d.phase==='morning'){
+   grad.addColorStop(0,'rgba(255,184,92,.34)'); grad.addColorStop(.42,'rgba(255,216,150,.15)'); grad.addColorStop(1,'rgba(255,255,255,0)');
+   g.fillStyle=grad; g.fillRect(0,0,vw,vh);
+   g.globalAlpha=.28; g.fillStyle='rgba(255,230,150,.85)'; for(let i=0;i<7;i++){ g.beginPath(); g.moveTo(vw*.08,vh*.10); g.lineTo(vw*(.18+i*.13),vh); g.lineTo(vw*(.22+i*.13),vh); g.fill(); } g.globalAlpha=1;
+   g.beginPath(); g.fillStyle='rgba(255,222,120,.90)'; g.arc(vw*.12,vh*.14,34,0,Math.PI*2); g.fill();
+ }else if(d.phase==='evening'){
+   grad.addColorStop(0,'rgba(255,95,50,.42)'); grad.addColorStop(.55,'rgba(255,154,80,.20)'); grad.addColorStop(1,'rgba(70,20,70,.20)');
+   g.fillStyle=grad; g.fillRect(0,0,vw,vh);
+   g.beginPath(); g.fillStyle='rgba(255,122,55,.88)'; g.arc(vw*.82,vh*.18,38,0,Math.PI*2); g.fill();
+ }else if(d.phase==='night'){
+   grad.addColorStop(0,'rgba(0,3,18,.66)'); grad.addColorStop(1,'rgba(2,6,23,.42)'); g.fillStyle=grad; g.fillRect(0,0,vw,vh);
+   g.fillStyle='rgba(255,255,210,.92)';
+   for(let i=0;i<70;i++){ const x=(hash2(i*17+3,991)*vw), y=(hash2(i*23-7,557)*vh*.55); const tw=1+hash2(i*31,223)*1.7; g.globalAlpha=.45+hash2(i*7,11)*.45; g.fillRect(x,y,tw,tw); }
+   g.globalAlpha=1; const mx=vw*.78,my=vh*.13; g.beginPath(); g.fillStyle='rgba(255,250,210,.92)'; g.arc(mx,my,30,0,Math.PI*2); g.fill(); g.beginPath(); g.fillStyle='rgba(5,8,22,.92)'; g.arc(mx+12,my-5,28,0,Math.PI*2); g.fill();
+ }
+ if(weather==='cloudy'){
+   g.fillStyle='rgba(80,92,110,.14)'; g.fillRect(0,0,vw,vh*.55);
+   for(let i=0;i<9;i++){ const x=((hash2(i*97,33)*vw + infoEcoFxAccV10*10*(i%3+1))%(vw+180))-90; const y=vh*(.06+hash2(i*19,83)*.22); g.fillStyle='rgba(220,225,235,.30)'; g.beginPath(); g.ellipse(x,y,70,18,0,0,Math.PI*2); g.fill(); }
+ }
+ if(weather==='rain'){
+   g.strokeStyle='rgba(185,220,255,.62)'; g.lineWidth=1.2;
+   const n=state.mobile?80:150; for(let i=0;i<n;i++){ const x=(hash2(i*13,77)*vw + infoEcoFxAccV10*180*(i%5+1))%vw; const y=(hash2(i*29,171)*vh + infoEcoFxAccV10*420*(1+(i%7)*.08))%vh; g.beginPath(); g.moveTo(x,y); g.lineTo(x-10,y+24); g.stroke(); }
+   g.fillStyle='rgba(25,45,75,.16)'; g.fillRect(0,0,vw,vh);
+ }else if(weather==='snow'){
+   const n=state.mobile?70:130; g.fillStyle='rgba(255,255,255,.82)';
+   for(let i=0;i<n;i++){ const x=(hash2(i*31,19)*vw + Math.sin(infoEcoFxAccV10+i)*18)%vw; const y=(hash2(i*37,29)*vh + infoEcoFxAccV10*55*(1+(i%5)*.14))%vh; const rr=1.2+hash2(i*41,73)*2.2; g.globalAlpha=.45+hash2(i*3,5)*.45; g.beginPath(); g.arc(x,y,rr,0,Math.PI*2); g.fill(); }
+   g.globalAlpha=1; g.fillStyle='rgba(230,245,255,.13)'; g.fillRect(0,0,vw,vh);
+ }else if(weather==='fog'){
+   g.fillStyle='rgba(210,220,225,.30)'; g.fillRect(0,0,vw,vh);
+   for(let i=0;i<8;i++){ const x=((hash2(i*101,19)*vw + infoEcoFxAccV10*18*(i+1))%(vw+260))-130; const y=vh*(.20+hash2(i*7,91)*.55); const grd=g.createRadialGradient(x,y,10,x,y,160); grd.addColorStop(0,'rgba(235,240,245,.28)'); grd.addColorStop(1,'rgba(235,240,245,0)'); g.fillStyle=grd; g.beginPath(); g.ellipse(x,y,170,38,0,0,Math.PI*2); g.fill(); }
+ }
+}
+function infoEcoProfileV10(meta){
+ const t=String(meta&&meta.type||''), role=String(meta&&meta.role||'');
+ let p={tags:['brightGround'], weight:7, chance:.18, yMode:'ground', rarity:'common', hint:'地上で発見'};
+ if(/pig|cow|mooshroom|sheep|chicken|rabbit|horse|donkey|mule|sniffer|armadillo/.test(t)) p={tags:['grassLow','brightGround'],weight:14,chance:.20,yMode:'ground',rarity:'common',hint:'草地/低地/明るい地上'};
+ if(/bee|parrot|ocelot|panda|fox|wolf/.test(t)) p={tags:['forest'],weight:13,chance:.20,yMode:'ground',rarity:/panda|ocelot/.test(t)?'uncommon':'common',hint:'森っぽい場所'};
+ if(/cat|villager|wandering_trader|iron_golem|copper_golem|allay/.test(t)) p={tags:['settlement'],weight:t==='cat'?4:8,chance:t==='cat'?.10:.16,yMode:t==='allay'?'fly':'ground',rarity:t==='wandering_trader'?'rare':'uncommon',hint:'村・拠点・プレイヤー周辺'};
+ if(/squid|glow_squid|dolphin|cod|salmon|pufferfish|tropical_fish|tadpole|nautilus|zombie_nautilus/.test(t) || role==='aquatic') p={tags:['water'],weight:13,chance:.22,yMode:'water',rarity:/glow_squid|zombie_nautilus/.test(t)?'rare':'common',hint:'水判定ありの場所のみ'};
+ if(/axolotl|frog|turtle/.test(t)) p={tags:['waterside','water'],weight:11,chance:.18,yMode:/frog|turtle/.test(t)?'shore':'water',rarity:'uncommon',hint:'水辺/水中'};
+ if(/bat/.test(t)) p={tags:['cave','dark'],weight:14,chance:.22,yMode:'fly',rarity:'uncommon',hint:'地下/暗所/洞窟っぽい場所'};
+ if(/polar_bear|snow_golem/.test(t)) p={tags:['coldHigh','snow'],weight:14,chance:.24,yMode:'ground',rarity:'uncommon',hint:'雪・高地・寒冷地。雪天なら低地にもチャンス'};
+ if(/goat|llama/.test(t)) p={tags:['mountain'],weight:13,chance:.21,yMode:'ground',rarity:'uncommon',hint:'高低差のある山地'};
+ if(/camel$|camel_husk/.test(t)) p={tags:['sand','brightGround'],weight:10,chance:.18,yMode:'ground',rarity:t==='camel_husk'?'uncommon':'common',hint:'砂地/低地'};
+ if(/strider/.test(t)) p={tags:['dark','fog','nightFar'],weight:8,chance:.16,yMode:'ground',rarity:'rare',hint:'霧・夜・暗所のレア枠'};
+ if(/zombie|creeper|skeleton|spider|zombie_horse|skeleton_horse/.test(t) || role==='hostile') p={tags:['nightFar','dark','cave'],weight:18,chance:.26,yMode:/spider/.test(t)?'ground':'ground',rarity:'uncommon',hint:'夜/暗所/遠方。昼はかなり出にくい'};
+ if(/happy_ghast/.test(t)) p={tags:['mountain','fog','nightFar'],weight:5,chance:.10,yMode:'sky',rarity:'rare',hint:'霧/夜/山地の空'};
+ if(/wandering_trader|happy_ghast|glow_squid|zombie_nautilus|strider/.test(t)) p.rarity='rare';
+ return p;
+}
+function infoEcoClassifyV10(x,z,ch){
+ const env=infoEcoClassifyV8(x,z,ch); const h=env.h;
+ const lake=smoothNoise(x*.032+400,z*.032-600); const beach=lake>.585 && lake<=.70;
+ if(beach || env.topType==='sand') env.tags.add('sand');
+ if(infoEcoWeatherAtV8()==='snow') env.tags.add('snow');
+ if(infoEcoWeatherAtV8()==='fog') env.tags.add('fog');
+ // 雪天は低地でもスノーゴーレム等にチャンスを出す。ただし水棲の場所は別。
+ if(infoEcoWeatherAtV8()==='snow' && h>=1) env.tags.add('coldHigh');
+ return env;
+}
+function infoEcoCandidateScoreV10(meta,env){
+ const prof=infoEcoProfileV10(meta); let matched=0;
+ for(const tag of prof.tags){ if(env.tags.has(tag)) matched++; }
+ if(matched<=0) return 0;
+ let w=prof.weight*(1+(matched-1)*.45);
+ const t=String(meta.type||''), d=env.day||infoEcoDayV8(), weather=env.weather||infoEcoWeatherAtV8();
+ if(weather==='rain' && (prof.tags.includes('water')||prof.tags.includes('waterside'))) w*=1.65;
+ if(weather==='snow' && /snow_golem|polar_bear/.test(t)) w*=2.4;
+ if(weather==='fog' && /bat|zombie|creeper|skeleton|spider|happy_ghast|strider/.test(t)) w*=1.8;
+ if(d.isNight && /zombie|creeper|skeleton|spider|bat|zombie_horse|skeleton_horse|happy_ghast|strider/.test(t)) w*=2.15;
+ if(!d.isNight && /zombie|creeper|skeleton|spider|zombie_horse|skeleton_horse/.test(t)) w*=.20;
+ if(t==='cat') w*=.38;
+ const seenKey=String(meta.type||meta.id); if(typeof infoEcoSeenV8!=='undefined' && !infoEcoSeenV8.has(seenKey)) w*=2.2; // 図鑑未発見を優先
+ return w;
+}
+function infoEcoSpawnPositionV10(meta,env,ch,slot){
+ const prof=infoEcoProfileV10(meta); let x=env.x,z=env.z,y=env.h+1.05;
+ if(prof.yMode==='water') y=1.25+hash2(ch.cx*7103+slot,ch.cz*7211-slot)*.55;
+ else if(prof.yMode==='shore') y=terrainHeight(x,z)+1.05;
+ else if(prof.yMode==='fly') y=terrainHeight(x,z)+2.4+hash2(ch.cx*7307,ch.cz*7309)*2.0;
+ else if(prof.yMode==='sky') y=terrainHeight(x,z)+7.0+hash2(ch.cx*7331,ch.cz*7333)*5.0;
+ return {x,y,z};
+}
+function infoEcoSpawnForChunkV10(ch){
+ if(!ch||!ch.done||!Array.isArray(INFO_TEXTURE_PACK_V3)) return false;
+ ensureAllInfoTexturesV3();
+ const day=infoEcoDayV8(), weather=infoEcoWeatherAtV8(); infoEcoWeatherV8=weather;
+ const samples=[];
+ for(let i=0;i<3;i++){
+   const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*(8101+i*23)+11,ch.cz*(8111+i*29)-7)*CHUNK_SIZE);
+   const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*(8123+i*31)+5,ch.cz*(8147+i*37)+13)*CHUNK_SIZE);
+   const env=infoEcoClassifyV10(x,z,ch); env.day=day; env.weather=weather; samples.push(env);
+ }
+ samples.sort((a,b)=>(b.tags.size+b.water+b.forest+b.slope*.05)-(a.tags.size+a.water+a.forest+a.slope*.05));
+ const env=samples[0]; const envKey=Array.from(env.tags).sort().join('-')||'plain';
+ const cycle=Math.floor(infoEcoNowV8()/18); // 同じチャンクでも18秒ごとに再抽選機会。重複キーで増えすぎ防止。
+ const spawnKey='infoEcoV10:'+ch.key+':'+envKey+':'+day.phase+':'+weather+':'+cycle;
+ if(customSpawned.has(spawnKey)) return false; customSpawned.add(spawnKey);
+ const candidates=[];
+ for(const meta of INFO_TEXTURE_PACK_V3){ const w=infoEcoCandidateScoreV10(meta,env); if(w>0)candidates.push({meta,w}); }
+ if(!candidates.length) return false;
+ const meta=infoEcoWeightedPickV8(candidates,ch,env); if(!meta) return false;
+ const prof=infoEcoProfileV10(meta); let chance=prof.chance;
+ if(prof.rarity==='rare') chance*=.72;
+ if(env.distPlayer<10 && meta.role==='hostile') chance*=.18;
+ if(hash2(ch.cx*8171+candidates.length+cycle,ch.cz*8191-Math.floor(env.h*7))>=chance) return false;
+ const nearSame=Array.from(customObjectEntities.values()).some(e=>{try{const p=e.getPosition(); return Math.hypot(p.x-env.x,p.z-env.z)<7 && e.data && String(e.data.defId||'').includes(String(meta.id||''));}catch(_){return false;}});
+ if(nearSame) return false;
+ const def=ensureInfoTextureDefV3(meta); if(!def) return false;
+ const pos=infoEcoSpawnPositionV10(meta,env,ch,candidates.length); const yaw=Math.floor(hash2(ch.cx*8209,ch.cz*8219)*4)*(Math.PI/2);
+ const instanceKey='infoEcoV10:'+ch.key+':'+meta.type+':'+day.phase+':'+weather+':'+cycle;
+ if(customObjectEntities.has(instanceKey)) return false;
+ placeCustomObject(def,pos.x,pos.y,pos.z,yaw,instanceKey);
+ const seenKey=String(meta.type||meta.id); const first=!infoEcoSeenV8.has(seenKey); infoEcoSeenV8.add(seenKey); if(first) infoEcoSaveSeenV8();
+ const rareMark=prof.rarity==='rare'?'★レア ':prof.rarity==='uncommon'?'◇ ':'◆ ';
+ setMsg(rareMark+'情報テクスチャ発見: '+meta.name+' / '+infoEcoPhaseLabelV8(day.phase)+'・'+infoEcoWeatherLabelV8(weather)+' / '+prof.hint+' / 図鑑 '+infoEcoSeenV8.size+'/'+INFO_TEXTURE_PACK_V3.length, first?'good':'info');
+ return true;
+}
+function infoEcoPickUnseenForCurrentWorldV10(){
+ if(!Array.isArray(INFO_TEXTURE_PACK_V3)) return null;
+ const d=infoEcoDayV8(), w=infoEcoWeatherAtV8();
+ let pool=INFO_TEXTURE_PACK_V3.filter(m=>!(infoEcoSeenV8&&infoEcoSeenV8.has(String(m.type||m.id))));
+ if(!pool.length) pool=INFO_TEXTURE_PACK_V3.slice();
+ // 時間・天気ごとの主役を明示。動物だけにならないよう、夜/雪/霧は敵対・ゴーレム・レアを優先。
+ const prefer=(m)=>{
+   const t=String(m.type||'');
+   if(d.isNight && /zombie|creeper|skeleton|spider|bat|zombie_horse|skeleton_horse|happy_ghast|strider/.test(t)) return true;
+   if(w==='snow' && /snow_golem|polar_bear/.test(t)) return true;
+   if(w==='fog' && /happy_ghast|strider|bat|zombie|creeper|skeleton|spider/.test(t)) return true;
+   if(w==='rain' && /squid|dolphin|cod|salmon|pufferfish|tropical_fish|axolotl|frog|turtle|tadpole|nautilus/.test(t)) return true;
+   if(d.phase==='evening' && /villager|wandering_trader|allay|fox|wolf|cat/.test(t)) return true;
+   return false;
+ };
+ const preferred=pool.filter(prefer); if(preferred.length) pool=preferred;
+ const idx=Math.floor(hash2(Math.floor(player.x)*9127+Math.floor(infoEcoNowV8()/9),Math.floor(player.z)*9133)*pool.length);
+ return pool[idx]||pool[0];
+}
+function infoEcoForceDiscoveryV10(){
+ if(!Array.isArray(INFO_TEXTURE_PACK_V3)) return 0;
+ const meta=infoEcoPickUnseenForCurrentWorldV10(); if(!meta) return 0;
+ const def=ensureInfoTextureDefV3(meta); if(!def) return 0;
+ const prof=infoEcoProfileV10(meta), d=infoEcoDayV8();
+ let dist=18+hash2(Math.floor(player.x)*43,Math.floor(player.z)*47)*12;
+ let ang=hash2(Math.floor(player.x)*53+Math.floor(infoEcoNowV8()/7),Math.floor(player.z)*59)*Math.PI*2;
+ // 敵は近すぎると理不尽なので遠目、ゴーレム/村人は近め、水棲は水候補を探す。
+ if(/zombie|creeper|skeleton|spider/.test(String(meta.type||''))) dist=28+hash2(Math.floor(player.x)*61,Math.floor(player.z)*67)*14;
+ let x=player.x+Math.cos(ang)*dist, z=player.z+Math.sin(ang)*dist;
+ if(prof.yMode==='water'){
+   let best=null,bestScore=-1;
+   for(let i=0;i<14;i++){ const a=hash2(i*71+Math.floor(player.x),Math.floor(player.z))*Math.PI*2, dd=14+hash2(i*73,Math.floor(player.x+player.z))*28; const xx=player.x+Math.cos(a)*dd, zz=player.z+Math.sin(a)*dd; const sc=infoEcoWaterScoreV8(xx,zz); if(sc>bestScore){bestScore=sc; best=[xx,zz];} }
+   if(best){ x=best[0]; z=best[1]; }
+ }
+ let y=terrainHeight(x,z)+1.05;
+ const env=infoEcoClassifyV10(x,z,{cx:chunkOf(x),cz:chunkOf(z)}); env.day=d; env.weather=infoEcoWeatherAtV8();
+ const pos=infoEcoSpawnPositionV10(meta,env,{cx:chunkOf(x),cz:chunkOf(z),key:chunkKey(chunkOf(x),chunkOf(z))},0); y=pos.y;
+ const key='infoEcoV10:feature:'+Math.floor(infoEcoNowV8()/24)+':'+String(meta.type||meta.id);
+ if(customObjectEntities.has(key)) return 0;
+ placeCustomObject(def,x,y,z,0,key);
+ const seenKey=String(meta.type||meta.id); const first=!infoEcoSeenV8.has(seenKey); infoEcoSeenV8.add(seenKey); if(first) infoEcoSaveSeenV8();
+ setMsg((prof.rarity==='rare'?'★レア ':'◇ ')+'探索チャンス: '+meta.name+' / '+infoEcoPhaseLabelV8(d.phase)+'・'+infoEcoWeatherLabelV8(infoEcoWeatherAtV8())+' / '+prof.hint+' / 図鑑 '+infoEcoSeenV8.size+'/'+INFO_TEXTURE_PACK_V3.length, first?'good':'info');
+ return 1;
+}
+function infoEcoTrySpawnNearbyV10(force){
+ const now=performance.now(); if(!force && now-infoEcoLastGuaranteedV9<5000) return 0;
+ let spawned=0; const pcx=chunkOf(player.x), pcz=chunkOf(player.z);
+ const list=Array.from(chunks.values()).filter(ch=>ch&&ch.done);
+ if(list.length){
+   // 全チャンク総当たり禁止。毎回最大3チャンクだけ順番に処理して周期カクつきを潰す。
+   list.sort((a,b)=>(Math.abs(a.cx-pcx)+Math.abs(a.cz-pcz))-(Math.abs(b.cx-pcx)+Math.abs(b.cz-pcz)));
+   const max=Math.min(3,list.length);
+   for(let i=0;i<max;i++){ const ch=list[(infoEcoSpawnCursorV10+i)%list.length]; try{ if(infoEcoSpawnForChunkV10(ch)) spawned++; }catch(e){ console.warn('info eco v10 chunk spawn failed',e); } }
+   infoEcoSpawnCursorV10=(infoEcoSpawnCursorV10+max)%Math.max(1,list.length);
+ }
+ if(force || now-infoEcoLastGuaranteedV9>24000){ spawned+=infoEcoForceDiscoveryV10(); infoEcoLastGuaranteedV9=now; }
+ return spawned;
+}
+try{
+ // v9の0.9秒ごとの重い近傍探索を軽量版へ差し替え。v9リスナーは残っても、この関数が呼ばれるので軽くなる。
+ infoEcoTrySpawnNearbyV9 = function(force){ return infoEcoTrySpawnNearbyV10(!!force); };
+ spawnCustomObjectForChunk=function(ch){ let r; try{ r=(typeof __infoSpawnCustomObjectForChunk==='function') ? __infoSpawnCustomObjectForChunk.apply(this,arguments) : undefined; }catch(e){} try{ infoEcoSpawnForChunkV10(ch); }catch(e){ console.warn('info ecology v10 spawn failed',e); } return r; };
+ if(Array.isArray(INFO_TEXTURE_PACK_V3)){ for(const meta of INFO_TEXTURE_PACK_V3){ const prof=infoEcoProfileV10(meta); meta.spawnHint=prof.hint; meta.rarity=prof.rarity; meta.spawnVersion=INFO_ECO_VERSION_V10; } }
+ app.on('update',function(dt){
+   try{
+     infoEcoSpawnAccV10 += dt||0; infoEcoForcedAccV10 += dt||0;
+     infoEcoApplySkyV10(); infoEcoDrawFxV10(dt||0);
+     if(infoEcoSpawnAccV10>4.0){ infoEcoSpawnAccV10=0; infoEcoTrySpawnNearbyV10(false); }
+     if(infoEcoForcedAccV10>24.0){ infoEcoForcedAccV10=0; infoEcoForceDiscoveryV10(); }
+     updateInfoEcoHudV9(false);
+   }catch(e){}
+ });
+ setTimeout(()=>{try{infoEcoEnsureFxV10(); infoEcoApplySkyV10(); infoEcoDrawFxV10(.016); infoEcoTrySpawnNearbyV10(true); updateInfoEcoHudV9(true); setMsg('情報テクスチャ生態系v10: 天候/朝夕夜演出・全種探索チャンス・周期カクつき軽減ON','good');}catch(e){}},900);
+}catch(e){ console.warn('info ecology v10 init failed',e); }
+
+
+
+// ===== Info Texture Ecology v11 HOTFIX: visible spawn / subtle light / stutter cut / 60fps-friendly =====
+// v10反省: 朝日演出が強すぎ、探索スポーンが遠くて見えにくい、重い全定義生成と周期スキャンがカクつき要因。
+// v11は「必ず見える距離に出す」「演出は控えめ」「スポーン処理は1回準備+低頻度」「チャンク生成をさらに小分け」に寄せる。
+const INFO_ECO_VERSION_V11 = 'v11-visible-soft-fps60';
+let infoEcoDefsReadyV11=false;
+let infoEcoLastSpawnV11=0;
+let infoEcoSpawnIndexV11=0;
+let infoEcoLastFxDrawV11=0;
+let infoEcoSkyLastV11=0;
+let __v11ChunkCursor=0;
+let __v11FrameSkip=false;
+function infoEcoEnsureDefsV11(){
+ if(infoEcoDefsReadyV11) return true;
+ try{
+   if(Array.isArray(INFO_TEXTURE_PACK_V3)){
+     for(const m of INFO_TEXTURE_PACK_V3){ try{ ensureInfoTextureDefV3(m); }catch(e){} }
+   }
+   infoEcoDefsReadyV11=true;
+ }catch(e){ console.warn('info eco v11 def prep failed',e); }
+ return infoEcoDefsReadyV11;
+}
+function infoEcoTypeForMomentV11(m){
+ const t=String(m&&m.type||''), d=infoEcoDayV8(), w=infoEcoWeatherAtV8();
+ if(w==='snow' && /snow_golem|polar_bear/.test(t)) return 120;
+ if(w==='rain' && /squid|dolphin|cod|salmon|pufferfish|tropical_fish|axolotl|frog|turtle|tadpole|nautilus|zombie_nautilus|glow_squid/.test(t)) return 110;
+ if(w==='fog' && /bat|zombie|creeper|skeleton|spider|happy_ghast|strider|zombie_horse|skeleton_horse/.test(t)) return 115;
+ if(d.isNight && /zombie|creeper|skeleton|spider|bat|zombie_horse|skeleton_horse|happy_ghast|strider/.test(t)) return 130;
+ if(d.phase==='evening' && /villager|wandering_trader|allay|fox|wolf|cat|copper_golem|iron_golem/.test(t)) return 85;
+ if(/snow_golem|zombie|creeper|skeleton|spider|bat|polar_bear|happy_ghast|strider|glow_squid|zombie_nautilus|wandering_trader/.test(t)) return 70;
+ if(/pig|cow|sheep|chicken|rabbit|horse|donkey|mule/.test(t)) return 28; // 動物ばっか防止
+ return 45;
+}
+function infoEcoPickNextVisibleV11(){
+ if(!Array.isArray(INFO_TEXTURE_PACK_V3)||!INFO_TEXTURE_PACK_V3.length) return null;
+ const unseen=INFO_TEXTURE_PACK_V3.filter(m=>!(infoEcoSeenV8&&infoEcoSeenV8.has(String(m.type||m.id))));
+ const base=(unseen.length?unseen:INFO_TEXTURE_PACK_V3).slice();
+ base.sort((a,b)=>infoEcoTypeForMomentV11(b)-infoEcoTypeForMomentV11(a));
+ const topScore=infoEcoTypeForMomentV11(base[0]);
+ const pool=base.filter(m=>infoEcoTypeForMomentV11(m)>=Math.max(20,topScore-15));
+ const m=pool[infoEcoSpawnIndexV11%pool.length]||base[0];
+ infoEcoSpawnIndexV11++;
+ return m;
+}
+function infoEcoVisibleSpawnV11(force){
+ const now=performance.now();
+ if(!force && now-infoEcoLastSpawnV11<6500) return 0;
+ if(!state.started && !force) return 0;
+ infoEcoLastSpawnV11=now;
+ infoEcoEnsureDefsV11();
+ const meta=infoEcoPickNextVisibleV11(); if(!meta) return 0;
+ const def=ensureInfoTextureDefV3(meta); if(!def) return 0;
+ const d=infoEcoDayV8(), weather=infoEcoWeatherAtV8();
+ const t=String(meta.type||'');
+ const yaw=player.yaw||0;
+ let dist=/zombie|creeper|skeleton|spider|polar_bear|zombie_horse|skeleton_horse/.test(t)?13:9;
+ if(/happy_ghast/.test(t)) dist=16;
+ let side=(hash2(Math.floor(now/1000),Math.floor(player.x*13+player.z*17))-.5)*8;
+ let x=player.x+Math.sin(yaw)*dist+Math.cos(yaw)*side;
+ let z=player.z+Math.cos(yaw)*dist-Math.sin(yaw)*side;
+ // 水棲は近場の水っぽい位置を探す。見つからない場合も、とりあえず低めに置いて「出ない」を防ぐ。
+ if(/squid|dolphin|cod|salmon|pufferfish|tropical_fish|axolotl|frog|turtle|tadpole|nautilus|glow_squid|zombie_nautilus/.test(t)){
+   let best=[x,z], bestScore=-1;
+   for(let i=0;i<10;i++){
+     const a=yaw + (i-5)*0.45; const dd=7+i*2.1;
+     const xx=player.x+Math.sin(a)*dd, zz=player.z+Math.cos(a)*dd;
+     const sc=infoEcoWaterScoreV8(xx,zz);
+     if(sc>bestScore){ bestScore=sc; best=[xx,zz]; }
+   }
+   x=best[0]; z=best[1];
+ }
+ const ch={cx:chunkOf(x),cz:chunkOf(z),key:chunkKey(chunkOf(x),chunkOf(z)),done:true};
+ const env=infoEcoClassifyV10(x,z,ch); env.day=d; env.weather=weather;
+ let pos=infoEcoSpawnPositionV10(meta,env,ch,0);
+ // 見えない事故を防ぐ。水棲/飛行以外は地面上、飛行は少し上にする。
+ if(!/squid|dolphin|cod|salmon|pufferfish|tropical_fish|axolotl|tadpole|nautilus|glow_squid|zombie_nautilus/.test(t)) pos.y=terrainHeight(x,z)+1.05;
+ if(/bat|bee|parrot|allay/.test(t)) pos.y=terrainHeight(x,z)+3.0;
+ if(/happy_ghast/.test(t)) pos.y=terrainHeight(x,z)+6.0;
+ const key='infoEcoV11:visible:'+Math.floor(now/6500)+':'+String(meta.type||meta.id);
+ if(customObjectEntities.has(key)) return 0;
+ try{ placeCustomObject(def,x,pos.y,z,Math.atan2(player.x-x,player.z-z),key); }
+ catch(e){ console.warn('info eco v11 place failed',e); return 0; }
+ const seenKey=String(meta.type||meta.id); const first=!infoEcoSeenV8.has(seenKey);
+ infoEcoSeenV8.add(seenKey); if(first) infoEcoSaveSeenV8();
+ setMsg((first?'★新発見 ':'◇出現 ') + meta.name + ' / ' + infoEcoPhaseLabelV8(d.phase)+'・'+infoEcoWeatherLabelV8(weather)+' / 目の前に探索チャンス / 図鑑 '+infoEcoSeenV8.size+'/'+INFO_TEXTURE_PACK_V3.length, first?'good':'info');
+ return 1;
+}
+// 重いv10チャンクスポーンは無効寄り。自然湧きは「見える探索チャンス」を主にして、カクつきを潰す。
+infoEcoSpawnForChunkV10=function(ch){ return false; };
+infoEcoForceDiscoveryV10=function(){ return infoEcoVisibleSpawnV11(true); };
+infoEcoTrySpawnNearbyV10=function(force){ return infoEcoVisibleSpawnV11(!!force); };
+infoEcoTrySpawnNearbyV9=function(force){ return infoEcoVisibleSpawnV11(!!force); };
+// 朝日は控えめ。画面を覆うビームは廃止。雨雪霧は軽量に残す。
+infoEcoDrawFxV10=function(dt){
+ const c=infoEcoEnsureFxV10(), g=infoEcoFxCtxV10; if(!g) return;
+ const now=performance.now(); if(now-infoEcoLastFxDrawV11<90) return; infoEcoLastFxDrawV11=now;
+ const r=Number(c.dataset.ratio||1), vw=c.width/r, vh=c.height/r;
+ const d=infoEcoDayV8(), weather=infoEcoWeatherAtV8(); infoEcoFxAccV10 += Math.min(.08,dt||.016);
+ g.setTransform(r,0,0,r,0,0); g.clearRect(0,0,vw,vh);
+ let grad=g.createLinearGradient(0,0,0,vh);
+ if(d.phase==='morning'){
+   grad.addColorStop(0,'rgba(255,196,120,.12)'); grad.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle=grad; g.fillRect(0,0,vw,vh*.55);
+   g.beginPath(); g.fillStyle='rgba(255,218,130,.28)'; g.arc(vw*.10,vh*.12,16,0,Math.PI*2); g.fill();
+ }else if(d.phase==='evening'){
+   grad.addColorStop(0,'rgba(255,112,62,.24)'); grad.addColorStop(1,'rgba(65,20,70,.08)'); g.fillStyle=grad; g.fillRect(0,0,vw,vh);
+   g.beginPath(); g.fillStyle='rgba(255,120,55,.42)'; g.arc(vw*.82,vh*.18,24,0,Math.PI*2); g.fill();
+ }else if(d.phase==='night'){
+   grad.addColorStop(0,'rgba(0,3,18,.48)'); grad.addColorStop(1,'rgba(2,6,23,.28)'); g.fillStyle=grad; g.fillRect(0,0,vw,vh);
+   g.fillStyle='rgba(255,255,220,.78)';
+   for(let i=0;i<38;i++){ const x=hash2(i*17+3,991)*vw, y=hash2(i*23-7,557)*vh*.48; const s=1+hash2(i*31,223)*1.2; g.globalAlpha=.35+hash2(i*7,11)*.35; g.fillRect(x,y,s,s); }
+   g.globalAlpha=1; g.beginPath(); g.fillStyle='rgba(255,250,210,.78)'; g.arc(vw*.80,vh*.13,20,0,Math.PI*2); g.fill(); g.beginPath(); g.fillStyle='rgba(5,8,22,.80)'; g.arc(vw*.80+8,vh*.13-4,18,0,Math.PI*2); g.fill();
+ }
+ if(weather==='rain'){
+   g.strokeStyle='rgba(185,220,255,.46)'; g.lineWidth=1; const n=state.mobile?42:85;
+   for(let i=0;i<n;i++){ const x=(hash2(i*13,77)*vw + infoEcoFxAccV10*120*(i%4+1))%vw; const y=(hash2(i*29,171)*vh + infoEcoFxAccV10*320*(1+(i%5)*.08))%vh; g.beginPath(); g.moveTo(x,y); g.lineTo(x-7,y+18); g.stroke(); }
+   g.fillStyle='rgba(25,45,75,.08)'; g.fillRect(0,0,vw,vh);
+ }else if(weather==='snow'){
+   const n=state.mobile?36:75; g.fillStyle='rgba(255,255,255,.70)';
+   for(let i=0;i<n;i++){ const x=(hash2(i*31,19)*vw + Math.sin(infoEcoFxAccV10+i)*12)%vw; const y=(hash2(i*37,29)*vh + infoEcoFxAccV10*42*(1+(i%4)*.12))%vh; const rr=1+hash2(i*41,73)*1.7; g.globalAlpha=.35+hash2(i*3,5)*.35; g.beginPath(); g.arc(x,y,rr,0,Math.PI*2); g.fill(); }
+   g.globalAlpha=1;
+ }else if(weather==='fog'){
+   g.fillStyle='rgba(210,220,225,.18)'; g.fillRect(0,0,vw,vh);
+   for(let i=0;i<4;i++){ const x=((hash2(i*101,19)*vw + infoEcoFxAccV10*10*(i+1))%(vw+220))-110; const y=vh*(.24+hash2(i*7,91)*.48); const grd=g.createRadialGradient(x,y,10,x,y,140); grd.addColorStop(0,'rgba(235,240,245,.20)'); grd.addColorStop(1,'rgba(235,240,245,0)'); g.fillStyle=grd; g.beginPath(); g.ellipse(x,y,150,34,0,0,Math.PI*2); g.fill(); }
+ }
+};
+// 空設定も頻度を落として、朝のライトを弱くする。
+const __v11BaseApplySky = infoEcoApplySkyV10;
+infoEcoApplySkyV10=function(){
+ const now=performance.now(); if(now-infoEcoSkyLastV11<250) return; infoEcoSkyLastV11=now;
+ try{ __v11BaseApplySky(); }catch(e){}
+ try{
+   const d=infoEcoDayV8();
+   if(typeof sun!=='undefined' && sun && sun.light){ if(d.phase==='morning') sun.light.intensity=Math.min(sun.light.intensity,.62); }
+   if(d.phase==='morning') document.body.style.background='#86bfff';
+ }catch(e){}
+};
+// チャンク生成の周期カクつき対策。スマホ開始後は毎フレーム大量生成しない。
+const __v11OldProcessChunkJobs = processChunkJobs;
+processChunkJobs=function(){
+ if(!state.started){ return __v11OldProcessChunkJobs(); }
+ if(state.mobile){ __v11FrameSkip=!__v11FrameSkip; if(__v11FrameSkip) return; }
+ const start=performance.now();
+ const budget=state.mobile?0.28:0.55;
+ const maxCols=state.mobile?10:20;
+ const list=Array.from(chunks.values()).filter(ch=>ch.pending.length);
+ if(!list.length) return;
+ const pcx=chunkOf(player.x), pcz=chunkOf(player.z);
+ // sort全量を毎回やると地味に重いので、近い候補だけ拾う。
+ let near=[];
+ for(const ch of list){ const man=Math.abs(ch.cx-pcx)+Math.abs(ch.cz-pcz); if(man<=ACTIVE_CHUNKS*2) near.push([man,ch]); }
+ if(!near.length) near=list.slice(0,6).map(ch=>[99,ch]);
+ near.sort((a,b)=>a[0]-b[0]);
+ let made=0, idx=__v11ChunkCursor%near.length;
+ while(made<maxCols && performance.now()-start<budget && near.length){
+   const ch=near[idx%near.length][1]; idx++;
+   const col=ch.pending.shift(); if(!col){ch.done=true;restoreEditsForChunk(ch); made++; continue;}
+   for(const b of columnBlocks(col[0],col[1])) addBlock(b[0],b[1],b[2],b[3],false);
+   made++;
+   if(ch.pending.length===0){ ch.done=true; restoreEditsForChunk(ch); }
+   if(world.size>MAX_ACTIVE_BLOCKS) break;
+ }
+ __v11ChunkCursor=idx;
+};
+// アプリ側更新のdt暴れを抑える。120Hz端末でも重い処理は60fps相当へ寄せる。
+try{ if(app){ app.maxDeltaTime = 1/30; } }catch(e){}
+setTimeout(()=>{try{ infoEcoVisibleSpawnV11(true); setMsg('v11修正ON: 朝日控えめ / 情報テクスチャを目の前に出す / 生成処理を小分けしてカクつき軽減','good'); }catch(e){console.warn(e);} },1200);
+setTimeout(()=>{try{ infoEcoVisibleSpawnV11(true); }catch(e){}},4200);
 
 
 setMsg('PlayCanvas Engine読込完了','good');
