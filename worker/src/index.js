@@ -6,6 +6,8 @@ export class Room {
     this.players = new Map();
     this.objectsLoaded = false;
     this.objects = [];
+    this.instancesLoaded = false;
+    this.instances = [];
   }
 
   async loadObjects() {
@@ -17,6 +19,38 @@ export class Room {
 
   async saveObjects() {
     await this.state.storage.put('customObjects', this.objects.slice(-100));
+  }
+
+  async loadInstances() {
+    if (this.instancesLoaded) return;
+    this.instancesLoaded = true;
+    const saved = await this.state.storage.get('customObjectInstances');
+    this.instances = Array.isArray(saved) ? saved.slice(-300) : [];
+  }
+
+  async saveInstances() {
+    await this.state.storage.put('customObjectInstances', this.instances.slice(-300));
+  }
+
+  cleanInstance(msg) {
+    if (!msg) return null;
+    const defId = String(msg.objectId || msg.defId || msg.id || '').slice(0, 96);
+    const instanceKey = String(msg.instanceKey || '').slice(0, 160);
+    const x = Number(msg.x), y = Number(msg.y), z = Number(msg.z);
+    const yaw = Number(msg.yaw) || 0;
+    if (!defId || !instanceKey) return null;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    return {
+      type: 'objectInstancePlace',
+      objectId: defId,
+      defId,
+      instanceKey,
+      x: Math.round(x * 1000) / 1000,
+      y: Math.round(y * 1000) / 1000,
+      z: Math.round(z * 1000) / 1000,
+      yaw: Math.round(yaw * 1000000) / 1000000,
+      updatedAt: Date.now()
+    };
   }
 
   normalizeHex(color) {
@@ -123,6 +157,7 @@ export class Room {
 
   async fetch(request) {
     await this.loadObjects();
+    await this.loadInstances();
 
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('mine-server-git2 WebSocket server OK / decals + per-cell-size + ultrahand sync enabled', {
@@ -140,6 +175,7 @@ export class Room {
 
     server.send(JSON.stringify({ type: 'welcome', playerId: serverPlayerId, time: Date.now() }));
     server.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() }));
+    server.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() }));
 
     server.addEventListener('message', async (event) => {
       await this.onMessage(server, event.data);
@@ -168,6 +204,7 @@ export class Room {
 
     if (msg.type === 'objectCatalogReq') {
       try { ws.send(JSON.stringify({ type: 'objectCatalog', objects: this.objects, time: Date.now() })); } catch {}
+      try { ws.send(JSON.stringify({ type: 'objectInstances', instances: this.instances, time: Date.now() })); } catch {}
       return;
     }
 
@@ -213,7 +250,56 @@ export class Room {
       return;
     }
 
-    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit' || msg.type === 'objectInstanceRemove' || msg.type === 'objectInstancePlace' || msg.type === 'objectInstanceTransform' || msg.type === 'objectInstanceAttach' || msg.type === 'objectInstanceDetach') {
+    if (msg.type === 'objectInstancePlace') {
+      const cleanObj = this.cleanObject(msg.object || msg.def || null);
+      if (cleanObj) {
+        const idx = this.objects.findIndex(o => o.id === cleanObj.id);
+        if (idx >= 0) this.objects[idx] = cleanObj;
+        else this.objects.push(cleanObj);
+        this.objects = this.objects.slice(-100);
+        await this.saveObjects();
+      }
+      const inst = this.cleanInstance(msg);
+      if (!inst) return;
+      const idx = this.instances.findIndex(i => i.instanceKey === inst.instanceKey);
+      if (idx >= 0) this.instances[idx] = inst;
+      else this.instances.push(inst);
+      this.instances = this.instances.slice(-300);
+      await this.saveInstances();
+      if (cleanObj) this.broadcast({ type: 'objectRegister', object: cleanObj, clientId, time: Date.now() }, ws);
+      this.broadcast({ ...inst, clientId, time: Date.now() }, ws);
+      return;
+    }
+
+    if (msg.type === 'objectInstanceRemove') {
+      const instanceKey = String(msg.instanceKey || '').slice(0, 160);
+      if (!instanceKey) return;
+      const before = this.instances.length;
+      this.instances = this.instances.filter(i => i.instanceKey !== instanceKey);
+      if (this.instances.length !== before) await this.saveInstances();
+      this.broadcast({ type: 'objectInstanceRemove', instanceKey, clientId, time: Date.now() }, ws);
+      return;
+    }
+
+    if (msg.type === 'objectInstanceTransform') {
+      const instanceKey = String(msg.instanceKey || '').slice(0, 160);
+      const existing = this.instances.find(i => i.instanceKey === instanceKey);
+      if (existing) {
+        const x = Number(msg.x), y = Number(msg.y), z = Number(msg.z), yaw = Number(msg.yaw) || 0;
+        if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+          existing.x = Math.round(x * 1000) / 1000;
+          existing.y = Math.round(y * 1000) / 1000;
+          existing.z = Math.round(z * 1000) / 1000;
+          existing.yaw = Math.round(yaw * 1000000) / 1000000;
+          existing.updatedAt = Date.now();
+          await this.saveInstances();
+        }
+      }
+      this.broadcast(base, ws);
+      return;
+    }
+
+    if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate' || msg.type === 'faceSnapshot' || msg.type === 'blockEdit' || msg.type === 'objectInstanceAttach' || msg.type === 'objectInstanceDetach') {
       if (msg.type === 'join' || msg.type === 'playerState' || msg.type === 'playerUpdate') {
         this.players.set(clientId, {
           clientId,
