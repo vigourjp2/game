@@ -3223,15 +3223,16 @@ placeObjectInFront = function(def,broadcastInstance){
 };
 
 function addCatLook(root){
- if(!root || root.__catLookAdded) return; root.__catLookAdded=true;
- const mat=ensureCustomMat('#f59e0b'), dark=ensureCustomMat('#78350f'), pink=ensureCustomMat('#fb7185');
- const b=ultraObjectBounds(root), c=root.getPosition();
- const w=Math.max(.28,Math.min(1.2,b.radius*.42));
- function box(name,matr,lx,ly,lz,sx,sy,sz){ const e=new pc.Entity(name); e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false}); e.render.material=matr; e.setLocalPosition(lx,ly,lz); e.setLocalScale(sx,sy,sz); e.data={catDecor:true,customObjectCell:false}; root.addChild(e); return e; }
- box('cat_ear_l',mat,-w*.55,b.max.y-c.y+.10,w*.24,w*.22,w*.35,w*.18);
- box('cat_ear_r',mat,w*.55,b.max.y-c.y+.10,w*.24,w*.22,w*.35,w*.18);
- box('cat_nose',pink,0,b.center.y-c.y,w*.56,w*.15,w*.10,w*.08);
- box('cat_tail',dark,w*.95,b.center.y-c.y,w*.08,w*.18,w*.18,w*.78);
+ // ねこ情報テクスチャの仕様は残すが、猫耳・しっぽ・鼻などの自動3D装飾は廃止。
+ // 貼ったブロックの見た目を勝手に崩さないため、既存の旧装飾があれば掃除だけ行う。
+ if(!root) return;
+ try{
+   const children=(root.children||[]).slice();
+   for(const e of children){
+     if(e && e.data && e.data.catDecor){ try{ e.destroy(); }catch{} }
+   }
+ }catch{}
+ root.__catLookAdded=false;
 }
 function grantInfoTexture(infoId){
  infoId=String(infoId||'');
