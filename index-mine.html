@@ -229,11 +229,11 @@ const blockDefs={
 };
 const order=['grass','dirt','stone','wood','water'];
 
-const app=new pc.Application(canvas,{mouse:new pc.Mouse(canvas),keyboard:new pc.Keyboard(window),touch:new pc.TouchDevice(canvas),graphicsDeviceOptions:{antialias:true,powerPreference:'high-performance',alpha:false,stencil:false,preserveDrawingBuffer:false}});
+const app=new pc.Application(canvas,{mouse:new pc.Mouse(canvas),keyboard:new pc.Keyboard(window),touch:new pc.TouchDevice(canvas),graphicsDeviceOptions:{antialias:!state.mobile,powerPreference:'high-performance',alpha:false,stencil:false,preserveDrawingBuffer:false}});
 app.start();
 app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
 app.setCanvasResolution(pc.RESOLUTION_AUTO);
-const targetPixelRatio=()=>state.qualityHigh?(state.mobile?Math.min(window.devicePixelRatio||1,1.35):Math.min(window.devicePixelRatio||1,1.75)):1;
+const targetPixelRatio=()=>state.qualityHigh?(state.mobile?Math.min(window.devicePixelRatio||1,1.10):Math.min(window.devicePixelRatio||1,1.45)):1;
 if(app.graphicsDevice){app.graphicsDevice.maxPixelRatio=targetPixelRatio();}
 $('pr').textContent=(app.graphicsDevice?app.graphicsDevice.maxPixelRatio:targetPixelRatio()).toFixed(2);
 window.addEventListener('resize',()=>app.resizeCanvas());
@@ -264,7 +264,7 @@ function makeTexture(name,base,accent,type){
    const grad=g.createLinearGradient(0,0,size,size);grad.addColorStop(0,'rgba(255,255,255,.26)');grad.addColorStop(.5,'rgba(45,160,255,.12)');grad.addColorStop(1,'rgba(0,40,150,.24)');g.fillStyle=grad;g.fillRect(0,0,size,size);
  }
  const tex=new pc.Texture(app.graphicsDevice,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
- tex.setSource(c);tex.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;tex.magFilter=pc.FILTER_LINEAR;tex.addressU=pc.ADDRESS_REPEAT;tex.addressV=pc.ADDRESS_REPEAT;tex.anisotropy=8;return tex;
+ tex.setSource(c);tex.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;tex.magFilter=pc.FILTER_LINEAR;tex.addressU=pc.ADDRESS_REPEAT;tex.addressV=pc.ADDRESS_REPEAT;tex.anisotropy=state.mobile?1:4;return tex;
 }
 function makeMat(name,base,accent,type,alpha){
  const m=new pc.StandardMaterial();m.name=name;m.diffuseMap=makeTexture(name,base,accent,type);m.diffuse=new pc.Color(1,1,1);m.specular=new pc.Color(.08,.08,.08);m.shininess=type==='water'?45:18;m.useMetalness=false;if(alpha<1){m.opacity=alpha;m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;m.alphaTest=0.01;}m.update();return m;
@@ -284,14 +284,14 @@ const edits=new Map();
 const chunkColumnCache=new Map();
 const WORLD_SEED=7331;
 const CHUNK_SIZE=16;
-const ACTIVE_CHUNKS=state.mobile?2:3;
+const ACTIVE_CHUNKS=state.mobile?1:2;
 const UNLOAD_CHUNKS=ACTIVE_CHUNKS+1;
 // 地下は論理的に詰める。描画は露出ブロックだけ。
 // これで“掘れば地下がある”状態と60FPSを両立する。
 const WORLD_BOTTOM=-24;
-const GEN_BUDGET_MS=state.mobile?7.0:10.0;
-const GEN_COLS_PER_FRAME=state.mobile?2200:6200;
-const MAX_ACTIVE_BLOCKS=state.mobile?11500:28000;
+const GEN_BUDGET_MS=state.mobile?2.2:3.8;
+const GEN_COLS_PER_FRAME=state.mobile?420:900;
+const MAX_ACTIVE_BLOCKS=state.mobile?5200:11500;
 let lastChunkX=999999,lastChunkZ=999999,chunkCursor=0;
 function key(x,y,z){return x+','+y+','+z;}
 function parseKey(id){const p=id.split(',').map(Number);return {x:p[0],y:p[1],z:p[2]};}
@@ -446,7 +446,7 @@ function processChunkJobs(){
 function buildWorld(){ensureChunksAroundPlayer(true);for(let i=0;i<260;i++)processChunkJobs();}
 function chunkStats(){let pending=0;for(const ch of chunks.values())pending+=ch.pending.length;return chunks.size+' chunks / '+world.size+' blocks / seed '+WORLD_SEED+(pending?(' / 生成待ち '+pending):'');}
 
-const camera=new pc.Entity('camera');camera.addComponent('camera',{clearColor:new pc.Color(.50,.70,1.0),fov:72,nearClip:.05,farClip:86});app.root.addChild(camera);
+const camera=new pc.Entity('camera');camera.addComponent('camera',{clearColor:new pc.Color(.50,.70,1.0),fov:72,nearClip:.05,farClip:70});app.root.addChild(camera);
 const sun=new pc.Entity('sun');sun.addComponent('light',{type:'directional',color:new pc.Color(1,0.96,0.86),intensity:1.35,castShadows:false});sun.setEulerAngles(48,35,0);app.root.addChild(sun);
 const hemi=new pc.Entity('skyFill');hemi.addComponent('light',{type:'omni',color:new pc.Color(.35,.50,.85),intensity:.15,range:80});hemi.setPosition(0,25,0);app.root.addChild(hemi);
 
@@ -468,7 +468,11 @@ let multiplayerLastSent = { x:999999, y:999999, z:999999, yaw:999999, pitch:9999
 let multiplayerRemoteMat = null;
 let multiplayerFacePlaceholderMat = null;
 const multiplayerRemotes = new Map();
-const MULTIPLAYER_SEND_INTERVAL_MS = 100; // 10Hz。7人でも安全優先。必要なら50ms=20Hzへ。
+const multiplayerRxQueue = [];
+const MULTIPLAYER_RX_BUDGET_MS = state.mobile ? 1.6 : 2.4;
+const MULTIPLAYER_RX_MAX_PER_FRAME = state.mobile ? 14 : 32;
+const MULTIPLAYER_RX_QUEUE_MAX = 240;
+const MULTIPLAYER_SEND_INTERVAL_MS = state.mobile ? 80 : 60; // 12〜16Hz。リアルタイム感を出しつつ60fps優先。
 
 // インカメは動画を直接送らない。96px JPEGスナップショットを数秒ごとに送る。
 // 7人時に重くしないため、遠隔プレイヤー表示は「顔写真カード + 小さい胴体」にする。
@@ -623,8 +627,8 @@ function connectMultiplayer() {
  });
  multiplayerSocket.addEventListener('message', (event) => {
    multiplayerRxCount++;
-   setMultiplayerRxCount();
-   handleMultiplayerMessage(event.data);
+   if (multiplayerRxQueue.length < MULTIPLAYER_RX_QUEUE_MAX) multiplayerRxQueue.push(event.data);
+   else multiplayerRxQueue[multiplayerRxQueue.length - 1] = event.data;
  });
  multiplayerSocket.addEventListener('close', () => {
    clearInterval(multiplayerHeartbeatTimer);
@@ -772,6 +776,8 @@ function handleMultiplayerMessage(raw) {
    if (!msg || msg.clientId === multiplayerClientId) return;
    const t = msg.type;
    if (handleObjectCatalogMessage(msg)) return;
+   if (t === 'players' && Array.isArray(msg.players)) { msg.players.forEach(updateRemotePlayer); return; }
+   if (t === 'worldEdits' && Array.isArray(msg.edits)) { msg.edits.forEach(applyRemoteBlockEditMsg); return; }
    if (t === 'welcome' || t === 'pong' || t === 'ping') return;
    if (t === 'leave' || t === 'disconnect') { removeRemotePlayer(msg.clientId || msg.playerId || msg.id); return; }
    if (t === 'join' || t === 'playerState' || t === 'playerUpdate' || t === 'state') updateRemotePlayer(msg);
@@ -779,7 +785,18 @@ function handleMultiplayerMessage(raw) {
    if (t === 'blockEdit' || t === 'break' || t === 'place') applyRemoteBlockEditMsg(msg);
  });
 }
+function processMultiplayerRxQueue() {
+ const start = performance.now();
+ let n = 0;
+ while (multiplayerRxQueue.length && n < MULTIPLAYER_RX_MAX_PER_FRAME && performance.now() - start < MULTIPLAYER_RX_BUDGET_MS) {
+   const raw = multiplayerRxQueue.shift();
+   handleMultiplayerMessage(raw);
+   n++;
+ }
+ if (n) setMultiplayerRxCount();
+}
 function updateMultiplayer(dt) {
+ processMultiplayerRxQueue();
  const nowForRemote = performance.now();
  for (const r of Array.from(multiplayerRemotes.values())) {
    if (!r.entity || !r.target) continue;
@@ -2533,6 +2550,7 @@ $('startBtn').onclick=()=>{state.started=true;$('start').style.display='none';if
 $('qualityBtn').onclick=()=>{state.qualityHigh=!state.qualityHigh;$('qualityBtn').textContent='画質: '+(state.qualityHigh?'HIGH':'LIGHT');if(app.graphicsDevice){app.graphicsDevice.maxPixelRatio=targetPixelRatio();$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}setMsg('画質変更: 再読込でテクスチャ解像度も反映','info');};
 
 let fpsAcc=0,fpsCount=0,fpsLast=performance.now();
+let hudUiLast=0;
 function update(dt){
  if(state.editingObject){
    updateObjectEditorFlight(dt);
@@ -2554,11 +2572,16 @@ function update(dt){
  player.vy-=18*dt;if(input.jump&&player.onGround){player.vy=7.2;player.onGround=false;}input.jump=false;
  player.y+=player.vy*dt;tryGround();if(player.y<-10){player.x=0;player.y=10;player.z=-8;player.vy=0;}
  aimCamera();
- const r=rayBlock();state.target=r;$('targetBox').textContent=r?(r.objectHit?('照準: OBJ ['+(r.objectHit.defId||'object')+']'):('照準: '+blockDefs[r.hit.data.type].label+' ['+r.hit.data.x+','+r.hit.data.y+','+r.hit.data.z+']')):'中央のブロック/OBJを狙う';
- $('pos').textContent=player.x.toFixed(1)+','+player.y.toFixed(1)+','+player.z.toFixed(1);
- $('chunks').textContent=chunkStats();
+ const r=rayBlock();state.target=r;
+ const uiNow=performance.now();
+ if(uiNow-hudUiLast>120){
+   hudUiLast=uiNow;
+   $('targetBox').textContent=r?(r.objectHit?('照準: OBJ ['+(r.objectHit.defId||'object')+']'):('照準: '+blockDefs[r.hit.data.type].label+' ['+r.hit.data.x+','+r.hit.data.y+','+r.hit.data.z+']')):'中央のブロック/OBJを狙う';
+   $('pos').textContent=player.x.toFixed(1)+','+player.y.toFixed(1)+','+player.z.toFixed(1);
+   $('chunks').textContent=chunkStats();
+ }
 }
-app.on('update',dt=>{dt=Math.min(dt,.05);update(dt);updateMultiplayer(dt);updateCustomObjectRuntime(dt);if(typeof updateObjectBuilder==='function')updateObjectBuilder(dt);fpsAcc+=dt;fpsCount++;const now=performance.now();if(now-fpsLast>500){const fps=Math.round(fpsCount/fpsAcc);$('fps').textContent=fps;if(app.graphicsDevice&&state.started&&fps<52&&app.graphicsDevice.maxPixelRatio>1){app.graphicsDevice.maxPixelRatio=Math.max(1,app.graphicsDevice.maxPixelRatio-.1);$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}
+app.on('update',dt=>{dt=Math.min(dt,.05);update(dt);updateMultiplayer(dt);updateCustomObjectRuntime(dt);if(typeof updateObjectBuilder==='function')updateObjectBuilder(dt);fpsAcc+=dt;fpsCount++;const now=performance.now();if(now-fpsLast>500){const fps=Math.round(fpsCount/fpsAcc);$('fps').textContent=fps;if(app.graphicsDevice&&state.started&&fps<55&&app.graphicsDevice.maxPixelRatio>1){app.graphicsDevice.maxPixelRatio=Math.max(1,app.graphicsDevice.maxPixelRatio-.15);$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);} if(app.graphicsDevice&&state.started&&fps>59&&app.graphicsDevice.maxPixelRatio<targetPixelRatio()){app.graphicsDevice.maxPixelRatio=Math.min(targetPixelRatio(),app.graphicsDevice.maxPixelRatio+.03);$('pr').textContent=app.graphicsDevice.maxPixelRatio.toFixed(2);}
 fpsAcc=0;fpsCount=0;fpsLast=now;}});
 
 /* OBJ editor UI auto-hide: based on per-block-size-scope-fixed, so size fix is preserved. */
@@ -3738,7 +3761,17 @@ ultraApplyTransform = function(msg){
 };
 
 const __infoUpdateCustomObjectRuntime = updateCustomObjectRuntime;
-updateCustomObjectRuntime=function(dt){ __infoUpdateCustomObjectRuntime(dt); updateInfoTexturePhysics(dt); updateCats(dt); updateInfoHud(); };
+let __infoRuntimeAcc=0;
+updateCustomObjectRuntime=function(dt){
+ __infoUpdateCustomObjectRuntime(dt);
+ __infoRuntimeAcc += dt;
+ if(__infoRuntimeAcc>=0.12){
+   const step=__infoRuntimeAcc; __infoRuntimeAcc=0;
+   updateInfoTexturePhysics(step);
+   updateCats(step);
+   updateInfoHud();
+ }
+};
 function initInfoTextureSystem(){ ensureInfoHud(); ensureCatInfoTexture(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); }
 try{initInfoTextureSystem();}catch(e){console.warn('info texture init failed',e);}
 
