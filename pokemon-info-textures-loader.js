@@ -1,83 +1,108 @@
-/*
- Pokemon Gen1 information texture loader for index-mine.html.
- - Use generated/pokemon-info-textures.gen1.30x30.generated.js when built.
- - Registers 151 plane information textures as kind:"plane", grid:30.
-*/
 (function(){
   'use strict';
-  const NAMES = ["フシギダネ", "フシギソウ", "フシギバナ", "ヒトカゲ", "リザード", "リザードン", "ゼニガメ", "カメール", "カメックス", "キャタピー", "トランセル", "バタフリー", "ビードル", "コクーン", "スピアー", "ポッポ", "ピジョン", "ピジョット", "コラッタ", "ラッタ", "オニスズメ", "オニドリル", "アーボ", "アーボック", "ピカチュウ", "ライチュウ", "サンド", "サンドパン", "ニドラン♀", "ニドリーナ", "ニドクイン", "ニドラン♂", "ニドリーノ", "ニドキング", "ピッピ", "ピクシー", "ロコン", "キュウコン", "プリン", "プクリン", "ズバット", "ゴルバット", "ナゾノクサ", "クサイハナ", "ラフレシア", "パラス", "パラセクト", "コンパン", "モルフォン", "ディグダ", "ダグトリオ", "ニャース", "ペルシアン", "コダック", "ゴルダック", "マンキー", "オコリザル", "ガーディ", "ウインディ", "ニョロモ", "ニョロゾ", "ニョロボン", "ケーシィ", "ユンゲラー", "フーディン", "ワンリキー", "ゴーリキー", "カイリキー", "マダツボミ", "ウツドン", "ウツボット", "メノクラゲ", "ドククラゲ", "イシツブテ", "ゴローン", "ゴローニャ", "ポニータ", "ギャロップ", "ヤドン", "ヤドラン", "コイル", "レアコイル", "カモネギ", "ドードー", "ドードリオ", "パウワウ", "ジュゴン", "ベトベター", "ベトベトン", "シェルダー", "パルシェン", "ゴース", "ゴースト", "ゲンガー", "イワーク", "スリープ", "スリーパー", "クラブ", "キングラー", "ビリリダマ", "マルマイン", "タマタマ", "ナッシー", "カラカラ", "ガラガラ", "サワムラー", "エビワラー", "ベロリンガ", "ドガース", "マタドガス", "サイホーン", "サイドン", "ラッキー", "モンジャラ", "ガルーラ", "タッツー", "シードラ", "トサキント", "アズマオウ", "ヒトデマン", "スターミー", "バリヤード", "ストライク", "ルージュラ", "エレブー", "ブーバー", "カイロス", "ケンタロス", "コイキング", "ギャラドス", "ラプラス", "メタモン", "イーブイ", "シャワーズ", "サンダース", "ブースター", "ポリゴン", "オムナイト", "オムスター", "カブト", "カブトプス", "プテラ", "カビゴン", "フリーザー", "サンダー", "ファイヤー", "ミニリュウ", "ハクリュー", "カイリュー", "ミュウツー", "ミュウ"];
-  const PACK_KEY = 'pokemon-info-textures.gen1.30x30';
-  const PREFIX = 'info-pokemon-';
-  const SOURCE_BASE = 'https://web.archive.org/web/20240319000051im_/https://pixel-art.tsurezure-brog.com/home/images/pokeicon-';
 
-  function pad3(n){ return String(n).padStart(3,'0'); }
-  function sourceUrl(n){ return SOURCE_BASE + n + '-150x150.jpg'; }
-  function baseDef(n, cells){
-    const no = pad3(n), name = NAMES[n-1] || no;
-    return {
-      id: PREFIX + no,
-      no: n,
-      name: '情報テクスチャ:' + no + ' ' + name,
-      kind: 'plane',
-      grid: 30,
-      scale: 0.045,
-      cells: Array.isArray(cells) ? cells : [],
-      infoTexture: true,
-      infoType: 'pokemon-' + no,
-      infoRole: 'pokemon-gen1',
-      infoBehavior: '第1世代ポケモン手持ちアイコン由来の30×30情報テクスチャ: ' + name,
-      infoPhysics: {massKg:1, gravityScale:1, terminalVelocity:18, bounce:0},
-      hp: 8,
-      sourceUrl: sourceUrl(n),
-      createdAt: 1,
-      updatedAt: 1
-    };
+  var LOADER_VERSION = 'pokemon-info-textures-loader.v1';
+  var SOURCE_NAME = 'generated/pokemon-info-textures.gen1.30x30.generated.js';
+
+  function safeNow(){ return Date.now ? Date.now() : new Date().getTime(); }
+  function normHex(c){
+    c = String(c || '').trim();
+    if(/^#[0-9a-fA-F]{6}$/.test(c)) return c.toLowerCase();
+    if(/^#[0-9a-fA-F]{3}$/.test(c)) return ('#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]).toLowerCase();
+    return '#22c55e';
   }
-  function hasGameRegistry(){ return !!(window.customObjectDefs && typeof window.validateObjectDef === 'function'); }
-  function register(def){
-    if(!hasGameRegistry() || !def || !Array.isArray(def.cells) || !def.cells.length) return false;
-    const clean = window.validateObjectDef(def) || def;
+  function pokemonId(no){
+    no = Math.max(1, Math.min(999, Math.trunc(Number(no)||0)));
+    return 'info-pokemon-' + String(no).padStart(3, '0');
+  }
+  function pokemonName(src, no){
+    var n = String((src && src.name) || '').trim();
+    return '情報テクスチャ:' + String(no).padStart(3, '0') + (n ? ' ' + n : '');
+  }
+  function normalizeCells(src, grid){
+    var out = [], seen = Object.create(null);
+    var cells = Array.isArray(src && src.cells) ? src.cells : [];
+    for(var i=0; i<cells.length; i++){
+      var c = cells[i] || {};
+      var x = Math.trunc(Number(c.x));
+      var y = Math.trunc(Number(c.y));
+      if(!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= grid || y >= grid) continue;
+      var key = x + ',' + y;
+      if(seen[key]) continue;
+      seen[key] = 1;
+      out.push({ x:x, y:y, color:normHex(c.color) });
+    }
+    return out;
+  }
+  function registerOne(src){
+    if(!src) return false;
+    var m = String(src.id || '').match(/(\d+)/);
+    var no = Math.trunc(Number(src.no || (m && m[1]) || 0));
+    if(!no) return false;
+    var grid = Math.max(8, Math.min(128, Math.trunc(Number(src.grid)||30)));
+    var cells = normalizeCells(src, grid);
+    if(!cells.length) return false;
+    var def = {
+      id: String(src.id || pokemonId(no)).slice(0,96),
+      no: no,
+      name: pokemonName(src, no),
+      kind: 'plane',
+      grid: grid,
+      // 30x30は貼付時に潰れすぎないよう少し大きめ。OBJ貼付倍率側でさらに調整可。
+      scale: Math.max(0.005, Math.min(0.50, Number(src.scale)||0.055)),
+      cells: cells,
+      infoTexture: true,
+      infoType: 'pokemon',
+      infoRole: 'pokemon',
+      infoBehavior: 'GitHub Actions生成の30x30多色ドット絵。3Dエディターでブロック面に貼る情報テクスチャ。',
+      infoPhysics: { massKg: 6, gravityScale: 1, terminalVelocity: 18, bounce: 0 },
+      hp: 12,
+      createdAt: 1,
+      updatedAt: safeNow(),
+      source: SOURCE_NAME
+    };
+    var clean = (typeof validateObjectDef === 'function') ? validateObjectDef(def) : def;
+    if(!clean) return false;
+    // validateObjectDefで落ちる補助メタは戻す。既存の情報テクスチャ判定・解放処理に乗せるため。
+    clean.no = no;
     clean.infoTexture = true;
-    clean.infoType = def.infoType;
-    clean.infoRole = def.infoRole;
+    clean.infoType = 'pokemon';
+    clean.infoRole = 'pokemon';
     clean.infoBehavior = def.infoBehavior;
     clean.infoPhysics = def.infoPhysics;
     clean.hp = def.hp;
-    clean.no = def.no;
-    clean.sourceUrl = def.sourceUrl;
-    window.customObjectDefs.set(clean.id, clean);
+    clean.updatedAt = def.updatedAt;
+    clean.source = SOURCE_NAME;
+    customObjectDefs.set(clean.id, clean);
     return true;
   }
-  function loadGeneratedDefs(){
-    if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) return window.POKEMON_INFO_TEXTURE_DEFS_30;
-    try{
-      const raw = localStorage.getItem(PACK_KEY);
-      const arr = raw ? JSON.parse(raw) : null;
-      if(Array.isArray(arr)) return arr;
-    }catch(e){}
-    return [];
-  }
-  function registerPokemonInfoTextures(){
-    const defs = loadGeneratedDefs();
-    let ok = 0;
-    for(let n=1;n<=151;n++){
-      const no = pad3(n);
-      const found = defs.find(d => String(d.id) === PREFIX + no || Number(d.no) === n);
-      if(found && register(Object.assign(baseDef(n, found.cells), found))) ok++;
+  function loadPokemonInfoTextures(){
+    var arr = window.POKEMON_INFO_TEXTURE_DEFS_30;
+    if(!Array.isArray(arr) || !arr.length){
+      console.warn(LOADER_VERSION + ': window.POKEMON_INFO_TEXTURE_DEFS_30 が無い。' + SOURCE_NAME + ' の読み込み順/配置を確認。');
+      return 0;
     }
-    try{ if(typeof window.setObjHud === 'function') window.setObjHud(); }catch(e){}
-    try{ if(typeof window.renderObjectManager === 'function') window.renderObjectManager(); }catch(e){}
-    window.POKEMON_INFO_TEXTURE_STATUS = {registered: ok, expected: 151, generatedLoaded: defs.length};
+    if(typeof customObjectDefs === 'undefined'){
+      console.warn(LOADER_VERSION + ': customObjectDefs がまだ無い。index-mine.html本体の後にloaderを読む必要あり。');
+      return 0;
+    }
+    var ok = 0;
+    for(var i=0; i<arr.length; i++){
+      try{ if(registerOne(arr[i])) ok++; }catch(e){ console.warn(LOADER_VERSION + ': register failed', arr[i] && arr[i].id, e); }
+    }
+    try{ if(typeof renderObjectManager === 'function') renderObjectManager(); }catch(e){}
+    try{ if(typeof updateTexturePasteOptions === 'function') updateTexturePasteOptions(); }catch(e){}
+    try{ if(typeof setObjHud === 'function') setObjHud(); }catch(e){}
+    try{ if(typeof setMsg === 'function') setMsg('ポケモン情報テクスチャ読込: ' + ok + '件 / 倒すと平面テクスチャ解放', ok ? 'good' : 'bad'); }catch(e){}
+    console.log(LOADER_VERSION + ': loaded ' + ok + ' pokemon info textures');
+    window.POKEMON_INFO_TEXTURE_LOADED_COUNT = ok;
     return ok;
   }
 
-  window.POKEMON_INFO_TEXTURE_NAMES = NAMES;
-  window.registerPokemonInfoTextures = registerPokemonInfoTextures;
-
-  // Run after the game has defined customObjectDefs/validateObjectDef.
-  function boot(retry){
-    if(hasGameRegistry()){ registerPokemonInfoTextures(); return; }
-    if(retry < 80) setTimeout(() => boot(retry+1), 250);
+  window.loadPokemonInfoTextures = loadPokemonInfoTextures;
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', loadPokemonInfoTextures, { once:true });
+  }else{
+    loadPokemonInfoTextures();
   }
-  boot(0);
 })();
