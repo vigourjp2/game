@@ -895,6 +895,72 @@ const OBJECT_STORAGE_KEY = 'voxelStudyWorld.customObjects3d.v2';
 // TDZを避けてここで先に初期化する。
 var INFO_TEXTURE_CAT_ID = 'info-cat';
 var INFO_TEXTURE_PREFIX = 'info-';
+var INFO_TEXTURE_PKMN_SLUG_TO_NO_V8 = {'bulbasaur':'001','ivysaur':'002','venusaur':'003','charmander':'004','charmeleon':'005','charizard':'006','squirtle':'007','wartortle':'008','blastoise':'009','caterpie':'010','metapod':'011','butterfree':'012','weedle':'013','kakuna':'014','beedrill':'015','pidgey':'016','pidgeotto':'017','pidgeot':'018','rattata':'019','raticate':'020','spearow':'021','fearow':'022','ekans':'023','arbok':'024','pikachu':'025','raichu':'026','sandshrew':'027','sandslash':'028','nidoran_f':'029','nidorina':'030','nidoqueen':'031','nidoran_m':'032','nidorino':'033','nidoking':'034','clefairy':'035','clefable':'036','vulpix':'037','ninetales':'038','jigglypuff':'039','wigglytuff':'040','zubat':'041','golbat':'042','oddish':'043','gloom':'044','vileplume':'045','paras':'046','parasect':'047','venonat':'048','venomoth':'049','diglett':'050','dugtrio':'051','meowth':'052','persian':'053','psyduck':'054','golduck':'055','mankey':'056','primeape':'057','growlithe':'058','arcanine':'059','poliwag':'060','poliwhirl':'061','poliwrath':'062','abra':'063','kadabra':'064','alakazam':'065','machop':'066','machoke':'067','machamp':'068','bellsprout':'069','weepinbell':'070','victreebel':'071','tentacool':'072','tentacruel':'073','geodude':'074','graveler':'075','golem':'076','ponyta':'077','rapidash':'078','slowpoke':'079','slowbro':'080','magnemite':'081','magneton':'082','farfetchd':'083','doduo':'084','dodrio':'085','seel':'086','dewgong':'087','grimer':'088','muk':'089','shellder':'090','cloyster':'091','gastly':'092','haunter':'093','gengar':'094','onix':'095','drowzee':'096','hypno':'097','krabby':'098','kingler':'099','voltorb':'100','electrode':'101','exeggcute':'102','exeggutor':'103','cubone':'104','marowak':'105','hitmonlee':'106','hitmonchan':'107','lickitung':'108','koffing':'109','weezing':'110','rhyhorn':'111','rhydon':'112','chansey':'113','tangela':'114','kangaskhan':'115','horsea':'116','seadra':'117','goldeen':'118','seaking':'119','staryu':'120','starmie':'121','mr_mime':'122','scyther':'123','jynx':'124','electabuzz':'125','magmar':'126','pinsir':'127','tauros':'128','magikarp':'129','gyarados':'130','lapras':'131','ditto':'132','eevee':'133','vaporeon':'134','jolteon':'135','flareon':'136','porygon':'137','omanyte':'138','omastar':'139','kabuto':'140','kabutops':'141','aerodactyl':'142','snorlax':'143','articuno':'144','zapdos':'145','moltres':'146','dratini':'147','dragonair':'148','dragonite':'149','mewtwo':'150','mew':'151'};
+// Legacy cleanup: 以前の試作ID info-pkmn080 / pkmn080 は使わない。
+// 図鑑追加分は必ず info-poke_080 形式へ正規化する。
+function normalizeInfoTextureTokenV8(value){
+ let s=String(value||'').trim().toLowerCase();
+ s=s.replace(/^info[-_]/,'');
+ s=s.replace(/[^a-z0-9_-]/g,'');
+ let m=s.match(/^pkmn[-_]?(\d{1,3})$/);
+ if(m) return 'poke_'+String(Math.max(1,Math.min(151,parseInt(m[1],10)))).padStart(3,'0');
+ m=s.match(/^poke(\d{3})$/);
+ if(m) return 'poke_'+m[1];
+ m=s.match(/^pkmn[-_](.+)$/);
+ if(m){
+   const slug=m[1].replace(/-/g,'_').replace(/[^a-z0-9_]/g,'');
+   const no=INFO_TEXTURE_PKMN_SLUG_TO_NO_V8[slug];
+   if(no) return 'poke_'+no;
+ }
+ return s;
+}
+function normalizeInfoTextureIdV8(value){
+ const token=normalizeInfoTextureTokenV8(value);
+ return INFO_TEXTURE_PREFIX + token;
+}
+function normalizeObjectIdV8(value){
+ const raw=String(value||'').trim();
+ if(/^info[-_](pkmn(?:[-_]?(?:\d{1,3}|[a-z0-9_-]+))|poke\d{3})$/i.test(raw)) return normalizeInfoTextureIdV8(raw);
+ return raw;
+}
+function normalizeInfoTextureDefIdsV8(def){
+ if(!def || typeof def!=='object') return def;
+ const out=Object.assign({},def);
+ if(out.id) out.id=normalizeObjectIdV8(out.id);
+ if(out.infoType) out.infoType=normalizeInfoTextureTokenV8(out.infoType);
+ if(Array.isArray(out.infoTextureIds)) out.infoTextureIds=out.infoTextureIds.map(normalizeObjectIdV8);
+ if(Array.isArray(out.decals)) out.decals=out.decals.map(d=>{
+   if(!d || typeof d!=='object') return d;
+   const nd=Object.assign({},d);
+   if(nd.textureId) nd.textureId=normalizeObjectIdV8(nd.textureId);
+   return nd;
+ });
+ return out;
+}
+function cleanupLegacyPkmnInfoTextureIdsV8(){
+ try{
+   for(const [id,def] of Array.from(customObjectDefs||new Map())){
+     const nid=normalizeObjectIdV8(id);
+     if(nid!==id){
+       customObjectDefs.delete(id);
+       const clean=normalizeInfoTextureDefIdsV8(def);
+       if(clean && !customObjectDefs.has(nid)) customObjectDefs.set(nid, clean);
+     }else if(def && typeof def==='object'){
+       const clean=normalizeInfoTextureDefIdsV8(def);
+       if(clean!==def) customObjectDefs.set(id, clean);
+     }
+   }
+   if(customObjectEntities&&customObjectEntities.forEach){
+     customObjectEntities.forEach(root=>{
+       if(root&&root.data){
+         if(root.data.defId) root.data.defId=normalizeObjectIdV8(root.data.defId);
+         if(Array.isArray(root.data.infoTextureIds)) root.data.infoTextureIds=root.data.infoTextureIds.map(normalizeObjectIdV8);
+       }
+     });
+   }
+   if(typeof saveCustomObjectsLocal==='function') saveCustomObjectsLocal();
+ }catch(e){ console.warn('legacy pkmn cleanup failed',e); }
+}
 var INFO_CARRIER_CAT_ID = 'builtin-info-carrier-cat';
 var INFO_BP_PREFIX = 'bp-';
 const customObjectDefs = new Map();
@@ -998,6 +1064,7 @@ function loadCustomObjectsLocal(){
  setObjHud();
 }
 function registerCustomObjectDef(def, source){
+ def=normalizeInfoTextureDefIdsV8(def);
  const clean=validateObjectDef(def);
  if(!clean) return false;
  const existed=customObjectDefs.has(clean.id);
@@ -1221,7 +1288,7 @@ function queueObjectInstancePlace(defId,msg){
  pendingObjectInstancePlaces.set(defId, arr.slice(-20));
 }
 function applyObjectInstancePlaceMessage(msg){
- const defId=String(msg.objectId||msg.defId||msg.id||'');
+ const defId=normalizeObjectIdV8(msg.objectId||msg.defId||msg.id||'');
  let def=customObjectDefs.get(defId);
  if(!def && msg.object){
    registerCustomObjectDef(msg.object,'remoteCatalog');
@@ -2619,7 +2686,7 @@ function update(dt){
  const uiNow=performance.now();
  if(uiNow-hudUiLast>120){
    hudUiLast=uiNow;
-   $('targetBox').textContent=r?(r.objectHit?('照準: OBJ ['+(r.objectHit.defId||'object')+']'):('照準: '+blockDefs[r.hit.data.type].label+' ['+r.hit.data.x+','+r.hit.data.y+','+r.hit.data.z+']')):'中央のブロック/OBJを狙う';
+   $('targetBox').textContent=r?(r.objectHit?('照準: OBJ ['+(normalizeObjectIdV8(r.objectHit.defId)||'object')+']'):('照準: '+blockDefs[r.hit.data.type].label+' ['+r.hit.data.x+','+r.hit.data.y+','+r.hit.data.z+']')):'中央のブロック/OBJを狙う';
    $('pos').textContent=player.x.toFixed(1)+','+player.y.toFixed(1)+','+player.z.toFixed(1);
    $('chunks').textContent=chunkStats();
  }
@@ -3870,9 +3937,9 @@ const INFO_TEXTURE_PACK_V3 = [
  {type:'copper_golem',name:'カッパーゴーレム',role:'helper',hp:25,damage:3,massKg:120,speed:1.2,sense:7.0,attackRange:1.3,soundBase:180,palette:{body:'#b45309',dark:'#451a03',accent:'#14b8a6'},behavior:'銅の小型ゴーレム。カチカチ歩く'}
 ];
 const INFO_TEXTURE_META_V3 = {};
-function infoTextureIdFromTypeV3(type){ return INFO_TEXTURE_PREFIX + String(type||'').replace(/^info-/,'').replace(/[^a-z0-9_-]/gi,'').toLowerCase(); }
+function infoTextureIdFromTypeV3(type){ return normalizeInfoTextureIdV8(type); }
 INFO_TEXTURE_PACK_V3.forEach(m=>{ m.id=m.id||infoTextureIdFromTypeV3(m.type); INFO_TEXTURE_META_V3[m.id]=m; INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(m.type)]=m; });
-function infoMetaForIdV3(id){ return INFO_TEXTURE_META_V3[String(id||'')] || null; }
+function infoMetaForIdV3(id){ id=normalizeObjectIdV8(id); return INFO_TEXTURE_META_V3[String(id||'')] || null; }
 function makeInfoIconCellsV3(seed,palette){
  const g=16,cells=[]; const put=(x,y,c)=>{ if(x>=0&&x<g&&y>=0&&y<g) cells.push({x,y,color:c}); };
  const p=Object.assign({body:'#94a3b8',dark:'#111827',light:'#f8fafc',accent:'#f97316',eye:'#020617'},palette||{});
@@ -3896,7 +3963,7 @@ function makeInfoIconCellsV3(seed,palette){
  return cells;
 }
 function ensureInfoTextureDefV3(meta){
- if(!meta) return null; const id=String(meta.id||infoTextureIdFromTypeV3(meta.type));
+ if(!meta) return null; meta=normalizeInfoTextureDefIdsV8(meta); const id=normalizeObjectIdV8(meta.id||infoTextureIdFromTypeV3(meta.type));
  const def={id,name:'情報テクスチャ:'+meta.name,kind:'plane',grid:16,scale:.085,cells:makeInfoIconCellsV3(meta.type,meta.palette),infoTexture:true,infoType:meta.type,infoPhysics:{massKg:meta.massKg||1,gravityScale:(meta.gravityScale==null?1:meta.gravityScale),terminalVelocity:18,bounce:meta.bounce||0},hp:meta.hp||8,infoRole:meta.role,infoBehavior:meta.behavior,createdAt:1,updatedAt:Date.now()};
  customObjectDefs.set(id, validateObjectDef(def)||def); return customObjectDefs.get(id);
 }
@@ -3904,6 +3971,7 @@ function ensureAllInfoTexturesV3(){ INFO_TEXTURE_PACK_V3.forEach(ensureInfoTextu
 ensureCatInfoTexture=function(){ return ensureInfoTextureDefV3(INFO_TEXTURE_META_V3[INFO_TEXTURE_CAT_ID]||INFO_TEXTURE_PACK_V3.find(m=>m.type==='cat')); };
 const __v3ValidateObjectDef = validateObjectDef;
 validateObjectDef=function(def){
+ def=normalizeInfoTextureDefIdsV8(def);
  const clean=__v3ValidateObjectDef(def); if(!clean) return clean;
  const ids=[]; const add=id=>{id=String(id||''); if(id&&!ids.includes(id)) ids.push(id);};
  if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add);
@@ -3915,7 +3983,7 @@ validateObjectDef=function(def){
  return clean;
 };
 function rootInfoTextureIdsV3(root){
- const out=[]; const add=id=>{id=String(id||''); if(id&&!out.includes(id)) out.push(id);};
+ const out=[]; const add=id=>{id=normalizeObjectIdV8(id); if(id&&!out.includes(id)) out.push(id);};
  if(root&&root.data&&Array.isArray(root.data.infoTextureIds)) root.data.infoTextureIds.forEach(add);
  const def=customObjectDefs.get(root&&root.data&&root.data.defId);
  if(def){ if(def.infoTexture) add(def.id); if(Array.isArray(def.infoTextureIds)) def.infoTextureIds.forEach(add); if(def.infoType){ const m=INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(def.infoType)]; if(m) add(m.id); } if(Array.isArray(def.decals)) for(const d of def.decals){ const tid=String(d&&d.textureId||''); const tdef=customObjectDefs.get(tid); if(infoMetaForIdV3(tid)||(tdef&&tdef.infoTexture)) add(tid); } }
@@ -4075,7 +4143,167 @@ function infoTextureApplyProMetaV4(meta){
  return meta;
 }
 for(const extra of INFO_TEXTURE_EXTRA_HOSTILES_V4){ if(!INFO_TEXTURE_PACK_V3.some(m=>m.type===extra.type)) INFO_TEXTURE_PACK_V3.push(extra); }
+
+// ===== Info Texture volume pack: 151 collectible monster-name entries =====
+// アイコン欄は未指定のため、既存の手続き型ドット絵ベイクを使う。外部画像は参照しない。
+const INFO_TEXTURE_POKEMON_VOLUME_PACK_V5 = [
+ {type:'poke_001',name:'No.001 フシギダネ',role:'passive',hp:9,damage:0,massKg:2,speed:1.10,sense:5.6,attackRange:0.95,soundBase:197,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.001。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_002',name:'No.002 フシギソウ',role:'neutral',hp:10,damage:3,massKg:3,speed:1.20,sense:6.2,attackRange:1.10,soundBase:234,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.002。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_003',name:'No.003 フシギバナ',role:'hostile',hp:11,damage:4,massKg:4,speed:1.30,sense:6.8,attackRange:1.25,soundBase:271,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.003。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_004',name:'No.004 ヒトカゲ',role:'neutral',hp:12,damage:5,massKg:5,speed:1.40,sense:7.4,attackRange:1.40,soundBase:308,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.004。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_005',name:'No.005 リザード',role:'hostile',hp:13,damage:1,massKg:6,speed:1.50,sense:8.0,attackRange:1.55,soundBase:345,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.005。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_006',name:'No.006 リザードン',role:'aquatic',hp:14,damage:0,massKg:7,speed:1.60,sense:8.6,attackRange:1.70,soundBase:382,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.006。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_007',name:'No.007 ゼニガメ',role:'aquatic',hp:15,damage:0,massKg:8,speed:1.70,sense:9.2,attackRange:1.85,soundBase:419,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.007。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_008',name:'No.008 カメール',role:'neutral',hp:16,damage:4,massKg:9,speed:1.80,sense:5.0,attackRange:2.00,soundBase:456,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.008。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_009',name:'No.009 カメックス',role:'neutral',hp:17,damage:5,massKg:10,speed:1.90,sense:5.6,attackRange:0.80,soundBase:493,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.009。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_010',name:'No.010 キャタピー',role:'passive',hp:18,damage:0,massKg:11,speed:2.00,sense:6.2,attackRange:0.95,soundBase:530,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.010。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_011',name:'No.011 トランセル',role:'neutral',hp:19,damage:2,massKg:12,speed:2.10,sense:6.8,attackRange:1.10,soundBase:567,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.011。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_012',name:'No.012 バタフリー',role:'hostile',hp:20,damage:3,massKg:13,speed:2.20,sense:7.4,attackRange:1.25,soundBase:604,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.012。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_013',name:'No.013 ビードル',role:'neutral',hp:21,damage:4,massKg:14,speed:2.30,sense:8.0,attackRange:1.40,soundBase:641,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.013。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_014',name:'No.014 コクーン',role:'hostile',hp:22,damage:5,massKg:15,speed:2.40,sense:8.6,attackRange:1.55,soundBase:678,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.014。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_015',name:'No.015 スピアー',role:'aquatic',hp:23,damage:0,massKg:16,speed:2.50,sense:9.2,attackRange:1.70,soundBase:715,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.015。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_016',name:'No.016 ポッポ',role:'aquatic',hp:24,damage:0,massKg:17,speed:2.60,sense:5.0,attackRange:1.85,soundBase:752,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.016。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_017',name:'No.017 ピジョン',role:'neutral',hp:25,damage:3,massKg:18,speed:1.00,sense:5.6,attackRange:2.00,soundBase:789,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.017。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_018',name:'No.018 ピジョット',role:'neutral',hp:26,damage:4,massKg:19,speed:1.10,sense:6.2,attackRange:0.80,soundBase:826,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.018。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_019',name:'No.019 コラッタ',role:'passive',hp:8,damage:0,massKg:20,speed:1.20,sense:6.8,attackRange:0.95,soundBase:863,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.019。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_020',name:'No.020 ラッタ',role:'neutral',hp:9,damage:1,massKg:21,speed:1.30,sense:7.4,attackRange:1.10,soundBase:900,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.020。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_021',name:'No.021 オニスズメ',role:'hostile',hp:10,damage:2,massKg:22,speed:1.40,sense:8.0,attackRange:1.25,soundBase:177,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.021。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_022',name:'No.022 オニドリル',role:'neutral',hp:11,damage:3,massKg:23,speed:1.50,sense:8.6,attackRange:1.40,soundBase:214,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.022。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_023',name:'No.023 アーボ',role:'hostile',hp:12,damage:4,massKg:24,speed:1.60,sense:9.2,attackRange:1.55,soundBase:251,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.023。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_024',name:'No.024 アーボック',role:'aquatic',hp:13,damage:0,massKg:25,speed:1.70,sense:5.0,attackRange:1.70,soundBase:288,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.024。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_025',name:'No.025 ピカチュウ',role:'aquatic',hp:14,damage:0,massKg:26,speed:1.80,sense:5.6,attackRange:1.85,soundBase:325,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.025。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_026',name:'No.026 ライチュウ',role:'neutral',hp:15,damage:2,massKg:27,speed:1.90,sense:6.2,attackRange:2.00,soundBase:362,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.026。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_027',name:'No.027 サンド',role:'neutral',hp:16,damage:3,massKg:28,speed:2.00,sense:6.8,attackRange:0.80,soundBase:399,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.027。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_028',name:'No.028 サンドパン',role:'passive',hp:17,damage:0,massKg:29,speed:2.10,sense:7.4,attackRange:0.95,soundBase:436,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.028。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_029',name:'No.029 ニドラン♀',role:'neutral',hp:18,damage:5,massKg:30,speed:2.20,sense:8.0,attackRange:1.10,soundBase:473,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.029。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_030',name:'No.030 ニドリーナ',role:'hostile',hp:19,damage:1,massKg:31,speed:2.30,sense:8.6,attackRange:1.25,soundBase:510,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.030。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_031',name:'No.031 ニドクイン',role:'neutral',hp:20,damage:2,massKg:32,speed:2.40,sense:9.2,attackRange:1.40,soundBase:547,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.031。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_032',name:'No.032 ニドラン♂',role:'hostile',hp:21,damage:3,massKg:33,speed:2.50,sense:5.0,attackRange:1.55,soundBase:584,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.032。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_033',name:'No.033 ニドリーノ',role:'aquatic',hp:22,damage:0,massKg:34,speed:2.60,sense:5.6,attackRange:1.70,soundBase:621,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.033。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_034',name:'No.034 ニドキング',role:'aquatic',hp:23,damage:0,massKg:35,speed:1.00,sense:6.2,attackRange:1.85,soundBase:658,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.034。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_035',name:'No.035 ピッピ',role:'neutral',hp:24,damage:1,massKg:36,speed:1.10,sense:6.8,attackRange:2.00,soundBase:695,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.035。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_036',name:'No.036 ピクシー',role:'neutral',hp:25,damage:2,massKg:37,speed:1.20,sense:7.4,attackRange:0.80,soundBase:732,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.036。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_037',name:'No.037 ロコン',role:'passive',hp:26,damage:0,massKg:38,speed:1.30,sense:8.0,attackRange:0.95,soundBase:769,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.037。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_038',name:'No.038 キュウコン',role:'neutral',hp:8,damage:4,massKg:39,speed:1.40,sense:8.6,attackRange:1.10,soundBase:806,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.038。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_039',name:'No.039 プリン',role:'hostile',hp:9,damage:5,massKg:40,speed:1.50,sense:9.2,attackRange:1.25,soundBase:843,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.039。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_040',name:'No.040 プクリン',role:'neutral',hp:10,damage:1,massKg:41,speed:1.60,sense:5.0,attackRange:1.40,soundBase:880,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.040。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_041',name:'No.041 ズバット',role:'hostile',hp:11,damage:2,massKg:42,speed:1.70,sense:5.6,attackRange:1.55,soundBase:917,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.041。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_042',name:'No.042 ゴルバット',role:'aquatic',hp:12,damage:0,massKg:43,speed:1.80,sense:6.2,attackRange:1.70,soundBase:194,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.042。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_043',name:'No.043 ナゾノクサ',role:'aquatic',hp:13,damage:0,massKg:44,speed:1.90,sense:6.8,attackRange:1.85,soundBase:231,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.043。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_044',name:'No.044 クサイハナ',role:'neutral',hp:14,damage:5,massKg:45,speed:2.00,sense:7.4,attackRange:2.00,soundBase:268,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.044。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_045',name:'No.045 ラフレシア',role:'neutral',hp:15,damage:1,massKg:46,speed:2.10,sense:8.0,attackRange:0.80,soundBase:305,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.045。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_046',name:'No.046 パラス',role:'passive',hp:16,damage:0,massKg:47,speed:2.20,sense:8.6,attackRange:0.95,soundBase:342,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.046。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_047',name:'No.047 パラセクト',role:'neutral',hp:17,damage:3,massKg:48,speed:2.30,sense:9.2,attackRange:1.10,soundBase:379,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.047。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_048',name:'No.048 コンパン',role:'hostile',hp:18,damage:4,massKg:49,speed:2.40,sense:5.0,attackRange:1.25,soundBase:416,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.048。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_049',name:'No.049 モルフォン',role:'neutral',hp:19,damage:5,massKg:50,speed:2.50,sense:5.6,attackRange:1.40,soundBase:453,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.049。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_050',name:'No.050 ディグダ',role:'hostile',hp:20,damage:1,massKg:51,speed:2.60,sense:6.2,attackRange:1.55,soundBase:490,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.050。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_051',name:'No.051 ダグトリオ',role:'aquatic',hp:21,damage:0,massKg:52,speed:1.00,sense:6.8,attackRange:1.70,soundBase:527,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.051。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_052',name:'No.052 ニャース',role:'aquatic',hp:22,damage:0,massKg:53,speed:1.10,sense:7.4,attackRange:1.85,soundBase:564,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.052。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_053',name:'No.053 ペルシアン',role:'neutral',hp:23,damage:4,massKg:54,speed:1.20,sense:8.0,attackRange:2.00,soundBase:601,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.053。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_054',name:'No.054 コダック',role:'neutral',hp:24,damage:5,massKg:55,speed:1.30,sense:8.6,attackRange:0.80,soundBase:638,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.054。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_055',name:'No.055 ゴルダック',role:'passive',hp:25,damage:0,massKg:56,speed:1.40,sense:9.2,attackRange:0.95,soundBase:675,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.055。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_056',name:'No.056 マンキー',role:'neutral',hp:26,damage:2,massKg:57,speed:1.50,sense:5.0,attackRange:1.10,soundBase:712,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.056。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_057',name:'No.057 オコリザル',role:'hostile',hp:8,damage:3,massKg:58,speed:1.60,sense:5.6,attackRange:1.25,soundBase:749,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.057。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_058',name:'No.058 ガーディ',role:'neutral',hp:9,damage:4,massKg:59,speed:1.70,sense:6.2,attackRange:1.40,soundBase:786,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.058。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_059',name:'No.059 ウインディ',role:'hostile',hp:10,damage:5,massKg:60,speed:1.80,sense:6.8,attackRange:1.55,soundBase:823,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.059。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_060',name:'No.060 ニョロモ',role:'aquatic',hp:11,damage:0,massKg:61,speed:1.90,sense:7.4,attackRange:1.70,soundBase:860,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.060。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_061',name:'No.061 ニョロゾ',role:'aquatic',hp:12,damage:0,massKg:62,speed:2.00,sense:8.0,attackRange:1.85,soundBase:897,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.061。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_062',name:'No.062 ニョロボン',role:'neutral',hp:13,damage:3,massKg:63,speed:2.10,sense:8.6,attackRange:2.00,soundBase:174,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.062。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_063',name:'No.063 ケーシィ',role:'neutral',hp:14,damage:4,massKg:64,speed:2.20,sense:9.2,attackRange:0.80,soundBase:211,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.063。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_064',name:'No.064 ユンゲラー',role:'passive',hp:15,damage:0,massKg:65,speed:2.30,sense:5.0,attackRange:0.95,soundBase:248,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.064。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_065',name:'No.065 フーディン',role:'neutral',hp:16,damage:1,massKg:66,speed:2.40,sense:5.6,attackRange:1.10,soundBase:285,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.065。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_066',name:'No.066 ワンリキー',role:'hostile',hp:17,damage:2,massKg:67,speed:2.50,sense:6.2,attackRange:1.25,soundBase:322,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.066。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_067',name:'No.067 ゴーリキー',role:'neutral',hp:18,damage:3,massKg:68,speed:2.60,sense:6.8,attackRange:1.40,soundBase:359,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.067。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_068',name:'No.068 カイリキー',role:'hostile',hp:19,damage:4,massKg:69,speed:1.00,sense:7.4,attackRange:1.55,soundBase:396,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.068。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_069',name:'No.069 マダツボミ',role:'aquatic',hp:20,damage:0,massKg:70,speed:1.10,sense:8.0,attackRange:1.70,soundBase:433,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.069。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_070',name:'No.070 ウツドン',role:'aquatic',hp:21,damage:0,massKg:71,speed:1.20,sense:8.6,attackRange:1.85,soundBase:470,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.070。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_071',name:'No.071 ウツボット',role:'neutral',hp:22,damage:2,massKg:72,speed:1.30,sense:9.2,attackRange:2.00,soundBase:507,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.071。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_072',name:'No.072 メノクラゲ',role:'neutral',hp:23,damage:3,massKg:73,speed:1.40,sense:5.0,attackRange:0.80,soundBase:544,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.072。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_073',name:'No.073 ドククラゲ',role:'passive',hp:24,damage:0,massKg:74,speed:1.50,sense:5.6,attackRange:0.95,soundBase:581,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.073。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_074',name:'No.074 イシツブテ',role:'neutral',hp:25,damage:5,massKg:75,speed:1.60,sense:6.2,attackRange:1.10,soundBase:618,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.074。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_075',name:'No.075 ゴローン',role:'hostile',hp:26,damage:1,massKg:76,speed:1.70,sense:6.8,attackRange:1.25,soundBase:655,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.075。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_076',name:'No.076 ゴローニャ',role:'neutral',hp:8,damage:2,massKg:77,speed:1.80,sense:7.4,attackRange:1.40,soundBase:692,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.076。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_077',name:'No.077 ポニータ',role:'hostile',hp:9,damage:3,massKg:78,speed:1.90,sense:8.0,attackRange:1.55,soundBase:729,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.077。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_078',name:'No.078 ギャロップ',role:'aquatic',hp:10,damage:0,massKg:79,speed:2.00,sense:8.6,attackRange:1.70,soundBase:766,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.078。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_079',name:'No.079 ヤドン',role:'aquatic',hp:11,damage:0,massKg:80,speed:2.10,sense:9.2,attackRange:1.85,soundBase:803,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.079。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_080',name:'No.080 ヤドラン',role:'neutral',hp:12,damage:1,massKg:1,speed:2.20,sense:5.0,attackRange:2.00,soundBase:840,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.080。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_081',name:'No.081 コイル',role:'neutral',hp:13,damage:2,massKg:2,speed:2.30,sense:5.6,attackRange:0.80,soundBase:877,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.081。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_082',name:'No.082 レアコイル',role:'passive',hp:14,damage:0,massKg:3,speed:2.40,sense:6.2,attackRange:0.95,soundBase:914,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.082。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_083',name:'No.083 カモネギ',role:'neutral',hp:15,damage:4,massKg:4,speed:2.50,sense:6.8,attackRange:1.10,soundBase:191,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.083。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_084',name:'No.084 ドードー',role:'hostile',hp:16,damage:5,massKg:5,speed:2.60,sense:7.4,attackRange:1.25,soundBase:228,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.084。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_085',name:'No.085 ドードリオ',role:'neutral',hp:17,damage:1,massKg:6,speed:1.00,sense:8.0,attackRange:1.40,soundBase:265,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.085。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_086',name:'No.086 パウワウ',role:'hostile',hp:18,damage:2,massKg:7,speed:1.10,sense:8.6,attackRange:1.55,soundBase:302,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.086。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_087',name:'No.087 ジュゴン',role:'aquatic',hp:19,damage:0,massKg:8,speed:1.20,sense:9.2,attackRange:1.70,soundBase:339,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.087。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_088',name:'No.088 ベトベター',role:'aquatic',hp:20,damage:0,massKg:9,speed:1.30,sense:5.0,attackRange:1.85,soundBase:376,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.088。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_089',name:'No.089 ベトベトン',role:'neutral',hp:21,damage:5,massKg:10,speed:1.40,sense:5.6,attackRange:2.00,soundBase:413,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.089。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_090',name:'No.090 シェルダー',role:'neutral',hp:22,damage:1,massKg:11,speed:1.50,sense:6.2,attackRange:0.80,soundBase:450,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.090。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_091',name:'No.091 パルシェン',role:'passive',hp:23,damage:0,massKg:12,speed:1.60,sense:6.8,attackRange:0.95,soundBase:487,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.091。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_092',name:'No.092 ゴース',role:'neutral',hp:24,damage:3,massKg:13,speed:1.70,sense:7.4,attackRange:1.10,soundBase:524,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.092。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_093',name:'No.093 ゴースト',role:'hostile',hp:25,damage:4,massKg:14,speed:1.80,sense:8.0,attackRange:1.25,soundBase:561,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.093。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_094',name:'No.094 ゲンガー',role:'neutral',hp:26,damage:5,massKg:15,speed:1.90,sense:8.6,attackRange:1.40,soundBase:598,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.094。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_095',name:'No.095 イワーク',role:'hostile',hp:8,damage:1,massKg:16,speed:2.00,sense:9.2,attackRange:1.55,soundBase:635,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.095。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_096',name:'No.096 スリープ',role:'aquatic',hp:9,damage:0,massKg:17,speed:2.10,sense:5.0,attackRange:1.70,soundBase:672,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.096。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_097',name:'No.097 スリーパー',role:'aquatic',hp:10,damage:0,massKg:18,speed:2.20,sense:5.6,attackRange:1.85,soundBase:709,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.097。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_098',name:'No.098 クラブ',role:'neutral',hp:11,damage:4,massKg:19,speed:2.30,sense:6.2,attackRange:2.00,soundBase:746,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.098。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_099',name:'No.099 キングラー',role:'neutral',hp:12,damage:5,massKg:20,speed:2.40,sense:6.8,attackRange:0.80,soundBase:783,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.099。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_100',name:'No.100 ビリリダマ',role:'passive',hp:13,damage:0,massKg:21,speed:2.50,sense:7.4,attackRange:0.95,soundBase:820,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.100。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_101',name:'No.101 マルマイン',role:'neutral',hp:14,damage:2,massKg:22,speed:2.60,sense:8.0,attackRange:1.10,soundBase:857,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.101。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_102',name:'No.102 タマタマ',role:'hostile',hp:15,damage:3,massKg:23,speed:1.00,sense:8.6,attackRange:1.25,soundBase:894,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.102。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_103',name:'No.103 ナッシー',role:'neutral',hp:16,damage:4,massKg:24,speed:1.10,sense:9.2,attackRange:1.40,soundBase:171,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.103。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_104',name:'No.104 カラカラ',role:'hostile',hp:17,damage:5,massKg:25,speed:1.20,sense:5.0,attackRange:1.55,soundBase:208,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.104。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_105',name:'No.105 ガラガラ',role:'aquatic',hp:18,damage:0,massKg:26,speed:1.30,sense:5.6,attackRange:1.70,soundBase:245,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.105。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_106',name:'No.106 サワムラー',role:'aquatic',hp:19,damage:0,massKg:27,speed:1.40,sense:6.2,attackRange:1.85,soundBase:282,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.106。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_107',name:'No.107 エビワラー',role:'neutral',hp:20,damage:3,massKg:28,speed:1.50,sense:6.8,attackRange:2.00,soundBase:319,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.107。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_108',name:'No.108 ベロリンガ',role:'neutral',hp:21,damage:4,massKg:29,speed:1.60,sense:7.4,attackRange:0.80,soundBase:356,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.108。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_109',name:'No.109 ドガース',role:'passive',hp:22,damage:0,massKg:30,speed:1.70,sense:8.0,attackRange:0.95,soundBase:393,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.109。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_110',name:'No.110 マタドガス',role:'neutral',hp:23,damage:1,massKg:31,speed:1.80,sense:8.6,attackRange:1.10,soundBase:430,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.110。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_111',name:'No.111 サイホーン',role:'hostile',hp:24,damage:2,massKg:32,speed:1.90,sense:9.2,attackRange:1.25,soundBase:467,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.111。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_112',name:'No.112 サイドン',role:'neutral',hp:25,damage:3,massKg:33,speed:2.00,sense:5.0,attackRange:1.40,soundBase:504,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.112。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_113',name:'No.113 ラッキー',role:'hostile',hp:26,damage:4,massKg:34,speed:2.10,sense:5.6,attackRange:1.55,soundBase:541,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.113。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_114',name:'No.114 モンジャラ',role:'aquatic',hp:8,damage:0,massKg:35,speed:2.20,sense:6.2,attackRange:1.70,soundBase:578,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.114。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_115',name:'No.115 ガルーラ',role:'aquatic',hp:9,damage:0,massKg:36,speed:2.30,sense:6.8,attackRange:1.85,soundBase:615,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.115。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_116',name:'No.116 タッツー',role:'neutral',hp:10,damage:2,massKg:37,speed:2.40,sense:7.4,attackRange:2.00,soundBase:652,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.116。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_117',name:'No.117 シードラ',role:'neutral',hp:11,damage:3,massKg:38,speed:2.50,sense:8.0,attackRange:0.80,soundBase:689,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.117。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_118',name:'No.118 トサキント',role:'passive',hp:12,damage:0,massKg:39,speed:2.60,sense:8.6,attackRange:0.95,soundBase:726,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.118。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_119',name:'No.119 アズマオウ',role:'neutral',hp:13,damage:5,massKg:40,speed:1.00,sense:9.2,attackRange:1.10,soundBase:763,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.119。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_120',name:'No.120 ヒトデマン',role:'hostile',hp:14,damage:1,massKg:41,speed:1.10,sense:5.0,attackRange:1.25,soundBase:800,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.120。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_121',name:'No.121 スターミー',role:'neutral',hp:15,damage:2,massKg:42,speed:1.20,sense:5.6,attackRange:1.40,soundBase:837,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.121。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_122',name:'No.122 バリヤード',role:'hostile',hp:16,damage:3,massKg:43,speed:1.30,sense:6.2,attackRange:1.55,soundBase:874,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.122。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_123',name:'No.123 ストライク',role:'aquatic',hp:17,damage:0,massKg:44,speed:1.40,sense:6.8,attackRange:1.70,soundBase:911,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.123。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_124',name:'No.124 ルージュラ',role:'aquatic',hp:18,damage:0,massKg:45,speed:1.50,sense:7.4,attackRange:1.85,soundBase:188,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.124。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_125',name:'No.125 エレブー',role:'neutral',hp:19,damage:1,massKg:46,speed:1.60,sense:8.0,attackRange:2.00,soundBase:225,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.125。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_126',name:'No.126 ブーバー',role:'neutral',hp:20,damage:2,massKg:47,speed:1.70,sense:8.6,attackRange:0.80,soundBase:262,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.126。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_127',name:'No.127 カイロス',role:'passive',hp:21,damage:0,massKg:48,speed:1.80,sense:9.2,attackRange:0.95,soundBase:299,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.127。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_128',name:'No.128 ケンタロス',role:'neutral',hp:22,damage:4,massKg:49,speed:1.90,sense:5.0,attackRange:1.10,soundBase:336,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.128。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_129',name:'No.129 コイキング',role:'hostile',hp:23,damage:5,massKg:50,speed:2.00,sense:5.6,attackRange:1.25,soundBase:373,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.129。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_130',name:'No.130 ギャラドス',role:'neutral',hp:24,damage:1,massKg:51,speed:2.10,sense:6.2,attackRange:1.40,soundBase:410,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.130。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_131',name:'No.131 ラプラス',role:'hostile',hp:25,damage:2,massKg:52,speed:2.20,sense:6.8,attackRange:1.55,soundBase:447,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.131。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_132',name:'No.132 メタモン',role:'aquatic',hp:26,damage:0,massKg:53,speed:2.30,sense:7.4,attackRange:1.70,soundBase:484,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.132。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_133',name:'No.133 イーブイ',role:'aquatic',hp:8,damage:0,massKg:54,speed:2.40,sense:8.0,attackRange:1.85,soundBase:521,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.133。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_134',name:'No.134 シャワーズ',role:'neutral',hp:9,damage:5,massKg:55,speed:2.50,sense:8.6,attackRange:2.00,soundBase:558,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.134。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_135',name:'No.135 サンダース',role:'neutral',hp:10,damage:1,massKg:56,speed:2.60,sense:9.2,attackRange:0.80,soundBase:595,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.135。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_136',name:'No.136 ブースター',role:'passive',hp:11,damage:0,massKg:57,speed:1.00,sense:5.0,attackRange:0.95,soundBase:632,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.136。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_137',name:'No.137 ポリゴン',role:'neutral',hp:12,damage:3,massKg:58,speed:1.10,sense:5.6,attackRange:1.10,soundBase:669,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.137。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_138',name:'No.138 オムナイト',role:'hostile',hp:13,damage:4,massKg:59,speed:1.20,sense:6.2,attackRange:1.25,soundBase:706,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.138。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_139',name:'No.139 オムスター',role:'neutral',hp:14,damage:5,massKg:60,speed:1.30,sense:6.8,attackRange:1.40,soundBase:743,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.139。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_140',name:'No.140 カブト',role:'hostile',hp:15,damage:1,massKg:61,speed:1.40,sense:7.4,attackRange:1.55,soundBase:780,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.140。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_141',name:'No.141 カブトプス',role:'aquatic',hp:16,damage:0,massKg:62,speed:1.50,sense:8.0,attackRange:1.70,soundBase:817,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.141。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_142',name:'No.142 プテラ',role:'aquatic',hp:17,damage:0,massKg:63,speed:1.60,sense:8.6,attackRange:1.85,soundBase:854,palette:{body:'#3b82f6',dark:'#1e3a8a',accent:'#bfdbfe'},behavior:'図鑑No.142。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_143',name:'No.143 カビゴン',role:'neutral',hp:18,damage:4,massKg:64,speed:1.70,sense:9.2,attackRange:2.00,soundBase:891,palette:{body:'#eab308',dark:'#713f12',accent:'#fef08a'},behavior:'図鑑No.143。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_144',name:'No.144 フリーザー',role:'neutral',hp:19,damage:5,massKg:65,speed:1.80,sense:5.0,attackRange:0.80,soundBase:168,palette:{body:'#a855f7',dark:'#581c87',accent:'#e9d5ff'},behavior:'図鑑No.144。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_145',name:'No.145 サンダー',role:'passive',hp:20,damage:0,massKg:66,speed:1.90,sense:5.6,attackRange:0.95,soundBase:205,palette:{body:'#ef4444',dark:'#7f1d1d',accent:'#fecaca'},behavior:'図鑑No.145。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_146',name:'No.146 ファイヤー',role:'neutral',hp:21,damage:2,massKg:67,speed:2.00,sense:6.2,attackRange:1.10,soundBase:242,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},behavior:'図鑑No.146。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_147',name:'No.147 ミニリュウ',role:'hostile',hp:22,damage:3,massKg:68,speed:2.10,sense:6.8,attackRange:1.25,soundBase:279,palette:{body:'#f472b6',dark:'#831843',accent:'#fbcfe8'},behavior:'図鑑No.147。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_148',name:'No.148 ハクリュー',role:'neutral',hp:23,damage:4,massKg:69,speed:2.20,sense:7.4,attackRange:1.40,soundBase:316,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},behavior:'図鑑No.148。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_149',name:'No.149 カイリュー',role:'hostile',hp:24,damage:5,massKg:70,speed:2.30,sense:8.0,attackRange:1.55,soundBase:353,palette:{body:'#84cc16',dark:'#365314',accent:'#d9f99d'},behavior:'図鑑No.149。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_150',name:'No.150 ミュウツー',role:'aquatic',hp:25,damage:0,massKg:71,speed:2.40,sense:8.6,attackRange:1.70,soundBase:390,palette:{body:'#22c55e',dark:'#14532d',accent:'#bbf7d0'},behavior:'図鑑No.150。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'},
+ {type:'poke_151',name:'No.151 ミュウ',role:'aquatic',hp:26,damage:0,massKg:72,speed:2.50,sense:9.2,attackRange:1.85,soundBase:427,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},behavior:'図鑑No.151。ボリューム追加用の情報テクスチャ。野生出現・撃破登録・面貼り付け対象。'}
+];
+for(const extra of INFO_TEXTURE_POKEMON_VOLUME_PACK_V5){
+ if(!INFO_TEXTURE_PACK_V3.some(m=>m.type===extra.type)) INFO_TEXTURE_PACK_V3.push(extra);
+}
 for(const m of INFO_TEXTURE_PACK_V3){ infoTextureApplyProMetaV4(m); m.id=m.id||infoTextureIdFromTypeV3(m.type); INFO_TEXTURE_META_V3[m.id]=m; INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(m.type)]=m; }
+try{ cleanupLegacyPkmnInfoTextureIdsV8(); }catch(e){}
 const INFO_TEXTURE_IMAGE_CACHE_V4 = new Map();
 const INFO_TEXTURE_MATERIAL_CACHE_V4 = new Map();
 function startInfoImageLoadV4(def){
@@ -5042,7 +5270,7 @@ placeObjectInFront = function(def, broadcastInstance=true){
 };
 const __affinityApplyObjectInstancePlaceMessageV5 = applyObjectInstancePlaceMessage;
 applyObjectInstancePlaceMessage = function(msg){
- const defId=String(msg&& (msg.objectId||msg.defId||msg.id) || '');
+ const defId=normalizeObjectIdV8(msg&& (msg.objectId||msg.defId||msg.id) || '');
  let def=customObjectDefs.get(defId);
  if(!def && msg && msg.object){
    registerCustomObjectDef(msg.object,'remoteCatalog');
