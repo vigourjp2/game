@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pokemon Cell Check 039 プリン</title>
+<style>
+  body{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:16px;background:#111;color:#eee}
+  h1{font-size:20px;margin:0 0 12px}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+  .card{background:#1d1d1d;border:1px solid #444;border-radius:10px;padding:12px;min-width:280px}
+  canvas{image-rendering:pixelated;border:1px solid #666;background:#222;max-width:100%}
+  img{image-rendering:pixelated;border:1px solid #666;background:#222;width:240px;height:240px;object-fit:contain}
+  pre{white-space:pre-wrap;word-break:break-word;background:#080808;border:1px solid #333;border-radius:8px;padding:10px;max-height:260px;overflow:auto}
+  button{font-size:16px;padding:8px 12px;margin:4px;background:#333;color:#fff;border:1px solid #777;border-radius:8px}
+  input{font-size:16px;width:72px;padding:6px;background:#222;color:#fff;border:1px solid #777;border-radius:6px}
+  .bad{color:#ff8080}.ok{color:#8cff8c}.warn{color:#ffd36a}
+</style>
+</head>
+<body>
+<h1>ポケモン情報テクスチャ セル確認: <span id="titleNo">039</span></h1>
+<p>このHTMLを <code>index-mine.html</code> と同じ場所に置く。<code>generated/pokemon-info-textures.gen1.30x30.generated.js</code> と <code>assets/pokemon-gen1-icons/pokeicon-039.jpg</code> を直接読み、セル化データがプリンに見えるか確認する。</p>
+<div>
+  No: <input id="no" value="039" maxlength="3" />
+  <button onclick="runCheck()">確認</button>
+</div>
+<div id="status" class="warn">loading...</div>
+<div class="row">
+  <div class="card">
+    <h2>元JPG</h2>
+    <img id="srcImg" alt="source jpg" />
+    <div id="imgPath"></div>
+  </div>
+  <div class="card">
+    <h2>generated cells 再描画</h2>
+    <canvas id="cellCanvas" width="300" height="300"></canvas>
+    <div>30×30 cells を10倍表示</div>
+  </div>
+  <div class="card">
+    <h2>cells情報</h2>
+    <pre id="info"></pre>
+  </div>
+</div>
+<script src="generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
+<script>
+function pad3(n){ return String(Math.max(1, Math.min(999, parseInt(n,10)||39))).padStart(3,'0'); }
+function runCheck(){
+  const no = pad3(document.getElementById('no').value);
+  document.getElementById('titleNo').textContent = no;
+  const status = document.getElementById('status');
+  const imgPath = `assets/pokemon-gen1-icons/pokeicon-${no}.jpg`;
+  const img = document.getElementById('srcImg');
+  img.src = imgPath + '?v=' + Date.now();
+  document.getElementById('imgPath').textContent = imgPath;
+  const arr = window.POKEMON_INFO_TEXTURE_DEFS_30;
+  if(!Array.isArray(arr)){
+    status.className='bad'; status.textContent='NG: window.POKEMON_INFO_TEXTURE_DEFS_30 が読めてない。generated JS の配置/パス違い。';
+    return;
+  }
+  const def = arr.find(d => Number(d.no) === Number(no) || String(d.id||'').includes(no));
+  if(!def){
+    status.className='bad'; status.textContent=`NG: generated内に No.${no} が無い。`; return;
+  }
+  const cells = Array.isArray(def.cells) ? def.cells : [];
+  const grid = Number(def.grid || 30);
+  const canvas = document.getElementById('cellCanvas');
+  canvas.width = grid * 10; canvas.height = grid * 10;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(const c of cells){
+    ctx.fillStyle = c.color || '#ff00ff';
+    ctx.fillRect(Number(c.x)*10, Number(c.y)*10, 10, 10);
+  }
+  const colors = new Map();
+  for(const c of cells) colors.set((c.color||'').toLowerCase(), (colors.get((c.color||'').toLowerCase())||0)+1);
+  const topColors = Array.from(colors.entries()).sort((a,b)=>b[1]-a[1]).slice(0,20);
+  const xs = cells.map(c=>Number(c.x)), ys=cells.map(c=>Number(c.y));
+  status.className='ok'; status.textContent=`OK: generated読込済み / No.${no} / cells ${cells.length} / colors ${colors.size}`;
+  document.getElementById('info').textContent = JSON.stringify({
+    id:def.id, no:def.no, name:def.name, grid:def.grid, cellCount:cells.length, colorCount:colors.size,
+    bounds:{minX:Math.min(...xs), maxX:Math.max(...xs), minY:Math.min(...ys), maxY:Math.max(...ys)},
+    topColors:topColors,
+    firstCells:cells.slice(0,80)
+  }, null, 2);
+}
+window.addEventListener('load', runCheck);
+</script>
+</body>
+</html>
