@@ -5969,319 +5969,184 @@ setMsg('PlayCanvas Engine読込完了','good');
 
 </script>
 
-<!-- Pokemon Gen1 clean integration: one source of truth, no forced test spawn. -->
+<!-- Pokemon Gen1 grid-aware rootcause integration: dynamic-grid cells, no forced test spawn. -->
 <script src="generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
 <script>
 (function(){
   'use strict';
-  var BUILD_STAMP = '2026-06-23 17:10 JST / pokemon-rootcause-clean-v3';
+  var BUILD_STAMP = '2026-06-23 16:45 JST / pokemon-grid-aware-rootcause-v3';
   var JP = ['フシギダネ','フシギソウ','フシギバナ','ヒトカゲ','リザード','リザードン','ゼニガメ','カメール','カメックス','キャタピー','トランセル','バタフリー','ビードル','コクーン','スピアー','ポッポ','ピジョン','ピジョット','コラッタ','ラッタ','オニスズメ','オニドリル','アーボ','アーボック','ピカチュウ','ライチュウ','サンド','サンドパン','ニドラン♀','ニドリーナ','ニドクイン','ニドラン♂','ニドリーノ','ニドキング','ピッピ','ピクシー','ロコン','キュウコン','プリン','プクリン','ズバット','ゴルバット','ナゾノクサ','クサイハナ','ラフレシア','パラス','パラセクト','コンパン','モルフォン','ディグダ','ダグトリオ','ニャース','ペルシアン','コダック','ゴルダック','マンキー','オコリザル','ガーディ','ウインディ','ニョロモ','ニョロゾ','ニョロボン','ケーシィ','ユンゲラー','フーディン','ワンリキー','ゴーリキー','カイリキー','マダツボミ','ウツドン','ウツボット','メノクラゲ','ドククラゲ','イシツブテ','ゴローン','ゴローニャ','ポニータ','ギャロップ','ヤドン','ヤドラン','コイル','レアコイル','カモネギ','ドードー','ドードリオ','パウワウ','ジュゴン','ベトベター','ベトベトン','シェルダー','パルシェン','ゴース','ゴースト','ゲンガー','イワーク','スリープ','スリーパー','クラブ','キングラー','ビリリダマ','マルマイン','タマタマ','ナッシー','カラカラ','ガラガラ','サワムラー','エビワラー','ベロリンガ','ドガース','マタドガス','サイホーン','サイドン','ラッキー','モンジャラ','ガルーラ','タッツー','シードラ','トサキント','アズマオウ','ヒトデマン','スターミー','バリヤード','ストライク','ルージュラ','エレブー','ブーバー','カイロス','ケンタロス','コイキング','ギャラドス','ラプラス','メタモン','イーブイ','シャワーズ','サンダース','ブースター','ポリゴン','オムナイト','オムスター','カブト','カブトプス','プテラ','カビゴン','フリーザー','サンダー','ファイヤー','ミニリュウ','ハクリュー','カイリュー','ミュウツー','ミュウ'];
-  function pad(no){ return String(Math.max(1, Math.min(151, Math.trunc(Number(no)||1)))).padStart(3,'0'); }
-  function jp(no){ return JP[Math.max(1, Math.min(151, Math.trunc(Number(no)||1)))-1] || ('No.'+pad(no)); }
+  function pad(no){ no=Math.max(1,Math.min(151,Math.trunc(Number(no)||1))); return String(no).padStart(3,'0'); }
   function pkmnId(no){ return 'info-pkmn_'+pad(no); }
-  function pkmnLegacyId(no){ return 'info-pokemon-'+pad(no); }
+  function legacyId(no){ return 'info-pokemon-'+pad(no); }
   function pkmnType(no){ return 'pokemon_'+pad(no); }
-  function imgUrl(no){ return 'assets/pokemon-gen1-icons/pokeicon-'+pad(no)+'.jpg?v='+encodeURIComponent(BUILD_STAMP); }
-  function pokemonNoFromAny(v){
+  function jp(no){ return JP[Math.max(1,Math.min(151,Math.trunc(Number(no)||1)))-1] || ('No.'+pad(no)); }
+  function pkmnNo(v){
     if(!v) return 0;
-    if(typeof v === 'number') { var nn=Math.trunc(v); return nn>=1&&nn<=151?nn:0; }
-    if(typeof v === 'object') {
-      return pokemonNoFromAny(v.pokemonNo || v.no || v.defId || v.id || v.legacyId || v.infoType || v.type || v.name || v.instanceKey || v.textureId || v.objectId);
-    }
+    if(typeof v==='number'){ var n=Math.trunc(v); return n>=1&&n<=151?n:0; }
+    if(typeof v==='object') return pkmnNo(v.pokemonNo||v.no||v.defId||v.id||v.legacyId||v.infoType||v.type||v.name||v.instanceKey||v.textureId||v.objectId||v.sourceFile||v.iconUrl||v.imageSrc);
     var s=String(v||'');
-    var m = s.match(/info[-_]pkmn[_-]?(\d{1,3})/i)
-         || s.match(/info[-_]pokemon[-_]?(\d{1,3})/i)
-         || s.match(/pokemon[_-]?(\d{1,3})/i)
-         || s.match(/pokeicon[-_]?(\d{1,3})/i)
-         || s.match(/情報テクスチャ\D*(\d{1,3})/i)
-         || s.match(/(?:^|[_:-])(\d{3})(?:$|\D)/);
-    var n=m?Math.trunc(Number(m[1])):0;
-    return n>=1&&n<=151?n:0;
+    var m=s.match(/info[-_]pkmn[_-]?(\d{1,3})/i)||s.match(/info[-_]pokemon[-_]?(\d{1,3})/i)||s.match(/pokemon[_-]?(\d{1,3})/i)||s.match(/pokeicon[-_]?(\d{1,3})/i)||s.match(/(?:^|[_:\/-])(\d{3})(?:$|\D)/);
+    var n=m?Math.trunc(Number(m[1])):0; return n>=1&&n<=151?n:0;
   }
-  function showBuildStamp(){
+  function showBuild(){
     try{
-      window.INDEX_MINE_BUILD_STAMP = BUILD_STAMP;
+      window.INDEX_MINE_BUILD_STAMP=BUILD_STAMP;
       var hud=document.getElementById('hud')||document.body;
-      var line=document.getElementById('pokemon-clean-build-stamp');
-      if(!line){
-        line=document.createElement('div');
-        line.id='pokemon-clean-build-stamp';
-        line.className='hudLine hudBuildStamp';
-        line.style.cssText='font-size:13px;line-height:1.25;color:#fff7ed;text-shadow:0 1px 2px #000;font-weight:700;';
-        var first=hud.firstElementChild;
-        if(first && first.nextSibling) hud.insertBefore(line, first.nextSibling); else hud.appendChild(line);
-      }
+      var line=document.getElementById('pokemon-grid-build-stamp');
+      if(!line){ line=document.createElement('div'); line.id='pokemon-grid-build-stamp'; line.className='hudLine hudBuildStamp'; line.style.cssText='font-size:13px;line-height:1.25;color:#fff7ed;text-shadow:0 1px 2px #000;font-weight:900;'; var first=hud.firstElementChild; if(first&&first.nextSibling) hud.insertBefore(line, first.nextSibling); else hud.appendChild(line); }
       line.textContent='版: '+BUILD_STAMP;
-      Array.from(document.querySelectorAll('.hudBuildStamp')).forEach(function(e){ if(e.id!=='pokemon-clean-build-stamp') e.style.display='none'; });
+      Array.from(document.querySelectorAll('.hudBuildStamp')).forEach(function(e){ if(e.id!==line.id) e.style.display='none'; });
     }catch(e){}
   }
-  showBuildStamp(); setInterval(showBuildStamp, 1000);
-  console.log('[index-mine build]', BUILD_STAMP);
+  showBuild(); setInterval(showBuild,1000); console.log('[index-mine build]', BUILD_STAMP);
 
-  var materialCache = Object.create(null);
-  function imageMaterial(no){
-    var key=pad(no);
-    if(materialCache[key]) return materialCache[key];
-    var mat=new pc.StandardMaterial();
-    mat.name='pokemon_clean_jpg_mat_'+key;
-    mat.diffuse=new pc.Color(1,1,1);
-    mat.emissive=new pc.Color(1,1,1);
-    mat.useLighting=false;
-    mat.cull=pc.CULLFACE_NONE;
-    mat.update();
-    materialCache[key]=mat;
-    try{
-      var asset=new pc.Asset('pokemon_clean_jpg_'+key+'_'+Date.now(), 'texture', {url: imgUrl(no)});
-      app.assets.add(asset);
-      var apply=function(a){
-        try{
-          mat.diffuseMap=a.resource;
-          mat.emissiveMap=a.resource;
-          mat.update();
-          console.log('[pokemon image loaded]', key, imgUrl(no));
-        }catch(err){ console.warn('[pokemon image material apply failed]', key, err); }
-      };
-      asset.ready(apply);
-      asset.on('load', apply);
-      asset.on('error', function(err){ console.warn('[pokemon image load error]', key, imgUrl(no), err); });
-      app.assets.load(asset);
-    }catch(e){ console.warn('[pokemon image load setup failed]', key, e); }
-    return mat;
+  function normHex(c){ try{ return (typeof normalizeHexColor==='function') ? normalizeHexColor(c) : (/^#[0-9a-f]{6}$/i.test(String(c||''))?String(c).toLowerCase():'#22c55e'); }catch(e){ return '#22c55e'; } }
+  function generatedDef(no){
+    var arr=window.POKEMON_INFO_TEXTURE_DEFS_30||[]; var n=Math.trunc(Number(no)||0);
+    return arr.find(function(d){ return Number(d.no)===n || pkmnNo(d.id)===n; }) || null;
   }
-  function createPokemonBillboard(no, x, y, z, yaw, instanceKey){
-    if(typeof pc==='undefined' || typeof app==='undefined' || !app.root) return null;
-    no=pokemonNoFromAny(no); if(!no) return null;
-    instanceKey=String(instanceKey || ('pokemon-clean-'+pad(no)+'-'+Date.now()+'-'+Math.random().toString(36).slice(2)));
-    try{
-      var old = (typeof customObjectEntities!=='undefined') ? customObjectEntities.get(instanceKey) : null;
-      if(old && old.data && old.data.__pokemonCleanBillboard) return old;
-      if(old && old.destroy) old.destroy();
-      if(typeof customObjectEntities!=='undefined') customObjectEntities.delete(instanceKey);
-    }catch(e){}
-    var root=new pc.Entity('pokemon_clean_'+pad(no));
-    var mat=imageMaterial(no);
-    function addPlane(name, ry){
-      var e=new pc.Entity(name);
-      e.addComponent('render',{type:'plane',castShadows:false,receiveShadows:false});
-      try{ e.render.meshInstances[0].material=mat; }catch(err){ try{ e.render.material=mat; }catch(e2){} }
-      e.setLocalEulerAngles(90, ry, 0);
-      e.setLocalScale(3.2, 1, 3.2);
-      e.setLocalPosition(0, 1.55, 0);
-      e.data={pokemonPlane:true,pokemonNo:no,__pokemonCleanBillboard:true};
-      root.addChild(e);
-      return e;
+  function pokemonCells(no){ var d=generatedDef(no); return d&&Array.isArray(d.cells)?d.cells:[]; }
+
+  // 根本修正1: validateObjectDef は plane の def.grid を潰してはいけない。
+  // 元コードは OBJECT_GRID=16 固定で、30x30 のポケモンcellsを16x16へ欠落させていた。
+  var baseValidate = (typeof validateObjectDef==='function') ? validateObjectDef : null;
+  validateObjectDef = function(def){
+    var no=pkmnNo(def);
+    if(no){
+      var cells=pokemonCells(no).map(function(c){ return {x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), color:normHex(c.color)}; }).filter(function(c){ return c.x>=0&&c.x<30&&c.y>=0&&c.y<30; });
+      if(!cells.length) return null;
+      return Object.assign({}, def||{}, {id:pkmnId(no), legacyId:legacyId(no), no:no, pokemonNo:no, name:'情報テクスチャ:'+pad(no)+' '+jp(no), kind:'plane', grid:30, scale:.105, cells:cells, infoTexture:true, pokemonInfo:true, infoType:pkmnType(no), infoRole:'passive', hp:20, maxHp:20, buildStamp:BUILD_STAMP, __pokemonGridAwareV3:true});
     }
-    addPlane('pokemon_image_front_'+pad(no), 0);
-    addPlane('pokemon_image_back_'+pad(no), 180);
-    addPlane('pokemon_image_cross_'+pad(no), 90);
-    addPlane('pokemon_image_cross2_'+pad(no), 270);
-    root.setPosition(Number(x)||0, Number(y)||1, Number(z)||0);
-    root.setEulerAngles(0, ((Number(yaw)||0)*180/Math.PI)||0, 0);
-    var id=pkmnId(no);
-    root.data={
-      customObject:true, defId:id, instanceKey:instanceKey, infoTexture:true,
-      infoTextureIds:[id], wildInfoTexture:true, pokemonInfo:true,
-      __pokemonCleanBillboard:true, pokemonNo:no,
-      name:'情報テクスチャ:'+pad(no)+' '+jp(no), hp:20, maxHp:20,
-      infoRole:'passive', infoBehavior:'ポケモン情報テクスチャ。JPGを直接看板表示。',
-      infoPhysics:{massKg:8, gravityScale:1, terminalVelocity:18, bounce:0},
-      buildStamp:BUILD_STAMP,
-      chunk:(typeof chunkIdForBlock==='function'?chunkIdForBlock(Math.round(Number(x)||0),Math.round(Number(z)||0)):undefined)
-    };
+    if(def && def.kind==='plane' && Array.isArray(def.cells) && Number(def.grid) && Number(def.grid)!==16){
+      var grid=Math.max(8,Math.min(128,Math.trunc(Number(def.grid)||16)));
+      var maxCells=Math.min(128*128, Math.max(512, grid*grid));
+      var out=[], seen=Object.create(null);
+      for(var i=0;i<def.cells.slice(0,maxCells).length;i++){
+        var c=def.cells[i], x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y));
+        if(x<0||x>=grid||y<0||y>=grid) continue;
+        var k=x+','+y; if(seen[k]) continue; seen[k]=1;
+        out.push({x:x,y:y,color:normHex(c.color)});
+      }
+      if(!out.length) return null;
+      return Object.assign({}, def, {id:String(def.id||('obj-'+Date.now())).slice(0,96), name:String(def.name||'object').slice(0,80), kind:'plane', grid:grid, scale:Math.max(.025,Math.min(.8,Number(def.scale)||.12)), cells:out, createdAt:Number(def.createdAt)||Date.now(), updatedAt:Number(def.updatedAt)||Date.now()});
+    }
+    return baseValidate ? baseValidate.apply(this,arguments) : def;
+  };
+
+  function addCellBox(parent, mat, lx, ly, lz, sx, sy, sz){
+    var e=new pc.Entity('obj_cell');
+    e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+    try{ e.render.material=mat; if(e.render.meshInstances) e.render.meshInstances.forEach(function(mi){ mi.material=mat; }); }catch(err){}
+    e.setLocalScale(sx,sy,sz); e.setLocalPosition(lx,ly,lz); e.data={customObjectCell:true}; parent.addChild(e); return e;
+  }
+  function placeDynamicPlane(def,x,y,z,yaw,instanceKey){
+    def=validateObjectDef(def); if(!def) return null;
+    var grid=Math.max(8,Math.min(128,Math.trunc(Number(def.grid)||16)));
+    var s=Math.max(.025,Math.min(.8,Number(def.scale)||.1));
+    instanceKey=String(instanceKey||('inst-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z)));
+    if(typeof customObjectRemovedInstances!=='undefined' && customObjectRemovedInstances.has(instanceKey)) return null;
+    if(typeof customObjectEntities!=='undefined' && customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
+    var root=new pc.Entity((def.pokemonInfo?'pokemon_grid_root_':'custom_object_')+instanceKey);
+    var used=def.cells.slice(0,Math.min(def.cells.length, grid*grid));
+    for(var i=0;i<used.length;i++){
+      var c=used[i];
+      var mat=(typeof ensureCustomMat==='function') ? ensureCustomMat(c.color) : null;
+      if(!mat) continue;
+      var lx=(c.x-(grid-1)/2)*s;
+      var ly=(grid-1-c.y)*s;
+      addCellBox(root, mat, lx, ly, 0, s*1.01, s*1.01, Math.max(.025,s*.045));
+      addCellBox(root, mat, 0, ly, lx, Math.max(.025,s*.045), s*1.01, s*1.01);
+    }
+    root.setPosition(Number(x)||0,Number(y)||1,Number(z)||0);
+    root.setEulerAngles(0,((Number(yaw)||0)*180/Math.PI)||0,0);
+    root.data={customObject:true,defId:def.id,instanceKey:instanceKey,chunk:(typeof chunkIdForBlock==='function'?chunkIdForBlock(Math.round(Number(x)||0),Math.round(Number(z)||0)):undefined), infoTexture:!!def.infoTexture, infoTextureIds:def.infoTexture?[def.id]:[], pokemonInfo:!!def.pokemonInfo, pokemonNo:def.pokemonNo||def.no||0, __pokemonGridAwareV3:!!def.pokemonInfo, buildStamp:BUILD_STAMP, hp:def.hp||20, maxHp:def.maxHp||def.hp||20};
     app.root.addChild(root);
-    if(typeof customObjectEntities!=='undefined') customObjectEntities.set(instanceKey, root);
+    if(typeof customObjectEntities!=='undefined') customObjectEntities.set(instanceKey,root);
     return root;
   }
-  function generatedCells(no){
-    try{
-      var arr=window.POKEMON_INFO_TEXTURE_DEFS_30 || [];
-      var n=Math.trunc(Number(no)||0);
-      return (arr.find(function(d){ return Number(d.no)===n || pokemonNoFromAny(d.id)===n; })||{}).cells || [];
-    }catch(e){ return []; }
-  }
-  function ensurePokemonDefinitions(){
+
+  // 根本修正2: placeCustomObject も OBJECT_GRID=16 固定だったため、planeは def.grid で描く。
+  var basePlace=(typeof placeCustomObject==='function') ? placeCustomObject : null;
+  placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+    var no=pkmnNo(def)||pkmnNo(instanceKey);
+    if(no) return placeDynamicPlane(Object.assign({}, def||{}, {id:pkmnId(no), no:no, pokemonNo:no}), x,y,z,yaw,instanceKey);
+    if(def && def.kind==='plane' && Number(def.grid) && Number(def.grid)!==16) return placeDynamicPlane(def,x,y,z,yaw,instanceKey);
+    return basePlace ? basePlace.apply(this,arguments) : null;
+  };
+
+  function ensurePokemonDefs(){
     if(typeof customObjectDefs==='undefined') return 0;
-    var addedMeta=0;
+    var added=0;
     for(var no=1; no<=151; no++){
-      var id=pkmnId(no), legacy=pkmnLegacyId(no), type=pkmnType(no);
-      var meta={
-        id:id, legacyId:legacy, type:type, no:no, name:pad(no)+' '+jp(no), role:'passive', hp:20, damage:0,
-        massKg:8, speed:1.35, sense:7, attackRange:1.1,
-        behavior:'ポケモン情報テクスチャ。野生スポーンで出現し、倒すと平面テクスチャ解放。',
-        pokemonInfo:true, imageSrc:imgUrl(no)
-      };
-      if(typeof INFO_TEXTURE_PACK_V3!=='undefined' && Array.isArray(INFO_TEXTURE_PACK_V3) && !INFO_TEXTURE_PACK_V3.some(function(m){return m && (m.id===id || m.type===type || m.legacyId===legacy);})){ INFO_TEXTURE_PACK_V3.push(meta); addedMeta++; }
+      var id=pkmnId(no), legacy=legacyId(no), type=pkmnType(no), cells=pokemonCells(no);
+      if(!cells.length) continue;
+      var meta={id:id, legacyId:legacy, type:type, no:no, name:pad(no)+' '+jp(no), role:'passive', hp:20, damage:0, massKg:8, speed:1.25, sense:7, attackRange:1.1, pokemonInfo:true, behavior:'ポケモン情報テクスチャ。generated 30x30 cellsをそのまま野生Mob表示する。'};
+      if(typeof INFO_TEXTURE_PACK_V3!=='undefined' && Array.isArray(INFO_TEXTURE_PACK_V3) && !INFO_TEXTURE_PACK_V3.some(function(m){ return m && (m.id===id || m.legacyId===legacy || m.type===type); })){ INFO_TEXTURE_PACK_V3.push(meta); added++; }
       if(typeof INFO_TEXTURE_META_V3!=='undefined'){
         INFO_TEXTURE_META_V3[id]=meta; INFO_TEXTURE_META_V3[legacy]=meta; INFO_TEXTURE_META_V3[type]=meta;
         if(typeof infoTextureIdFromTypeV3==='function') INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(type)]=meta;
       }
-      var def={
-        id:id, legacyId:legacy, no:no, name:'情報テクスチャ:'+pad(no)+' '+jp(no), kind:'pokemon-jpg', grid:30,
-        cells:generatedCells(no), imageSrc:imgUrl(no), infoTexture:true, pokemonInfo:true,
-        infoType:type, infoRole:'passive', hp:20, createdAt:1, updatedAt:Date.now(), buildStamp:BUILD_STAMP,
-        __pokemonCleanDef:true
-      };
-      customObjectDefs.set(id, def);
-      customObjectDefs.set(legacy, def);
+      var def=validateObjectDef({id:id, legacyId:legacy, no:no, pokemonNo:no, name:'情報テクスチャ:'+pad(no)+' '+jp(no), kind:'plane', grid:30, scale:.105, cells:cells, infoTexture:true, pokemonInfo:true, infoType:type, hp:20, createdAt:1, updatedAt:Date.now()});
+      if(def){ customObjectDefs.set(id,def); customObjectDefs.set(legacy,def); }
     }
     try{ if(typeof setObjHud==='function') setObjHud(); if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
-    return addedMeta;
+    return added;
   }
+
+  function convertOldPokemonRoots(){
+    if(typeof customObjectEntities==='undefined') return 0;
+    var n=0;
+    Array.from(customObjectEntities.entries()).forEach(function(pair){
+      var key=pair[0], root=pair[1];
+      var no=pkmnNo(key)||pkmnNo(root&&root.data)||pkmnNo(root&&root.name);
+      if(!no) return;
+      if(root && root.data && root.data.__pokemonGridAwareV3) return;
+      var p=(root&&root.getPosition)?root.getPosition():{x:0,y:1,z:0};
+      var yaw=Number(root&&root.data&&root.data.yaw)||0;
+      try{ if(root&&root.destroy) root.destroy(); }catch(e){}
+      try{ customObjectEntities.delete(key); }catch(e){}
+      var def=(typeof customObjectDefs!=='undefined') && (customObjectDefs.get(pkmnId(no)) || customObjectDefs.get(legacyId(no)));
+      if(def && placeDynamicPlane(def,p.x,p.y,p.z,yaw,key)) n++;
+    });
+    return n;
+  }
+
   function install(){
     try{
-      showBuildStamp();
-      if(typeof pc==='undefined' || typeof app==='undefined' || !app.root || typeof customObjectDefs==='undefined'){ setTimeout(install, 250); return; }
-      var addedMeta=ensurePokemonDefinitions();
-      if(typeof ensureInfoTextureDefV3==='function' && !window.__pokemonCleanEnsureHook){
-        window.__pokemonCleanEnsureHook=true;
-        var baseEnsure=ensureInfoTextureDefV3;
-        ensureInfoTextureDefV3=function(meta){
-          var no=pokemonNoFromAny(meta);
-          if(no){ ensurePokemonDefinitions(); return customObjectDefs.get(pkmnId(no)) || customObjectDefs.get(pkmnLegacyId(no)); }
-          return baseEnsure.apply(this, arguments);
+      showBuild();
+      if(typeof pc==='undefined'||typeof app==='undefined'||!app.root||typeof customObjectDefs==='undefined'){ setTimeout(install,250); return; }
+      var added=ensurePokemonDefs();
+      if(typeof ensureInfoTextureDefV3==='function' && !window.__pokemonGridAwareEnsureV3){
+        window.__pokemonGridAwareEnsureV3=true;
+        var oldEnsure=ensureInfoTextureDefV3;
+        ensureInfoTextureDefV3=function(meta){ var no=pkmnNo(meta); if(no){ ensurePokemonDefs(); return customObjectDefs.get(pkmnId(no))||customObjectDefs.get(legacyId(no)); } return oldEnsure.apply(this,arguments); };
+      }
+      if(typeof applyObjectInstancePlaceMessage==='function' && !window.__pokemonGridAwareApplyV3){
+        window.__pokemonGridAwareApplyV3=true;
+        var oldApply=applyObjectInstancePlaceMessage;
+        applyObjectInstancePlaceMessage=function(msg){
+          var no=pkmnNo(msg&&(msg.object||msg.def||msg.objectId||msg.defId||msg.id||msg.instanceKey));
+          if(no){
+            ensurePokemonDefs();
+            var x=Number(msg.x), y=Number(msg.y), z=Number(msg.z), yaw=Number(msg.yaw)||0, ik=String(msg.instanceKey||('remote-'+pkmnId(no)+'-'+Date.now()));
+            if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)){
+              if(typeof customObjectEntities!=='undefined' && customObjectEntities.has(ik)) return true;
+              var def=customObjectDefs.get(pkmnId(no))||customObjectDefs.get(legacyId(no));
+              if(placeDynamicPlane(def,x,y,z,yaw,ik)) return true;
+            }
+          }
+          return oldApply.apply(this,arguments);
         };
       }
-      if(typeof placeCustomObject==='function' && !window.__pokemonCleanPlaceHook){
-        window.__pokemonCleanPlaceHook=true;
-        var basePlace=placeCustomObject;
-        placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-          var no=pokemonNoFromAny(def) || pokemonNoFromAny(instanceKey);
-          if(no) return createPokemonBillboard(no,x,y,z,yaw,instanceKey) || basePlace.apply(this, arguments);
-          return basePlace.apply(this, arguments);
-        };
-      }
-      // Convert only already-existing old Pokemon entities. No debug/test spawn is created here.
-      if(typeof customObjectEntities!=='undefined'){
-        Array.from(customObjectEntities.entries()).forEach(function(pair){
-          var key=pair[0], root=pair[1];
-          if(!root || (root.data && root.data.__pokemonCleanBillboard)) return;
-          var no=pokemonNoFromAny(key) || pokemonNoFromAny(root.data) || pokemonNoFromAny(root.name);
-          if(!no) return;
-          var p=root.getPosition ? root.getPosition() : {x:0,y:1,z:0};
-          var yaw=Number(root.data && root.data.yaw)||0;
-          try{ if(root.destroy) root.destroy(); }catch(e){}
-          try{ customObjectEntities.delete(key); }catch(e){}
-          createPokemonBillboard(no,p.x,p.y,p.z,yaw,key);
-        });
-      }
-      window.POKEMON_CLEAN_BUILD=BUILD_STAMP;
-      console.log('[pokemon clean integration]', BUILD_STAMP, 'defs=151', 'addedMeta='+addedMeta, 'generated='+((window.POKEMON_INFO_TEXTURE_DEFS_30||[]).length));
-      if(typeof setMsg==='function') setMsg('ポケモン統合を整理: 151種をスポーン候補へ追加 / 強制プリン生成なし / JPG看板表示 '+BUILD_STAMP,'good');
-    }catch(e){ console.warn('[pokemon clean install failed]', e); setTimeout(install,500); }
+      var swept=convertOldPokemonRoots();
+      window.POKEMON_ROOTCAUSE_BUILD=BUILD_STAMP;
+      console.log('[pokemon grid-aware rootcause v3]', BUILD_STAMP, 'pack=', (typeof INFO_TEXTURE_PACK_V3!=='undefined'&&INFO_TEXTURE_PACK_V3.length), 'added=', added, 'converted=', swept, 'defs=', (window.POKEMON_INFO_TEXTURE_DEFS_30||[]).length);
+      if(typeof setMsg==='function') setMsg('ポケモン根本整理v3: 16固定を撤去 / 30x30 cells直描画 / 強制プリンなし / converted '+swept+' / '+BUILD_STAMP,'good');
+    }catch(e){ console.warn('[pokemon grid-aware rootcause v3 failed]',e); setTimeout(install,500); }
   }
-  install(); setTimeout(install,1200); setTimeout(install,3500);
+  install(); setTimeout(install,1000); setTimeout(install,3000);
+  var until=Date.now()+60000;
+  var timer=setInterval(function(){ try{ ensurePokemonDefs(); var n=convertOldPokemonRoots(); if(n) console.log('[pokemon old roots converted v3]', n); }catch(e){} if(Date.now()>until) clearInterval(timer); },900);
 })();
 </script>
-
-
-<script>
-// ===== Pokemon Spawn Root-Cause Clean v3 =====
-// 原因対策: 旧V3/V12の「Minecraft Mob + Pokemon混在pool」とhash抽選を、Gen1専用の循環スポーンに置換する。
-// 目的: プリン(info-pkmn_039)など1種固定に見える偏りを潰し、151種が実際に出る機会を保証する。
-(function(){
-  'use strict';
-  var ROOT_BUILD='2026-06-23 17:10 JST / pokemon-rootcause-clean-v3';
-  var JP=['フシギダネ','フシギソウ','フシギバナ','ヒトカゲ','リザード','リザードン','ゼニガメ','カメール','カメックス','キャタピー','トランセル','バタフリー','ビードル','コクーン','スピアー','ポッポ','ピジョン','ピジョット','コラッタ','ラッタ','オニスズメ','オニドリル','アーボ','アーボック','ピカチュウ','ライチュウ','サンド','サンドパン','ニドラン♀','ニドリーナ','ニドクイン','ニドラン♂','ニドリーノ','ニドキング','ピッピ','ピクシー','ロコン','キュウコン','プリン','プクリン','ズバット','ゴルバット','ナゾノクサ','クサイハナ','ラフレシア','パラス','パラセクト','コンパン','モルフォン','ディグダ','ダグトリオ','ニャース','ペルシアン','コダック','ゴルダック','マンキー','オコリザル','ガーディ','ウインディ','ニョロモ','ニョロゾ','ニョロボン','ケーシィ','ユンゲラー','フーディン','ワンリキー','ゴーリキー','カイリキー','マダツボミ','ウツドン','ウツボット','メノクラゲ','ドククラゲ','イシツブテ','ゴローン','ゴローニャ','ポニータ','ギャロップ','ヤドン','ヤドラン','コイル','レアコイル','カモネギ','ドードー','ドードリオ','パウワウ','ジュゴン','ベトベター','ベトベトン','シェルダー','パルシェン','ゴース','ゴースト','ゲンガー','イワーク','スリープ','スリーパー','クラブ','キングラー','ビリリダマ','マルマイン','タマタマ','ナッシー','カラカラ','ガラガラ','サワムラー','エビワラー','ベロリンガ','ドガース','マタドガス','サイホーン','サイドン','ラッキー','モンジャラ','ガルーラ','タッツー','シードラ','トサキント','アズマオウ','ヒトデマン','スターミー','バリヤード','ストライク','ルージュラ','エレブー','ブーバー','カイロス','ケンタロス','コイキング','ギャラドス','ラプラス','メタモン','イーブイ','シャワーズ','サンダース','ブースター','ポリゴン','オムナイト','オムスター','カブト','カブトプス','プテラ','カビゴン','フリーザー','サンダー','ファイヤー','ミニリュウ','ハクリュー','カイリュー','ミュウツー','ミュウ'];
-  var recent=[];
-  var lastNear=0;
-  var lastChunk=0;
-  var installed=false;
-  function pad(n){ return String(Math.max(1,Math.min(151,Math.trunc(Number(n)||1)))).padStart(3,'0'); }
-  function jp(n){ return JP[Math.max(1,Math.min(151,Math.trunc(Number(n)||1)))-1] || ('No.'+pad(n)); }
-  function id(n){ return 'info-pkmn_'+pad(n); }
-  function legacy(n){ return 'info-pokemon-'+pad(n); }
-  function type(n){ return 'pokemon_'+pad(n); }
-  function img(n){ return 'assets/pokemon-gen1-icons/pokeicon-'+pad(n)+'.jpg?v='+encodeURIComponent(ROOT_BUILD); }
-  function seed(){ try{return Number(WORLD_SEED)||7331;}catch(e){return 7331;} }
-  function h(n){ var x=(Math.trunc(n)^seed())>>>0; x=Math.imul(x^(x>>>16),2246822507)>>>0; x=Math.imul(x^(x>>>13),3266489909)>>>0; return ((x^(x>>>16))>>>0)/4294967295; }
-  function noFrom(v){
-    if(!v) return 0;
-    if(typeof v==='number'){ var nn=Math.trunc(v); return nn>=1&&nn<=151?nn:0; }
-    if(typeof v==='object') return noFrom(v.pokemonNo||v.no||v.defId||v.id||v.legacyId||v.infoType||v.type||v.name||v.instanceKey||v.objectId||v.textureId);
-    var m=String(v).match(/info[-_]pkmn[_-]?(\d{1,3})/i)||String(v).match(/info[-_]pokemon[-_]?(\d{1,3})/i)||String(v).match(/pokemon[_-]?(\d{1,3})/i)||String(v).match(/pokeicon[-_]?(\d{1,3})/i)||String(v).match(/(?:^|[_:-])(\d{3})(?:$|\D)/);
-    var n=m?Math.trunc(Number(m[1])):0; return n>=1&&n<=151?n:0;
-  }
-  function generatedCells(no){ try{ var arr=window.POKEMON_INFO_TEXTURE_DEFS_30||[]; var n=Math.trunc(Number(no)||0); var d=arr.find(function(x){return Number(x.no)===n || noFrom(x.id)===n;}); return (d&&d.cells)||[]; }catch(e){ return []; } }
-  function ensureOne(no){
-    if(typeof customObjectDefs==='undefined') return null;
-    var n=Math.max(1,Math.min(151,Math.trunc(Number(no)||1))), k=id(n), old=customObjectDefs.get(k);
-    if(old && old.__pokemonRootCleanDef) return old;
-    var def={id:k,legacyId:legacy(n),no:n,pokemonNo:n,name:'情報テクスチャ:'+pad(n)+' '+jp(n),kind:'pokemon-jpg',grid:30,scale:.11,cells:generatedCells(n),imageSrc:img(n),infoTexture:true,pokemonInfo:true,wildInfoTexture:true,infoType:type(n),infoRole:'passive',hp:20,damage:0,createdAt:1,updatedAt:Date.now(),buildStamp:ROOT_BUILD,__pokemonRootCleanDef:true};
-    customObjectDefs.set(k,def); customObjectDefs.set(legacy(n),def);
-    try{
-      if(typeof INFO_TEXTURE_META_V3!=='undefined'){ INFO_TEXTURE_META_V3[k]=def; INFO_TEXTURE_META_V3[legacy(n)]=def; INFO_TEXTURE_META_V3[type(n)]=def; }
-      if(typeof INFO_TEXTURE_PACK_V3!=='undefined' && Array.isArray(INFO_TEXTURE_PACK_V3) && !INFO_TEXTURE_PACK_V3.some(function(m){return noFrom(m)===n;})) INFO_TEXTURE_PACK_V3.push({id:k,legacyId:legacy(n),type:type(n),no:n,pokemonNo:n,name:pad(n)+' '+jp(n),role:'passive',hp:20,damage:0,pokemonInfo:true,imageSrc:img(n),__pokemonRootCleanMeta:true});
-    }catch(e){}
-    return def;
-  }
-  function ensureAll(){ for(var n=1;n<=151;n++) ensureOne(n); try{ if(typeof setObjHud==='function') setObjHud(); if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){} }
-  function pokemonNear(r){
-    var count=0, rr=r*r;
-    try{ for(const [,root] of customObjectEntities){ if(!root||!root.getPosition) continue; if(!noFrom(root.data)||!(root.data&&root.data.pokemonInfo)) continue; var p=root.getPosition(), dx=p.x-player.x, dz=p.z-player.z; if(dx*dx+dz*dz<=rr) count++; } }catch(e){}
-    return count;
-  }
-  function remember(n){ recent.push(n); while(recent.length>18) recent.shift(); }
-  function pick(slot, salt){
-    // 151と互いに素な37で全種を一周させる。直近18種は避け、短時間の固定湧きをなくす。
-    var n=((Math.trunc(slot)*37 + Math.floor(h(slot*19+salt)*151) + seed()) % 151) + 1;
-    for(var i=0;i<151 && recent.indexOf(n)>=0;i++) n=(n%151)+1;
-    remember(n); return n;
-  }
-  function groundY(x,z,n){
-    try{ var y=terrainHeight(Math.round(x),Math.round(z))+1.05; if([72,86,87,90,91,98,116,117,118,119,120,129,130,131,134,138,139,140,141].indexOf(n)>=0) y+=0.02; return y; }catch(e){ return 1.05; }
-  }
-  function spawnPokemon(no,x,z,reason,key){
-    ensureAll(); var n=Math.max(1,Math.min(151,Math.trunc(Number(no)||1))), def=ensureOne(n); if(!def || typeof placeCustomObject!=='function') return false;
-    x=Math.round(x); z=Math.round(z); var y=groundY(x,z,n); var instanceKey=key || ('pkmnRootClean:'+seed()+':'+(typeof chunkOf==='function'?chunkOf(x):Math.floor(x/16))+','+(typeof chunkOf==='function'?chunkOf(z):Math.floor(z/16))+':'+Math.floor(Date.now()/45000)+':'+pad(n));
-    try{ if(customObjectRemovedInstances&&customObjectRemovedInstances.has(instanceKey)) return false; if(customObjectEntities&&customObjectEntities.has(instanceKey)) return false; }catch(e){}
-    var yaw=Math.floor(h(x*13+z*17+n)*4)*(Math.PI/2); var root=placeCustomObject(def,x,y,z,yaw,instanceKey); if(!root) return false;
-    root.data=Object.assign({},root.data||{},{pokemonInfo:true,pokemonNo:n,infoTextureIds:[id(n)],wildInfoTexture:true,worldSharedSpawn:true,spawnReason:reason,ownerClientId:'world',buildStamp:ROOT_BUILD,hp:20,maxHp:20});
-    try{ sendMultiplayer({type:'objectInstancePlace',objectId:def.id,defId:def.id,instanceKey:instanceKey,x:x,y:y,z:z,yaw:yaw,object:def,worldSharedSpawn:true,wildInfoTexture:true,pokemonInfo:true,pokemonNo:n,ownerClientId:'world'}); }catch(e){}
-    try{ if(typeof setMsg==='function') setMsg('ポケモン出現: '+pad(n)+' '+jp(n)+' / '+reason+' / 直近重複なし','good'); }catch(e){}
-    return true;
-  }
-  function spawnNear(force){
-    try{ if(!state.started) return false; }catch(e){ return false; }
-    var now=performance.now(); if(!force && now-lastNear<5200) return false; if(!force && pokemonNear(20)>=4) return false; lastNear=now;
-    var dir=(typeof forwardVec==='function')?forwardVec():{x:Math.sin(player.yaw||0),z:Math.cos(player.yaw||0)}; var slot=Math.floor(Date.now()/5200); var dist=7+(slot%3)*2;
-    var x=player.x+dir.x*dist+(h(slot+71)-.5)*6, z=player.z+dir.z*dist+(h(slot+83)-.5)*6;
-    var n=pick(slot,123); var key='pkmnRootNear:'+seed()+':'+slot+':'+pad(n); return spawnPokemon(n,x,z,'near-151-cycle',key);
-  }
-  function spawnChunk(ch){
-    try{ if(!ch||!ch.done||!state.started) return false; }catch(e){ return false; }
-    var now=performance.now(); if(now-lastChunk<1800) return false; lastChunk=now;
-    var slot=Math.floor(Date.now()/45000), ck='pkmnRootChunkTry:'+ch.key+':'+slot; try{ if(customSpawned.has(ck)) return false; customSpawned.add(ck); }catch(e){}
-    if(h(ch.cx*92821+ch.cz*68917+slot*31)>.34) return false;
-    var x=ch.cx*CHUNK_SIZE+Math.floor(h(ch.cx*17+slot)*CHUNK_SIZE), z=ch.cz*CHUNK_SIZE+Math.floor(h(ch.cz*19-slot)*CHUNK_SIZE), n=pick(slot+ch.cx*101+ch.cz*103,456);
-    return spawnPokemon(n,x,z,'chunk-151-ecology',null);
-  }
-  function stamp(){
-    try{
-      window.POKEMON_ROOTCAUSE_CLEAN_BUILD=ROOT_BUILD; window.INDEX_MINE_BUILD_STAMP=ROOT_BUILD;
-      var hud=document.getElementById('hud')||document.body, line=document.getElementById('pokemon-clean-build-stamp');
-      if(line) line.textContent='版: '+ROOT_BUILD;
-      var dbg=document.getElementById('pokemon-rootcause-clean-hud');
-      if(!dbg){ dbg=document.createElement('div'); dbg.id='pokemon-rootcause-clean-hud'; dbg.style.cssText='position:fixed;left:18px;top:176px;z-index:35;background:rgba(15,23,42,.62);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:5px 10px;font:700 12px system-ui;text-shadow:0 1px 2px #000;pointer-events:none;'; document.body.appendChild(dbg); }
-      dbg.innerHTML='Pokemon RootClean: 151種循環 / 近場 '+pokemonNear(20)+' / recent '+recent.slice(-5).map(pad).join(',');
-    }catch(e){}
-  }
-  function install(){
-    try{
-      if(installed) return; if(typeof customObjectDefs==='undefined'||typeof placeCustomObject==='undefined'||typeof app==='undefined'||!app.root){ setTimeout(install,250); return; }
-      installed=true; ensureAll();
-      // 旧猫専用/V3雑湧き/V12混在poolを最終的に止め、通常OBJスポーン + Pokemon専用スポーンだけにする。
-      var base = (typeof __infoSpawnCustomObjectForChunk==='function') ? __infoSpawnCustomObjectForChunk : (typeof spawnCustomObjectForChunk==='function' ? spawnCustomObjectForChunk : null);
-      if(base){ spawnCustomObjectForChunk=function(ch){ var r; try{ r=base.apply(this,arguments); }catch(e){ console.warn('root clean base spawn failed',e); } try{ spawnChunk(ch); }catch(e){ console.warn('root clean pokemon chunk failed',e); } return r; }; }
-      setInterval(function(){ try{ stamp(); spawnNear(false); }catch(e){} },1000);
-      setTimeout(function(){ spawnNear(true); stamp(); },900);
-      setTimeout(function(){ spawnNear(true); stamp(); },6200);
-      console.log('[pokemon rootcause clean]',ROOT_BUILD,'defs=151','old mixed pool disabled','no-recent cycle enabled');
-      try{ if(typeof setMsg==='function') setMsg('原因対策完了: プリン固定を潰し、151種を直近重複なしで循環スポーン '+ROOT_BUILD,'good'); }catch(e){}
-    }catch(e){ console.warn('[pokemon rootcause clean install failed]',e); installed=false; setTimeout(install,500); }
-  }
-  install(); setTimeout(install,1200); setTimeout(install,3500);
-})();
-</script>
-
-</body>
-</html>
