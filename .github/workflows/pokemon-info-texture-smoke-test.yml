@@ -1,1 +1,48 @@
+name: Pokemon Info Texture Smoke Test
 
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/smoke_download_one_pokemon_icon.py'
+      - '.github/workflows/pokemon-info-texture-smoke-test.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pokemon-info-texture-smoke-test
+  cancel-in-progress: true
+
+jobs:
+  smoke-test-one-download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pillow
+        run: python -m pip install --upgrade pillow
+
+      - name: Download and convert only 001
+        run: python tools/smoke_download_one_pokemon_icon.py
+
+      - name: Commit smoke test result
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/pokemon-gen1-icons/pokeicon-001.jpg generated/pokemon-info-texture-smoke-test.json generated/pokemon-info-texture-smoke-test.js || true
+          if git diff --cached --quiet; then
+            echo "No smoke test files changed."
+          else
+            git commit -m "pokemon texture smoke test result"
+            git push
+          fi
