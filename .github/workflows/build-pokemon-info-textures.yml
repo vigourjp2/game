@@ -1,1 +1,44 @@
+name: Build Pokemon Info Textures
 
+on:
+  push:
+    paths:
+      - 'tools/build_pokemon_info_textures.py'
+      - '.github/workflows/build-pokemon-info-textures.yml'
+      - 'pokemon-info-textures-loader.js'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-pokemon-info-textures:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pillow
+        run: python -m pip install --upgrade pip pillow
+
+      - name: Generate 30x30 texture data
+        run: python tools/build_pokemon_info_textures.py
+
+      - name: Commit generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add generated/pokemon-info-textures.gen1.30x30.generated.js generated/pokemon-info-textures.gen1.30x30.json assets/pokemon-gen1-icons/
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+          else
+            git commit -m "Generate Pokemon info textures 30x30"
+            git push
+          fi
