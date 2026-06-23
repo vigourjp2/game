@@ -6056,5 +6056,300 @@ setMsg('PlayCanvas Engine読込完了','good');
 })();
 </script>
 
+
+<script>
+// ===== Pokemon direct JPG texture patch =====
+(function(){
+  'use strict';
+  var V='pokemon-direct-jpg-texture.v1';
+  function pad(n){return String(Math.max(1,Math.min(999,Math.trunc(Number(n)||0)))).padStart(3,'0');}
+  function noFrom(v){var m=String(v||'').match(/(\d{1,3})/); return m?Math.max(1,Math.min(151,Math.trunc(Number(m[1])))):0;}
+  function imageSrcFor(no){return 'assets/pokemon-gen1-icons/pokeicon-'+pad(no)+'.jpg';}
+  function attachImage(def){
+    if(!def) return def;
+    var no=Number(def.no)||noFrom(def.id)||noFrom(def.type)||noFrom(def.name);
+    if(no>=1 && no<=151){
+      def.no=no;
+      def.imageSrc=def.imageSrc||imageSrcFor(no);
+      def.imageMode='direct-jpg';
+      def.pixelArt=true;
+      def.iconBaked=true;
+      def.pokemonInfo=true;
+    }
+    return def;
+  }
+  function drawCellsFallback(canvas,def){
+    var g=canvas.getContext('2d');
+    g.clearRect(0,0,canvas.width,canvas.height);
+    var grid=Math.max(8,Math.min(128,Math.trunc(Number(def&&def.grid)||30)));
+    var cell=Math.max(1,Math.floor(canvas.width/grid));
+    var ox=Math.floor((canvas.width-cell*grid)/2), oy=Math.floor((canvas.height-cell*grid)/2);
+    for(var i=0,arr=def&&def.cells||[]; i<arr.length; i++){
+      var c=arr[i]||{}, x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y));
+      if(x<0||y<0||x>=grid||y>=grid) continue;
+      g.fillStyle=String(c.color||'#ffffff');
+      g.fillRect(ox+x*cell,oy+y*cell,cell,cell);
+    }
+  }
+  function drawImageContain(canvas,img){
+    var g=canvas.getContext('2d');
+    g.clearRect(0,0,canvas.width,canvas.height);
+    g.imageSmoothingEnabled=false;
+    var iw=img.naturalWidth||img.width||1, ih=img.naturalHeight||img.height||1;
+    var m=8, scale=Math.min((canvas.width-m*2)/iw,(canvas.height-m*2)/ih);
+    var w=Math.max(1,Math.round(iw*scale)), h=Math.max(1,Math.round(ih*scale));
+    var x=Math.round((canvas.width-w)/2), y=Math.round((canvas.height-h)/2);
+    g.drawImage(img,x,y,w,h);
+  }
+  var oldValidate=(typeof validateObjectDef==='function')?validateObjectDef:null;
+  if(oldValidate && !window.__pokemonDirectValidatePatched){
+    window.__pokemonDirectValidatePatched=true;
+    validateObjectDef=function(def){
+      var raw=def||{};
+      var clean=oldValidate.apply(this,arguments);
+      if(clean && raw && (raw.pokemonInfo || String(raw.id||'').indexOf('info-pokemon-')===0 || /^pokemon_\d+/.test(String(raw.type||'')))){
+        attachImage(clean);
+        if(raw.pokemonCells && !clean.pokemonCells) clean.pokemonCells=raw.pokemonCells;
+        if(raw.infoType) clean.infoType=raw.infoType;
+        if(raw.infoRole) clean.infoRole=raw.infoRole;
+        if(raw.infoBehavior) clean.infoBehavior=raw.infoBehavior;
+        if(raw.infoText) clean.infoText=raw.infoText;
+        clean.infoTexture=true;
+      }
+      return clean;
+    };
+  }
+  var oldEnsure=(typeof ensureInfoTextureDefV3==='function')?ensureInfoTextureDefV3:null;
+  if(oldEnsure && !window.__pokemonDirectEnsurePatched){
+    window.__pokemonDirectEnsurePatched=true;
+    ensureInfoTextureDefV3=function(meta){
+      attachImage(meta);
+      var def=oldEnsure.apply(this,arguments);
+      attachImage(def);
+      try{ if(def&&typeof customObjectDefs!=='undefined') customObjectDefs.set(def.id,def); }catch(e){}
+      return def;
+    };
+  }
+  var oldPlace=(typeof placeCustomObject==='function')?placeCustomObject:null;
+  if(oldPlace && !window.__pokemonDirectPlacePatched){
+    window.__pokemonDirectPlacePatched=true;
+    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+      def=validateObjectDef(def); attachImage(def);
+      if(!def || def.kind!=='plane' || !def.imageSrc) return oldPlace.apply(this,arguments);
+      instanceKey=instanceKey || ('inst-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
+      if(customObjectRemovedInstances.has(instanceKey)) return null;
+      if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
+      var root=new pc.Entity('custom_plane_jpg_'+instanceKey);
+      var canvas=document.createElement('canvas'); canvas.width=canvas.height=256;
+      drawCellsFallback(canvas,def);
+      var tex=new pc.Texture(app.graphicsDevice,{mipmaps:false});
+      tex.minFilter=pc.FILTER_NEAREST; tex.magFilter=pc.FILTER_NEAREST; tex.addressU=pc.ADDRESS_CLAMP_TO_EDGE; tex.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+      tex.setSource(canvas);
+      var mat=new pc.StandardMaterial();
+      mat.diffuseMap=tex;
+      mat.emissive=new pc.Color(.04,.04,.04);
+      mat.specular=new pc.Color(.02,.02,.02);
+      mat.shininess=4;
+      mat.update();
+      var w=Math.max(1.05,Math.min(2.2,(Number(def.grid)||30)*(Number(def.scale)||.055)));
+      var e=new pc.Entity('obj_pokemon_jpg');
+      e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+      e.render.material=mat;
+      e.setLocalScale(w,w,Math.max(.025,w*.035));
+      e.setLocalPosition(0,w/2,0);
+      e.data={customObjectCell:true,planeTexture:true,pokemonJpg:true};
+      root.addChild(e);
+      root.setPosition(x,y,z);
+      root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
+      root.data={customObject:true,defId:def.id,instanceKey:instanceKey,chunk:chunkIdForBlock(Math.round(x),Math.round(z)),pokemonJpg:true};
+      app.root.addChild(root);
+      customObjectEntities.set(instanceKey,root);
+      var img=new Image();
+      img.onload=function(){try{drawImageContain(canvas,img); tex.setSource(canvas); mat.update();}catch(e){console.warn(V+': image draw failed',def.imageSrc,e);}};
+      img.onerror=function(){console.warn(V+': image load failed, cells fallback used',def.imageSrc);};
+      img.src=def.imageSrc;
+      return root;
+    };
+  }
+  function patchExisting(){
+    var n=0;
+    try{
+      if(Array.isArray(window.INFO_TEXTURE_PACK_V3)||Array.isArray(INFO_TEXTURE_PACK_V3)){
+        var arr=window.INFO_TEXTURE_PACK_V3||INFO_TEXTURE_PACK_V3;
+        for(var i=0;i<arr.length;i++){ if(attachImage(arr[i])&&arr[i].imageSrc)n++; }
+      }
+    }catch(e){}
+    try{
+      if(typeof customObjectDefs!=='undefined'){
+        customObjectDefs.forEach(function(def,id){
+          if(def && (def.pokemonInfo || String(id).indexOf('info-pokemon-')===0)){ attachImage(def); customObjectDefs.set(id,def); }
+        });
+      }
+    }catch(e){}
+    try{ if(typeof setMsg==='function') setMsg('ポケモンJPG直貼り表示ON: assets/pokemon-gen1-icons を直接使用','good'); }catch(e){}
+    console.log(V+': patched pokemon meta/direct jpg count='+n);
+  }
+  setTimeout(patchExisting,300);
+  setTimeout(patchExisting,1800);
+})();
+</script>
+
+
+<script>
+(function(){
+  'use strict';
+  // Pokemon cells authoritative display patch.
+  // 目的: JPG直貼りや古い16x/旧描画ではなく、generated の30x30 cellsをゲーム表示の正とする。
+  var V='pokemon-generated-cells-authoritative.v1';
+  function pad(no){ no=Math.max(1,Math.min(999,Math.trunc(Number(no)||0))); return ('000'+no).slice(-3); }
+  function idOf(no){ return 'info-pokemon-'+pad(no); }
+  function noFromId(id){ var m=String(id||'').match(/(?:info-pokemon-|info-pkmn_|pokemon_)(\d+)/); return m?Math.trunc(Number(m[1])):0; }
+  function norm(c){
+    c=String(c||'').trim();
+    if(/^#[0-9a-f]{6}$/i.test(c)) return c.toLowerCase();
+    if(/^#[0-9a-f]{3}$/i.test(c)) return ('#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]).toLowerCase();
+    return '#ff66aa';
+  }
+  function sourceDef(no){
+    var arr=window.POKEMON_INFO_TEXTURE_DEFS_30;
+    if(!Array.isArray(arr)) return null;
+    no=Math.trunc(Number(no)||0);
+    for(var i=0;i<arr.length;i++) if(Math.trunc(Number(arr[i]&&arr[i].no)||0)===no) return arr[i];
+    return null;
+  }
+  function sourceCells(no){
+    var src=sourceDef(no);
+    if(!src || !Array.isArray(src.cells)) return null;
+    var grid=Math.max(8,Math.min(128,Math.trunc(Number(src.grid)||30)));
+    var seen=Object.create(null), out=[];
+    for(var i=0;i<src.cells.length;i++){
+      var c=src.cells[i]||{};
+      var x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y));
+      if(x<0||x>=grid||y<0||y>=grid) continue;
+      var k=x+','+y; if(seen[k]) continue; seen[k]=1;
+      out.push({x:x,y:y,color:norm(c.color)});
+    }
+    return out.length ? {grid:grid,cells:out,src:src} : null;
+  }
+  function isPokemonDef(def){ return !!(def && (def.pokemonInfo || /^info-pokemon-\d+/.test(String(def.id||'')) || /^pokemon_\d+/.test(String(def.infoType||def.type||'')))); }
+  function repairPokemonDef(def){
+    if(!isPokemonDef(def)) return def;
+    var no=Math.trunc(Number(def.no)||0) || noFromId(def.id) || noFromId(def.infoType) || noFromId(def.type);
+    var s=sourceCells(no);
+    if(!s) return def;
+    var src=s.src||{};
+    def.id=String(def.id||idOf(no));
+    def.no=no;
+    def.kind='plane';
+    def.grid=s.grid;
+    def.cells=s.cells;
+    def.pokemonCells=s.cells;
+    def.scale=Math.max(0.035,Math.min(0.09,Number(def.scale)||0.055));
+    def.name=String(def.name||src.name||('情報テクスチャ:'+pad(no))).replace(/^情報テクスチャ:\s*/,'情報テクスチャ:');
+    if(def.name.indexOf(pad(no))<0 && src.name) def.name='情報テクスチャ:'+pad(no)+' '+String(src.name).replace(/^情報テクスチャ:\s*/,'');
+    def.infoTexture=true; def.pokemonInfo=true; def.iconBaked=true;
+    def.sourceFile='generated/pokemon-info-textures.gen1.30x30.generated.js';
+    def.imageSrc=''; def.iconUrl='';
+    def.updatedAt=Date.now();
+    return def;
+  }
+  function makeCellsCanvas(def, px){
+    def=repairPokemonDef(def);
+    var grid=Math.max(8,Math.min(128,Math.trunc(Number(def.grid)||30)));
+    var cell=Math.max(1,Math.floor((px||300)/grid));
+    var size=cell*grid;
+    var canvas=document.createElement('canvas'); canvas.width=size; canvas.height=size;
+    var g=canvas.getContext('2d'); g.clearRect(0,0,size,size); g.imageSmoothingEnabled=false;
+    for(var i=0;i<(def.cells||[]).length;i++){
+      var c=def.cells[i]||{}; var x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y));
+      if(x<0||x>=grid||y<0||y>=grid) continue;
+      g.fillStyle=norm(c.color); g.fillRect(x*cell,y*cell,cell,cell);
+    }
+    return canvas;
+  }
+  function makeMat(def){
+    var canvas=makeCellsCanvas(def,300);
+    var tex=new pc.Texture(app.graphicsDevice,{mipmaps:false});
+    tex.minFilter=pc.FILTER_NEAREST; tex.magFilter=pc.FILTER_NEAREST; tex.addressU=pc.ADDRESS_CLAMP_TO_EDGE; tex.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+    tex.setSource(canvas);
+    var mat=new pc.StandardMaterial();
+    mat.diffuseMap=tex; mat.opacityMap=tex;
+    mat.blendType=pc.BLEND_NORMAL; mat.alphaTest=0.02; mat.cull=pc.CULLFACE_NONE;
+    mat.emissive=new pc.Color(.035,.035,.035); mat.specular=new pc.Color(0,0,0); mat.shininess=1; mat.update();
+    return mat;
+  }
+  function placePokemonCells(def,x,y,z,yaw,instanceKey){
+    def=repairPokemonDef(def);
+    instanceKey=instanceKey || ('inst-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
+    if(customObjectRemovedInstances && customObjectRemovedInstances.has(instanceKey)) return null;
+    if(customObjectEntities && customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
+    var root=new pc.Entity('custom_pokemon_cells_'+instanceKey);
+    var w=(Number(def.grid)||30)*(Number(def.scale)||0.055);
+    w=Math.max(1.2,Math.min(2.4,w));
+    var e=new pc.Entity('obj_pokemon_cells');
+    e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
+    e.render.material=makeMat(def);
+    e.setLocalScale(w,w,Math.max(.02,w*.025));
+    e.setLocalPosition(0,w/2,0);
+    e.data={customObjectCell:true,planeTexture:true,pokemonCells:true};
+    root.addChild(e);
+    root.setPosition(x,y,z); root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
+    root.data={customObject:true,defId:def.id,instanceKey:instanceKey,chunk:chunkIdForBlock(Math.round(x),Math.round(z)),pokemonCells:true};
+    app.root.addChild(root); customObjectEntities.set(instanceKey,root);
+    return root;
+  }
+  function install(){
+    if(typeof pc==='undefined' || typeof app==='undefined' || typeof customObjectDefs==='undefined' || typeof placeCustomObject!=='function') return false;
+    if(!Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)){ console.warn(V+': generated missing'); return false; }
+    if(!window.__pokemonCellsAuthoritativeValidate){
+      window.__pokemonCellsAuthoritativeValidate=true;
+      var oldValidate=validateObjectDef;
+      validateObjectDef=function(def){
+        if(isPokemonDef(def)) return oldValidate(repairPokemonDef(Object.assign({},def)));
+        return oldValidate.apply(this,arguments);
+      };
+    }
+    if(!window.__pokemonCellsAuthoritativePlace){
+      window.__pokemonCellsAuthoritativePlace=true;
+      var oldPlace=placeCustomObject;
+      placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+        if(isPokemonDef(def)) return placePokemonCells(def,x,y,z,yaw,instanceKey);
+        return oldPlace.apply(this,arguments);
+      };
+    }
+    var fixed=0;
+    customObjectDefs.forEach(function(def,id){
+      if(isPokemonDef(def)){
+        var clean=validateObjectDef(repairPokemonDef(Object.assign({},def)));
+        if(clean){ clean.infoTexture=true; clean.pokemonInfo=true; clean.sourceFile='generated/pokemon-info-textures.gen1.30x30.generated.js'; customObjectDefs.set(id,clean); fixed++; }
+      }
+    });
+    // 既にスポーン済みの旧プリン等は、同じ位置・同じinstanceKeyで作り直す。
+    var rebuilt=0;
+    if(typeof customObjectEntities!=='undefined'){
+      Array.from(customObjectEntities.entries()).forEach(function(pair){
+        var key=pair[0], root=pair[1];
+        var defId=root&&root.data&&root.data.defId;
+        if(!/^info-pokemon-\d+/.test(String(defId||''))) return;
+        var def=customObjectDefs.get(defId); if(!def) return;
+        var p=root.getPosition ? root.getPosition().clone() : {x:0,y:0,z:0};
+        var yaw=0; try{ yaw=(root.getEulerAngles().y||0)*Math.PI/180; }catch(e){}
+        try{ root.destroy(); }catch(e){}
+        customObjectEntities.delete(key);
+        placePokemonCells(def,p.x,p.y,p.z,yaw,key); rebuilt++;
+      });
+    }
+    try{ if(typeof setMsg==='function') setMsg('ポケモンgenerated cells表示を正に修正: defs '+fixed+' / rebuild '+rebuilt,'good'); }catch(e){}
+    console.log(V+': fixed defs='+fixed+' rebuilt='+rebuilt);
+    return true;
+  }
+  var tries=0;
+  function retry(){ tries++; if(!install() && tries<20) setTimeout(retry,300); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',retry,{once:true}); else retry();
+  setTimeout(install,1800);
+  setTimeout(install,4500);
+})();
+</script>
+
 </body>
 </html>
