@@ -5970,18 +5970,26 @@ setMsg('PlayCanvas Engine読込完了','good');
 </script>
 
 <!-- Pokemon Gen1 clean integration: one source of truth, no forced test spawn. -->
-<script src="generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
+<script src="https://vigourjp2.github.io/game/generated/pokemon-info-textures.gen1.30x30.generated.js?v=20260623-git-direct"></script>
 <script>
 (function(){
   'use strict';
-  var BUILD_STAMP = '2026-06-23 16:05 JST / pokemon-clean-rootcause-v1';
+  var BUILD_STAMP = '2026-06-23 20:24 JST / pokemon-git-jpg-direct-v2';
+  var GIT_ASSET_BASE = 'https://vigourjp2.github.io/game/assets/pokemon-gen1-icons/';
+  var RAW_ASSET_BASE = 'https://raw.githubusercontent.com/vigourjp2/game/main/assets/pokemon-gen1-icons/';
   var JP = ['フシギダネ','フシギソウ','フシギバナ','ヒトカゲ','リザード','リザードン','ゼニガメ','カメール','カメックス','キャタピー','トランセル','バタフリー','ビードル','コクーン','スピアー','ポッポ','ピジョン','ピジョット','コラッタ','ラッタ','オニスズメ','オニドリル','アーボ','アーボック','ピカチュウ','ライチュウ','サンド','サンドパン','ニドラン♀','ニドリーナ','ニドクイン','ニドラン♂','ニドリーノ','ニドキング','ピッピ','ピクシー','ロコン','キュウコン','プリン','プクリン','ズバット','ゴルバット','ナゾノクサ','クサイハナ','ラフレシア','パラス','パラセクト','コンパン','モルフォン','ディグダ','ダグトリオ','ニャース','ペルシアン','コダック','ゴルダック','マンキー','オコリザル','ガーディ','ウインディ','ニョロモ','ニョロゾ','ニョロボン','ケーシィ','ユンゲラー','フーディン','ワンリキー','ゴーリキー','カイリキー','マダツボミ','ウツドン','ウツボット','メノクラゲ','ドククラゲ','イシツブテ','ゴローン','ゴローニャ','ポニータ','ギャロップ','ヤドン','ヤドラン','コイル','レアコイル','カモネギ','ドードー','ドードリオ','パウワウ','ジュゴン','ベトベター','ベトベトン','シェルダー','パルシェン','ゴース','ゴースト','ゲンガー','イワーク','スリープ','スリーパー','クラブ','キングラー','ビリリダマ','マルマイン','タマタマ','ナッシー','カラカラ','ガラガラ','サワムラー','エビワラー','ベロリンガ','ドガース','マタドガス','サイホーン','サイドン','ラッキー','モンジャラ','ガルーラ','タッツー','シードラ','トサキント','アズマオウ','ヒトデマン','スターミー','バリヤード','ストライク','ルージュラ','エレブー','ブーバー','カイロス','ケンタロス','コイキング','ギャラドス','ラプラス','メタモン','イーブイ','シャワーズ','サンダース','ブースター','ポリゴン','オムナイト','オムスター','カブト','カブトプス','プテラ','カビゴン','フリーザー','サンダー','ファイヤー','ミニリュウ','ハクリュー','カイリュー','ミュウツー','ミュウ'];
+  var EN = ['bulbasaur','ivysaur','venusaur','charmander','charmeleon','charizard','squirtle','wartortle','blastoise','caterpie','metapod','butterfree','weedle','kakuna','beedrill','pidgey','pidgeotto','pidgeot','rattata','raticate','spearow','fearow','ekans','arbok','pikachu','raichu','sandshrew','sandslash','nidoran-f','nidorina','nidoqueen','nidoran-m','nidorino','nidoking','clefairy','clefable','vulpix','ninetales','jigglypuff','wigglytuff','zubat','golbat','oddish','gloom','vileplume','paras','parasect','venonat','venomoth','diglett','dugtrio','meowth','persian','psyduck','golduck','mankey','primeape','growlithe','arcanine','poliwag','poliwhirl','poliwrath','abra','kadabra','alakazam','machop','machoke','machamp','bellsprout','weepinbell','victreebel','tentacool','tentacruel','geodude','graveler','golem','ponyta','rapidash','slowpoke','slowbro','magnemite','magneton','farfetchd','doduo','dodrio','seel','dewgong','grimer','muk','shellder','cloyster','gastly','haunter','gengar','onix','drowzee','hypno','krabby','kingler','voltorb','electrode','exeggcute','exeggutor','cubone','marowak','hitmonlee','hitmonchan','lickitung','koffing','weezing','rhyhorn','rhydon','chansey','tangela','kangaskhan','horsea','seadra','goldeen','seaking','staryu','starmie','mr-mime','scyther','jynx','electabuzz','magmar','pinsir','tauros','magikarp','gyarados','lapras','ditto','eevee','vaporeon','jolteon','flareon','porygon','omanyte','omastar','kabuto','kabutops','aerodactyl','snorlax','articuno','zapdos','moltres','dratini','dragonair','dragonite','mewtwo','mew'];
+  var EN_TO_NO = Object.create(null);
+  EN.forEach(function(n,i){ EN_TO_NO[n]=i+1; EN_TO_NO[n.replace(/-/g,'_')]=i+1; });
   function pad(no){ return String(Math.max(1, Math.min(151, Math.trunc(Number(no)||1)))).padStart(3,'0'); }
   function jp(no){ return JP[Math.max(1, Math.min(151, Math.trunc(Number(no)||1)))-1] || ('No.'+pad(no)); }
   function pkmnId(no){ return 'info-pkmn_'+pad(no); }
   function pkmnLegacyId(no){ return 'info-pokemon-'+pad(no); }
   function pkmnType(no){ return 'pokemon_'+pad(no); }
-  function imgUrl(no){ return 'assets/pokemon-gen1-icons/pokeicon-'+pad(no)+'.jpg?v='+encodeURIComponent(BUILD_STAMP); }
+  function pkmnNameId(no){ return 'info-pkmn_'+EN[Math.max(1, Math.min(151, Math.trunc(Number(no)||1)))-1].replace(/-/g,'_'); }
+  function pkmnLegacyNameId(no){ return 'info-pokemon-'+EN[Math.max(1, Math.min(151, Math.trunc(Number(no)||1)))-1].replace(/-/g,'_'); }
+  function imgUrl(no){ return GIT_ASSET_BASE+'pokeicon-'+pad(no)+'.jpg?v='+encodeURIComponent(BUILD_STAMP); }
+  function rawImgUrl(no){ return RAW_ASSET_BASE+'pokeicon-'+pad(no)+'.jpg?v='+encodeURIComponent(BUILD_STAMP); }
   function pokemonNoFromAny(v){
     if(!v) return 0;
     if(typeof v === 'number') { var nn=Math.trunc(v); return nn>=1&&nn<=151?nn:0; }
@@ -5989,6 +5997,10 @@ setMsg('PlayCanvas Engine読込完了','good');
       return pokemonNoFromAny(v.pokemonNo || v.no || v.defId || v.id || v.legacyId || v.infoType || v.type || v.name || v.instanceKey || v.textureId || v.objectId);
     }
     var s=String(v||'');
+    var low=s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+    var parts=low.split('_');
+    for(var i=0;i<parts.length;i++){ if(EN_TO_NO[parts[i]]) return EN_TO_NO[parts[i]]; }
+    for(var name in EN_TO_NO){ if(low.indexOf(name.replace(/-/g,'_'))>=0) return EN_TO_NO[name]; }
     var m = s.match(/info[-_]pkmn[_-]?(\d{1,3})/i)
          || s.match(/info[-_]pokemon[-_]?(\d{1,3})/i)
          || s.match(/pokemon[_-]?(\d{1,3})/i)
@@ -6043,7 +6055,15 @@ setMsg('PlayCanvas Engine読込完了','good');
       };
       asset.ready(apply);
       asset.on('load', apply);
-      asset.on('error', function(err){ console.warn('[pokemon image load error]', key, imgUrl(no), err); });
+      asset.on('error', function(err){
+        console.warn('[pokemon image load error]', key, imgUrl(no), err, 'retry raw');
+        try{
+          var raw=new pc.Asset('pokemon_clean_jpg_raw_'+key+'_'+Date.now(), 'texture', {url: rawImgUrl(no)});
+          app.assets.add(raw); raw.ready(apply); raw.on('load', apply);
+          raw.on('error', function(e2){ console.warn('[pokemon raw image load error]', key, rawImgUrl(no), e2); });
+          app.assets.load(raw);
+        }catch(e3){ console.warn('[pokemon raw image load setup failed]', key, e3); }
+      });
       app.assets.load(asset);
     }catch(e){ console.warn('[pokemon image load setup failed]', key, e); }
     return mat;
@@ -6131,16 +6151,16 @@ setMsg('PlayCanvas Engine読込完了','good');
     if(typeof customObjectDefs==='undefined') return 0;
     var addedMeta=0;
     for(var no=1; no<=151; no++){
-      var id=pkmnId(no), legacy=pkmnLegacyId(no), type=pkmnType(no);
+      var id=pkmnId(no), legacy=pkmnLegacyId(no), type=pkmnType(no), nameId=pkmnNameId(no), legacyName=pkmnLegacyNameId(no);
       var meta={
         id:id, legacyId:legacy, type:type, no:no, name:pad(no)+' '+jp(no), role:'passive', hp:20, damage:0,
         massKg:8, speed:1.35, sense:7, attackRange:1.1,
         behavior:'ポケモン情報テクスチャ。野生スポーンで出現し、倒すと平面テクスチャ解放。',
         pokemonInfo:true, imageSrc:imgUrl(no), iconUrl:imgUrl(no), gitImageTexture:true
       };
-      if(typeof INFO_TEXTURE_PACK_V3!=='undefined' && Array.isArray(INFO_TEXTURE_PACK_V3) && !INFO_TEXTURE_PACK_V3.some(function(m){return m && (m.id===id || m.type===type || m.legacyId===legacy);})){ INFO_TEXTURE_PACK_V3.push(meta); addedMeta++; }
+      if(typeof INFO_TEXTURE_PACK_V3!=='undefined' && Array.isArray(INFO_TEXTURE_PACK_V3) && !INFO_TEXTURE_PACK_V3.some(function(m){return m && (m.id===id || m.id===nameId || m.type===type || m.legacyId===legacy);})){ INFO_TEXTURE_PACK_V3.push(meta); addedMeta++; }
       if(typeof INFO_TEXTURE_META_V3!=='undefined'){
-        INFO_TEXTURE_META_V3[id]=meta; INFO_TEXTURE_META_V3[legacy]=meta; INFO_TEXTURE_META_V3[type]=meta;
+        INFO_TEXTURE_META_V3[id]=meta; INFO_TEXTURE_META_V3[legacy]=meta; INFO_TEXTURE_META_V3[type]=meta; INFO_TEXTURE_META_V3[nameId]=meta; INFO_TEXTURE_META_V3[legacyName]=meta;
         if(typeof infoTextureIdFromTypeV3==='function') INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(type)]=meta;
       }
       var def={
@@ -6151,6 +6171,8 @@ setMsg('PlayCanvas Engine読込完了','good');
       };
       customObjectDefs.set(id, def);
       customObjectDefs.set(legacy, def);
+      customObjectDefs.set(nameId, def);
+      customObjectDefs.set(legacyName, def);
     }
     try{ if(typeof setObjHud==='function') setObjHud(); if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
     return addedMeta;
@@ -6198,6 +6220,127 @@ setMsg('PlayCanvas Engine読込完了','good');
     }catch(e){ console.warn('[pokemon clean install failed]', e); setTimeout(install,500); }
   }
   install(); setTimeout(install,1200); setTimeout(install,3500);
+})();
+</script>
+
+
+<!-- Pokemon Git image texture hard fix: same-origin first, no GitHub-only dependency. -->
+<script>
+(function(){
+  'use strict';
+  var BUILD_STAMP = '2026-06-23 20:35 JST / pokemon-git-same-origin-hardfix-v3';
+  var JP=['フシギダネ','フシギソウ','フシギバナ','ヒトカゲ','リザード','リザードン','ゼニガメ','カメール','カメックス','キャタピー','トランセル','バタフリー','ビードル','コクーン','スピアー','ポッポ','ピジョン','ピジョット','コラッタ','ラッタ','オニスズメ','オニドリル','アーボ','アーボック','ピカチュウ','ライチュウ','サンド','サンドパン','ニドラン♀','ニドリーナ','ニドクイン','ニドラン♂','ニドリーノ','ニドキング','ピッピ','ピクシー','ロコン','キュウコン','プリン','プクリン','ズバット','ゴルバット','ナゾノクサ','クサイハナ','ラフレシア','パラス','パラセクト','コンパン','モルフォン','ディグダ','ダグトリオ','ニャース','ペルシアン','コダック','ゴルダック','マンキー','オコリザル','ガーディ','ウインディ','ニョロモ','ニョロゾ','ニョロボン','ケーシィ','ユンゲラー','フーディン','ワンリキー','ゴーリキー','カイリキー','マダツボミ','ウツドン','ウツボット','メノクラゲ','ドククラゲ','イシツブテ','ゴローン','ゴローニャ','ポニータ','ギャロップ','ヤドン','ヤドラン','コイル','レアコイル','カモネギ','ドードー','ドードリオ','パウワウ','ジュゴン','ベトベター','ベトベトン','シェルダー','パルシェン','ゴース','ゴースト','ゲンガー','イワーク','スリープ','スリーパー','クラブ','キングラー','ビリリダマ','マルマイン','タマタマ','ナッシー','カラカラ','ガラガラ','サワムラー','エビワラー','ベロリンガ','ドガース','マタドガス','サイホーン','サイドン','ラッキー','モンジャラ','ガルーラ','タッツー','シードラ','トサキント','アズマオウ','ヒトデマン','スターミー','バリヤード','ストライク','ルージュラ','エレブー','ブーバー','カイロス','ケンタロス','コイキング','ギャラドス','ラプラス','メタモン','イーブイ','シャワーズ','サンダース','ブースター','ポリゴン','オムナイト','オムスター','カブト','カブトプス','プテラ','カビゴン','フリーザー','サンダー','ファイヤー','ミニリュウ','ハクリュー','カイリュー','ミュウツー','ミュウ'];
+  var EN=['bulbasaur','ivysaur','venusaur','charmander','charmeleon','charizard','squirtle','wartortle','blastoise','caterpie','metapod','butterfree','weedle','kakuna','beedrill','pidgey','pidgeotto','pidgeot','rattata','raticate','spearow','fearow','ekans','arbok','pikachu','raichu','sandshrew','sandslash','nidoran-f','nidorina','nidoqueen','nidoran-m','nidorino','nidoking','clefairy','clefable','vulpix','ninetales','jigglypuff','wigglytuff','zubat','golbat','oddish','gloom','vileplume','paras','parasect','venonat','venomoth','diglett','dugtrio','meowth','persian','psyduck','golduck','mankey','primeape','growlithe','arcanine','poliwag','poliwhirl','poliwrath','abra','kadabra','alakazam','machop','machoke','machamp','bellsprout','weepinbell','victreebel','tentacool','tentacruel','geodude','graveler','golem','ponyta','rapidash','slowpoke','slowbro','magnemite','magneton','farfetchd','doduo','dodrio','seel','dewgong','grimer','muk','shellder','cloyster','gastly','haunter','gengar','onix','drowzee','hypno','krabby','kingler','voltorb','electrode','exeggcute','exeggutor','cubone','marowak','hitmonlee','hitmonchan','lickitung','koffing','weezing','rhyhorn','rhydon','chansey','tangela','kangaskhan','horsea','seadra','goldeen','seaking','staryu','starmie','mr-mime','scyther','jynx','electabuzz','magmar','pinsir','tauros','magikarp','gyarados','lapras','ditto','eevee','vaporeon','jolteon','flareon','porygon','omanyte','omastar','kabuto','kabutops','aerodactyl','snorlax','articuno','zapdos','moltres','dratini','dragonair','dragonite','mewtwo','mew'];
+  var EN_TO_NO=Object.create(null); EN.forEach(function(n,i){ EN_TO_NO[n]=i+1; EN_TO_NO[n.replace(/-/g,'_')]=i+1; });
+  function pad(n){ return String(Math.max(1,Math.min(151,Math.trunc(Number(n)||1)))).padStart(3,'0'); }
+  function pkmnId(n){ return 'info-pkmn_'+pad(n); }
+  function legacyId(n){ return 'info-pokemon-'+pad(n); }
+  function nameId(n){ return 'info-pkmn_'+EN[Math.max(1,Math.min(151,Math.trunc(Number(n)||1)))-1].replace(/-/g,'_'); }
+  function legacyNameId(n){ return 'info-pokemon-'+EN[Math.max(1,Math.min(151,Math.trunc(Number(n)||1)))-1].replace(/-/g,'_'); }
+  function typeId(n){ return 'pokemon_'+pad(n); }
+  function jp(n){ return JP[Math.max(1,Math.min(151,Math.trunc(Number(n)||1)))-1]||('No.'+pad(n)); }
+  function noFrom(v){
+    if(!v) return 0; if(typeof v==='number'){var nn=Math.trunc(v); return nn>=1&&nn<=151?nn:0;}
+    if(typeof v==='object') return noFrom(v.pokemonNo||v.no||v.defId||v.id||v.legacyId||v.infoType||v.type||v.name||v.instanceKey||v.textureId||v.objectId);
+    var s=String(v), low=s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+    for(var k in EN_TO_NO){ if(low===k || low.indexOf(k)>=0) return EN_TO_NO[k]; }
+    var m=s.match(/info[-_]pkmn[_-]?(\d{1,3})/i)||s.match(/info[-_]pokemon[-_]?(\d{1,3})/i)||s.match(/pokemon[_-]?(\d{1,3})/i)||s.match(/pokeicon[-_]?(\d{1,3})/i)||s.match(/(?:^|[_:-])(\d{3})(?:$|\D)/);
+    var n=m?Math.trunc(Number(m[1])):0; return n>=1&&n<=151?n:0;
+  }
+  function fileName(n){ return 'pokeicon-'+pad(n)+'.jpg'; }
+  function uniq(a){ var o=[], seen=Object.create(null); a.forEach(function(u){ if(u&&!seen[u]){seen[u]=1;o.push(u);} }); return o; }
+  function withV(u){ return u+(u.indexOf('?')>=0?'&':'?')+'v='+encodeURIComponent(BUILD_STAMP); }
+  function candidates(n){
+    var f=fileName(n), path='assets/pokemon-gen1-icons/'+f, out=[];
+    try{ out.push(new URL(path, location.href).href); }catch(e){}
+    try{ out.push(location.origin + '/assets/pokemon-gen1-icons/' + f); }catch(e){}
+    try{ out.push(location.origin + '/game/assets/pokemon-gen1-icons/' + f); }catch(e){}
+    out.push('https://vigourjp2.github.io/game/assets/pokemon-gen1-icons/'+f);
+    out.push('https://raw.githubusercontent.com/vigourjp2/game/main/assets/pokemon-gen1-icons/'+f);
+    return uniq(out).map(withV);
+  }
+  function primaryUrl(n){ return candidates(n)[0]; }
+  function loadImageSeq(n, ok, ng){
+    var list=candidates(n), i=0;
+    function next(){
+      if(i>=list.length){ if(ng) ng(); return; }
+      var url=list[i++], img=new Image();
+      img.decoding='async'; img.referrerPolicy='no-referrer';
+      if(/^https?:\/\//i.test(url) && url.indexOf(location.origin)!==0) img.crossOrigin='anonymous';
+      img.onload=function(){ ok(img,url); };
+      img.onerror=function(){ console.warn('[pokemon hardfix image miss]', pad(n), url); next(); };
+      img.src=url;
+    }
+    next();
+  }
+  var matCache=Object.create(null), imgCache=Object.create(null);
+  function applyTextureToMaterial(mat,img,url){
+    if(typeof pc==='undefined'||typeof app==='undefined'||!app.graphicsDevice) return;
+    var tex=new pc.Texture(app.graphicsDevice,{mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE});
+    tex.name='pokemon_git_tex_'+url;
+    tex.setSource(img);
+    mat.diffuseMap=tex; mat.emissiveMap=tex; mat.opacityMap=null; mat.diffuse=new pc.Color(1,1,1); mat.emissive=new pc.Color(1,1,1); mat.useLighting=false; mat.cull=pc.CULLFACE_NONE; mat.update();
+  }
+  function material(n){
+    var key=pad(n); if(matCache[key]) return matCache[key];
+    var mat=new pc.StandardMaterial(); mat.name='pokemon_git_hardfix_mat_'+key; mat.diffuse=new pc.Color(1,1,1); mat.emissive=new pc.Color(1,1,1); mat.useLighting=false; mat.cull=pc.CULLFACE_NONE; mat.update(); matCache[key]=mat;
+    loadImageSeq(n,function(img,url){ imgCache[key]={img:img,url:url}; applyTextureToMaterial(mat,img,url); console.log('[pokemon hardfix image loaded]', key, url); },function(){ console.warn('[pokemon hardfix all image urls failed]', key); });
+    return mat;
+  }
+  function createBillboard(n,x,y,z,yaw,instanceKey){
+    if(typeof pc==='undefined'||typeof app==='undefined'||!app.root) return null;
+    n=noFrom(n); if(!n) return null; instanceKey=String(instanceKey||('pokemon-git-'+pad(n)+'-'+Date.now()+'-'+Math.random().toString(36).slice(2)));
+    try{ var old=(typeof customObjectEntities!=='undefined')?customObjectEntities.get(instanceKey):null; if(old&&old.destroy) old.destroy(); if(typeof customObjectEntities!=='undefined') customObjectEntities.delete(instanceKey); }catch(e){}
+    var root=new pc.Entity('pokemon_git_image_'+pad(n)); var mat=material(n);
+    function plane(name,ry){ var e=new pc.Entity(name); e.addComponent('render',{type:'plane',castShadows:false,receiveShadows:false}); try{ e.render.meshInstances[0].material=mat; }catch(_){ try{ e.render.material=mat; }catch(__){} } e.setLocalEulerAngles(90,ry,0); e.setLocalScale(3.0,1,3.0); e.setLocalPosition(0,1.5,0); e.data={pokemonPlane:true,pokemonNo:n,__pokemonGitHardfix:true}; root.addChild(e); }
+    plane('pokemon_git_front_'+pad(n),0); plane('pokemon_git_back_'+pad(n),180); plane('pokemon_git_cross_'+pad(n),90); plane('pokemon_git_cross2_'+pad(n),270);
+    root.setPosition(Number(x)||0,Number(y)||1,Number(z)||0); root.setEulerAngles(0,((Number(yaw)||0)*180/Math.PI)||0,0);
+    root.data={customObject:true,defId:pkmnId(n),instanceKey:instanceKey,infoTexture:true,infoTextureIds:[pkmnId(n)],wildInfoTexture:true,pokemonInfo:true,gitImageTexture:true,__pokemonGitHardfix:true,pokemonNo:n,name:'情報テクスチャ:'+pad(n)+' '+jp(n),hp:20,maxHp:20,infoRole:'passive',infoBehavior:'Git画像JPGをそのまま使う情報テクスチャ',infoPhysics:{massKg:8,gravityScale:1,terminalVelocity:18,bounce:0},buildStamp:BUILD_STAMP,chunk:(typeof chunkIdForBlock==='function'?chunkIdForBlock(Math.round(Number(x)||0),Math.round(Number(z)||0)):undefined)};
+    app.root.addChild(root); try{ if(typeof customObjectEntities!=='undefined') customObjectEntities.set(instanceKey,root); }catch(e){}
+    return root;
+  }
+  function generatedCells(n){ try{ var arr=window.POKEMON_INFO_TEXTURE_DEFS_30||[]; var nn=Math.trunc(Number(n)||0); return (arr.find(function(d){return Number(d.no)===nn||noFrom(d.id)===nn;})||{}).cells||[]; }catch(e){ return []; } }
+  function ensureDefs(){
+    if(typeof customObjectDefs==='undefined') return;
+    for(var n=1;n<=151;n++){
+      var id=pkmnId(n), legacy=legacyId(n), nid=nameId(n), lnid=legacyNameId(n), typ=typeId(n), url=primaryUrl(n);
+      var meta={id:id,legacyId:legacy,type:typ,no:n,name:pad(n)+' '+jp(n),role:'passive',hp:20,damage:0,massKg:8,speed:1.35,sense:7,attackRange:1.1,behavior:'Gitに置いたJPGをそのまま貼る情報テクスチャ。野生出現し、倒すと平面テクスチャ解放。',pokemonInfo:true,gitImageTexture:true,imageSrc:url,iconUrl:url,imageCandidates:candidates(n)};
+      try{ if(typeof INFO_TEXTURE_PACK_V3!=='undefined'&&Array.isArray(INFO_TEXTURE_PACK_V3)&&!INFO_TEXTURE_PACK_V3.some(function(m){return m&&(m.id===id||m.legacyId===legacy||m.type===typ||m.id===nid);})){ INFO_TEXTURE_PACK_V3.push(meta); } }catch(e){}
+      try{ if(typeof INFO_TEXTURE_META_V3!=='undefined'){ INFO_TEXTURE_META_V3[id]=meta; INFO_TEXTURE_META_V3[legacy]=meta; INFO_TEXTURE_META_V3[typ]=meta; INFO_TEXTURE_META_V3[nid]=meta; INFO_TEXTURE_META_V3[lnid]=meta; } }catch(e){}
+      var def={id:id,legacyId:legacy,no:n,name:'情報テクスチャ:'+pad(n)+' '+jp(n),kind:'plane',grid:30,scale:.085,cells:generatedCells(n),imageSrc:url,iconUrl:url,imageCandidates:candidates(n),infoTexture:true,pokemonInfo:true,gitImageTexture:true,infoType:typ,infoRole:'passive',hp:20,createdAt:1,updatedAt:Date.now(),buildStamp:BUILD_STAMP,__pokemonGitHardfixDef:true};
+      customObjectDefs.set(id,def); customObjectDefs.set(legacy,def); customObjectDefs.set(nid,def); customObjectDefs.set(lnid,def);
+    }
+    try{ if(typeof setObjHud==='function') setObjHud(); if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
+  }
+  function installDrawHook(){
+    try{
+      if(window.__pokemonGitHardfixDrawHook || typeof drawInfoImageToCanvasV4!=='function') return; window.__pokemonGitHardfixDrawHook=true;
+      var base=drawInfoImageToCanvasV4;
+      drawInfoImageToCanvasV4=function(canvas,def){
+        var n=noFrom(def); if(n && def && (def.pokemonInfo||def.gitImageTexture)){
+          var key=pad(n), cached=imgCache[key];
+          if(cached&&cached.img&&canvas){ try{ var g=canvas.getContext('2d'), w=canvas.width, h=canvas.height, iw=cached.img.naturalWidth||cached.img.width, ih=cached.img.naturalHeight||cached.img.height, sc=Math.min(w/iw,h/ih), dw=Math.max(1,Math.round(iw*sc)), dh=Math.max(1,Math.round(ih*sc)), dx=Math.round((w-dw)/2), dy=Math.round((h-dh)/2); g.clearRect(0,0,w,h); g.imageSmoothingEnabled=true; g.drawImage(cached.img,dx,dy,dw,dh); return true; }catch(e){} }
+          loadImageSeq(n,function(img,url){ imgCache[key]={img:img,url:url}; try{ if(typeof INFO_TEXTURE_MATERIAL_CACHE_V4!=='undefined') INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); if(typeof refreshInfoTextureVisualsV4==='function') refreshInfoTextureVisualsV4(def.id||pkmnId(n)); }catch(e){} });
+          return false;
+        }
+        return base.apply(this,arguments);
+      };
+    }catch(e){ console.warn('[pokemon hardfix draw hook failed]',e); }
+  }
+  function showStamp(){ try{ window.INDEX_MINE_BUILD_STAMP=BUILD_STAMP; var hud=document.getElementById('hud')||document.body, line=document.getElementById('pokemon-clean-build-stamp')||document.getElementById('pokemon-git-hardfix-stamp'); if(!line){ line=document.createElement('div'); line.id='pokemon-git-hardfix-stamp'; line.className='hudLine hudBuildStamp'; line.style.cssText='font-size:13px;line-height:1.25;color:#fff7ed;text-shadow:0 1px 2px #000;font-weight:700;'; hud.insertBefore(line,hud.firstChild?hud.firstChild.nextSibling:null); } line.textContent='版: '+BUILD_STAMP; Array.from(document.querySelectorAll('.hudBuildStamp')).forEach(function(e){ if(e!==line) e.style.display='none'; }); }catch(e){} }
+  function install(){
+    try{
+      showStamp();
+      if(typeof pc==='undefined'||typeof app==='undefined'||!app.root||typeof customObjectDefs==='undefined'){ setTimeout(install,250); return; }
+      ensureDefs(); installDrawHook();
+      if(typeof ensureInfoTextureDefV3==='function' && !window.__pokemonGitHardfixEnsureHook){ window.__pokemonGitHardfixEnsureHook=true; var be=ensureInfoTextureDefV3; ensureInfoTextureDefV3=function(meta){ var n=noFrom(meta); if(n){ ensureDefs(); return customObjectDefs.get(pkmnId(n))||customObjectDefs.get(legacyId(n)); } return be.apply(this,arguments); }; }
+      if(typeof placeCustomObject==='function' && !window.__pokemonGitHardfixPlaceHook){ window.__pokemonGitHardfixPlaceHook=true; var bp=placeCustomObject; placeCustomObject=function(def,x,y,z,yaw,instanceKey){ var n=noFrom(def)||noFrom(instanceKey); if(n) return createBillboard(n,x,y,z,yaw,instanceKey)||bp.apply(this,arguments); return bp.apply(this,arguments); }; }
+      try{ if(typeof customObjectEntities!=='undefined'){ Array.from(customObjectEntities.entries()).forEach(function(pair){ var k=pair[0], r=pair[1]; if(!r||r.data&&r.data.__pokemonGitHardfix) return; var n=noFrom(k)||noFrom(r.data)||noFrom(r.name); if(!n) return; var p=r.getPosition?r.getPosition():{x:0,y:1,z:0}, yw=Number(r.data&&r.data.yaw)||0; try{ if(r.destroy) r.destroy(); customObjectEntities.delete(k); }catch(e){} createBillboard(n,p.x,p.y,p.z,yw,k); }); } }catch(e){}
+      console.log('[pokemon git hardfix installed]', BUILD_STAMP);
+      if(typeof setMsg==='function') setMsg('Git画像情報テクスチャ修正: 同一オリジン/assets優先でJPGをそのまま貼る '+BUILD_STAMP,'good');
+    }catch(e){ console.warn('[pokemon git hardfix install failed]',e); setTimeout(install,500); }
+  }
+  install(); setTimeout(install,1000); setTimeout(install,3500); setInterval(showStamp,1000);
 })();
 </script>
 
