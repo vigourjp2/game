@@ -99,6 +99,13 @@
   body.objEditing #ultraHandBtn{display:none!important}
 
 </style>
+
+<script>
+window.__INDEX_MINE_BUILD_STAMP__ = '2026-06-23 15:05 JST';
+window.__INDEX_MINE_PATCH_ID__ = 'poke-cells-debug-final';
+console.log('[index-mine build]', window.__INDEX_MINE_BUILD_STAMP__, window.__INDEX_MINE_PATCH_ID__);
+</script>
+
 </head>
 <body>
 <button id="objUiToggle" type="button">OBJ UI</button>
@@ -106,6 +113,7 @@
 <canvas id="app"></canvas>
 <div id="hud">
   <div class="hudLine"><b>Voxel Study World</b> / PlayCanvas Engine</div>
+  <div class="hudLine">版: <span id="buildStamp" class="info">2026-06-23 15:05 JST / poke-cells-debug-final</span></div>
   <div class="hudLine">FPS: <span id="fps">--</span> / PixelRatio: <span id="pr">--</span></div>
   <div class="hudLine">座標: <span id="pos">--</span></div>
   <div class="hudLine">世界: <span id="chunks">--</span></div>
