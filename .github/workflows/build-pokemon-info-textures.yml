@@ -1,19 +1,23 @@
 name: Build Pokemon Info Textures
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'tools/build_pokemon_info_textures.py'
       - '.github/workflows/build-pokemon-info-textures.yml'
-      - 'pokemon-info-textures-loader.js'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: build-pokemon-info-textures
+  cancel-in-progress: true
+
 jobs:
   build-pokemon-info-textures:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,19 +30,20 @@ jobs:
           python-version: '3.11'
 
       - name: Install Pillow
-        run: python -m pip install --upgrade pip pillow
+        run: python -m pip install --upgrade pillow
 
-      - name: Generate 30x30 texture data
+      - name: Generate all 151 Pokemon info textures
         run: python tools/build_pokemon_info_textures.py
 
-      - name: Commit generated files
+      - name: Commit generated 151 files
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add generated/pokemon-info-textures.gen1.30x30.generated.js generated/pokemon-info-textures.gen1.30x30.json assets/pokemon-gen1-icons/
+          git add assets/pokemon-gen1-icons/ generated/pokemon-info-textures.gen1.30x30.generated.js generated/pokemon-info-textures.gen1.30x30.json
           if git diff --cached --quiet; then
             echo "No generated changes"
           else
-            git commit -m "Generate Pokemon info textures 30x30"
+            git commit -m "Generate all 151 Pokemon info textures"
             git push
           fi
