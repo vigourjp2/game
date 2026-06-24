@@ -3143,7 +3143,7 @@ if(typeof placeCustomObject==='function'){
 // ファイル前方で var 初期化済み。ここで const 再宣言しない。
 let playerHp = 20;
 let playerLastDamagedAt = 0;
-const INFO_TEXTURE_GRANTED_KEY = 'mineInfoTextureDefeatedByPlayer.v2';
+const INFO_TEXTURE_GRANTED_KEY = 'mineInfoTextureDefeatedByLocalPlayer.v3';
 let infoTextureGranted = new Set();
 try{ infoTextureGranted = new Set(JSON.parse(localStorage.getItem(INFO_TEXTURE_GRANTED_KEY)||'[]').map(String)); }catch{}
 let catAiAcc = 0;
@@ -6291,6 +6291,41 @@ try{
   });
   try{ setTimeout(()=>setMsg('音/物理演出ON: 状況BGM・SE・ノックバック・攻撃/歩行/泳ぎ/出現消滅・エモート(V/R)', 'good'), 900); }catch{}
   console.log(FX_VERSION+' active');
+})();
+
+
+// ===== Info Texture local-player defeat gate v14 =====
+// 不具合修正:
+// これまでは damageObjectRoot() の撃破時に無条件で grantInfoTexture() していたため、
+// 猫同士の喧嘩・味方Mobの攻撃・クリーパー自爆など、プレイヤーが倒していない情報Mobまで一覧解禁される可能性があった。
+// 以後は「この端末のプレイヤーが breakBlock() で攻撃/撃破した処理中」だけ登録を許可する。
+(function(){
+  const INFO_TEXTURE_GRANT_GATE_VERSION = 'info-grant-local-player-only-v14';
+  let localPlayerAttackDepth = 0;
+  try{
+    const oldGrantInfoTexture = grantInfoTexture;
+    grantInfoTexture = function(infoId){
+      if(localPlayerAttackDepth <= 0){
+        try{ console.warn('[InfoTexture] grant blocked: not defeated by local player', infoId); }catch(e){}
+        return false;
+      }
+      return oldGrantInfoTexture.apply(this, arguments);
+    };
+  }catch(e){ console.warn('InfoTexture grant gate install failed', e); }
+
+  try{
+    const oldBreakBlock = breakBlock;
+    breakBlock = function(){
+      localPlayerAttackDepth++;
+      try{
+        return oldBreakBlock.apply(this, arguments);
+      }finally{
+        localPlayerAttackDepth = Math.max(0, localPlayerAttackDepth - 1);
+      }
+    };
+  }catch(e){ console.warn('InfoTexture local attack gate install failed', e); }
+
+  try{ console.log(INFO_TEXTURE_GRANT_GATE_VERSION + ' active'); }catch(e){}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
