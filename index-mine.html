@@ -6559,6 +6559,200 @@ try{
   try{ setTimeout(hardEnforce, 250); setTimeout(hardEnforce, 1000); console.log(INFO_WILD_HARD_CAP_VERSION + ' active'); }catch(e){}
 })();
 
+
+// ===== InfoTexture Capture / EXP / Gold System v1 =====
+// 仕様変更:
+// ・情報テクスチャ討伐では登録しない。経験値と金だけ入る。
+// ・登録はモンスターボール捕獲成功時だけ。
+// ・捕獲成功時は経験値/金なし。
+const INFO_CAPTURE_RPG_VERSION = 'InfoTexture Capture RPG v1';
+const INFO_CAPTURE_PROGRESS_KEY = 'mineInfoTexturePlayerProgress.v1';
+let infoPlayerProgress = { level:1, exp:0, gold:0, totalExp:0, captures:0, defeats:0 };
+try{
+  const saved = JSON.parse(localStorage.getItem(INFO_CAPTURE_PROGRESS_KEY)||'null');
+  if(saved && typeof saved==='object') infoPlayerProgress = Object.assign(infoPlayerProgress, saved);
+}catch{}
+function saveInfoPlayerProgress(){ try{ localStorage.setItem(INFO_CAPTURE_PROGRESS_KEY, JSON.stringify(infoPlayerProgress)); }catch{} }
+function infoXpNeed(level){ level=Math.max(1, Math.trunc(Number(level)||1)); return Math.floor(28 + Math.pow(level, 1.45) * 22); }
+function infoPlayerMaxHp(){ return 20 + (Math.max(1, infoPlayerProgress.level)-1) * 4; }
+function infoPlayerAttackDamage(){ return 4 + Math.floor((Math.max(1, infoPlayerProgress.level)-1) * 0.85); }
+function infoRootLabel(root){
+  const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(root):null;
+  if(meta && meta.name) return String(meta.name);
+  const ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(root):[]);
+  const id=(ids&&ids[0])||'';
+  const def=customObjectDefs.get(id) || customObjectDefs.get(root&&root.data&&root.data.defId);
+  return String((def&&def.name)||id||'情報テクスチャ').replace(/^情報テクスチャ[:：]?/,'');
+}
+function infoRootMetaForReward(root){
+  const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(root):null;
+  const maxHp=Number(root&&root.data&&(root.data.maxHp||root.data.hp)) || Number(meta&&meta.hp) || 10;
+  const dmg=Number(meta&&meta.damage)||0;
+  return { meta, maxHp:Math.max(1,maxHp), damage:Math.max(0,dmg) };
+}
+function addInfoDefeatReward(root){
+  const ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(root):[]);
+  if(!ids || !ids.length){ setMsg('OBJ破壊: 登録/EXP/金なし', 'info'); return; }
+  const r=infoRootMetaForReward(root);
+  const xp=Math.max(4, Math.floor(r.maxHp*0.9 + r.damage*2 + Math.max(0, infoPlayerProgress.level-1)*0.6));
+  const gold=Math.max(1, Math.floor(r.maxHp*0.35 + r.damage + 2 + Math.random()*4));
+  infoPlayerProgress.exp += xp;
+  infoPlayerProgress.totalExp += xp;
+  infoPlayerProgress.gold += gold;
+  infoPlayerProgress.defeats += 1;
+  let ups=0;
+  while(infoPlayerProgress.exp >= infoXpNeed(infoPlayerProgress.level)){
+    infoPlayerProgress.exp -= infoXpNeed(infoPlayerProgress.level);
+    infoPlayerProgress.level += 1;
+    ups++;
+  }
+  playerHp = Math.min(infoPlayerMaxHp(), Math.max(1, Number(playerHp)||1) + (ups?infoPlayerMaxHp():0));
+  saveInfoPlayerProgress();
+  if(ups) setMsg('LEVEL UP! Lv.'+infoPlayerProgress.level+' / 攻撃 '+infoPlayerAttackDamage()+' / 最大HP '+infoPlayerMaxHp(), 'good');
+  else setMsg('撃破: +'+xp+'EXP / +'+gold+'G（登録なし）', 'good');
+  if(typeof updateInfoHud==='function') updateInfoHud();
+}
+function ensureMonsterBallButton(){
+  let btn=$('monsterBallBtn');
+  if(!btn){
+    btn=document.createElement('button');
+    btn.className='mbtn';
+    btn.id='monsterBallBtn';
+    btn.innerHTML='BALL<br>捕獲';
+    const box=$('mobileButtons');
+    if(box) box.insertBefore(btn, box.firstChild); else document.body.appendChild(btn);
+  }
+  if(!btn.__ballBound){
+    btn.__ballBound=true;
+    btn.addEventListener('pointerdown', e=>{ e.preventDefault(); throwMonsterBall(); });
+  }
+  if(!$('monsterBallStyle')){
+    const st=document.createElement('style');
+    st.id='monsterBallStyle';
+    st.textContent = '#monsterBallBtn{background:linear-gradient(180deg,#ef4444 0 47%,#f8fafc 48% 100%);color:#111827;border-color:rgba(255,255,255,.86);text-shadow:none;box-shadow:0 10px 24px rgba(0,0,0,.28)}#monsterBallBtn:active{transform:scale(.96);filter:brightness(1.08)}#combatHpHud{min-width:160px;white-space:pre-line}';
+    document.head.appendChild(st);
+  }
+}
+const __captureOldEnsureInfoHud = (typeof ensureInfoHud==='function') ? ensureInfoHud : null;
+if(__captureOldEnsureInfoHud){
+  ensureInfoHud = function(){ const r=__captureOldEnsureInfoHud.apply(this,arguments); ensureMonsterBallButton(); return r; };
+}
+const __captureOldUpdateInfoHud = (typeof updateInfoHud==='function') ? updateInfoHud : null;
+if(__captureOldUpdateInfoHud){
+  updateInfoHud = function(){
+    const maxHp=infoPlayerMaxHp();
+    playerHp=Math.min(maxHp, Math.max(0, Number(playerHp)||0));
+    const h=$('combatHpHud');
+    if(h){
+      h.textContent='HP '+Math.round(playerHp)+'/'+maxHp+'\nLv.'+infoPlayerProgress.level+' EXP '+Math.floor(infoPlayerProgress.exp)+'/'+infoXpNeed(infoPlayerProgress.level)+'\n所持金 '+Math.floor(infoPlayerProgress.gold)+'G / 攻撃 '+infoPlayerAttackDamage();
+    }
+    if(blueprintBtn) blueprintBtn.classList.toggle('on', !!(ultraHeld&&ultraHeld.mode==='field'));
+    ensureMonsterBallButton();
+  };
+}
+function canCaptureInfoRoot(root){
+  if(!root || !root.data) return {ok:false, reason:'対象なし'};
+  const ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(root):[]);
+  if(!ids || !ids.length) return {ok:false, reason:'情報テクスチャではない'};
+  const p=root.getPosition ? root.getPosition() : null;
+  const dist=p ? Math.hypot(p.x-player.x,p.z-player.z) : 999;
+  if(dist>8.5) return {ok:false, reason:'遠すぎる'};
+  const maxHp=Number(root.data.maxHp||root.data.hp)||10;
+  const hp=Number(root.data.hp||maxHp);
+  const weakRatio=hp/maxHp;
+  if(weakRatio>.35) return {ok:false, reason:'まだ元気すぎる。弱らせろ HP '+Math.ceil(hp)+'/'+Math.ceil(maxHp)};
+  if(root.data.fxKnockX || root.data.fxKnockZ || root.data.fxKnockY) return {ok:false, reason:'暴れている。少し落ち着かせろ'};
+  return {ok:true, ids, hp, maxHp, weakRatio};
+}
+function captureChanceForRoot(root, c){
+  const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(root):null;
+  let chance=.45 + (1-Math.max(0,Math.min(1,c.weakRatio))) * .75;
+  if(meta && meta.role==='hostile') chance-=.12;
+  if(meta && meta.role==='passive') chance+=.10;
+  chance += Math.min(.18, Math.max(0, infoPlayerProgress.level-1)*.012);
+  return Math.max(.18, Math.min(.92, chance));
+}
+function throwMonsterBall(){
+  ensureInfoHud();
+  if(!state.started){ setMsg('まだ開始してない', 'bad'); return false; }
+  const r=(typeof rayBlock==='function')?rayBlock(true):null;
+  if(!r || !r.objectHit || !r.objectHit.root){ setMsg('モンスターボール空振り。照準を情報テクスチャへ合わせろ', 'bad'); return false; }
+  const root=r.objectHit.root;
+  const c=canCaptureInfoRoot(root);
+  const label=infoRootLabel(root);
+  try{ if(typeof markAttack==='function') markAttack(root); }catch{}
+  if(!c.ok){ setMsg('捕獲失敗: '+label+' / '+c.reason, 'bad'); try{ if(typeof catMeow==='function') catMeow(root,'angry'); }catch{} return false; }
+  const chance=captureChanceForRoot(root,c);
+  if(Math.random()>chance){
+    root.data.nextHitAt=0;
+    setMsg('ボールが揺れた…でも逃げた！ '+label+' 捕獲率 '+Math.round(chance*100)+'%', 'bad');
+    try{ if(typeof catMeow==='function') catMeow(root,'angry'); }catch{}
+    return false;
+  }
+  for(const id of c.ids) grantInfoTexture(id);
+  infoPlayerProgress.captures += 1;
+  saveInfoPlayerProgress();
+  const ik=root.data.instanceKey;
+  removeCustomObjectInstance(ik,true);
+  setMsg('捕獲完了: '+label+' を登録！（EXP/金なし）', 'good');
+  updateInfoHud();
+  return true;
+}
+const __captureOldDamagePlayer = (typeof damagePlayer==='function') ? damagePlayer : null;
+if(__captureOldDamagePlayer){
+  damagePlayer = function(amount,label){
+    const r=__captureOldDamagePlayer.apply(this,arguments);
+    if(playerHp>infoPlayerMaxHp()) playerHp=infoPlayerMaxHp();
+    if(playerHp===20 && infoPlayerMaxHp()>20 && (Number(amount)||0)>0 && Math.round(playerHp)===20){
+      // 旧処理は死亡時HP20固定なので、レベル上昇後は最大HPまで戻す。
+      if((Number(amount)||0)>0 && playerHp>0 && playerHp<=20) playerHp=Math.min(infoPlayerMaxHp(), playerHp);
+    }
+    updateInfoHud();
+    return r;
+  };
+}
+function damageObjectRootCaptureRpg(root, amount){
+  if(!root) return false;
+  root.data=root.data||{};
+  const def=customObjectDefs.get(root.data&&root.data.defId);
+  const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(root):null;
+  const baseMax=Number(root.data.maxHp||root.data.hp||def&&def.hp||meta&&meta.hp)||10;
+  root.data.maxHp=Math.max(1, baseMax);
+  root.data.hp=Math.max(0, (Number(root.data.hp)||root.data.maxHp) - Math.max(0, Number(amount)||0));
+  const label=infoRootLabel(root);
+  setMsg('攻撃: '+label+' HP '+Math.ceil(root.data.hp)+'/'+Math.ceil(root.data.maxHp), 'info');
+  try{ if(typeof catMeow==='function') catMeow(root, root.data.hp<=0?'hurt':'angry'); }catch{}
+  try{ if(typeof markHit==='function') markHit(root, amount); }catch{}
+  if(root.data.hp<=0){
+    const playerKill = root.data.lastPlayerHitAt && (performance.now()-root.data.lastPlayerHitAt < 2500);
+    if(playerKill) addInfoDefeatReward(root);
+    else setMsg('野生同士の撃破: 登録/EXP/金なし', 'info');
+    const ik=root.data.instanceKey;
+    removeCustomObjectInstance(ik,true);
+  }
+  return true;
+}
+damageObjectRoot = damageObjectRootCaptureRpg;
+const __capturePrevBreakBlock = (typeof breakBlock==='function') ? breakBlock : null;
+if(__capturePrevBreakBlock){
+  breakBlock = function(){
+    if(ultraHeld && typeof ultraDetachHeld==='function') return ultraDetachHeld();
+    if(state.editingObject) return __capturePrevBreakBlock.apply(this,arguments);
+    const r=(typeof rayBlock==='function')?rayBlock(true):null;
+    if(r && r.objectHit && r.objectHit.root){
+      try{ if(typeof markAttack==='function') markAttack(r.objectHit.root); }catch{}
+      try{ r.objectHit.root.data=r.objectHit.root.data||{}; r.objectHit.root.data.lastPlayerHitAt=performance.now(); }catch{}
+      return damageObjectRoot(r.objectHit.root, infoPlayerAttackDamage());
+    }
+    return __capturePrevBreakBlock.apply(this,arguments);
+  };
+}
+window.addEventListener('keydown', e=>{
+  if((e.key==='c'||e.key==='C') && !state.editingObject){ e.preventDefault(); throwMonsterBall(); }
+}, true);
+try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' active'); }catch(e){ console.warn('capture rpg init failed', e); }
+
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
