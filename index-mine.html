@@ -215,6 +215,7 @@
 </div></div>
 <div id="error"></div>
 <script src="https://cdn.jsdelivr.net/npm/playcanvas@latest/build/playcanvas.min.js"></script>
+<script src="./generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
 <script>
 (function(){
 'use strict';
@@ -964,6 +965,7 @@ function cleanupLegacyPkmnInfoTextureIdsV8(){
 var INFO_CARRIER_CAT_ID = 'builtin-info-carrier-cat';
 var INFO_BP_PREFIX = 'bp-';
 const customObjectDefs = new Map();
+window.customObjectDefs = customObjectDefs;
 const customObjectEntities = new Map();
 // OBJ呼出同期で、相手端末がまだOBJ定義を持っていない場合に一時保留する。
 const pendingObjectInstancePlaces = new Map();
@@ -3937,6 +3939,7 @@ const INFO_TEXTURE_PACK_V3 = [
  {type:'copper_golem',name:'カッパーゴーレム',role:'helper',hp:25,damage:3,massKg:120,speed:1.2,sense:7.0,attackRange:1.3,soundBase:180,palette:{body:'#b45309',dark:'#451a03',accent:'#14b8a6'},behavior:'銅の小型ゴーレム。カチカチ歩く'}
 ];
 const INFO_TEXTURE_META_V3 = {};
+window.INFO_TEXTURE_META_V3 = INFO_TEXTURE_META_V3;
 function infoTextureIdFromTypeV3(type){ return normalizeInfoTextureIdV8(type); }
 INFO_TEXTURE_PACK_V3.forEach(m=>{ m.id=m.id||infoTextureIdFromTypeV3(m.type); INFO_TEXTURE_META_V3[m.id]=m; INFO_TEXTURE_META_V3[infoTextureIdFromTypeV3(m.type)]=m; });
 function infoMetaForIdV3(id){ id=normalizeObjectIdV8(id); return INFO_TEXTURE_META_V3[String(id||'')] || null; }
@@ -4062,6 +4065,7 @@ spawnCustomObjectForChunk=function(ch){
 };
 initInfoTextureSystem=function(){ ensureInfoHud(); ensureAllInfoTexturesV3(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); };
 try{ initInfoTextureSystem(); setMsg('情報テクスチャ大量パック: '+INFO_TEXTURE_PACK_V3.length+'種を内蔵','good'); }catch(e){ console.warn('info texture v3 init failed',e); }
+try{ if(typeof window.applyPokemonGeneratedInfoTextures30==='function'){ window.applyPokemonGeneratedInfoTextures30(); setObjHud(); renderObjectManager(); } }catch(e){ console.warn('pokemon dotdata apply failed', e); }
 
 // ===== Info Texture PRO pack v4: real image flat textures + richer mob data =====
 // V3 の「16px疑似アイコン」だけでは見た目・音・習性が薄いので、ネット上のMob画像を平面テクスチャへ変換する層を追加。
@@ -4306,6 +4310,7 @@ for(const m of INFO_TEXTURE_PACK_V3){ infoTextureApplyProMetaV4(m); m.id=m.id||i
 try{ cleanupLegacyPkmnInfoTextureIdsV8(); }catch(e){}
 const INFO_TEXTURE_IMAGE_CACHE_V4 = new Map();
 const INFO_TEXTURE_MATERIAL_CACHE_V4 = new Map();
+window.INFO_TEXTURE_MATERIAL_CACHE_V4 = INFO_TEXTURE_MATERIAL_CACHE_V4;
 function startInfoImageLoadV4(def){
  const url=String(def&&def.iconUrl||''); if(!url) return null;
  let rec=INFO_TEXTURE_IMAGE_CACHE_V4.get(url); if(rec) return rec;
@@ -4400,6 +4405,7 @@ updateCats = function(dt){
 };
 ensureAllInfoTexturesV3();
 try{ setMsg('情報テクスチャPRO v4: 実画像URL→平面テクスチャ変換 / '+INFO_TEXTURE_PACK_V3.length+'種 / 音・習性・攻撃性強化','good'); }catch{}
+try{ if(typeof window.applyPokemonGeneratedInfoTextures30==='function'){ window.applyPokemonGeneratedInfoTextures30(); setObjHud(); renderObjectManager(); } }catch(e){ console.warn('pokemon dotdata apply late failed', e); }
 
 
 
