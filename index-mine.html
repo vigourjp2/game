@@ -336,6 +336,29 @@ function logicalTypeAt(x,y,z){
  if(e)return e.data.type;
  return baseTerrainType(x,y,z);
 }
+function isWaterType(type){return type==='water';}
+function isWaterAt(x,y,z){return isWaterType(logicalTypeAt(x,y,z));}
+function waterSurfaceAt(x,z){
+ const bx=Math.round(x), bz=Math.round(z);
+ // water block y=1 occupies roughly 1..2, so the swim surface is 2.0.
+ return isWaterAt(bx,1,bz)?2:null;
+}
+function playerWaterState(){
+ const rr=(player&&player.radius?player.radius:.28)*.75;
+ const samples=[[player.x,player.z],[player.x-rr,player.z],[player.x+rr,player.z],[player.x,player.z-rr],[player.x,player.z+rr]];
+ const ySamples=[Math.floor(player.y+.12),Math.floor(player.y+.82),Math.floor(player.y+1.35)];
+ for(const s of samples){
+   for(const yy of ySamples){
+     if(isWaterAt(Math.round(s[0]),yy,Math.round(s[1]))){
+       const surface=waterSurfaceAt(s[0],s[1]);
+       return {inWater:true,surface:surface==null?yy+1:surface};
+     }
+   }
+ }
+ const surface=waterSurfaceAt(player.x,player.z);
+ if(surface!==null && player.y<surface+.15 && player.y>surface-1.45) return {inWater:true,surface};
+ return {inWater:false,surface:null};
+}
 function isSolidAt(x,y,z){
  const t=logicalTypeAt(x,y,z);
  return !!(t&&isSolidType(t));
@@ -453,7 +476,7 @@ const camera=new pc.Entity('camera');camera.addComponent('camera',{clearColor:ne
 const sun=new pc.Entity('sun');sun.addComponent('light',{type:'directional',color:new pc.Color(1,0.96,0.86),intensity:1.35,castShadows:false});sun.setEulerAngles(48,35,0);app.root.addChild(sun);
 const hemi=new pc.Entity('skyFill');hemi.addComponent('light',{type:'omni',color:new pc.Color(.35,.50,.85),intensity:.15,range:80});hemi.setPosition(0,25,0);app.root.addChild(hemi);
 
-const player={x:0,y:terrainHeight(0,-8)+3,z:-8,vx:0,vy:0,vz:0,yaw:0,pitch:0,onGround:false,height:1.72,radius:.28,speed:5.0};
+const player={x:0,y:terrainHeight(0,-8)+3,z:-8,vx:0,vy:0,vz:0,yaw:0,pitch:0,onGround:false,inWater:false,waterSurface:null,height:1.72,radius:.28,speed:5.0};
 const input={mx:0,my:0,lx:0,ly:0,lookX:0,lookY:0,breaking:false,placing:false,jump:false};
 const smooth={mx:0,my:0,lookX:0,lookY:0};
 
@@ -1810,6 +1833,12 @@ function blueprintThumb(def){
  g.fillStyle='rgba(191,219,254,.95)'; g.font='11px system-ui'; g.fillText((def.kind==='plane'?'平面':'立体')+' '+cells.length+' cells',8,16);
  return c.toDataURL('image/png');
 }
+function blueprintDisplayName(def){
+ let n=String((def&&def.name)||'');
+ n=n.replace(/^\s*情報テクスチャ\s*[:：-]?\s*/u,'');
+ n=n.replace(/^\s*InfoTexture\s*[:：-]?\s*/iu,'');
+ return n.trim() || String((def&&def.id)||'object');
+}
 function renderObjectManager(){
  const list=$('bpList'); if(!list) return;
  const defs=Array.from(customObjectDefs.values()).filter(shouldShowObjectDefInManager).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
@@ -1818,14 +1847,14 @@ function renderObjectManager(){
  for(const def of defs){
    const card=document.createElement('div'); card.className='bpCard';
    const img=document.createElement('img'); img.className='bpThumb'; img.src=blueprintThumb(def); card.appendChild(img);
-   const name=document.createElement('div'); name.className='bpName'; name.textContent=def.name||def.id; card.appendChild(name);
+   const name=document.createElement('div'); name.className='bpName'; name.textContent=blueprintDisplayName(def); name.title=def.name||def.id; card.appendChild(name);
    const meta=document.createElement('div'); meta.className='bpMeta'; meta.textContent=(def.kind==='plane'?'平面':'立体')+' / '+(def.cells?def.cells.length:0)+' cells / size '+Number(def.scale||0).toFixed(2); card.appendChild(meta);
    const btns=document.createElement('div'); btns.className='bpBtns';
    const canCallObject = !(def && def.infoTexture);
    const bCall=document.createElement('button');
    if(canCallObject){
      bCall.textContent='呼出';
-     bCall.onclick=()=>{closeObjectManager(); placeObjectInFront(def); setMsg('OBJ呼出: '+(def.name||def.id),'good');};
+     bCall.onclick=()=>{closeObjectManager(); placeObjectInFront(def); setMsg('OBJ呼出: '+blueprintDisplayName(def),'good');};
    }else{
      bCall.textContent='呼出不可';
      bCall.disabled=true;
@@ -1834,7 +1863,7 @@ function renderObjectManager(){
    }
    const bEdit=document.createElement('button'); bEdit.textContent='編集'; bEdit.onclick=()=>{closeObjectManager(); startEditObjectEditor(def.id,false);};
    const bCopy=document.createElement('button'); bCopy.textContent='複製編集'; bCopy.onclick=()=>{closeObjectManager(); startEditObjectEditor(def.id,true);};
-   const bDel=document.createElement('button'); bDel.textContent='削除'; bDel.className='badBtn'; bDel.onclick=()=>{if(confirm('このOBJを削除する？\n'+(def.name||def.id))){deleteCustomObjectDef(def.id,true); renderObjectManager();}};
+   const bDel=document.createElement('button'); bDel.textContent='削除'; bDel.className='badBtn'; bDel.onclick=()=>{if(confirm('このOBJを削除する？\n'+blueprintDisplayName(def))){deleteCustomObjectDef(def.id,true); renderObjectManager();}};
    btns.appendChild(bCall); btns.appendChild(bEdit); btns.appendChild(bCopy); btns.appendChild(bDel); card.appendChild(btns);
    list.appendChild(card);
  }
@@ -2645,9 +2674,13 @@ function placeBlock(){
  if(state.editingObject){objectBuilderPlace();return;}
  const r=rayBlock();if(!r){setMsg('配置先が見つからない','bad');return;}
  if(r.objectHit){setMsg('OBJには直接配置しない。先にBREAKで除去','bad');return;}
- const [x,y,z]=r.place;if(y<WORLD_BOTTOM||logicalTypeAt(x,y,z)||customObjectCellAtPoint(x,y+.5,z)){setMsg('そこには置けない','bad');return;}
+ const [x,y,z]=r.place;
+ const existing=logicalTypeAt(x,y,z);
+ const replacingWater=isWaterType(existing);
+ if(y<WORLD_BOTTOM||customObjectCellAtPoint(x,y+.5,z)||existing&&!replacingWater){setMsg('そこには置けない','bad');return;}
  if(Math.abs(x-player.x)<.7&&Math.abs(z-player.z)<.7&&y<player.y+2){setMsg('自分の場所には置けない','bad');return;}
- addBlock(x,y,z,state.selected,true);sendBlockEditMultiplayer(x,y,z,state.selected);revealAround(x,y,z);setMsg('配置: '+blockDefs[state.selected].label,'good');
+ if(replacingWater&&world.has(key(x,y,z))) removeBlock(x,y,z,false);
+ addBlock(x,y,z,state.selected,true);sendBlockEditMultiplayer(x,y,z,state.selected);revealAround(x,y,z);setMsg(replacingWater?'水面を埋めて配置: '+blockDefs[state.selected].label:'配置: '+blockDefs[state.selected].label,'good');
 }
 
 
@@ -2698,11 +2731,29 @@ function update(dt){
  smooth.mx+=(Math.max(-1,Math.min(1,input.mx))-smooth.mx)*Math.min(1,dt*12);smooth.my+=(Math.max(-1,Math.min(1,input.my))-smooth.my)*Math.min(1,dt*12);
  smooth.lookX+=(input.lookX-smooth.lookX)*Math.min(1,dt*14);smooth.lookY+=(input.lookY-smooth.lookY)*Math.min(1,dt*14);
  if(state.mobile){player.yaw-=smooth.lookX*dt*2.9;player.pitch+=smooth.lookY*dt*2.1;player.pitch=Math.max(-1.25,Math.min(1.25,player.pitch));}
+ const water=playerWaterState();
+ player.inWater=water.inWater;
+ player.waterSurface=water.surface;
  const yaw=player.yaw, fwdX=Math.sin(yaw),fwdZ=Math.cos(yaw),rightX=Math.cos(yaw),rightZ=-Math.sin(yaw);
- const vx=(fwdX*smooth.my+rightX*smooth.mx)*player.speed, vz=(fwdZ*smooth.my+rightZ*smooth.mx)*player.speed;
+ const waterMoveScale=player.inWater?.66:1;
+ const vx=(fwdX*smooth.my+rightX*smooth.mx)*player.speed*waterMoveScale, vz=(fwdZ*smooth.my+rightZ*smooth.mx)*player.speed*waterMoveScale;
  let nx=player.x+vx*dt,nz=player.z+vz*dt;
  if(!collision(nx,player.y,player.z))player.x=nx;if(!collision(player.x,player.y,nz))player.z=nz;
- player.vy-=18*dt;if(input.jump&&player.onGround){player.vy=7.2;player.onGround=false;}input.jump=false;
+ if(player.inWater){
+   player.vy-=5.0*dt;
+   if(player.vy<0)player.vy*=Math.max(0,1-4.8*dt);
+   if(player.waterSurface!==null&&player.y<player.waterSurface-.24)player.vy+=8.2*dt;
+   player.vy=Math.max(player.vy,-2.2);
+   if(input.jump){
+     player.vy=(player.waterSurface!==null&&player.y>player.waterSurface-.55)?10.8:4.8;
+     player.onGround=false;
+     setMsg('水面ジャンプ！','good');
+   }
+ }else{
+   player.vy-=18*dt;
+   if(input.jump&&player.onGround){player.vy=7.2;player.onGround=false;}
+ }
+ input.jump=false;
  player.y+=player.vy*dt;tryGround();if(player.y<-10){player.x=0;player.y=10;player.z=-8;player.vy=0;}
  aimCamera();
  const r=rayBlock();state.target=r;
