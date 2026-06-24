@@ -1068,6 +1068,23 @@ function loadCustomObjectsLocal(){
  try{ const arr=JSON.parse(localStorage.getItem(OBJECT_STORAGE_KEY)||'[]'); if(Array.isArray(arr)) arr.forEach(d=>registerCustomObjectDef(d,'localLoad')); }catch{}
  setObjHud();
 }
+
+function clearLocalBlueprintCache(reason){
+ // 端末キャッシュ全消しは、OBJ定義だけでなく「情報テクスチャ入手済み」フラグも消す。
+ // これを消さないと、プレイヤーが倒していない情報テクスチャが一覧に残り続ける。
+ try{ localStorage.removeItem(OBJECT_STORAGE_KEY); }catch{}
+ try{ localStorage.removeItem('mineInfoTextureDefeatedByLocalPlayer.v3'); }catch{}
+ try{ localStorage.removeItem('mineInfoTextureDefeatedByPlayer.v2'); }catch{}
+ try{ localStorage.removeItem('mineInfoTextureDefeated.v1'); }catch{}
+ try{ if(typeof infoTextureGranted!=='undefined' && infoTextureGranted && infoTextureGranted.clear) infoTextureGranted.clear(); }catch{}
+ try{ customObjectDefs.clear(); }catch{}
+ try{ if(typeof ensureAllInfoTexturesV3==='function') ensureAllInfoTexturesV3(); }catch{}
+ try{ if(typeof ensureCatInfoTexture==='function') ensureCatInfoTexture(); }catch{}
+ try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch{}
+ try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch{}
+ try{ setObjHud(); }catch{}
+ try{ setMsg(reason || '端末キャッシュ全消し: OBJ定義と情報テクスチャ解禁履歴を削除', 'good'); }catch{}
+}
 function registerCustomObjectDef(def, source){
  def=normalizeInfoTextureDefIdsV8(def);
  const clean=validateObjectDef(def);
@@ -1467,7 +1484,7 @@ function bindObjectEditorUi(){
  const bc=$('bpCloseBtn'); if(bc)bc.onclick=closeObjectManager;
  const brw=$('bpResetWorldBtn'); if(brw)brw.onclick=requestWorldReset;
  const bro=$('bpResetObjectsBtn'); if(bro)bro.onclick=requestObjectWorldReset;
- const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\nCloudflare側に残っているOBJは再接続で戻る可能性あり。')){localStorage.removeItem(OBJECT_STORAGE_KEY);customObjectDefs.clear();renderObjectManager();setObjHud();}};
+ const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\n情報テクスチャの入手済み履歴も消します。\nCloudflare側に残っている通常OBJは再接続で戻る可能性あり。')){clearLocalBlueprintCache();}};
  const oc=$('objCanvas'); if(oc){oc.addEventListener('pointerdown',e=>{objPointerDown=true;oc.setPointerCapture(e.pointerId);paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointermove',e=>{if(objPointerDown&&objTool!=='pick')paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointerup',()=>{objPointerDown=false;});oc.addEventListener('pointercancel',()=>{objPointerDown=false;});}
  const pal=$('objPalette'); if(pal){pal.addEventListener('pointerdown',e=>{const r=pal.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)/r.width*pal.width),y=Math.floor((e.clientY-r.top)/r.height*pal.height);const d=pal.getContext('2d').getImageData(Math.max(0,Math.min(pal.width-1,x)),Math.max(0,Math.min(pal.height-1,y)),1,1).data;setObjColor('#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''));setObjTool('paint');});}
  const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
@@ -1906,7 +1923,7 @@ function bindObjectEditorUi(){
  const bc=$('bpCloseBtn'); if(bc)bc.onclick=closeObjectManager;
  const brw=$('bpResetWorldBtn'); if(brw)brw.onclick=requestWorldReset;
  const bro=$('bpResetObjectsBtn'); if(bro)bro.onclick=requestObjectWorldReset;
- const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\nCloudflare側に残っているOBJは再接続で戻る可能性あり。')){localStorage.removeItem(OBJECT_STORAGE_KEY);customObjectDefs.clear();renderObjectManager();setObjHud();}};
+ const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\n情報テクスチャの入手済み履歴も消します。\nCloudflare側に残っている通常OBJは再接続で戻る可能性あり。')){clearLocalBlueprintCache();}};
  const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
  const cbtn=$('objColorCustomBtn'); if(cbtn)cbtn.onclick=openObjColorPanel;
  buildObjColorPresets();
