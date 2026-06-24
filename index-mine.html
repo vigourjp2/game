@@ -7190,10 +7190,11 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
 })();
 
 
-// ===== InfoTexture Capture UX v3: honest probability, loud outcome, no pity/guarantee =====
+// ===== InfoTexture Capture UX v3: honest result, loud outcome, guaranteed high-rate catch =====
 (function(){
   'use strict';
-  const VERSION='capture-ux-v3-result-theater-honest-probability';
+  const VERSION='capture-ux-v3-result-theater-pity-guarantee';
+  const attemptMap=new Map();
   let busy=false;
   let lastResult='';
   let lastTargetKey='';
@@ -7299,8 +7300,10 @@ body.capShakeScreen{animation:capScreenShake .22s linear 0s 3;}
       if(c.weakRatio<=.35) base+=.18;
       if(c.dist<4) base+=.08;
     }
-    // 表示している捕獲率をそのまま抽選に使う。95%でも5%は失敗する。
-    return clamp(base,.05,.95);
+    const tries=attemptMap.get(keyOf(root))||0;
+    base+=Math.min(.30, tries*.12);
+    if(base>=.95) return 1.0; // 画面上95%以上なら体感詐欺にしない。確定捕獲。
+    return clamp(base,.05,.98);
   };
   function status(root){
     if(!root) return {text:'🎯 捕獲照準: 対象なし\n情報テクスチャへカーソルを合わせろ',cls:'v3No',ok:false,chance:0};
@@ -7309,9 +7312,10 @@ body.capShakeScreen{animation:capScreenShake .22s linear 0s 3;}
     const ch=c.ok?captureChanceForRoot(root,c):0;
     const hp=(c&&c.maxHp)?`HP ${Math.ceil(c.hp)}/${Math.ceil(c.maxHp)}（${Math.round((c.hp/c.maxHp)*100)}%）`:'HP --';
     const dist=(c&&isFinite(c.dist))?`距離 ${c.dist.toFixed(1)}m`:'距離 --';
-    const rate=Math.round(ch*100)+'%';
-    const miss=Math.max(0,100-Math.round(ch*100));
-    const reason=c.ok?`投げれば ${rate}（失敗 ${miss}%）`:(c.reason||'条件NG');
+    const tries=attemptMap.get(keyOf(root))||0;
+    const rate=ch>=1?'100% 確定':(Math.round(ch*100)+'%');
+    const bonus=tries?` / 連続失敗補正 +${Math.min(30,tries*12)}%`:'';
+    const reason=c.ok?`投げれば ${rate}${bonus}`:(c.reason||'条件NG');
     return {text:`🎯 ${labelOf(root)}\n捕獲率: ${rate} / ${hp}\n${dist} / ${reason}${lastResult&&lastTargetKey===keyOf(root)?'\n直前: '+lastResult:''}`,cls:c.ok?'v3Ready':'v3No',ok:!!c.ok,chance:ch,c};
   }
   function updateHud(){
@@ -7346,19 +7350,18 @@ body.capShakeScreen{animation:capScreenShake .22s linear 0s 3;}
     const ids=idsOf(root), label=labelOf(root), c=(typeof canCaptureInfoRoot==='function')?canCaptureInfoRoot(root):{ok:false,reason:'条件NG'};
     if(!ids||!ids.length){ se('no'); show('捕獲不可','情報テクスチャではない','fail'); flash(); setMsg('捕獲不可: 情報テクスチャではない','bad'); setTimeout(hide,900); return false; }
     const chance=c.ok?captureChanceForRoot(root,c):0;
-    const key=keyOf(root);
-    const roll=Math.random();
-    const success=!!(c.ok && roll<=chance);
+    const key=keyOf(root), tries=attemptMap.get(key)||0;
+    const success=!!(c.ok && (chance>=1 || Math.random()<=chance));
     busy=true; lastTargetKey=key; lastResult='判定中…';
-    show('THROW!','モンスターボールを投げた！\n'+label+' / 捕獲率 '+Math.round(chance*100)+'%','throw'); se('throw'); flash();
-    setMsg('モンスターボール！ '+label+' / 捕獲率 '+Math.round(chance*100)+'%', 'info');
+    show('THROW!','モンスターボールを投げた！\n'+label+' / 捕獲率 '+(chance>=1?'100% 確定':Math.round(chance*100)+'%'),'throw'); se('throw'); flash();
+    setMsg('モンスターボール！ '+label+' / 捕獲率 '+(chance>=1?'100%':Math.round(chance*100)+'%'), 'info');
     setTimeout(()=>{ show('HIT!','ボールが当たった！', 'throw'); se('hit'); shakeScreen(); },520);
     setTimeout(()=>{ show('1…','ボールが揺れる…','shake'); se('shake'); },980);
     setTimeout(()=>{ show('2…','まだ揺れている…','shake'); se('shake'); },1450);
     setTimeout(()=>{ show('3…','決まるか…！？','shake'); se('shake'); },1920);
     setTimeout(()=>{
       if(success){
-        lastResult='捕獲成功';
+        attemptMap.delete(key); lastResult='捕獲成功';
         show('捕獲成功!!','登録完了：'+label+'\nEXP/金は入らない','success'); se('success'); flash(); shakeScreen();
         try{ for(const id of ids) if(typeof grantInfoTexture==='function') grantInfoTexture(id); }catch(e){}
         try{ if(window.infoPlayerProgress){} infoPlayerProgress.captures+=1; saveInfoPlayerProgress(); }catch(e){}
@@ -7368,19 +7371,18 @@ body.capShakeScreen{animation:capScreenShake .22s linear 0s 3;}
         setTimeout(()=>{ se('register'); },240);
         setTimeout(()=>{ hide(); busy=false; updateHud(); },1550);
       }else{
-        lastResult=c.ok?('失敗（抽選 '+Math.ceil(roll*100)+' / 成功ライン '+Math.round(chance*100)+'）'):'条件NG';
-        show('脱出された!!',(c.ok?'抽選で逃げた':'条件NG: '+(c.reason||'不明'))+'
-'+label+' / 捕獲率 '+Math.round(chance*100)+'% / 抽選 '+Math.ceil(roll*100), 'fail');
+        attemptMap.set(key,tries+1); lastResult='失敗 → 次回補正+'+Math.min(30,(tries+1)*12)+'%';
+        show('脱出された!!',(c.ok?'惜しい！次回捕獲率アップ':'条件NG: '+(c.reason||'不明'))+'\n'+label+' / 今回 '+Math.round(chance*100)+'%', 'fail');
         se('break'); flash(); shakeScreen(); escapeRoot(root);
         try{ if(typeof catMeow==='function') catMeow(root,'angry'); }catch(e){}
-        setMsg((c.ok?'捕獲失敗: ':'捕獲条件NG: ')+label+' / 捕獲率 '+Math.round(chance*100)+'% / 抽選 '+Math.ceil(roll*100), 'bad');
+        setMsg((c.ok?'捕獲失敗: ':'捕獲条件NG: ')+label+' / '+(c.reason||'抽選失敗')+' / 次回補正あり', 'bad');
         setTimeout(()=>{ hide(); busy=false; updateHud(); },1550);
       }
     },2420);
     return true;
   };
   try{ app.on('update',()=>updateHud()); }catch(e){ setInterval(updateHud,180); }
-  try{ ensureStyle(); updateHud(); setTimeout(()=>setMsg('捕獲UX v3: 表示率そのまま抽選。成功/失敗を全画面演出とSEで表示','good'),900); console.log(VERSION+' active'); }catch(e){}
+  try{ ensureStyle(); updateHud(); setTimeout(()=>setMsg('捕獲UX v3: 95%以上は確定。成功/失敗を全画面演出とSEで表示','good'),900); console.log(VERSION+' active'); }catch(e){}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
