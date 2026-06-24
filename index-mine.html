@@ -5732,10 +5732,10 @@ try{
   const INFO_SHARED_VERSION_V12 = 'v12-shared-world-sync-visible-spawn';
   const INFO_SHARED_DAY_MS_DEFAULT = 720000;      // 12分で1日
   const INFO_SHARED_WEATHER_MS_DEFAULT = 240000;  // 4分で天気更新
-  const INFO_SHARED_SPAWN_NEAR_MS = 6500;
-  const INFO_SHARED_CHUNK_MS = 2200;
+  const INFO_SHARED_SPAWN_NEAR_MS = 12000;
+  const INFO_SHARED_CHUNK_MS = 9000;
   const INFO_SHARED_REQUEST_MS = 12000;
-  const INFO_SHARED_MAX_INFO_ROOTS_NEAR = state.mobile ? 5 : 8;
+  const INFO_SHARED_MAX_INFO_ROOTS_NEAR = 3;
   let infoSharedServerOffsetMs = 0;
   let infoSharedWorldState = {
     version: INFO_SHARED_VERSION_V12,
@@ -6010,6 +6010,7 @@ try{
   }
   function infoSharedSpawn(meta, x, z, reason, forceKey){
     if(!meta) return false;
+    try{ if(typeof canSpawnWildInfoTextureAt==='function' && !canSpawnWildInfoTextureAt(x,z)) return false; }catch(e){}
     infoSharedEnsureDefs();
     let def=null; try{ def=ensureInfoTextureDefV3(meta); }catch{}
     if(!def) return false;
@@ -6039,7 +6040,7 @@ try{
     if(!state.started) return false;
     const now=performance.now();
     if(!force && now-infoSharedLastNearSpawn<INFO_SHARED_SPAWN_NEAR_MS) return false;
-    if(!force && infoSharedCountInfoRootsNear(20)>=INFO_SHARED_MAX_INFO_ROOTS_NEAR) return false;
+    if(infoSharedCountInfoRootsNear(28)>=INFO_SHARED_MAX_INFO_ROOTS_NEAR) return false;
     infoSharedLastNearSpawn=now;
     const dir=forwardVec ? forwardVec() : {x:Math.sin(player.yaw), z:Math.cos(player.yaw)};
     const slot=Math.floor(infoSharedElapsed()/INFO_SHARED_SPAWN_NEAR_MS);
@@ -6391,6 +6392,120 @@ try{
   }catch(e){ console.warn('InfoTexture local attack gate install failed', e); }
 
   try{ console.log(INFO_TEXTURE_GRANT_GATE_VERSION + ' active'); }catch(e){}
+})();
+
+
+// ===== Info Texture wild spawn HARD CAP v15 =====
+// 最終安全弁。過去の複数スポーン層・サーバ再配信・既存残骸を全部まとめて抑える。
+// プレイヤー周辺28ブロック以内の「野生」情報テクスチャは常に最大3体。
+(function(){
+  const INFO_WILD_HARD_CAP_VERSION = 'info-wild-hard-cap-v15';
+  const HARD_MAX = 3;
+  const HARD_RADIUS = 28;
+  const HARD_DESPAWN_RADIUS = 48;
+  let hardAcc = 0;
+  function hardKey(root, ik){
+    return String(ik || (root && root.data && root.data.instanceKey) || '');
+  }
+  function hardIsWildInfo(root, ik){
+    try{
+      const key = hardKey(root, ik);
+      const data = (root && root.data) || {};
+      if(data.wildInfoTexture || data.worldSharedSpawn || data.ownerClientId === 'world') return true;
+      if(/^infoTexture(?::|V3:)/.test(key)) return true;
+      if(/^infoShared/i.test(key)) return true;
+      const did = String(data.defId || '');
+      const def = (customObjectDefs && customObjectDefs.get) ? customObjectDefs.get(did) : null;
+      return !!(def && def.infoTexture && (/^info/i.test(key) || data.spawnReason));
+    }catch(e){ return false; }
+  }
+  function hardDist2(root, x, z){
+    if(!root || !root.getPosition) return Infinity;
+    const p = root.getPosition();
+    const dx = p.x - x, dz = p.z - z;
+    return dx*dx + dz*dz;
+  }
+  function hardRemove(ik, root){
+    try{ if(customObjectRemovedInstances && ik) customObjectRemovedInstances.add(String(ik)); }catch(e){}
+    try{ if(root && root.destroy) root.destroy(); }catch(e){}
+    try{ customObjectEntities.delete(ik); }catch(e){}
+  }
+  function hardCountNear(x, z, radius){
+    const r2 = radius * radius; let n = 0;
+    try{
+      for(const [ik, root] of customObjectEntities){
+        if(!hardIsWildInfo(root, ik)) continue;
+        if(hardDist2(root, x, z) <= r2) n++;
+      }
+    }catch(e){}
+    return n;
+  }
+  function hardEnforce(){
+    if(!player || !customObjectEntities) return;
+    const px = Number(player.x) || 0, pz = Number(player.z) || 0;
+    const near2 = HARD_RADIUS * HARD_RADIUS;
+    const far2 = HARD_DESPAWN_RADIUS * HARD_DESPAWN_RADIUS;
+    const near = [];
+    try{
+      for(const [ik, root] of Array.from(customObjectEntities)){
+        if(!hardIsWildInfo(root, ik)) continue;
+        const d2 = hardDist2(root, px, pz);
+        if(d2 > far2){ hardRemove(ik, root); continue; }
+        if(d2 <= near2) near.push([d2, ik, root]);
+      }
+      near.sort((a,b)=>a[0]-b[0]);
+      for(let i = HARD_MAX; i < near.length; i++) hardRemove(near[i][1], near[i][2]);
+    }catch(e){ console.warn('wild hard cap enforce failed', e); }
+  }
+  function hardCanSpawn(x, z){
+    hardEnforce();
+    x = Number(x); z = Number(z);
+    if(!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    if(hardCountNear(player.x, player.z, HARD_RADIUS) >= HARD_MAX) return false;
+    if(hardCountNear(x, z, HARD_RADIUS) >= HARD_MAX) return false;
+    return true;
+  }
+
+  try{
+    window.canSpawnWildInfoTextureAt = hardCanSpawn;
+    if(typeof canSpawnWildInfoTextureAt === 'function') canSpawnWildInfoTextureAt = hardCanSpawn;
+  }catch(e){}
+
+  try{
+    const oldPlaceCustomObject = placeCustomObject;
+    placeCustomObject = function(def, x, y, z, yaw, instanceKey){
+      const ik = String(instanceKey || '');
+      const isInfo = /^infoTexture(?::|V3:)/.test(ik) || /^infoShared/i.test(ik) || !!(def && def.infoTexture);
+      if(isInfo && !hardCanSpawn(x, z)) return null;
+      const root = oldPlaceCustomObject.apply(this, arguments);
+      if(root && isInfo){
+        root.data = Object.assign({}, root.data || {}, { wildInfoTexture:true, ownerClientId:(root.data&&root.data.ownerClientId)||'world' });
+        hardEnforce();
+      }
+      return root;
+    };
+  }catch(e){ console.warn('wild hard cap place hook failed', e); }
+
+  try{
+    const oldUpdateCustomObjectRuntime = updateCustomObjectRuntime;
+    updateCustomObjectRuntime = function(dt){
+      const r = oldUpdateCustomObjectRuntime.apply(this, arguments);
+      hardAcc += Number(dt) || 0;
+      if(hardAcc >= 0.15){ hardAcc = 0; hardEnforce(); }
+      return r;
+    };
+  }catch(e){ console.warn('wild hard cap runtime hook failed', e); }
+
+  try{
+    const oldInfoSharedHudV15 = infoSharedHud;
+    infoSharedHud = function(){
+      hardEnforce();
+      return oldInfoSharedHudV15.apply(this, arguments);
+    };
+  }catch(e){}
+
+  try{ setInterval(hardEnforce, 500); }catch(e){}
+  try{ setTimeout(hardEnforce, 250); setTimeout(hardEnforce, 1000); console.log(INFO_WILD_HARD_CAP_VERSION + ' active'); }catch(e){}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
