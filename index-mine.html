@@ -1037,13 +1037,16 @@ function compactObjectCells(){
 function validateObjectDef(def){
  if(!def || !Array.isArray(def.cells)) return null;
  const kind = (def.kind==='plane') ? 'plane' : 'voxel3d';
+ const gridSize = kind==='plane'
+   ? Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)))
+   : OBJECT_GRID;
  const cells=[];
- const maxCells = kind==='plane' ? 512 : 1536;
+ const maxCells = kind==='plane' ? Math.min(4096, gridSize * gridSize) : 1536;
  for(const c of def.cells.slice(0,maxCells)){
    const x=Math.trunc(Number(c.x));
    const y=Math.trunc(Number(c.y));
    const z=kind==='plane' ? 0 : Math.trunc(Number(c.z));
-   if(x<0||x>=OBJECT_GRID||y<0||y>=OBJECT_GRID) continue;
+   if(x<0||x>=gridSize||y<0||y>=gridSize) continue;
    if(kind==='voxel3d' && (z<0||z>=OBJECT_GRID)) continue;
    const cell = kind==='plane' ? {x,y,color:normalizeHexColor(c.color)} : {x,y,z,color:normalizeHexColor(c.color),size:clampObjCellSize(c.size, Number(def.scale)||.16)};
    if(kind==='voxel3d'){
@@ -1055,7 +1058,7 @@ function validateObjectDef(def){
  if(!cells.length) return null;
  const id=String(def.id||('obj-'+Date.now()+'-'+Math.floor(Math.random()*100000))).slice(0,96);
  const scale=Math.max(.06,Math.min(.8,Number(def.scale)||.16));
- return {id,name:String(def.name||'object').slice(0,40),kind,grid:OBJECT_GRID,scale,cells,createdAt:Number(def.createdAt)||Date.now()};
+ return {id,name:String(def.name||'object').slice(0,40),kind,grid:gridSize,scale,cells,createdAt:Number(def.createdAt)||Date.now(),updatedAt:Number(def.updatedAt)||Date.now()};
 }
 function saveCustomObjectsLocal(){
  try{ localStorage.setItem(OBJECT_STORAGE_KEY, JSON.stringify(Array.from(customObjectDefs.values()).slice(-100))); }catch{}
@@ -1115,12 +1118,13 @@ function placeCustomObject(def, x, y, z, yaw, instanceKey){
  if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
  const root=new pc.Entity('custom_object_'+instanceKey);
  const s=def.scale;
+ const gridSize = Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)));
  if(def.kind==='plane'){
-   const used=def.cells.slice(0,512);
+   const used=def.cells.slice(0, Math.min(4096, gridSize * gridSize));
    for(const c of used){
      const mat=ensureCustomMat(c.color);
-     const lx=(c.x-(OBJECT_GRID-1)/2)*s;
-     const ly=(OBJECT_GRID-1-c.y)*s;
+     const lx=(c.x-(gridSize-1)/2)*s;
+     const ly=(gridSize-1-c.y)*s;
      addCustomBox(root, mat, lx, ly, 0, s*1.01, s*1.01, Math.max(.025,s*.045));
      // 雑草っぽく横から見ても消えないように十字面も足す。ただし薄く軽量。
      addCustomBox(root, mat, 0, ly, lx, Math.max(.025,s*.045), s*1.01, s*1.01);
@@ -5559,8 +5563,101 @@ try{
    if(typeof renderObjectManager==='function') renderObjectManager();
    setMsg('情報テクスチャ画質修正: 名前検索ベース風の多色ドット絵へ再ベイク '+INFO_TEXTURE_PACK_V3.length+'種','good');
  }
-}catch(e){ console.warn('info texture v7 init failed',e); }
+ }catch(e){ console.warn('info texture v7 init failed',e); }
 
+
+// ===== Pokemon generated 30x30 dotdata final override v9 =====
+// 目的: V7の再ベイク(16x16仮アイコン)より後で、GitHub Actions生成の30x30 cellsを必ず優先する。
+// さらに ensureInfoTextureDefV3 をラップして、野生スポーン直前に再生成されても30x30へ戻す。
+(function(){
+  const POKE_DOT_V9 = 'v9-generated-pokemon-30x30-final-override';
+  function generatedPokemonDefsV9(){
+    if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) return window.POKEMON_INFO_TEXTURE_DEFS_30;
+    const obj = window.POKEMON_INFO_TEXTURES_GEN1_30X30 || window.POKEMON_INFO_TEXTURES || window.POKEMON_DOTDATA;
+    if(obj && typeof obj === 'object'){
+      return Object.keys(obj).map(k=>{
+        const d=obj[k]||{}; const no=String(d.no||k).replace(/\D/g,'').padStart(3,'0').slice(-3);
+        return Object.assign({id:'info-poke_'+no,type:'poke_'+no,no:Number(no),name:'No.'+no,grid:30,scale:.085}, d);
+      });
+    }
+    return [];
+  }
+  function keyFromMetaV9(meta){
+    const raw = String((meta && (meta.id || meta.type || meta.infoType)) || '');
+    let m = raw.match(/poke[_-]?(\d{1,3})/i) || raw.match(/info-poke[_-]?(\d{1,3})/i);
+    if(m) return String(Math.max(1, Math.min(151, parseInt(m[1],10)))).padStart(3,'0');
+    return '';
+  }
+  function findGeneratedPokemonV9(metaOrId){
+    const key = typeof metaOrId === 'string' ? keyFromMetaV9({id:metaOrId}) : keyFromMetaV9(metaOrId);
+    if(!key) return null;
+    return generatedPokemonDefsV9().find(d=>{
+      const no = String(d.no || '').padStart(3,'0');
+      return no === key || String(d.id||'') === 'info-poke_'+key || String(d.type||'') === 'poke_'+key;
+    }) || null;
+  }
+  function buildPokemonPlaneDefV9(d, base){
+    if(!d || !Array.isArray(d.cells) || !d.cells.length) return null;
+    const no = String(d.no || keyFromMetaV9(d) || '').padStart(3,'0').slice(-3);
+    const id = 'info-poke_' + no;
+    const type = 'poke_' + no;
+    return Object.assign({}, base||{}, {
+      id, type, infoType:type,
+      name:(base && base.name) || ('情報テクスチャ:' + (d.name || ('No.'+no))),
+      kind:'plane', grid:Math.max(1, Math.min(64, Math.trunc(Number(d.grid)||30))), scale:Number(d.scale)||.085,
+      cells:d.cells.map(c=>({x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), color:normalizeHexColor(c.color)})),
+      infoTexture:true, infoRole:(base&&base.infoRole)||'pokemon', hp:(base&&base.hp)||12,
+      infoBehavior:(base&&base.infoBehavior)||'図鑑ドット絵セル変換済み。野生出現・撃破登録・面貼り付け対象。',
+      infoPhysics:(base&&base.infoPhysics)||{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},
+      pokemonGeneratedCells30:true, pokemonDotVersion:POKE_DOT_V9,
+      iconUrl:'', sourceFile:d.source||'', updatedAt:Date.now(), createdAt:(base&&base.createdAt)||1
+    });
+  }
+  function applyPokemonGeneratedFinalV9(){
+    const defs = generatedPokemonDefsV9();
+    if(!defs.length || !window.customObjectDefs) return false;
+    let applied=0;
+    for(const d of defs){
+      const no=String(d.no || keyFromMetaV9(d) || '').padStart(3,'0').slice(-3);
+      if(!no || !Array.isArray(d.cells) || !d.cells.length) continue;
+      const id='info-poke_'+no, type='poke_'+no;
+      const base=customObjectDefs.get(id) || {};
+      const plane=buildPokemonPlaneDefV9(d, base);
+      if(!plane) continue;
+      customObjectDefs.set(id, (typeof validateObjectDef==='function' ? (validateObjectDef(plane)||plane) : plane));
+      if(window.INFO_TEXTURE_META_V3){
+        const meta = window.INFO_TEXTURE_META_V3[id] || window.INFO_TEXTURE_META_V3[type] || {id,type,name:d.name||('No.'+no)};
+        Object.assign(meta,{id,type,name:d.name||meta.name||('No.'+no),generatedCells30:true,pokemonGeneratedCells30:true,cells:d.cells,grid:plane.grid,iconUrl:'',sourceFile:d.source||''});
+        window.INFO_TEXTURE_META_V3[id]=meta; window.INFO_TEXTURE_META_V3[type]=meta;
+      }
+      applied++;
+    }
+    try{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }catch(e){}
+    try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch(e){}
+    try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
+    return applied>0;
+  }
+  const baseEnsure = window.ensureInfoTextureDefV3 || (typeof ensureInfoTextureDefV3 === 'function' ? ensureInfoTextureDefV3 : null);
+  if(baseEnsure){
+    ensureInfoTextureDefV3 = function(meta){
+      const def = baseEnsure.apply(this, arguments);
+      try{
+        const d = findGeneratedPokemonV9(meta || def);
+        if(d && window.customObjectDefs){
+          const id = 'info-poke_' + String(d.no || keyFromMetaV9(d)).padStart(3,'0').slice(-3);
+          const plane = buildPokemonPlaneDefV9(d, def || customObjectDefs.get(id));
+          if(plane){ customObjectDefs.set(id, validateObjectDef(plane)||plane); return customObjectDefs.get(id); }
+        }
+      }catch(e){ console.warn('pokemon generated ensure override failed', e); }
+      return def;
+    };
+    window.ensureInfoTextureDefV3 = ensureInfoTextureDefV3;
+  }
+  window.applyPokemonGeneratedInfoTextures30Final = applyPokemonGeneratedFinalV9;
+  try{ applyPokemonGeneratedFinalV9(); }catch(e){ console.warn('pokemon generated final apply failed', e); }
+  setTimeout(()=>{ try{ applyPokemonGeneratedFinalV9(); }catch(e){} }, 500);
+  setTimeout(()=>{ try{ applyPokemonGeneratedFinalV9(); }catch(e){} }, 1800);
+})();
 
 
 // ===== Shared World Sync v12: server-authoritative time/weather + shared info-texture spawn =====
