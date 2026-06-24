@@ -6753,6 +6753,442 @@ window.addEventListener('keydown', e=>{
 try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' active'); }catch(e){ console.warn('capture rpg init failed', e); }
 
 
+
+// ===== InfoTexture Pokemon field visual regression fix v10 =====
+// 捕獲/RPG化の後でも、フィールド上の情報テクスチャが旧16x16の仮アイコンへ戻らないようにする。
+// 30x30 generated dotdata が読めている場合はそれを優先し、無い場合だけ自前30x30シルエットで復元する。
+(function(){
+  const INFO_POKE_FIELD_VISUAL_FIX_VERSION = 'v10-pokemon-field-visual-fallback-30x30';
+  function pokeNoFromAnyV10(v){
+    const raw = String((v && (v.id || v.defId || v.type || v.infoType)) || v || '');
+    const m = raw.match(/(?:info[-_])?poke[-_]?(\d{1,3})/i);
+    if(!m) return 0;
+    const n = parseInt(m[1],10);
+    return (n>=1 && n<=151) ? n : 0;
+  }
+  function isPokeDefV10(def){ return !!(def && (pokeNoFromAnyV10(def) || pokeNoFromAnyV10(def.id) || /^poke_/i.test(String(def.infoType||'')))); }
+  function pokeIdV10(no){ return 'info-poke_' + String(no).padStart(3,'0'); }
+  function pokeTypeV10(no){ return 'poke_' + String(no).padStart(3,'0'); }
+  function hexToRgbV10(hex){
+    hex=String(hex||'#7dd3fc').replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join('');
+    const n=parseInt(hex||'7dd3fc',16); return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+  }
+  function rgbToHexV10(r,g,b){ const h=n=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0'); return '#'+h(r)+h(g)+h(b); }
+  function mixHexV10(a,b,t){ a=hexToRgbV10(a); b=hexToRgbV10(b); return rgbToHexV10(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t); }
+  function shadeV10(a,t){ return mixHexV10(a, t>=1 ? '#ffffff' : '#000000', t>=1 ? Math.min(.85,t-1) : Math.min(.85,1-t)); }
+  function paletteForPokemonV10(no, meta, base){
+    let body = (base && base.palette && base.palette.body) || (meta && meta.palette && meta.palette.body) || '#60a5fa';
+    let dark = (base && base.palette && base.palette.dark) || (meta && meta.palette && meta.palette.dark) || shadeV10(body,.55);
+    let accent = (base && base.palette && base.palette.accent) || (meta && meta.palette && meta.palette.accent) || shadeV10(body,1.35);
+    // 元のボリューム追加用の巡回色がポケモン名とズレるため、代表色だけ補正。
+    if(no>=1&&no<=3){ body='#22c55e'; dark='#14532d'; accent='#ef4444'; }
+    else if(no>=4&&no<=6){ body='#f97316'; dark='#7c2d12'; accent='#fde68a'; }
+    else if(no>=7&&no<=9){ body='#38bdf8'; dark='#075985'; accent='#bfdbfe'; }
+    else if(no>=10&&no<=12){ body=no===12?'#a78bfa':'#84cc16'; dark=no===12?'#4c1d95':'#365314'; accent=no===12?'#f9a8d4':'#bef264'; }
+    else if(no>=13&&no<=15){ body=no===15?'#facc15':'#f59e0b'; dark='#78350f'; accent='#111827'; }
+    else if(no>=16&&no<=18){ body='#a16207'; dark='#451a03'; accent='#fef3c7'; }
+    else if(no>=19&&no<=20){ body='#a16207'; dark='#451a03'; accent='#fca5a5'; }
+    else if(no>=21&&no<=22){ body='#b45309'; dark='#451a03'; accent='#fef3c7'; }
+    else if(no>=23&&no<=24){ body='#a855f7'; dark='#581c87'; accent='#f9a8d4'; }
+    else if(no>=25&&no<=26){ body='#facc15'; dark='#713f12'; accent='#ef4444'; }
+    else if(no>=27&&no<=28){ body='#fbbf24'; dark='#92400e'; accent='#fef3c7'; }
+    else if(no>=29&&no<=31){ body='#8b5cf6'; dark='#4c1d95'; accent='#c4b5fd'; }
+    else if(no>=32&&no<=34){ body='#60a5fa'; dark='#1e3a8a'; accent='#c084fc'; }
+    else if(no>=35&&no<=36){ body='#f9a8d4'; dark='#be185d'; accent='#fff7ed'; }
+    else if(no>=37&&no<=38){ body='#fb923c'; dark='#7c2d12'; accent='#fde68a'; }
+    else if(no>=39&&no<=40){ body='#f9a8d4'; dark='#be185d'; accent='#d946ef'; }
+    else if(no>=41&&no<=42){ body='#7c3aed'; dark='#312e81'; accent='#22d3ee'; }
+    else if(no>=43&&no<=45){ body='#22c55e'; dark='#14532d'; accent='#ef4444'; }
+    else if(no>=54&&no<=55){ body='#facc15'; dark='#713f12'; accent='#93c5fd'; }
+    else if(no>=58&&no<=59){ body='#f97316'; dark='#7c2d12'; accent='#fef3c7'; }
+    else if(no>=60&&no<=62){ body='#60a5fa'; dark='#1e3a8a'; accent='#f9fafb'; }
+    else if(no>=63&&no<=65){ body='#facc15'; dark='#713f12'; accent='#a78bfa'; }
+    else if(no>=66&&no<=68){ body='#94a3b8'; dark='#334155'; accent='#fca5a5'; }
+    else if(no>=72&&no<=73){ body='#38bdf8'; dark='#075985'; accent='#ef4444'; }
+    else if(no>=74&&no<=76){ body='#78716c'; dark='#292524'; accent='#d6d3d1'; }
+    else if(no>=81&&no<=82){ body='#d1d5db'; dark='#374151'; accent='#60a5fa'; }
+    else if(no>=92&&no<=94){ body='#7c3aed'; dark='#1e1b4b'; accent='#f472b6'; }
+    else if(no>=95&&no<=95){ body='#9ca3af'; dark='#374151'; accent='#e5e7eb'; }
+    else if(no>=98&&no<=99){ body='#ef4444'; dark='#7f1d1d'; accent='#fca5a5'; }
+    else if(no>=129&&no<=130){ body=no===129?'#f97316':'#38bdf8'; dark=no===129?'#7c2d12':'#075985'; accent='#fef3c7'; }
+    else if(no>=143&&no<=143){ body='#475569'; dark='#0f172a'; accent='#f8fafc'; }
+    else if(no>=144&&no<=146){ body=no===144?'#7dd3fc':(no===145?'#facc15':'#fb923c'); dark=no===144?'#075985':(no===145?'#713f12':'#7c2d12'); accent='#f8fafc'; }
+    else if(no>=147&&no<=149){ body='#93c5fd'; dark='#1e3a8a'; accent='#fef3c7'; }
+    else if(no>=150&&no<=151){ body='#c084fc'; dark='#581c87'; accent='#f9a8d4'; }
+    return {body,dark,accent,hi:shadeV10(body,1.38),low:shadeV10(body,.62),eye:'#0f172a',white:'#f8fafc'};
+  }
+  function canvasCellsV10(c){
+    const g=c.getContext('2d',{willReadFrequently:true}), d=g.getImageData(0,0,30,30).data, cells=[];
+    for(let y=0;y<30;y++) for(let x=0;x<30;x++){
+      const i=(y*30+x)*4; if(d[i+3]<36) continue;
+      cells.push({x,y,color:rgbToHexV10(d[i],d[i+1],d[i+2])});
+    }
+    return cells;
+  }
+  function drawPixelPokemonV10(no, meta, base){
+    const p=paletteForPokemonV10(no, meta, base);
+    const c=document.createElement('canvas'); c.width=c.height=30;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=false;
+    function rect(x,y,w,h,col){ g.fillStyle=col; g.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h)); }
+    function ellipse(x,y,w,h,col){ g.fillStyle=col; g.beginPath(); g.ellipse(x,y,w/2,h/2,0,0,Math.PI*2); g.fill(); }
+    function tri(x1,y1,x2,y2,x3,y3,col){ g.fillStyle=col; g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.lineTo(x3,y3); g.closePath(); g.fill(); }
+    const family = (no>=16&&no<=18)||(no>=21&&no<=22)||(no>=41&&no<=42)||(no>=144&&no<=146) ? 'bird' :
+      ((no>=10&&no<=15)||(no>=46&&no<=49)||(no>=123&&no<=123) ? 'bug' :
+      ((no>=23&&no<=24)||(no>=27&&no<=28)||(no>=54&&no<=55)||(no>=60&&no<=62)||(no>=72&&no<=73)||(no>=86&&no<=91)||(no>=98&&no<=99)||(no>=116&&no<=121)||(no>=129&&no<=131)||(no>=138&&no<=141) ? 'water' :
+      ((no>=74&&no<=76)||no===95||no===111||no===112 ? 'rock' :
+      ((no>=29&&no<=34)||(no>=37&&no<=40)||(no>=52&&no<=53)||(no>=56&&no<=59)||(no>=77&&no<=78)||(no>=83&&no<=85)||(no>=133&&no<=136)||(no>=143&&no<=149) ? 'beast' : 'humanoid'))));
+    // shadow
+    ellipse(15,25,19,4,'rgba(0,0,0,.24)');
+    if(family==='bird'){
+      ellipse(15,13,12,13,p.body); ellipse(16,20,8,8,p.low);
+      tri(7,14,1,9,5,20,p.accent); tri(23,14,29,9,25,20,p.accent);
+      tri(17,10,23,8,18,14,p.hi); rect(18,12,3,3,p.eye); tri(21,15,27,16,21,19,p.accent);
+      rect(12,22,3,4,p.dark); rect(17,22,3,4,p.dark);
+    }else if(family==='bug'){
+      ellipse(15,14,15,13,p.body); ellipse(15,20,12,8,p.low);
+      rect(9,8,3,3,p.dark); rect(18,8,3,3,p.dark); rect(10,13,3,3,p.eye); rect(18,13,3,3,p.eye);
+      rect(4,17,5,3,p.dark); rect(21,17,5,3,p.dark); tri(8,7,4,2,11,8,p.accent); tri(22,7,26,2,19,8,p.accent);
+    }else if(family==='water'){
+      ellipse(14,16,18,11,p.body); tri(5,16,0,10,1,22,p.accent); tri(20,16,28,11,27,22,p.hi);
+      rect(17,13,3,3,p.eye); rect(10,21,4,3,p.dark); rect(15,21,4,3,p.dark);
+      if(no===129){ tri(12,9,16,3,18,10,p.accent); rect(10,18,10,4,p.low); }
+    }else if(family==='rock'){
+      rect(8,9,14,13,p.body); rect(6,14,18,7,p.low); rect(10,7,5,5,p.hi); rect(16,6,5,6,p.dark);
+      rect(11,13,3,3,p.eye); rect(17,13,3,3,p.eye); rect(9,22,4,3,p.dark); rect(17,22,4,3,p.dark);
+    }else if(family==='beast'){
+      ellipse(14,17,18,12,p.body); ellipse(18,11,12,11,p.body);
+      rect(7,21,4,5,p.dark); rect(16,21,4,5,p.dark);
+      tri(15,7,12,1,19,8,p.accent); tri(21,8,25,2,24,11,p.dark);
+      tri(6,14,1,11,5,18,p.accent); rect(19,10,3,3,p.eye);
+      if(no>=29&&no<=34){ tri(10,12,7,8,11,15,p.accent); tri(7,15,4,13,7,18,p.accent); }
+      if(no>=37&&no<=38){ for(let i=0;i<(no===38?5:3);i++) tri(5-i,17-i,0,13+i,5,21,p.hi); }
+      if(no===143){ ellipse(15,16,20,17,p.body); ellipse(16,15,12,10,p.accent); rect(10,10,3,3,p.eye); rect(18,10,3,3,p.eye); }
+      if(no>=147&&no<=149){ ellipse(14,17,12,16,p.body); tri(15,7,18,2,20,10,p.white); tri(6,18,0,15,4,22,p.accent); tri(22,16,29,10,25,22,p.accent); }
+    }else{
+      ellipse(15,12,13,12,p.body); rect(10,17,11,8,p.low); rect(7,18,4,6,p.body); rect(21,18,4,6,p.body);
+      rect(11,23,4,4,p.dark); rect(17,23,4,4,p.dark); rect(12,11,3,3,p.eye); rect(18,11,3,3,p.eye);
+      tri(15,7,12,2,18,7,p.accent);
+      if(no>=43&&no<=45){ rect(12,2,3,8,'#15803d'); rect(15,4,8,4,'#22c55e'); rect(7,4,8,4,'#22c55e'); ellipse(15,11,12,9,p.accent); }
+      if(no>=63&&no<=65){ tri(12,7,5,2,10,12,p.accent); tri(18,7,25,2,20,12,p.accent); }
+      if(no===150||no===151){ tri(21,20,29,17,23,23,p.accent); }
+    }
+    // pixel outline/highlight pass
+    g.globalAlpha=.22; rect(8,8,14,2,p.hi); g.globalAlpha=1;
+    return c;
+  }
+  function fallbackCellsForPokeV10(no, meta, base){ return canvasCellsV10(drawPixelPokemonV10(no, meta, base)); }
+  function needsPokeFieldFixV10(def){
+    if(!isPokeDefV10(def)) return false;
+    if(def.pokemonGeneratedCells30 && Number(def.grid)>=24 && Array.isArray(def.cells) && def.cells.length>180) return false;
+    return Number(def.grid||0)<24 || !Array.isArray(def.cells) || def.cells.length<180 || String(def.pokemonDotVersion||'').indexOf('fallback')>=0;
+  }
+  function rebuildRootVisualV10(root, def){
+    if(!root || !def || !root.children) return false;
+    try{
+      const keep = [];
+      for(const ch of Array.from(root.children||[])){
+        if(ch && ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)){ keep.push(ch); continue; }
+        try{ ch.destroy(); }catch{}
+      }
+      const s=Number(def.scale)||.085, gridSize=Math.max(1,Math.min(64,Math.trunc(Number(def.grid)||30)));
+      const used=(def.cells||[]).slice(0, Math.min(4096, gridSize*gridSize));
+      for(const cell of used){
+        const mat=ensureCustomMat(normalizeHexColor(cell.color));
+        const lx=(Number(cell.x)-(gridSize-1)/2)*s;
+        const ly=(gridSize-1-Number(cell.y))*s;
+        addCustomBox(root, mat, lx, ly, 0, s*1.01, s*1.01, Math.max(.025,s*.045));
+        addCustomBox(root, mat, 0, ly, lx, Math.max(.025,s*.045), s*1.01, s*1.01);
+      }
+      root.data=Object.assign({},root.data||{},{visualFixedV10:true});
+      return true;
+    }catch(e){ console.warn('poke root visual rebuild failed', e); return false; }
+  }
+  function applyPokeFieldVisualFixV10(){
+    if(!window.customObjectDefs) return 0;
+    let applied=0;
+    const metas = (Array.isArray(window.INFO_TEXTURE_PACK_V3) ? window.INFO_TEXTURE_PACK_V3 : []);
+    for(const meta of metas){
+      const no=pokeNoFromAnyV10(meta); if(!no) continue;
+      const id=pokeIdV10(no), type=pokeTypeV10(no);
+      const cur=customObjectDefs.get(id) || customObjectDefs.get(type) || {};
+      if(!needsPokeFieldFixV10(Object.assign({},cur,{id, type}))) continue;
+      const cells=fallbackCellsForPokeV10(no, meta, cur);
+      if(!cells.length) continue;
+      const fixed=Object.assign({}, cur, {
+        id, type, infoType:type, name:(cur.name && !/^情報テクスチャ:No\./.test(cur.name))?cur.name:('情報テクスチャ:'+(meta.name||('No.'+String(no).padStart(3,'0')))),
+        kind:'plane', grid:30, scale:Number(cur.scale)||.085, cells, infoTexture:true,
+        infoRole:cur.infoRole||meta.role||'pokemon', infoBehavior:cur.infoBehavior||meta.behavior||'', hp:cur.hp||meta.hp||12,
+        infoPhysics:cur.infoPhysics||{massKg:meta.massKg||1,gravityScale:(meta.gravityScale==null?1:meta.gravityScale),terminalVelocity:18,bounce:0},
+        pokemonFallbackCells30:true, pokemonDotVersion:'v10-fallback-field-visual', updatedAt:Date.now()
+      });
+      customObjectDefs.set(id, validateObjectDef(fixed)||fixed);
+      if(window.INFO_TEXTURE_META_V3){ window.INFO_TEXTURE_META_V3[id]=Object.assign({},window.INFO_TEXTURE_META_V3[id]||meta,{id,type,grid:30,cells,pokemonFallbackCells30:true}); window.INFO_TEXTURE_META_V3[type]=window.INFO_TEXTURE_META_V3[id]; }
+      applied++;
+    }
+    for(const [,root] of customObjectEntities){
+      if(!root || !root.data) continue;
+      const no=pokeNoFromAnyV10(root.data.defId) || (typeof rootInfoTextureIdsV3==='function' ? pokeNoFromAnyV10((rootInfoTextureIdsV3(root)||[])[0]) : 0);
+      if(!no) continue;
+      const def=customObjectDefs.get(pokeIdV10(no));
+      if(def && def.pokemonFallbackCells30 && !root.data.visualFixedV10) rebuildRootVisualV10(root, def);
+    }
+    try{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }catch{}
+    return applied;
+  }
+  const oldEnsure = (typeof ensureInfoTextureDefV3==='function') ? ensureInfoTextureDefV3 : null;
+  if(oldEnsure){
+    ensureInfoTextureDefV3 = function(meta){
+      const def=oldEnsure.apply(this, arguments);
+      try{
+        const no=pokeNoFromAnyV10(meta||def); if(no){ applyPokeFieldVisualFixV10(); return customObjectDefs.get(pokeIdV10(no)) || def; }
+      }catch(e){ console.warn('poke visual ensure fix failed', e); }
+      return def;
+    };
+    window.ensureInfoTextureDefV3 = ensureInfoTextureDefV3;
+  }
+  try{ const n=applyPokeFieldVisualFixV10(); if(n) setMsg('情報テクスチャ表示デグレ修正: フィールド画像30x30復元 '+n+'種','good'); }catch(e){ console.warn('poke field visual fix init failed', e); }
+  try{ setTimeout(applyPokeFieldVisualFixV10, 700); setTimeout(applyPokeFieldVisualFixV10, 2300); setInterval(()=>{ try{ applyPokeFieldVisualFixV10(); }catch{} }, 5000); }catch{}
+  window.applyPokeFieldVisualFixV10 = applyPokeFieldVisualFixV10;
+})();
+
+
+// ===== InfoTexture Capture UX / Probability HUD / Ball Motion+SE v2 =====
+(function(){
+  'use strict';
+  const CAPTURE_UX_VERSION='capture-ux-v2-probability-motion-se';
+  const capFx={balls:[], mats:new Map(), lastHudAt:0, busy:false, targetRoot:null, hud:null};
+  function nowMs(){ return performance && performance.now ? performance.now() : Date.now(); }
+  function clamp(n,a,b){ return Math.max(a, Math.min(b, Number(n)||0)); }
+  function capEnsureCtx(){
+    try{
+      const C=window.AudioContext||window.webkitAudioContext; if(!C) return null;
+      if(!window.__infoCaptureAudioCtx) window.__infoCaptureAudioCtx=new C();
+      if(window.__infoCaptureAudioCtx.state==='suspended') window.__infoCaptureAudioCtx.resume().catch(()=>{});
+      return window.__infoCaptureAudioCtx;
+    }catch(e){ return null; }
+  }
+  function capTone(freq,dur,type,vol,slide,delay){
+    try{
+      const ctx=capEnsureCtx(); if(!ctx) return;
+      const t=ctx.currentTime+(delay||0), o=ctx.createOscillator(), g=ctx.createGain();
+      o.type=type||'sine'; o.frequency.setValueAtTime(Math.max(20,freq),t);
+      if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(20,freq*slide),t+dur*.9);
+      g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(vol||.06,t+.018); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+      o.connect(g).connect(ctx.destination); o.start(t); o.stop(t+dur+.04);
+    }catch(e){}
+  }
+  function capNoise(dur,vol,filter,delay){
+    try{
+      const ctx=capEnsureCtx(); if(!ctx) return;
+      const t=ctx.currentTime+(delay||0), src=ctx.createBufferSource(), b=ctx.createBuffer(1,Math.max(1,Math.floor(ctx.sampleRate*dur)),ctx.sampleRate), data=b.getChannelData(0);
+      for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*(1-i/data.length);
+      const f=ctx.createBiquadFilter(), g=ctx.createGain(); f.type='lowpass'; f.frequency.value=filter||900;
+      g.gain.setValueAtTime(vol||.04,t); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+      src.buffer=b; src.connect(f).connect(g).connect(ctx.destination); src.start(t); src.stop(t+dur+.03);
+    }catch(e){}
+  }
+  function capSE(kind){
+    if(!state.started) return;
+    if(kind==='aim'){ capTone(840,.055,'sine',.018,1.08); }
+    else if(kind==='throw'){ capTone(360,.12,'square',.06,1.9); capNoise(.10,.025,1800); }
+    else if(kind==='fly'){ capTone(520,.08,'triangle',.035,1.35); }
+    else if(kind==='hit'){ capNoise(.13,.045,900); capTone(180,.10,'square',.045,.62); }
+    else if(kind==='shake'){ capTone(420,.08,'triangle',.055,.82); capNoise(.055,.018,600); }
+    else if(kind==='fail'){ capTone(220,.18,'sawtooth',.075,.45); capNoise(.22,.05,700); capTone(130,.16,'square',.045,.7,.12); }
+    else if(kind==='success'){ capTone(660,.10,'sine',.06,1.25); capTone(880,.11,'sine',.055,1.18,.09); capTone(1320,.18,'triangle',.045,1.05,.20); }
+    else if(kind==='register'){ capTone(980,.10,'sine',.045,1.45); capTone(1480,.18,'triangle',.04,1.15,.08); }
+    else if(kind==='no'){ capTone(110,.12,'square',.05,.55); }
+  }
+  ['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>capEnsureCtx(),{once:false,capture:true,passive:true}));
+  function capMat(key,color,alpha){
+    key=key+'|'+(alpha||1); if(capFx.mats.has(key)) return capFx.mats.get(key);
+    const m=new pc.StandardMaterial();
+    const hex=String(color||'#ffffff').replace('#','');
+    const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
+    m.diffuse=new pc.Color(r,g,b); m.emissive=new pc.Color(r*.38,g*.38,b*.38); m.opacity=alpha==null?1:alpha;
+    if(alpha<1){ m.blendType=pc.BLEND_NORMAL; m.depthWrite=false; }
+    m.update(); capFx.mats.set(key,m); return m;
+  }
+  function capRootCenter(root){
+    try{
+      if(typeof ultraObjectBounds==='function'){
+        const b=ultraObjectBounds(root); return {x:(b.min.x+b.max.x)/2,y:(b.min.y+b.max.y)/2,z:(b.min.z+b.max.z)/2};
+      }
+    }catch(e){}
+    try{ const p=root.getPosition(); return {x:p.x,y:p.y+1,z:p.z}; }catch(e){ return {x:player.x,y:player.y+1.2,z:player.z}; }
+  }
+  function capBurst(x,y,z,color,n){
+    try{
+      for(let i=0;i<(n||12);i++){
+        const e=new pc.Entity('capSpark'); e.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false}); e.render.material=capMat('spark'+color,color,.82);
+        e.setPosition(x,y,z); const sz=.035+Math.random()*.055; e.setLocalScale(sz,sz,sz); app.root.addChild(e);
+        const a=Math.random()*Math.PI*2, sp=.55+Math.random()*1.8;
+        capFx.balls.push({e,mode:'particle',age:0,life:.45+Math.random()*.35,vx:Math.cos(a)*sp,vy:.7+Math.random()*1.8,vz:Math.sin(a)*sp});
+      }
+    }catch(e){}
+  }
+  function ensureCaptureTargetHud(){
+    if(capFx.hud && document.body.contains(capFx.hud)) return capFx.hud;
+    const st=document.getElementById('captureUxStyle') || document.createElement('style');
+    st.id='captureUxStyle';
+    st.textContent += '#captureTargetHud{position:fixed;right:10px;top:184px;z-index:15;min-width:230px;max-width:320px;padding:9px 12px;border-radius:15px;background:rgba(2,6,23,.76);border:1px solid rgba(248,250,252,.30);color:#e0f2fe;font-size:12px;font-weight:900;line-height:1.35;text-shadow:0 2px 5px #000;white-space:pre-line;box-shadow:0 12px 28px rgba(0,0,0,.30);pointer-events:none}#captureTargetHud.good{border-color:rgba(34,197,94,.85);color:#bbf7d0}#captureTargetHud.bad{border-color:rgba(248,113,113,.75);color:#fecaca}#captureTargetHud.info{border-color:rgba(96,165,250,.75);color:#bfdbfe}body.objEditing #captureTargetHud{display:none!important}.capBallBtnReady{box-shadow:0 0 0 3px rgba(34,197,94,.42),0 10px 24px rgba(0,0,0,.28)!important}.capBallBtnNo{filter:grayscale(.45) brightness(.88)}';
+    if(!document.getElementById('captureUxStyle')) document.head.appendChild(st);
+    const h=document.createElement('div'); h.id='captureTargetHud'; h.className='info'; h.textContent='捕獲照準: --'; document.body.appendChild(h); capFx.hud=h; return h;
+  }
+  function capTargetFromCursor(){
+    try{
+      const r=(typeof rayBlock==='function')?rayBlock(true):null;
+      if(r && r.objectHit && r.objectHit.root) return {root:r.objectHit.root, ray:r};
+    }catch(e){}
+    return null;
+  }
+  const oldCanCaptureInfoRoot = (typeof canCaptureInfoRoot==='function') ? canCaptureInfoRoot : null;
+  canCaptureInfoRoot = function(root){
+    if(!root || !root.data) return {ok:false, reason:'対象なし', chance:0};
+    const ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(root):[]);
+    if(!ids || !ids.length) return {ok:false, reason:'情報テクスチャではない', chance:0};
+    const p=root.getPosition ? root.getPosition() : null;
+    const dist=p ? Math.hypot(p.x-player.x,p.z-player.z) : 999;
+    const maxHp=Math.max(1, Number(root.data.maxHp||root.data.hp)||10);
+    const hp=clamp(Number(root.data.hp||maxHp),0,maxHp);
+    const weakRatio=hp/maxHp;
+    const moving=!!(root.data.fxKnockX || root.data.fxKnockZ || root.data.fxKnockY);
+    const angry=!!(root.data.angryUntil && root.data.angryUntil>nowMs());
+    if(hp<=0) return {ok:false, ids, hp, maxHp, weakRatio, dist, moving, angry, reason:'倒れている', chance:0};
+    if(dist>10.5) return {ok:false, ids, hp, maxHp, weakRatio, dist, moving, angry, reason:'遠すぎる '+dist.toFixed(1)+'m', chance:0};
+    if(weakRatio>.70) return {ok:false, ids, hp, maxHp, weakRatio, dist, moving, angry, reason:'まだ元気すぎる。HP70%以下まで弱らせろ', chance:0};
+    return {ok:true, ids, hp, maxHp, weakRatio, dist, moving, angry, reason:'条件OK'};
+  };
+  captureChanceForRoot = function(root,c){
+    c=c||canCaptureInfoRoot(root);
+    if(!c || !c.ok) return 0;
+    const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(root):null;
+    let chance=.20 + (1-clamp(c.weakRatio,0,1))*1.00;
+    if(c.weakRatio<=.35) chance+=.16;
+    if(c.weakRatio<=.18) chance+=.10;
+    if(c.dist<4.0) chance+=.08; else if(c.dist>8.0) chance-=.08;
+    if(c.moving) chance-=.18;
+    if(c.angry) chance-=.08;
+    if(meta && meta.role==='hostile') chance-=.10;
+    if(meta && (meta.role==='passive'||meta.role==='pokemon')) chance+=.07;
+    chance += Math.min(.20, Math.max(0, (infoPlayerProgress&&infoPlayerProgress.level||1)-1)*.014);
+    return clamp(chance,.08,.95);
+  };
+  function captureStatusText(root){
+    const label=(typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ';
+    const c=canCaptureInfoRoot(root), chance=captureChanceForRoot(root,c);
+    const hp=(c&&c.maxHp)?('HP '+Math.ceil(c.hp)+'/'+Math.ceil(c.maxHp)+'（'+Math.round((c.hp/c.maxHp)*100)+'%）'):'HP --';
+    const dist=(c&&isFinite(c.dist))?('距離 '+c.dist.toFixed(1)+'m'):'距離 --';
+    const flags=[]; if(c&&c.moving) flags.push('暴れ中-18%'); if(c&&c.angry) flags.push('怒り中-8%');
+    const chanceText=c.ok ? Math.round(chance*100)+'%' : '0%';
+    const reason=c.ok ? ('投げたら判定あり'+(flags.length?' / '+flags.join(' / '):'')) : (c.reason||'条件NG');
+    return {text:'🎯 '+label+'\n捕獲率: '+chanceText+' / '+hp+'\n'+dist+' / '+reason, cls:c.ok?'good':'bad', ok:c.ok, chance};
+  }
+  function updateCaptureTargetHud(force){
+    const h=ensureCaptureTargetHud();
+    if(!state.started){ h.textContent='捕獲照準: 起動後に表示'; h.className='info'; return; }
+    const t=capTargetFromCursor(); capFx.targetRoot=t&&t.root;
+    const btn=document.getElementById('monsterBallBtn');
+    if(!t){ h.textContent='🎯 捕獲照準: 対象なし\n情報テクスチャにカーソルを当てろ'; h.className='info'; if(btn){btn.classList.remove('capBallBtnReady');btn.classList.add('capBallBtnNo');} return; }
+    const ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(t.root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(t.root):[]);
+    if(!ids || !ids.length){ h.textContent='🎯 捕獲照準: OBJ\n情報テクスチャではない'; h.className='info'; if(btn){btn.classList.remove('capBallBtnReady');btn.classList.add('capBallBtnNo');} return; }
+    const s=captureStatusText(t.root); h.textContent=s.text; h.className=s.cls;
+    if(btn){ btn.classList.toggle('capBallBtnReady',s.ok); btn.classList.toggle('capBallBtnNo',!s.ok); }
+  }
+  function makeBallEntity(){
+    const root=new pc.Entity('monsterBallFx'); root.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false}); root.render.material=capMat('ballTop','#ef4444',1); root.setLocalScale(.18,.18,.18);
+    const core=new pc.Entity('ballCore'); core.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false}); core.render.material=capMat('ballCore','#f8fafc',1); core.setLocalScale(.78,.34,.78); core.setLocalPosition(0,-.035,0); root.addChild(core);
+    const band=new pc.Entity('ballBand'); band.addComponent('render',{type:'box',castShadows:false,receiveShadows:false}); band.render.material=capMat('ballBand','#111827',1); band.setLocalScale(1.05,.10,1.05); band.setLocalPosition(0,0,0); root.addChild(band);
+    const btn=new pc.Entity('ballBtn'); btn.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false}); btn.render.material=capMat('ballBtn','#f8fafc',1); btn.setLocalScale(.30,.30,.30); btn.setLocalPosition(0,0,-.70); root.addChild(btn);
+    app.root.addChild(root); return root;
+  }
+  function createCaptureBall(root, outcome){
+    const f=forwardVec();
+    const start={x:player.x+f.x*.55,y:player.y+1.25,z:player.z+f.z*.55};
+    const target=capRootCenter(root);
+    const e=makeBallEntity(); e.setPosition(start.x,start.y,start.z);
+    capFx.balls.push({e,mode:'fly',root,outcome,age:0,life:.48,start,target,done:false,shakeIndex:0,shakeAt:0});
+    capSE('throw'); setTimeout(()=>capSE('fly'),90);
+    return e;
+  }
+  function animateRootEscape(root, success){
+    try{
+      if(!root||!root.data) return;
+      root.data.fxHitUntil=nowMs()+520;
+      root.data.fxKnockY=Math.max(root.data.fxKnockY||0, success?1.25:1.75);
+      if(!success){
+        const p=root.getPosition(), dx=p.x-player.x, dz=p.z-player.z, d=Math.hypot(dx,dz)||1;
+        root.data.fxKnockX=(root.data.fxKnockX||0)+(dx/d)*2.3; root.data.fxKnockZ=(root.data.fxKnockZ||0)+(dz/d)*2.3;
+      }
+    }catch(e){}
+  }
+  function finishCaptureBall(b, success){
+    if(b.done) return; b.done=true; capFx.busy=false;
+    const root=b.root, outcome=b.outcome||{}; const label=outcome.label||((typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ');
+    const pos=b.e&&b.e.getPosition?b.e.getPosition():capRootCenter(root);
+    if(success){
+      capSE('success'); capBurst(pos.x,pos.y,pos.z,'#facc15',22); capBurst(pos.x,pos.y+.12,pos.z,'#60a5fa',16);
+      try{ for(const id of (outcome.ids||[])) grantInfoTexture(id); }catch(e){}
+      try{ infoPlayerProgress.captures += 1; saveInfoPlayerProgress(); }catch(e){}
+      setTimeout(()=>{ try{ capSE('register'); }catch(e){} },230);
+      setMsg('捕獲完了: '+label+' 登録！ EXP/金なし / 捕獲率 '+Math.round((outcome.chance||0)*100)+'%', 'good');
+      try{ const ik=root&&root.data&&root.data.instanceKey; if(ik) removeCustomObjectInstance(ik,true); }catch(e){}
+      try{ updateInfoHud(); updateCaptureTargetHud(true); }catch(e){}
+    }else{
+      capSE('fail'); capBurst(pos.x,pos.y,pos.z,'#f87171',18); animateRootEscape(root,false);
+      try{ if(typeof catMeow==='function') catMeow(root,'angry'); }catch(e){}
+      setMsg(outcome.reason || ('捕獲失敗: '+label+' / 捕獲率 '+Math.round((outcome.chance||0)*100)+'%'), 'bad');
+    }
+    setTimeout(()=>{ try{ b.e&&b.e.destroy(); }catch(e){} },260);
+  }
+  function updateCaptureBalls(dt){
+    for(let i=capFx.balls.length-1;i>=0;i--){
+      const b=capFx.balls[i]; b.age+=dt;
+      if(!b.e){ capFx.balls.splice(i,1); continue; }
+      if(b.mode==='particle'){
+        if(b.age>=b.life){ try{b.e.destroy();}catch(e){} capFx.balls.splice(i,1); continue; }
+        const p=b.e.getPosition(); b.vy-=5.8*dt; b.e.setPosition(p.x+b.vx*dt,p.y+b.vy*dt,p.z+b.vz*dt); const k=1-b.age/b.life; b.e.setLocalScale(Math.max(.001,.07*k),Math.max(.001,.07*k),Math.max(.001,.07*k)); continue;
+      }
+      if(b.mode==='fly'){
+        const k=clamp(b.age/b.life,0,1), arc=Math.sin(k*Math.PI)*1.25;
+        const x=b.start.x+(b.target.x-b.start.x)*k, y=b.start.y+(b.target.y-b.start.y)*k+arc, z=b.start.z+(b.target.z-b.start.z)*k;
+        b.e.setPosition(x,y,z); b.e.setEulerAngles(nowMs()*.7,nowMs()*1.15,nowMs()*.42);
+        if(k>=1){ b.mode='shake'; b.age=0; b.shakeAt=0; capSE('hit'); capBurst(x,y,z,'#f8fafc',10); }
+      }else if(b.mode==='shake'){
+        const p=b.e.getPosition(); const wob=Math.sin(b.age*34)*.10*(1-b.shakeIndex*.17); b.e.setPosition(p.x+wob*dt*12,p.y+Math.abs(wob)*.10,p.z);
+        b.e.setEulerAngles(0,Math.sin(b.age*18)*24,Math.cos(b.age*18)*18);
+        const shakes=b.outcome && b.outcome.success ? 3 : Math.max(1, Math.min(3, Math.floor((b.outcome.chance||0)*3)+1));
+        if(b.age-b.shakeAt>.55){ b.shakeAt=b.age; b.shakeIndex++; capSE('shake'); capBurst(p.x,p.y,p.z,b.outcome.success?'#bfdbfe':'#fca5a5',6); }
+        if(b.shakeIndex>=shakes && b.age>.55*shakes+.16) finishCaptureBall(b, !!(b.outcome&&b.outcome.success));
+      }
+    }
+  }
+  const prevThrowMonsterBall = (typeof throwMonsterBall==='function') ? throwMonsterBall : null;
+  throwMonsterBall = function(){
+    try{ ensureInfoHud(); ensureMonsterBallButton(); updateCaptureTargetHud(true); }catch(e){}
+    if(!state.started){ capSE('no'); setMsg('まだ開始してない', 'bad'); return false; }
+    if(capFx.busy){ capSE('no'); setMsg('ボール処理中。揺れ終わるまで待て', 'bad'); return false; }
+    const t=capTargetFromCursor();
+    if(!t || !t.root){ capSE('no'); setMsg('モンスターボール空振り。照準を情報テクスチャへ合わせろ', 'bad'); return false; }
+    const root=t.root, c=canCaptureInfoRoot(root), label=(typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ';
+    try{ if(typeof markAttack==='function') markAttack(root); }catch(e){}
+    const chance=captureChanceForRoot(root,c), ok=!!(c&&c.ok), success=ok && Math.random()<=chance;
+    let reason='捕獲失敗: '+label+' / '+(c&&c.reason?c.reason:'条件NG')+' / 捕獲率 '+Math.round(chance*100)+'%';
+    if(ok && !success) reason='ボールが揺れた…でも逃げた！ '+label+' / 捕獲率 '+Math.round(chance*100)+'%';
+    capFx.busy=true;
+    createCaptureBall(root,{success, chance, ids:(c&&c.ids)||[], label, reason});
+    return true;
+  };
+  app.on('update', function(dt){
+    try{
+      dt=Math.min(dt||0,.05); updateCaptureBalls(dt);
+      const t=nowMs(); if(t-capFx.lastHudAt>160){ capFx.lastHudAt=t; updateCaptureTargetHud(false); }
+    }catch(e){ console.warn('capture ux update failed', e); }
+  });
+  try{ ensureCaptureTargetHud(); ensureMonsterBallButton(); updateCaptureTargetHud(true); setTimeout(()=>setMsg('捕獲UX強化: 照準中の捕獲率表示・ボール投げ/揺れ/成功失敗SE演出ON','good'),1200); }catch(e){ console.warn('capture ux init failed',e); }
+  console.log(CAPTURE_UX_VERSION+' active');
+})();
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
