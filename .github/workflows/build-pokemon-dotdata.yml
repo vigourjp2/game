@@ -1,0 +1,26 @@
+name: build pokemon dotdata
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'assets/pokemon-gen1-icons/**'
+      - 'tools/build-pokemon-info-textures.py'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pillow numpy
+      - run: python tools/build-pokemon-info-textures.py --grid 30 --input assets/pokemon-gen1-icons --out generated/pokemon-info-textures.gen1.30x30.generated.js
+      - name: commit generated dotdata
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Generate pokemon dot texture data'
+          file_pattern: generated/pokemon-info-textures.gen1.30x30.generated.js
