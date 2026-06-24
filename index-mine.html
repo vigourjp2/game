@@ -7385,6 +7385,201 @@ body.capShakeScreen{animation:capScreenShake .22s linear 0s 3;}
   try{ ensureStyle(); updateHud(); setTimeout(()=>setMsg('捕獲UX v3: 95%以上は確定。成功/失敗を全画面演出とSEで表示','good'),900); console.log(VERSION+' active'); }catch(e){}
 })();
 
+
+// ===== InfoTexture Capture UX v4: real registration + honest probability =====
+(function(){
+  'use strict';
+  const VERSION='capture-ux-v4-register-fix-honest-rate';
+  const clamp=(n,a,b)=>Math.max(a,Math.min(b,Number(n)||0));
+  const now=()=>performance&&performance.now?performance.now():Date.now();
+
+  function normalizeInfoId(id){
+    try{ if(typeof normalizeObjectIdV8==='function') return normalizeObjectIdV8(id); }catch(e){}
+    return String(id||'');
+  }
+  function idsOf(root){
+    let ids=[];
+    try{ ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(root):[]); }catch(e){ ids=[]; }
+    ids=(ids||[]).map(normalizeInfoId).filter(Boolean);
+    return Array.from(new Set(ids));
+  }
+  function labelOf(root){
+    try{ return (typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ'; }catch(e){ return '情報テクスチャ'; }
+  }
+  function keyOf(root){ return String(root&&root.data&&(root.data.instanceKey||root.data.defId)||'target'); }
+  function target(){ try{ const r=(typeof rayBlock==='function')?rayBlock(true):null; if(r&&r.objectHit&&r.objectHit.root) return r.objectHit.root; }catch(e){} return null; }
+
+  // v14の「討伐以外grant禁止」が捕獲登録まで止めていたので、捕獲専用の直接登録ルートを作る。
+  function captureGrantInfoTextureDirect(infoId){
+    infoId=normalizeInfoId(infoId);
+    if(!infoId) return false;
+    try{ if(infoId===INFO_TEXTURE_CAT_ID && typeof ensureCatInfoTexture==='function') ensureCatInfoTexture(); }catch(e){}
+    try{ if(/^info-poke_\d{3}$/.test(infoId) && typeof ensureInfoTextureDefV3==='function'){
+      const no=Number(infoId.slice(-3));
+      const meta=(typeof INFO_TEXTURE_PACK_V3!=='undefined' && INFO_TEXTURE_PACK_V3||[]).find(m=>Number(m.no)===no || String(m.id)===infoId);
+      if(meta) ensureInfoTextureDefV3(meta);
+    }}catch(e){}
+    try{ if(typeof infoTextureGranted==='undefined' || !infoTextureGranted || !infoTextureGranted.add) infoTextureGranted=new Set(); }catch(e){}
+    let first=false;
+    try{ first=!infoTextureGranted.has(infoId); infoTextureGranted.add(infoId); }catch(e){}
+    try{ localStorage.setItem(INFO_TEXTURE_GRANTED_KEY, JSON.stringify(Array.from(infoTextureGranted))); }catch(e){}
+    try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
+    try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch(e){}
+    try{ if(typeof setObjHud==='function') setObjHud(); }catch(e){}
+    try{ if(typeof updateInfoHud==='function') updateInfoHud(); }catch(e){}
+    try{ console.log('[capture grant direct]', infoId, 'first=', first, 'all=', Array.from(infoTextureGranted)); }catch(e){}
+    return true;
+  }
+  window.captureGrantInfoTextureDirect=captureGrantInfoTextureDirect;
+
+  function currentInfoIdsText(){
+    try{ return Array.from(infoTextureGranted||[]).join(',') || 'なし'; }catch(e){ return '不明'; }
+  }
+
+  // 失敗補正・95%以上確定化は撤廃。表示値と実抽選を一致させる。
+  captureChanceForRoot=function(root,c){
+    c=c||((typeof canCaptureInfoRoot==='function')?canCaptureInfoRoot(root):null);
+    if(!c||!c.ok) return 0;
+    const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(root):null;
+    let chance=.20 + (1-clamp(c.weakRatio,0,1))*1.00;
+    if(c.weakRatio<=.35) chance+=.16;
+    if(c.weakRatio<=.18) chance+=.10;
+    if(c.dist<4.0) chance+=.08; else if(c.dist>8.0) chance-=.08;
+    if(c.moving) chance-=.18;
+    if(c.angry) chance-=.08;
+    if(meta && meta.role==='hostile') chance-=.10;
+    if(meta && (meta.role==='passive'||meta.role==='pokemon')) chance+=.07;
+    chance += Math.min(.20, Math.max(0, (infoPlayerProgress&&infoPlayerProgress.level||1)-1)*.014);
+    return clamp(chance,.08,.95);
+  };
+
+  function ensureStyle(){
+    if(document.getElementById('captureUxV4Style')) return;
+    const st=document.createElement('style'); st.id='captureUxV4Style';
+    st.textContent=`
+#captureTargetHud{top:154px!important;right:8px!important;z-index:28!important;min-width:268px!important;max-width:360px!important;font-size:13px!important;border-width:2px!important;background:rgba(1,7,19,.88)!important;}
+#captureTargetHud.v4Ready{border-color:#22c55e!important;color:#dcfce7!important;box-shadow:0 0 0 3px rgba(34,197,94,.20),0 14px 34px rgba(0,0,0,.42)!important;}
+#captureTargetHud.v4No{border-color:#fb7185!important;color:#ffe4e6!important;}
+#captureStageV4{position:fixed;inset:0;z-index:10005;pointer-events:none;display:none;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle at 50% 44%,rgba(255,255,255,.14),rgba(0,0,0,.10) 34%,rgba(0,0,0,.44));font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;text-align:center;color:white;text-shadow:0 4px 14px #000,0 0 24px #000;}
+#captureStageV4.show{display:flex;animation:capV4In .12s ease-out both;}
+#captureStageV4 .main{font-size:clamp(34px,10vw,88px);font-weight:1000;letter-spacing:.04em;line-height:1.02;}
+#captureStageV4 .sub{margin-top:10px;font-size:clamp(16px,4vw,29px);font-weight:1000;color:#e0f2fe;max-width:94vw;white-space:pre-line;}
+#captureStageV4 .ball{width:104px;height:104px;border-radius:999px;margin:0 auto 20px;background:linear-gradient(180deg,#ef4444 0 46%,#111827 47% 53%,#f8fafc 54%);border:5px solid #fff;box-shadow:0 18px 58px rgba(0,0,0,.58),0 0 32px rgba(255,255,255,.70);position:relative;}
+#captureStageV4 .ball:after{content:'';position:absolute;width:32px;height:32px;border-radius:999px;background:#fff;border:5px solid #111827;left:50%;top:50%;transform:translate(-50%,-50%);box-shadow:0 0 14px #fff;}
+#captureStageV4.throw .ball{animation:capV4Throw .58s cubic-bezier(.1,.9,.2,1) both;}
+#captureStageV4.shake .ball{animation:capV4Shake .42s ease-in-out infinite;}
+#captureStageV4.fail{background:radial-gradient(circle,rgba(239,68,68,.44),rgba(0,0,0,.50));}
+#captureStageV4.success{background:radial-gradient(circle,rgba(250,204,21,.42),rgba(34,197,94,.20) 38%,rgba(0,0,0,.40));}
+#captureStageV4.register{background:radial-gradient(circle,rgba(59,130,246,.40),rgba(34,197,94,.32) 44%,rgba(0,0,0,.30));}
+#captureFlashV4{position:fixed;inset:0;z-index:10004;pointer-events:none;background:white;opacity:0;}
+#captureFlashV4.flash{animation:capV4Flash .30s ease-out both;}
+body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
+@keyframes capV4In{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+@keyframes capV4Throw{0%{transform:translate(-42vw,28vh) scale(.55) rotate(-260deg)}68%{transform:translate(0,-8vh) scale(1.15) rotate(30deg)}100%{transform:translate(0,0) scale(1) rotate(0)}}
+@keyframes capV4Shake{0%,100%{transform:translateX(0) rotate(0)}22%{transform:translateX(-20px) rotate(-24deg)}48%{transform:translateX(18px) rotate(22deg)}72%{transform:translateX(-11px) rotate(-13deg)}}
+@keyframes capV4Flash{0%{opacity:.96}100%{opacity:0}}
+@keyframes capV4ScreenShake{0%,100%{transform:translate(0,0)}25%{transform:translate(5px,-3px)}50%{transform:translate(-5px,4px)}75%{transform:translate(3px,2px)}}
+#monsterBallBtn.capBallBtnReady{box-shadow:0 0 0 4px rgba(34,197,94,.55),0 0 24px rgba(34,197,94,.62)!important;}
+#monsterBallBtn.capBallBtnNo{filter:grayscale(.7) brightness(.75)!important;}
+`;
+    document.head.appendChild(st);
+  }
+  function stage(){
+    ensureStyle(); let d=document.getElementById('captureStageV4');
+    if(!d){ d=document.createElement('div'); d.id='captureStageV4'; d.innerHTML='<div class="ball"></div><div class="main"></div><div class="sub"></div>'; document.body.appendChild(d); }
+    let f=document.getElementById('captureFlashV4'); if(!f){ f=document.createElement('div'); f.id='captureFlashV4'; document.body.appendChild(f); }
+    return d;
+  }
+  function show(main,sub,cls){ const d=stage(); d.className='show '+(cls||''); d.querySelector('.main').textContent=main||''; d.querySelector('.sub').textContent=sub||''; }
+  function hide(){ const d=document.getElementById('captureStageV4'); if(d) d.className=''; }
+  function flash(){ const f=document.getElementById('captureFlashV4'); if(!f) return; f.classList.remove('flash'); void f.offsetWidth; f.classList.add('flash'); }
+  function shake(){ document.body.classList.remove('capV4ShakeScreen'); void document.body.offsetWidth; document.body.classList.add('capV4ShakeScreen'); setTimeout(()=>document.body.classList.remove('capV4ShakeScreen'),760); }
+  function se(k){
+    try{ if(typeof window.__captureUxV3Ctx!=='undefined'){ /* keep old ctx warm */ } }catch(e){}
+    try{ if(typeof capSE==='function') capSE(k); }catch(e){}
+    try{
+      const C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+      if(!window.__captureUxV4Ctx) window.__captureUxV4Ctx=new C(); const c=window.__captureUxV4Ctx; if(c.state==='suspended') c.resume().catch(()=>{});
+      const tone=(freq,dur,type,vol,delay,slide)=>{ const t=c.currentTime+(delay||0), o=c.createOscillator(), g=c.createGain(); o.type=type||'sine'; o.frequency.setValueAtTime(freq,t); if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*slide),t+dur); g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(vol||.07,t+.015); g.gain.exponentialRampToValueAtTime(.0001,t+dur); o.connect(g).connect(c.destination); o.start(t); o.stop(t+dur+.04); };
+      if(k==='throw'){ tone(260,.16,'square',.09,0,2.4); tone(620,.10,'triangle',.05,.07,1.4); }
+      else if(k==='hit'){ tone(160,.13,'square',.08,0,.55); tone(480,.08,'triangle',.05,.04,1.2); }
+      else if(k==='shake'){ tone(380,.10,'triangle',.085,0,.76); }
+      else if(k==='fail'||k==='break'){ tone(210,.20,'sawtooth',.10,0,.45); tone(120,.18,'square',.06,.13,.62); }
+      else if(k==='success'){ tone(740,.13,'sine',.08,0,1.18); tone(990,.16,'sine',.08,.10,1.12); tone(1480,.26,'triangle',.07,.24,1.05); }
+      else if(k==='register'){ tone(900,.10,'sine',.08,0,1.35); tone(1250,.16,'triangle',.07,.09,1.2); tone(1800,.22,'sine',.055,.20,1.04); }
+      else if(k==='no'){ tone(95,.16,'square',.08,0,.58); }
+    }catch(e){}
+  }
+  ['pointerdown','touchstart','keydown'].forEach(ev=>window.addEventListener(ev,()=>{try{se('unlock')}catch(e){}},{capture:true,passive:true,once:true}));
+
+  function status(root){
+    if(!root) return {text:'🎯 捕獲照準: 対象なし\n情報テクスチャへカーソルを合わせろ',cls:'v4No',ok:false,chance:0};
+    const ids=idsOf(root); if(!ids.length) return {text:'🎯 捕獲照準: OBJ\n情報テクスチャではない',cls:'v4No',ok:false,chance:0};
+    const c=(typeof canCaptureInfoRoot==='function')?canCaptureInfoRoot(root):{ok:false,reason:'捕獲判定なし'};
+    const ch=c.ok?captureChanceForRoot(root,c):0;
+    const hp=(c&&c.maxHp)?`HP ${Math.ceil(c.hp)}/${Math.ceil(c.maxHp)}（${Math.round((c.hp/c.maxHp)*100)}%）`:'HP --';
+    const dist=(c&&isFinite(c.dist))?`距離 ${c.dist.toFixed(1)}m`:'距離 --';
+    const reason=c.ok?`投げたら ${Math.round(ch*100)}%で捕獲判定`:(c.reason||'条件NG');
+    return {text:`🎯 ${labelOf(root)}\n捕獲率: ${Math.round(ch*100)}% / ${hp}\n${dist} / ${reason}`,cls:c.ok?'v4Ready':'v4No',ok:!!c.ok,chance:ch,c,ids};
+  }
+  function updateHud(){
+    try{
+      ensureStyle(); let h=document.getElementById('captureTargetHud'); if(!h) return;
+      if(!state.started){ h.textContent='捕獲照準: 起動後に表示'; h.className='info'; return; }
+      const s=status(target()); h.textContent=s.text; h.className=s.cls;
+      const btn=document.getElementById('monsterBallBtn'); if(btn){ btn.classList.toggle('capBallBtnReady',s.ok); btn.classList.toggle('capBallBtnNo',!s.ok); }
+    }catch(e){}
+  }
+  function removeRoot(root){
+    try{ const ik=root&&root.data&&root.data.instanceKey; if(ik && typeof removeCustomObjectInstance==='function'){ removeCustomObjectInstance(ik,true); } }catch(e){}
+    try{ if(root&&root.parent&&root.destroy) root.destroy(); }catch(e){}
+  }
+  function escapeRoot(root){
+    try{ if(!root||!root.data) return; root.data.angryUntil=now()+1200; root.data.fxHitUntil=now()+900; const p=root.getPosition(), dx=p.x-player.x, dz=p.z-player.z, d=Math.hypot(dx,dz)||1; root.data.fxKnockX=(root.data.fxKnockX||0)+(dx/d)*3.2; root.data.fxKnockZ=(root.data.fxKnockZ||0)+(dz/d)*3.2; root.data.fxKnockY=Math.max(root.data.fxKnockY||0,2.2); }catch(e){}
+  }
+
+  let busy=false;
+  throwMonsterBall=function(){
+    try{ ensureStyle(); if(typeof ensureMonsterBallButton==='function') ensureMonsterBallButton(); updateHud(); }catch(e){}
+    if(!state.started){ se('no'); show('NO!','まだ開始してない','fail'); setTimeout(hide,850); return false; }
+    if(busy){ se('no'); show('WAIT!','ボール判定中。結果が出るまで待て','fail'); setTimeout(hide,850); return false; }
+    const root=target();
+    if(!root){ se('no'); show('空振り!','照準を情報テクスチャへ合わせろ','fail'); flash(); setMsg('モンスターボール空振り。対象なし','bad'); setTimeout(hide,900); return false; }
+    const ids=idsOf(root), label=labelOf(root), c=(typeof canCaptureInfoRoot==='function')?canCaptureInfoRoot(root):{ok:false,reason:'条件NG'};
+    if(!ids.length){ se('no'); show('捕獲不可','情報テクスチャではない','fail'); flash(); setMsg('捕獲不可: 情報テクスチャではない','bad'); setTimeout(hide,900); return false; }
+    const chance=c.ok?captureChanceForRoot(root,c):0;
+    const success=!!(c.ok && Math.random()<=chance);
+    busy=true;
+    show('THROW!','モンスターボールを投げた！\n'+label+' / 捕獲率 '+Math.round(chance*100)+'%','throw'); se('throw'); flash(); setMsg('モンスターボール！ '+label+' / 捕獲率 '+Math.round(chance*100)+'%', 'info');
+    setTimeout(()=>{ show('HIT!','ボールが当たった！', 'throw'); se('hit'); shake(); },520);
+    setTimeout(()=>{ show('1…','ボールが揺れる…','shake'); se('shake'); },980);
+    setTimeout(()=>{ show('2…','まだ揺れている…','shake'); se('shake'); },1450);
+    setTimeout(()=>{ show('3…','決まるか…！？','shake'); se('shake'); },1920);
+    setTimeout(()=>{
+      if(success){
+        let registered=[];
+        for(const id of ids){ if(captureGrantInfoTextureDirect(id)) registered.push(id); }
+        show('捕獲成功!!','登録完了：'+label+'\n登録ID: '+(registered.join(', ')||'なし')+'\nEXP/金は入らない','register'); se('success'); flash(); shake();
+        try{ infoPlayerProgress.captures+=1; saveInfoPlayerProgress(); }catch(e){}
+        removeRoot(root);
+        try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
+        try{ if(typeof updateInfoHud==='function') updateInfoHud(); }catch(e){}
+        setMsg('捕獲成功!! '+label+' 登録完了: '+(registered.join(', ')||currentInfoIdsText())+'（EXP/金なし）', 'good');
+        setTimeout(()=>{ se('register'); },260);
+        setTimeout(()=>{ hide(); busy=false; updateHud(); },1700);
+      }else{
+        show('脱出された!!',(c.ok?'抽選失敗':'条件NG: '+(c.reason||'不明'))+'\n'+label+' / 今回 '+Math.round(chance*100)+'%', 'fail'); se('fail'); flash(); shake(); escapeRoot(root);
+        try{ if(typeof catMeow==='function') catMeow(root,'angry'); }catch(e){}
+        setMsg((c.ok?'捕獲失敗: ':'捕獲条件NG: ')+label+' / '+(c.reason||'抽選失敗')+' / 捕獲率 '+Math.round(chance*100)+'%', 'bad');
+        setTimeout(()=>{ hide(); busy=false; updateHud(); },1550);
+      }
+    },2420);
+    return true;
+  };
+  try{ app.on('update',()=>updateHud()); }catch(e){ setInterval(updateHud,180); }
+  try{ ensureStyle(); updateHud(); setTimeout(()=>setMsg('捕獲登録修正: 成功時は捕獲専用ルートで一覧登録 / 95%確定・失敗補正は廃止','good'),1000); console.log(VERSION+' active'); }catch(e){}
+})();
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
