@@ -3720,6 +3720,50 @@ handleObjectCatalogMessage=function(msg){
  }
  return __infoHandleObjectCatalogMessage(msg);
 };
+
+// ===== Wild InfoTexture spawn limiter =====
+// 野生の情報テクスチャがチャンクごとに増え続ける暴走を止める。
+// プレイヤー周辺では最大3体まで。遠くの野生個体は破棄して、スマホ負荷も抑える。
+const INFO_WILD_MAX_NEAR_PLAYER = 3;
+const INFO_WILD_NEAR_RADIUS = 28;
+const INFO_WILD_DESPAWN_RADIUS = 48;
+function isWildInfoTextureInstance(root, instanceKey){
+ const ik=String(instanceKey || (root&&root.data&&root.data.instanceKey) || '');
+ if(/^infoTexture(?::|V3:)/.test(ik)) return true;
+ const did=String(root&&root.data&&root.data.defId||'');
+ const def=customObjectDefs&&customObjectDefs.get?customObjectDefs.get(did):null;
+ return !!(def && def.infoTexture && /^infoTexture/.test(ik));
+}
+function wildInfoDistance2(root,x,z){
+ if(!root||!root.getPosition) return Infinity;
+ const p=root.getPosition(); const dx=p.x-x, dz=p.z-z;
+ return dx*dx+dz*dz;
+}
+function cleanupFarWildInfoTextures(){
+ const max2=INFO_WILD_DESPAWN_RADIUS*INFO_WILD_DESPAWN_RADIUS;
+ for(const [ik,root] of Array.from(customObjectEntities||[])){
+   if(!isWildInfoTextureInstance(root,ik)) continue;
+   if(wildInfoDistance2(root,player.x,player.z)>max2){
+     try{root.destroy();}catch{}
+     customObjectEntities.delete(ik);
+   }
+ }
+}
+function countNearWildInfoTextures(x,z,radius){
+ const r2=radius*radius; let n=0;
+ for(const [ik,root] of customObjectEntities){
+   if(!isWildInfoTextureInstance(root,ik)) continue;
+   if(wildInfoDistance2(root,x,z)<=r2) n++;
+ }
+ return n;
+}
+function canSpawnWildInfoTextureAt(x,z){
+ cleanupFarWildInfoTextures();
+ // 出現候補地点の周辺、またはプレイヤー周辺で3体以上なら追加しない。
+ if(countNearWildInfoTextures(x,z,INFO_WILD_NEAR_RADIUS)>=INFO_WILD_MAX_NEAR_PLAYER) return false;
+ if(countNearWildInfoTextures(player.x,player.z,INFO_WILD_NEAR_RADIUS)>=INFO_WILD_MAX_NEAR_PLAYER) return false;
+ return true;
+}
 const __infoSpawnCustomObjectForChunk = spawnCustomObjectForChunk;
 spawnCustomObjectForChunk=function(ch){
  // 既存のユーザーOBJランダム出現は維持。
@@ -3736,6 +3780,7 @@ spawnCustomObjectForChunk=function(ch){
    const def=ensureCatInfoTexture();
    const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*929+3,ch.cz*937+4)*CHUNK_SIZE);
    const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*941+5,ch.cz*947+6)*CHUNK_SIZE);
+   if(!canSpawnWildInfoTextureAt(x,z)) return r;
    const y=terrainHeight(x,z)+1.05;
    const yaw=Math.floor(hash2(ch.cx*953,ch.cz*967)*4)*(Math.PI/2);
    placeCustomObject(def,x,y,z,yaw,'infoTexture:'+ch.key+':cat');
@@ -3901,6 +3946,7 @@ updateCustomObjectRuntime=function(dt){
  __infoRuntimeAcc += dt;
  if(__infoRuntimeAcc>=0.12){
    const step=__infoRuntimeAcc; __infoRuntimeAcc=0;
+   cleanupFarWildInfoTextures();
    updateInfoTexturePhysics(step);
    updateCats(step);
    updateInfoHud();
@@ -4081,7 +4127,9 @@ spawnCustomObjectForChunk=function(ch){
  const r=__v3SpawnCustomObjectForChunk.apply(this,arguments); ensureAllInfoTexturesV3(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{}
  if(!ch||!ch.done) return r; const slot=Math.floor(hash2(ch.cx*773+17,ch.cz*797-31)*INFO_TEXTURE_PACK_V3.length); const meta=INFO_TEXTURE_PACK_V3[slot]; const spawnKey='infoTextureWildV3:'+ch.key+':'+meta.type; if(customSpawned.has(spawnKey)) return r; customSpawned.add(spawnKey);
  const baseChance=(meta.role==='hostile')?.06:(meta.role==='aquatic'?.10:.14); if(hash2(ch.cx*811+slot,ch.cz*823-slot)>=baseChance) return r;
- const def=ensureInfoTextureDefV3(meta); const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*829+slot,ch.cz*839)*CHUNK_SIZE); const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*853,ch.cz*857+slot)*CHUNK_SIZE); const y=terrainHeight(x,z)+1.05; const yaw=Math.floor(hash2(ch.cx*859,ch.cz*863)*4)*(Math.PI/2);
+ const def=ensureInfoTextureDefV3(meta); const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*829+slot,ch.cz*839)*CHUNK_SIZE); const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*853,ch.cz*857+slot)*CHUNK_SIZE);
+ if(!canSpawnWildInfoTextureAt(x,z)) return r;
+ const y=terrainHeight(x,z)+1.05; const yaw=Math.floor(hash2(ch.cx*859,ch.cz*863)*4)*(Math.PI/2);
  placeCustomObject(def,x,y,z,yaw,'infoTextureV3:'+ch.key+':'+meta.type); return r;
 };
 initInfoTextureSystem=function(){ ensureInfoHud(); ensureAllInfoTexturesV3(); try{customObjectDefs.delete(INFO_CARRIER_CAT_ID);}catch{} updateInfoHud(); setObjHud(); renderObjectManager(); };
