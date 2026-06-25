@@ -4975,7 +4975,7 @@ app.on('update',function(){ __smoothFrameNo++; });
       try{
         const c = document.createElement('canvas'); c.width = grid; c.height = grid;
         const cx = c.getContext('2d', {willReadFrequently:true});
-        cx.clearRect(0,0,grid,grid); cx.drawImage(img,0,0,grid,grid);
+        cx.clearRect(0,0,grid,grid); const pad=Math.max(1,Math.floor(grid*.07)); cx.drawImage(img,pad,pad,grid-pad*2,grid-pad*2);
         const data = cx.getImageData(0,0,grid,grid).data, cells=[];
         for(let y=0;y<grid;y++) for(let x=0;x<grid;x++){
           const i=(y*grid+x)*4, a=data[i+3]; if(a<24) continue;
@@ -7793,6 +7793,124 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ console.log(VERSION+' active'); }catch(e){}
 })();
 
+
+
+
+// ===== Pokemon generated-cell edge padding fix =====
+// 右端・下端に絵が張り付いた30x30セルをそのままフィールドへ出すと、
+// 斜め十字ビルボード/ボックス厚み/端ピクセルで右側・下側が欠けて見える。
+// 図鑑元画像ではなく、ゲーム内に使うセル定義だけを内側へ再配置して余白を作る。
+(function(){
+  const POKE_EDGE_PAD_VERSION = 'v11-poke-generated-cell-inner-padding';
+  const POKE_EDGE_MARGIN = 2;
+  function isPokeInfoDef(def){
+    const id=String(def&&def.id||''), type=String(def&&def.type||def&&def.infoType||'');
+    return !!(def && def.kind==='plane' && (id.match(/^info-poke_\d{3}$/) || type.match(/^poke_\d{3}$/) || def.pokemonGeneratedCells30));
+  }
+  function normalizeColor(c){
+    try{ return (typeof normalizeHexColor==='function') ? normalizeHexColor(c) : String(c||'#ffffff'); }catch(e){ return String(c||'#ffffff'); }
+  }
+  function padPokeCells(cells, grid){
+    grid=Math.max(8, Math.min(64, Math.trunc(Number(grid)||30)));
+    if(!Array.isArray(cells) || !cells.length) return cells||[];
+    const valid=[];
+    for(const c of cells){
+      const x=Math.trunc(Number(c&&c.x)), y=Math.trunc(Number(c&&c.y));
+      if(x>=0&&x<grid&&y>=0&&y<grid) valid.push({x,y,color:normalizeColor(c.color)});
+    }
+    if(!valid.length) return cells;
+    const minX=Math.min(...valid.map(c=>c.x)), maxX=Math.max(...valid.map(c=>c.x));
+    const minY=Math.min(...valid.map(c=>c.y)), maxY=Math.max(...valid.map(c=>c.y));
+    const bw=maxX-minX+1, bh=maxY-minY+1;
+    const edgeTouch = minX<=0 || minY<=0 || maxX>=grid-1 || maxY>=grid-1;
+    if(!edgeTouch && minX>=POKE_EDGE_MARGIN && minY>=POKE_EDGE_MARGIN && maxX<=grid-1-POKE_EDGE_MARGIN && maxY<=grid-1-POKE_EDGE_MARGIN) return valid;
+    const inner=Math.max(1, grid-POKE_EDGE_MARGIN*2);
+    const fit=Math.min(inner/bw, inner/bh, 1);
+    const dw=Math.max(1, Math.floor(bw*fit));
+    const dh=Math.max(1, Math.floor(bh*fit));
+    const dx=Math.floor((grid-dw)/2);
+    const dy=Math.floor((grid-dh)/2);
+    try{
+      const src=document.createElement('canvas'); src.width=src.height=grid;
+      const sg=src.getContext('2d'); sg.imageSmoothingEnabled=false; sg.clearRect(0,0,grid,grid);
+      for(const c of valid){ sg.fillStyle=c.color; sg.fillRect(c.x,c.y,1,1); }
+      const dst=document.createElement('canvas'); dst.width=dst.height=grid;
+      const dg=dst.getContext('2d',{willReadFrequently:true}); dg.imageSmoothingEnabled=false; dg.clearRect(0,0,grid,grid);
+      dg.drawImage(src,minX,minY,bw,bh,dx,dy,dw,dh);
+      const data=dg.getImageData(0,0,grid,grid).data, out=[];
+      for(let y=0;y<grid;y++) for(let x=0;x<grid;x++){
+        const i=(y*grid+x)*4; if(data[i+3]<24) continue;
+        out.push({x,y,color:'#'+[data[i],data[i+1],data[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('')});
+      }
+      return out.length ? out : valid;
+    }catch(e){
+      const sx=dw/bw, sy=dh/bh, map=new Map();
+      for(const c of valid){
+        const nx=Math.max(0,Math.min(grid-1,Math.floor(dx+(c.x-minX)*sx)));
+        const ny=Math.max(0,Math.min(grid-1,Math.floor(dy+(c.y-minY)*sy)));
+        map.set(nx+','+ny,{x:nx,y:ny,color:c.color});
+      }
+      return Array.from(map.values());
+    }
+  }
+  function paddedDef(def){
+    if(!isPokeInfoDef(def) || def.pokeEdgePadVersion===POKE_EDGE_PAD_VERSION) return def;
+    const grid=Math.max(8, Math.min(64, Math.trunc(Number(def.grid)||30)));
+    const cells=padPokeCells(def.cells, grid);
+    return Object.assign({}, def, {grid, cells, pokeEdgePadVersion:POKE_EDGE_PAD_VERSION, edgePaddingCells:POKE_EDGE_MARGIN, updatedAt:Date.now()});
+  }
+  function applyAllPokePadding(){
+    try{
+      if(!window.customObjectDefs && typeof customObjectDefs==='undefined') return 0;
+      let n=0;
+      for(const [id,def] of customObjectDefs){
+        if(isPokeInfoDef(def)){
+          const nd=paddedDef(def);
+          if(nd!==def){ customObjectDefs.set(id, (typeof validateObjectDef==='function'?(validateObjectDef(nd)||nd):nd)); n++; }
+        }
+      }
+      try{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }catch(e){}
+      return n;
+    }catch(e){ console.warn('poke edge padding apply failed', e); return 0; }
+  }
+  function rebuildExistingPokeRoots(){
+    try{
+      if(!customObjectEntities || !customObjectDefs) return;
+      for(const root of customObjectEntities.values()){
+        const def=customObjectDefs.get(root&&root.data&&root.data.defId);
+        if(!isPokeInfoDef(def)) continue;
+        if(typeof rebuildRootVisualV10==='function') rebuildRootVisualV10(root,def);
+        const p=root.getPosition?root.getPosition():null;
+        if(p && typeof terrainHeight==='function') root.setPosition(p.x, terrainHeight(p.x,p.z)+0.025, p.z);
+      }
+    }catch(e){ console.warn('poke root rebuild after padding failed', e); }
+  }
+  try{
+    const oldEnsure=ensureInfoTextureDefV3;
+    ensureInfoTextureDefV3=function(meta){
+      const def=oldEnsure.apply(this,arguments);
+      try{
+        const nd=paddedDef(def);
+        if(nd && nd!==def){ customObjectDefs.set(nd.id, (typeof validateObjectDef==='function'?(validateObjectDef(nd)||nd):nd)); return customObjectDefs.get(nd.id)||nd; }
+      }catch(e){}
+      return def;
+    };
+    window.ensureInfoTextureDefV3=ensureInfoTextureDefV3;
+  }catch(e){}
+  try{
+    const oldPlace=placeCustomObject;
+    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+      try{ if(isPokeInfoDef(def)) def=paddedDef(def); }catch(e){}
+      return oldPlace.apply(this,[def,x,y,z,yaw,instanceKey]);
+    };
+  }catch(e){}
+  window.applyPokeGeneratedEdgePadding = function(){ const n=applyAllPokePadding(); rebuildExistingPokeRoots(); return n; };
+  try{ applyAllPokePadding(); }catch(e){}
+  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 350);
+  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 1600);
+  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 2600);
+  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 5200);
+})();
 
 // ===== InfoTexture field-size / ground-anchor fix =====
 // 図鑑・generated cells プレビューは触らず、ゲームフィールド上の野生情報テクスチャだけを縮小して足元接地にする。
