@@ -254,7 +254,12 @@ def image_to_cells(path: Path, grid: int, safe_pad: float = 0.22) -> Dict:
     }
 
 
-def build(input_dir: Path, out_file: Path, grid: int, safe_pad: float = 0.22, scale: float = 0.085) -> List[Dict]:
+def build(input_dir: Path, out_file: Path, grid: int, safe_pad: float = 0.22, scale: float | None = None) -> List[Dict]:
+    if scale is None:
+        # 旧30セル時代の見た目サイズ(30 * 0.085 = 2.55)を維持する。
+        # grid=96なら 2.55 / 96 = 0.0265625。
+        scale = 2.55 / float(grid)
+
     files = (
         sorted(input_dir.glob('pokeicon-*.jpg'))
         + sorted(input_dir.glob('pokeicon-*.png'))
@@ -302,7 +307,7 @@ def main() -> None:
     ap.add_argument('--out', default='generated/pokemon-info-textures.gen1.30x30.generated.js')
     ap.add_argument('--grid', type=int, default=96, help='cell grid resolution. 96 recommended for high-res info texture')
     ap.add_argument('--safe-pad', type=float, default=0.22, help='safe blank margin ratio around detected pokemon body')
-    ap.add_argument('--scale', type=float, default=0.085, help='plane scale written to generated definitions')
+    ap.add_argument('--scale', type=float, default=None, help='plane scale written to generated definitions. Default keeps old visual size: 2.55 / grid')
     args = ap.parse_args()
     build(Path(args.input), Path(args.out), args.grid, safe_pad=args.safe_pad, scale=args.scale)
 
