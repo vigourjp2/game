@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Download archived Pokemon Gen1 hand-held icons and convert each 150x150 image into
-30x30 grid cell colors for index-mine.html information plane textures.
+Download Pokemon Gen1 images from official Pokemon Zukan detail pages and convert
+each image into 30x30 grid cell colors for index-mine.html information plane textures.
 
 Output:
   generated/pokemon-info-textures.gen1.30x30.generated.js
@@ -16,6 +16,8 @@ from io import BytesIO
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+from urllib.parse import urljoin
+from html import unescape
 
 try:
     from PIL import Image
@@ -47,36 +49,204 @@ NAMES = [
 "カブトプス","プテラ","カビゴン","フリーザー","サンダー","ファイヤー","ミニリュウ","ハクリュー","カイリュー","ミュウツー","ミュウ"
 ]
 
-URL_PATTERNS = [
-    "https://web.archive.org/web/20240319000051im_/https://pixel-art.tsurezure-brog.com/home/images/pokeicon-{n}-150x150.jpg",
-    "https://web.archive.org/web/20200829022319im_/https://pixel-art.tsurezure-brog.com/home/images/pokeicon-{n}-150x150.jpg",
-]
+DETAIL_URL_PATTERN = "https://zukan.pokemon.co.jp/detail/{n:04d}"
+
+# Common UI/social assets are also present in the detail page. Exclude those so the
+# extractor picks the Pokemon art, not the site logo/search buttons/SNS icons.
+REJECT_IMAGE_WORDS = (
+    "logo", "header", "footer", "sns", "twitter", "facebook", "line",
+    "search", "sort", "arrow", "pagetop", "close", "btn", "icon_type",
+    "loading", "spinner", "blank", "common", "sprite", "parts",
+)
+
+IMAGE_EXT_RE = re.compile(r"\.(?:png|jpe?g|webp)(?:[?#][^\s\"'<>)]*)?$", re.I)
+
 
 def url_for(n: int) -> str:
-    return URL_PATTERNS[0].format(n=n)
+    """Detail page URL, e.g. https://zukan.pokemon.co.jp/detail/0001."""
+    return DETAIL_URL_PATTERN.format(n=n)
 
-def download(n: int) -> Path:
-    out = ASSET_DIR / f"pokeicon-{n:03d}.jpg"
-    if out.exists() and out.stat().st_size > 1000:
-        return out
-    last = None
-    for pat in URL_PATTERNS:
-        url = pat.format(n=n)
+
+def fetch_bytes(url: str, *, accept: str = "*/*") -> tuple[bytes, str]:
+    req = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Pokemon texture-builder",
+            "Accept": accept,
+            "Referer": "https://zukan.pokemon.co.jp/",
+        },
+    )
+    with urlopen(req, timeout=30) as r:
+        return r.read(), r.headers.get("Content-Type", "")
+
+
+def fetch_text(url: str) -> str:
+    data, _ = fetch_bytes(url, accept="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+    return data.decode("utf-8", "ignore")
+
+
+def normalize_url(raw: str, base_url: str) -> str | None:
+    raw = unescape(raw or "").strip().strip('"\'')
+    if not raw or raw.startswith(("data:", "javascript:", "mailto:")):
+        return None
+    raw = raw.replace("\\/", "/")
+    return urljoin(base_url, raw)
+
+
+def add_candidate(candidates: list[str], seen: set[str], raw: str, base_url: str) -> None:
+    url = normalize_url(raw, base_url)
+    if not url:
+        return
+    if not IMAGE_EXT_RE.search(url):
+        return
+    low = url.lower()
+    if any(word in low for word in REJECT_IMAGE_WORDS):
+        return
+    if url not in seen:
+        seen.add(url)
+        candidates.append(url)
+
+
+
+
+def walk_json_for_images(obj, page_url: str, candidates: list[str], seen: set[str]) -> None:
+    """Collect image URLs from parsed json-data, preserving priority/order."""
+    if isinstance(obj, dict):
+        # On the official Zukan detail page, the current Pokemon is under
+        # json-data.pokemon. Prefer the large/medium/small fields in that order.
+        for key in ("image_l", "image_m", "image_s", "img", "image", "url"):
+            value = obj.get(key)
+            if isinstance(value, str):
+                add_candidate(candidates, seen, value, page_url)
+        for value in obj.values():
+            walk_json_for_images(value, page_url, candidates, seen)
+    elif isinstance(obj, list):
+        for value in obj:
+            walk_json_for_images(value, page_url, candidates, seen)
+
+def extract_image_urls(html: str, page_url: str) -> list[str]:
+    """Extract likely Pokemon image URLs from the official Zukan detail page."""
+    candidates: list[str] = []
+    seen: set[str] = set()
+    doc = unescape(html).replace("\\/", "/")
+
+    # Official Zukan detail pages expose the main data in
+    # <script id="json-data" type="application/json">. Pull that first so
+    # current Pokemon images beat evolution/news/social images.
+    script_re = re.compile(
+        r"<script[^>]+id=[\"']json-data[\"'][^>]*>(.*?)</script>",
+        re.I | re.S,
+    )
+    for m in script_re.finditer(doc):
+        raw_json = m.group(1).strip()
         try:
-            req = Request(url, headers={"User-Agent":"Mozilla/5.0 texture-builder"})
-            with urlopen(req, timeout=30) as r:
-                data = r.read()
-            if len(data) < 1000:
-                raise RuntimeError(f"too small: {len(data)} bytes")
-            out.write_bytes(data)
-            return out
-        except Exception as e:
-            last = e
-            time.sleep(0.25)
-    raise RuntimeError(f"download failed #{n:03d}: {last}")
+            data = json.loads(raw_json)
+            pokemon = data.get("pokemon") if isinstance(data, dict) else None
+            if isinstance(pokemon, dict):
+                for key in ("image_l", "image_m", "image_s"):
+                    value = pokemon.get(key)
+                    if isinstance(value, str):
+                        add_candidate(candidates, seen, value, page_url)
+            walk_json_for_images(data, page_url, candidates, seen)
+        except Exception:
+            # Fall through to regex extraction below.
+            pass
+
+    # Prefer OGP/Twitter card images if present.
+    meta_re = re.compile(
+        r"<meta[^>]+(?:property|name)=[\"'](?:og:image|twitter:image)[\"'][^>]+content=[\"']([^\"']+)[\"']",
+        re.I,
+    )
+    for m in meta_re.finditer(doc):
+        add_candidate(candidates, seen, m.group(1), page_url)
+
+    # img/source attributes and lazy-load variants.
+    attr_re = re.compile(
+        r"(?:src|data-src|data-original|data-lazy|data-image|content)=[\"']([^\"']+)[\"']",
+        re.I,
+    )
+    for m in attr_re.finditer(doc):
+        value = m.group(1)
+        # srcset may contain multiple URLs with widths.
+        for part in value.split(","):
+            add_candidate(candidates, seen, part.strip().split(" ")[0], page_url)
+
+    srcset_re = re.compile(r"srcset=[\"']([^\"']+)[\"']", re.I)
+    for m in srcset_re.finditer(doc):
+        for part in m.group(1).split(","):
+            add_candidate(candidates, seen, part.strip().split(" ")[0], page_url)
+
+    # CSS url(...) and JSON/string embedded image paths.
+    for m in re.finditer(r"url\(([^)]+)\)", doc, re.I):
+        add_candidate(candidates, seen, m.group(1), page_url)
+    for m in re.finditer(r"https?://[^\"'<> )]+\.(?:png|jpe?g|webp)(?:[?#][^\"'<> )]+)?", doc, re.I):
+        add_candidate(candidates, seen, m.group(0), page_url)
+    for m in re.finditer(r"/[A-Za-z0-9_./%~@-]+\.(?:png|jpe?g|webp)(?:[?#][^\"'<> )]+)?", doc, re.I):
+        add_candidate(candidates, seen, m.group(0), page_url)
+
+    return candidates
+
+
+def score_image_candidate(url: str, n: int) -> int:
+    low = url.lower()
+    no3 = f"{n:03d}"
+    no4 = f"{n:04d}"
+    score = 0
+    if no4 in low:
+        score += 120
+    if no3 in low:
+        score += 40
+    if "pokemon" in low or "zukan" in low or "pm" in low:
+        score += 30
+    if "detail" in low or "main" in low or "image" in low or "img" in low:
+        score += 20
+    if low.endswith(".png") or ".png?" in low:
+        score += 10
+    return score
+
+
+def save_as_jpeg(data: bytes, out: Path) -> None:
+    img = Image.open(BytesIO(data)).convert("RGBA")
+    # Official art may have transparency. Composite on white so the existing
+    # background/grid filtering still behaves predictably.
+    bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+    bg.alpha_composite(img)
+    bg.convert("RGB").save(out, "JPEG", quality=95)
+
+
+def download(n: int) -> tuple[Path, str]:
+    out = ASSET_DIR / f"pokeicon-{n:03d}.jpg"
+    page_url = url_for(n)
+    if out.exists() and out.stat().st_size > 1000:
+        return out, page_url
+
+    last = None
+    try:
+        html = fetch_text(page_url)
+        candidates = extract_image_urls(html, page_url)
+        candidates.sort(key=lambda u: score_image_candidate(u, n), reverse=True)
+        if not candidates:
+            raise RuntimeError("no candidate image URL found in detail page")
+
+        for img_url in candidates:
+            try:
+                data, ctype = fetch_bytes(img_url, accept="image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+                if len(data) < 1000:
+                    raise RuntimeError(f"too small: {len(data)} bytes")
+                if "svg" in ctype.lower() or data.lstrip().startswith(b"<svg"):
+                    raise RuntimeError("svg image is not supported by Pillow")
+                save_as_jpeg(data, out)
+                return out, img_url
+            except Exception as e:
+                last = e
+                time.sleep(0.25)
+    except Exception as e:
+        last = e
+
+    raise RuntimeError(f"download failed #{n:03d} from {page_url}: {last}")
 
 def is_grid_or_bg(r,g,b,a=255):
-    # Archive/icon page images contain white/very-light backing and gray grid lines.
+    # Official artwork may contain white/very-light backing, and old generated assets may contain gray grid lines.
     if a < 16:
         return True
     # very light background
@@ -126,7 +296,7 @@ def main():
     failures = []
     for n, name in enumerate(NAMES, 1):
         try:
-            path = download(n)
+            path, source_image_url = download(n)
             cells = analyze_image(path, 30)
             if not cells:
                 raise RuntimeError("no colored cells extracted")
@@ -145,6 +315,7 @@ def main():
                 "infoPhysics": {"massKg": 1, "gravityScale": 1, "terminalVelocity": 18, "bounce": 0},
                 "hp": 8,
                 "sourceUrl": url_for(n),
+                "sourceImageUrl": source_image_url,
                 "createdAt": 1,
                 "updatedAt": 1
             })
