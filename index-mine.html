@@ -7581,423 +7581,100 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 })();
 
 
-// ===== Info/Pokemon field bottom clipping fix v11 =====
-// 30x30 generated cell sprites are rendered as vertical billboards/voxel planes.
-// The previous field placement allowed the lowest pixel row to sit exactly on, or partly under,
-// the terrain/water surface.  On the phone view this made feet/tail/bottom pixels look cut off.
+// ===== Regression fix: InfoTexture aim / attack / capture target hitbox v16 =====
+// 見た目を30x30ドット絵へ作り直した後、薄い平面・分割セル・回転OBJが rayBlock() の点サンプリングから漏れて
+// 「見えているのに照準対象なし」になるデグレをここで最後に潰す。
 (function(){
-  const INFO_PLANE_BOTTOM_CLEARANCE_V11 = 0.12;
-  const INFO_PLANE_CLIP_FIX_VERSION_V11 = 'v11-info-plane-bottom-clearance';
-
-  function rootDefV11(root, def){
-    if(def) return def;
-    try{ return customObjectDefs && root && root.data ? customObjectDefs.get(String(root.data.defId||'')) : null; }catch(e){ return null; }
+  'use strict';
+  const VERSION='info-target-hitbox-v16';
+  const oldRayBlock = (typeof rayBlock === 'function') ? rayBlock : null;
+  function num(v,d){ v=Number(v); return Number.isFinite(v)?v:d; }
+  function isInfoRootV16(root){
+    try{ if(rootInfoMetaV3(root)) return true; }catch(e){}
+    try{ const ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(root):[]); if(ids&&ids.length) return true; }catch(e){}
+    try{ const def=customObjectDefs.get(root&&root.data&&root.data.defId); if(def && (def.infoTexture || (Array.isArray(def.infoTextureIds)&&def.infoTextureIds.length))) return true; }catch(e){}
+    return false;
   }
-  function isInfoPlaneRootV11(root, def){
-    def = rootDefV11(root, def);
-    if(!root || !root.getPosition || !def) return false;
-    if(def.kind !== 'plane') return false;
-    if(def.infoTexture) return true;
-    const id = String(def.id || (root.data&&root.data.defId) || '');
-    return /^info[-_]poke[_-]?\d{3}$/i.test(id) || /^infoTexture(?::|V3:)/.test(String(root.data&&root.data.instanceKey||''));
+  function inflateAabb(a, pad){
+    pad=num(pad,.12);
+    return {minX:num(a.minX, a.min&&a.min.x)-pad, maxX:num(a.maxX, a.max&&a.max.x)+pad,
+      minY:num(a.minY, a.min&&a.min.y)-pad, maxY:num(a.maxY, a.max&&a.max.y)+pad,
+      minZ:num(a.minZ, a.min&&a.min.z)-pad, maxZ:num(a.maxZ, a.max&&a.max.z)+pad};
   }
-  function visualBoundsV11(root){
+  function rootAabbV16(root){
     try{
-      if(typeof affinityVisualBoundsV6 === 'function') return affinityVisualBoundsV6(root);
-    }catch(e){}
-    if(!root || !root.children || !root.children.length || !root.getPosition){
-      const p=(root&&root.getPosition)?root.getPosition().clone():new pc.Vec3();
-      return {min:p.clone(), max:p.clone(), center:p.clone()};
-    }
-    let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity,hit=false;
-    for(const c of root.children){
-      if(!c || !c.getPosition || !c.getLocalScale) continue;
-      if(c.data && (c.data.affinityAura || c.data.ignoreObjectBounds)) continue;
-      const p=c.getPosition(), sc=c.getLocalScale();
-      const hx=Math.max(Math.abs(sc.x),.02)*.55, hy=Math.max(Math.abs(sc.y),.02)*.55, hz=Math.max(Math.abs(sc.z),.02)*.55;
-      minX=Math.min(minX,p.x-hx); maxX=Math.max(maxX,p.x+hx);
-      minY=Math.min(minY,p.y-hy); maxY=Math.max(maxY,p.y+hy);
-      minZ=Math.min(minZ,p.z-hz); maxZ=Math.max(maxZ,p.z+hz); hit=true;
-    }
-    if(!hit){ const p=root.getPosition().clone(); return {min:p.clone(), max:p.clone(), center:p.clone()}; }
-    return {min:new pc.Vec3(minX,minY,minZ), max:new pc.Vec3(maxX,maxY,maxZ), center:new pc.Vec3((minX+maxX)/2,(minY+maxY)/2,(minZ+maxZ)/2)};
-  }
-  function groundTopV11(x,z){
-    try{ if(typeof groundTopAtV6 === 'function') return groundTopAtV6(x,z); }catch(e){}
-    try{ return terrainHeight(x,z)+1; }catch(e){ return 1; }
-  }
-  function liftInfoPlaneBottomV11(root, def){
-    try{
-      if(!isInfoPlaneRootV11(root, def)) return root;
-      const p=root.getPosition();
-      const g=groundTopV11(p.x,p.z);
-      const b=visualBoundsV11(root);
-      const targetMinY=g+INFO_PLANE_BOTTOM_CLEARANCE_V11;
-      const dy=targetMinY-b.min.y;
-      if(Number.isFinite(dy) && dy>.01){
-        root.setPosition(p.x, p.y+dy, p.z);
-        root.data=Object.assign({},root.data||{},{bottomClipFix:INFO_PLANE_CLIP_FIX_VERSION_V11});
+      if(typeof ultraObjectBounds==='function'){
+        const b=ultraObjectBounds(root);
+        if(b&&b.min&&b.max) return {minX:b.min.x,maxX:b.max.x,minY:b.min.y,maxY:b.max.y,minZ:b.min.z,maxZ:b.max.z};
       }
-    }catch(e){ console.warn('info plane bottom clip fix failed', e); }
-    return root;
-  }
-
-  const __placeCustomObjectClipFixV11 = (typeof placeCustomObject === 'function') ? placeCustomObject : null;
-  if(__placeCustomObjectClipFixV11){
-    placeCustomObject = function(def,x,y,z,yaw,instanceKey){
-      const root=__placeCustomObjectClipFixV11.apply(this,arguments);
-      return liftInfoPlaneBottomV11(root, def);
-    };
-    window.placeCustomObject = placeCustomObject;
-  }
-
-  let acc=0;
-  function tickV11(dt){
-    acc += Number(dt)||0;
-    if(acc < .25) return;
-    acc = 0;
-    try{
-      if(!customObjectEntities) return;
-      for(const [,root] of customObjectEntities) liftInfoPlaneBottomV11(root, null);
     }catch(e){}
-  }
-  try{ if(app && app.on) app.on('update', tickV11); else setInterval(()=>tickV11(.25),250); }catch(e){ setInterval(()=>tickV11(.25),250); }
-  window.liftInfoPlaneBottomV11 = liftInfoPlaneBottomV11;
-})();
-
-
-// ===== Pokemon InfoTexture field visual/size final fix v12 =====
-// 目的:
-// 1) フィールド内のポケモン情報テクスチャがデカすぎる問題を修正
-// 2) 30x30セルをそのまま巨大表示して低解像度に見える問題を、元画像テクスチャ優先で改善
-// 3) v6の接地スナップがv11の下端クリアランスを打ち消すため、最後段で下端を再補正
-(function(){
-  const POKE_FIELD_FIX_V12 = 'v12-pokemon-field-size-hires-bottom';
-  const POKE_FIELD_SCALE_V12 = 0.038;      // 30 grid => 約1.14ブロック高。旧0.085(約2.55)は巨大すぎる。
-  const POKE_BOTTOM_CLEARANCE_V12 = 0.24;  // 水面・地面・スマホ低視点で足元が食われない余白。
-  const POKE_CANVAS_SIZE_V12 = 512;
-
-  function pokeNoV12(v){
-    const raw=String((v&&(v.id||v.type||v.infoType||v.defId))||v||'');
-    const m=raw.match(/(?:info[-_]?poke|poke|pokemon)[_-]?(\d{1,3})/i);
-    if(!m) return '';
-    const n=Math.max(1,Math.min(151,parseInt(m[1],10)||0));
-    return n?String(n).padStart(3,'0'):'';
-  }
-  function isPokemonInfoDefV12(def){
-    if(!def) return false;
-    const id=String(def.id||def.infoType||def.type||'');
-    return !!(def.pokemonGeneratedCells30 || /^info[-_]?poke[_-]?\d{3}$/i.test(id) || /^poke[_-]?\d{3}$/i.test(id));
-  }
-  function pokemonAssetUrlV12(def){
-    const no=pokeNoV12(def); if(!no) return '';
-    // ここは jpg 決め打ち禁止。generated の source/iconUrl があれば優先し、無ければ PNG→WebP→JPG のフォールバックローダに渡す。
-    const cur=String((def&&(def.iconUrl||def.sourceFile||def.source))||'');
-    if(cur && !/pokeicon-\d{3}\.jpg(?:[?#].*)?$/i.test(cur)) return cur;
-    return 'assets/pokemon-gen1-icons/pokeicon-'+no+'.png';
-  }
-  function normalizePokemonDefV12(def){
-    if(!def || !isPokemonInfoDefV12(def)) return def;
-    const no=pokeNoV12(def); if(!no) return def;
-    def.scale=POKE_FIELD_SCALE_V12;
-    def.grid=Math.max(30, Math.trunc(Number(def.grid)||30));
-    def.iconUrl=def.iconUrl || pokemonAssetUrlV12(def);
-    def.sourceFile=def.sourceFile || def.iconUrl;
-    def.pokemonFieldFixVersion=POKE_FIELD_FIX_V12;
-    return def;
-  }
-
-  function ensurePokemonImagesV12(){
     try{
-      if(!customObjectDefs) return 0;
-      let n=0;
-      for(const [id,def] of customObjectDefs){
-        if(!isPokemonInfoDefV12(def)) continue;
-        normalizePokemonDefV12(def);
-        customObjectDefs.set(id,def); n++;
-        try{ if(typeof startInfoImageLoadV4==='function') startInfoImageLoadV4(def); }catch(e){}
+      const p=root.getPosition(); return {minX:p.x-.6,maxX:p.x+.6,minY:p.y-.1,maxY:p.y+1.8,minZ:p.z-.6,maxZ:p.z+.6};
+    }catch(e){ return null; }
+  }
+  function rayAabbT(o,d,a,maxDist){
+    let tmin=0, tmax=maxDist;
+    const axes=[['x','minX','maxX'],['y','minY','maxY'],['z','minZ','maxZ']];
+    for(const [ax,mn,mx] of axes){
+      const ov=o[ax], dv=d[ax];
+      if(Math.abs(dv)<1e-6){ if(ov<a[mn]||ov>a[mx]) return null; continue; }
+      let t1=(a[mn]-ov)/dv, t2=(a[mx]-ov)/dv;
+      if(t1>t2){ const tmp=t1; t1=t2; t2=tmp; }
+      tmin=Math.max(tmin,t1); tmax=Math.min(tmax,t2);
+      if(tmax<tmin) return null;
+    }
+    return (tmax>=0 && tmin<=maxDist) ? Math.max(0,tmin) : null;
+  }
+  function bestObjectHitV16(origin,dir,maxDist){
+    let best=null;
+    try{
+      for(const [instanceKey,root] of customObjectEntities){
+        if(!root||!root.getPosition||!root.children) continue;
+        const info=isInfoRootV16(root);
+        const rootPad=info?.55:.18;
+        const rb=rootAabbV16(root); if(!rb) continue;
+        const rt=rayAabbT(origin,dir,inflateAabb(rb,rootPad),maxDist);
+        if(rt==null) continue;
+        let hitCell=null, hitAabb=inflateAabb(rb,rootPad);
+        // セル単位でも確認。ただし情報テクスチャは見た目優先なのでroot全体AABBをヒット可能にする。
+        let cellBestT=null;
+        try{
+          for(const cell of root.children){
+            if(!cell||!cell.getPosition||!cell.getLocalScale) continue;
+            const ca=(typeof customObjectCellAabb==='function')?customObjectCellAabb(cell):null;
+            if(!ca) continue;
+            const pad=info?.20:.08;
+            const ia=inflateAabb(ca,pad);
+            const ct=rayAabbT(origin,dir,ia,maxDist);
+            if(ct!=null && (cellBestT==null||ct<cellBestT)){ cellBestT=ct; hitCell=cell; hitAabb=ia; }
+          }
+        }catch(e){}
+        const t=(cellBestT!=null)?cellBestT:rt;
+        if(!best || t<best.t){ best={t, objectHit:{root,cell:hitCell,instanceKey,defId:root.data&&root.data.defId,aabb:hitAabb,infoTarget:info}}; }
       }
-      try{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }catch(e){}
-      return n;
-    }catch(e){ console.warn('pokemon v12 def normalize failed',e); return 0; }
-  }
-
-  function removeLightBgV12(canvas){
-    const g=canvas.getContext('2d',{willReadFrequently:true});
-    const img=g.getImageData(0,0,canvas.width,canvas.height), d=img.data;
-    for(let i=0;i<d.length;i+=4){
-      const r=d[i], gr=d[i+1], b=d[i+2], max=Math.max(r,gr,b), min=Math.min(r,gr,b);
-      // 元画像の白背景/薄いグレー罫線だけ透明化。黒線や本体色は残す。
-      if((r>=238 && gr>=238 && b>=238) || (max-min<=10 && r>=172 && gr>=172 && b>=172)) d[i+3]=0;
-    }
-    g.putImageData(img,0,0);
-  }
-  function drawPokemonHiResV12(canvas,def){
-    if(!canvas || !def || !isPokemonInfoDefV12(def)) return false;
-    normalizePokemonDefV12(def);
-    let rec=null;
-    try{ if(typeof startInfoImageLoadV4==='function') rec=startInfoImageLoadV4(def); }catch(e){}
-    if(!rec || rec.state!=='loaded' || !rec.img) return false;
-    const g=canvas.getContext('2d');
-    const w=canvas.width, h=canvas.height;
-    const iw=rec.img.naturalWidth||rec.img.width, ih=rec.img.naturalHeight||rec.img.height;
-    if(!iw || !ih) return false;
-    g.clearRect(0,0,w,h);
-    g.imageSmoothingEnabled=false;
-    const sc=Math.min(w/iw,h/ih)*0.96;
-    const dw=Math.max(1,Math.round(iw*sc)), dh=Math.max(1,Math.round(ih*sc));
-    const dx=Math.round((w-dw)/2), dy=Math.round((h-dh)/2);
-    try{
-      g.drawImage(rec.img,dx,dy,dw,dh);
-      removeLightBgV12(canvas);
-      return true;
-    }catch(e){ console.warn('pokemon hires draw failed',e); return false; }
-  }
-
-  const __makePlaneTextureCanvasV12 = (typeof makePlaneTextureCanvas==='function') ? makePlaneTextureCanvas : null;
-  if(__makePlaneTextureCanvasV12){
-    makePlaneTextureCanvas = function(def,pixelSize){
-      def=normalizePokemonDefV12(def);
-      if(def && isPokemonInfoDefV12(def)){
-        const c=document.createElement('canvas');
-        c.width=c.height=Math.max(256, Math.trunc(Number(pixelSize)||POKE_CANVAS_SIZE_V12));
-        if(drawPokemonHiResV12(c,def)) return c;
-      }
-      return __makePlaneTextureCanvasV12.apply(this,arguments);
-    };
-    window.makePlaneTextureCanvas = makePlaneTextureCanvas;
-  }
-
-  function makePokemonMatV12(def){
-    try{
-      normalizePokemonDefV12(def);
-      if(typeof makeInfoTextureMaterialV4==='function') return makeInfoTextureMaterialV4(def);
     }catch(e){}
-    return null;
+    return best;
   }
-  function destroyVisualChildrenV12(root){
-    if(!root || !root.children) return;
-    for(const ch of Array.from(root.children||[])){
-      if(ch && ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)) continue;
-      try{ ch.destroy(); }catch(e){}
+  rayBlock = function(){
+    if(!oldRayBlock) return null;
+    const dir=forwardVec();
+    const origin={x:player.x,y:player.y+1.45,z:player.z};
+    const maxDist=8.8;
+    const obj=bestObjectHitV16(origin,dir,maxDist);
+    let block=null, last=[Math.round(player.x),Math.floor(player.y+1.35),Math.round(player.z)];
+    for(let t=.16;t<maxDist;t+=.06){
+      const px=origin.x+dir.x*t, py=origin.y+dir.y*t, pz=origin.z+dir.z*t;
+      const bx=Math.floor(px+.5), by=Math.floor(py), bz=Math.floor(pz+.5);
+      const b=blockAt(bx,by,bz);
+      if(b&&isSolidType(b.data.type)){ block={t,hit:b,place:last}; break; }
+      last=[bx,by,bz];
     }
-  }
-  function rebuildPokemonRootV12(root,def){
-    if(!root || !def || !isPokemonInfoDefV12(def)) return root;
-    normalizePokemonDefV12(def);
-    try{
-      destroyVisualChildrenV12(root);
-      const grid=Math.max(1,Math.trunc(Number(def.grid)||30));
-      const s=Number(def.scale)||POKE_FIELD_SCALE_V12;
-      const w=grid*s, h=w;
-      const e=new pc.Entity('obj_cell_pokemon_v12');
-      e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
-      const mat=makePokemonMatV12(def);
-      e.render.material=mat || (typeof ensureCustomMat==='function' ? ensureCustomMat('#f59e0b') : null);
-      e.setLocalScale(w,h,Math.max(.012,s*.16));
-      e.setLocalPosition(0,h/2,0);
-      e.data={customObjectCell:true,planeTexture:true,pokemonFieldVisualV12:true};
-      root.addChild(e);
-      root.data=Object.assign({},root.data||{},{pokemonFieldFixVersion:POKE_FIELD_FIX_V12, visualFixedV10:true});
-    }catch(e){ console.warn('pokemon root rebuild v12 failed',e); }
-    return root;
-  }
-  function rootDefV12(root,def){
-    if(def) return def;
-    try{ return root && root.data && customObjectDefs ? customObjectDefs.get(String(root.data.defId||'')) : null; }catch(e){ return null; }
-  }
-  function boundsV12(root){
-    try{ if(typeof affinityVisualBoundsV6==='function') return affinityVisualBoundsV6(root); }catch(e){}
-    try{ return ultraObjectBounds(root); }catch(e){}
-    const p=(root&&root.getPosition)?root.getPosition().clone():new pc.Vec3();
-    return {min:p.clone(),max:p.clone(),center:p.clone()};
-  }
-  function groundV12(x,z){
-    try{ if(typeof groundTopAtV6==='function') return groundTopAtV6(x,z); }catch(e){}
-    try{ return terrainHeight(x,z)+1; }catch(e){ return 1; }
-  }
-  function finalBottomSnapV12(root,def){
-    try{
-      def=rootDefV12(root,def);
-      if(!root || !root.getPosition || !isPokemonInfoDefV12(def)) return root;
-      const p=root.getPosition();
-      const b=boundsV12(root);
-      const target=groundV12(p.x,p.z)+POKE_BOTTOM_CLEARANCE_V12;
-      const dy=target-b.min.y;
-      if(Number.isFinite(dy) && Math.abs(dy)>.015) root.setPosition(p.x,p.y+dy,p.z);
-      root.data=Object.assign({},root.data||{},{bottomClipFix:POKE_FIELD_FIX_V12});
-    }catch(e){}
-    return root;
-  }
-  function fixRootV12(root,def){
-    def=rootDefV12(root,def);
-    if(!root || !isPokemonInfoDefV12(def)) return root;
-    if(!root.data || root.data.pokemonFieldFixVersion!==POKE_FIELD_FIX_V12) rebuildPokemonRootV12(root,def);
-    return finalBottomSnapV12(root,def);
-  }
-
-  const __placeCustomObjectV12 = (typeof placeCustomObject==='function') ? placeCustomObject : null;
-  if(__placeCustomObjectV12){
-    placeCustomObject = function(def,x,y,z,yaw,instanceKey){
-      def=normalizePokemonDefV12(def);
-      const root=__placeCustomObjectV12.apply(this,arguments);
-      return fixRootV12(root,def);
-    };
-    window.placeCustomObject=placeCustomObject;
-  }
-
-  function tickV12(){
-    try{
-      ensurePokemonImagesV12();
-      if(!customObjectEntities) return;
-      for(const [,root] of customObjectEntities) fixRootV12(root,null);
-    }catch(e){}
-  }
-  try{ setTimeout(tickV12,120); setTimeout(tickV12,900); setTimeout(tickV12,2500); setInterval(tickV12,1000); }catch(e){}
-  try{ if(app && app.on) app.on('update',function(){ finalBottomSnapV12.__acc=(finalBottomSnapV12.__acc||0)+1; if(finalBottomSnapV12.__acc%12===0) tickV12(); }); }catch(e){}
-  window.applyPokemonFieldFixV12=tickV12;
-  try{ const n=ensurePokemonImagesV12(); if(n) console.log(POKE_FIELD_FIX_V12+' applied to '+n+' pokemon defs'); }catch(e){}
-})();
-
-
-// ===== Pokemon asset extension fallback + transparent bg final fix v13 =====
-// V12の jpg 決め打ちをやめる。generated cells(JS)を基本にしつつ、高解像度元画像がある場合だけ PNG/WebP/JPG の順で読み、白背景を透明化する。
-(function(){
-  const POKE_VISUAL_FIX_V13 = 'v13-pokemon-ext-fallback-transparent-smaller';
-  const POKE_FIELD_SCALE_V13 = 0.038;
-  const POKE_BOTTOM_CLEARANCE_V13 = 0.20;
-  function pokeNoV13(v){
-    const raw=String((v&&(v.id||v.type||v.infoType||v.defId))||v||'');
-    const m=raw.match(/(?:info[-_]?poke|poke|pokemon)[_-]?(\d{1,3})/i);
-    if(!m) return '';
-    const n=Math.max(1,Math.min(151,parseInt(m[1],10)||0));
-    return n?String(n).padStart(3,'0'):'';
-  }
-  function isPokeV13(def){
-    if(!def) return false;
-    const id=String(def.id||def.infoType||def.type||'');
-    return !!(def.pokemonGeneratedCells30 || /^info[-_]?poke[_-]?\d{3}$/i.test(id) || /^poke[_-]?\d{3}$/i.test(id));
-  }
-  function candidatesV13(def){
-    const no=pokeNoV13(def); if(!no) return [];
-    const base='assets/pokemon-gen1-icons/pokeicon-'+no;
-    const list=[];
-    for(const u of [def&&def.iconUrl, def&&def.sourceFile, def&&def.source, base+'.png', base+'.webp', base+'.jpg', base+'.jpeg']){
-      const s=String(u||'').trim();
-      if(s && !list.includes(s)) list.push(s);
-    }
-    return list;
-  }
-  function normalizePokeDefV13(def){
-    if(!isPokeV13(def)) return def;
-    const list=candidatesV13(def);
-    def.scale=POKE_FIELD_SCALE_V13;
-    def.grid=Math.max(30,Math.trunc(Number(def.grid)||30));
-    def.iconUrl=list[0]||def.iconUrl||'';
-    def.pokemonAssetCandidatesV13=list;
-    def.pokemonFieldFixVersion=POKE_VISUAL_FIX_V13;
-    return def;
-  }
-  const __startInfoImageLoadV13 = (typeof startInfoImageLoadV4==='function') ? startInfoImageLoadV4 : null;
-  if(__startInfoImageLoadV13){
-    startInfoImageLoadV4 = function(def){
-      if(!isPokeV13(def)) return __startInfoImageLoadV13.apply(this,arguments);
-      normalizePokeDefV13(def);
-      const list=candidatesV13(def);
-      if(!list.length) return null;
-      const key='pokemon-v13|'+pokeNoV13(def)+'|'+list.join('|');
-      let rec=INFO_TEXTURE_IMAGE_CACHE_V4.get(key); if(rec) return rec;
-      rec={state:'loading',img:null,url:list[0],tried:[],candidates:list.slice()};
-      INFO_TEXTURE_IMAGE_CACHE_V4.set(key,rec);
-      let idx=0;
-      const tryNext=()=>{
-        if(idx>=list.length){ rec.state='error'; rec.img=null; console.warn('pokemon image all candidates failed',list); return; }
-        const url=list[idx++]; rec.url=url; rec.tried.push(url);
-        const img=new Image(); img.crossOrigin='anonymous'; img.referrerPolicy='no-referrer'; img.decoding='async';
-        img.onload=()=>{ rec.state='loaded'; rec.img=img; def.iconUrl=url; try{INFO_TEXTURE_MATERIAL_CACHE_V4.clear();}catch(e){} try{refreshInfoTextureVisualsV4(def.id);}catch(e){} };
-        img.onerror=()=>{ tryNext(); };
-        img.src=url; rec.img=img;
-      };
-      tryNext();
-      return rec;
-    };
-    window.startInfoImageLoadV4=startInfoImageLoadV4;
-  }
-  function transparentWhiteBgV13(canvas){
-    const g=canvas.getContext('2d',{willReadFrequently:true});
-    const img=g.getImageData(0,0,canvas.width,canvas.height), d=img.data;
-    for(let i=0;i<d.length;i+=4){
-      const r=d[i], gr=d[i+1], b=d[i+2];
-      const max=Math.max(r,gr,b), min=Math.min(r,gr,b);
-      // 白/薄灰の背景だけ抜く。黒輪郭、影、体色は残す。
-      if((r>=242&&gr>=242&&b>=242) || (max-min<=12 && r>=184&&gr>=184&&b>=184)) d[i+3]=0;
-    }
-    g.putImageData(img,0,0);
-  }
-  function drawHiResPokeV13(canvas,def){
-    if(!canvas || !isPokeV13(def)) return false;
-    normalizePokeDefV13(def);
-    const rec=typeof startInfoImageLoadV4==='function' ? startInfoImageLoadV4(def) : null;
-    if(!rec || rec.state!=='loaded' || !rec.img) return false;
-    const g=canvas.getContext('2d'); const w=canvas.width,h=canvas.height;
-    const iw=rec.img.naturalWidth||rec.img.width, ih=rec.img.naturalHeight||rec.img.height;
-    if(!iw||!ih) return false;
-    g.clearRect(0,0,w,h); g.imageSmoothingEnabled=false;
-    const sc=Math.min(w/iw,h/ih)*0.96;
-    const dw=Math.max(1,Math.round(iw*sc)), dh=Math.max(1,Math.round(ih*sc));
-    g.drawImage(rec.img,Math.round((w-dw)/2),Math.round((h-dh)/2),dw,dh);
-    transparentWhiteBgV13(canvas);
-    return true;
-  }
-  const __makePlaneTextureCanvasV13 = (typeof makePlaneTextureCanvas==='function') ? makePlaneTextureCanvas : null;
-  if(__makePlaneTextureCanvasV13){
-    makePlaneTextureCanvas=function(def,pixelSize){
-      def=normalizePokeDefV13(def);
-      const c=__makePlaneTextureCanvasV13.apply(this,arguments);
-      if(c && isPokeV13(def)) drawHiResPokeV13(c,def);
-      return c;
-    };
-    window.makePlaneTextureCanvas=makePlaneTextureCanvas;
-  }
-  function boundsV13(root){ try{ if(typeof affinityVisualBoundsV6==='function') return affinityVisualBoundsV6(root); }catch(e){} try{return ultraObjectBounds(root);}catch(e){} const p=root.getPosition(); return {min:p,max:p,center:p}; }
-  function groundV13(x,z){ try{ if(typeof groundTopAtV6==='function') return groundTopAtV6(x,z); }catch(e){} try{return terrainHeight(x,z)+1;}catch(e){return 1;} }
-  function rebuildRootV13(root,def){
-    if(!root||!def||!isPokeV13(def)) return;
-    normalizePokeDefV13(def);
-    try{
-      for(const ch of Array.from(root.children||[])){ if(ch&&ch.data&&(ch.data.affinityAura||ch.data.ignoreObjectBounds)) continue; try{ch.destroy();}catch(e){} }
-      const grid=Math.max(30,Math.trunc(Number(def.grid)||30)), s=POKE_FIELD_SCALE_V13, w=grid*s, h=w;
-      const e=new pc.Entity('obj_cell_pokemon_v13');
-      e.addComponent('render',{type:'box',castShadows:false,receiveShadows:false});
-      const mat=(typeof makeInfoTextureMaterialV4==='function') ? makeInfoTextureMaterialV4(def) : null;
-      e.render.material=mat || (typeof ensureCustomMat==='function' ? ensureCustomMat('#f59e0b') : null);
-      e.setLocalScale(w,h,Math.max(.012,s*.16)); e.setLocalPosition(0,h/2,0);
-      e.data={customObjectCell:true,planeTexture:true,pokemonFieldVisualV13:true};
-      root.addChild(e); root.data=Object.assign({},root.data||{},{pokemonFieldFixVersion:POKE_VISUAL_FIX_V13});
-    }catch(e){ console.warn('pokemon rebuild v13 failed',e); }
-  }
-  function fixRootV13(root){
-    try{
-      if(!root||!root.data||!customObjectDefs) return;
-      const def=customObjectDefs.get(String(root.data.defId||''));
-      if(!isPokeV13(def)) return;
-      normalizePokeDefV13(def);
-      if(root.data.pokemonFieldFixVersion!==POKE_VISUAL_FIX_V13) rebuildRootV13(root,def);
-      const p=root.getPosition(), b=boundsV13(root), target=groundV13(p.x,p.z)+POKE_BOTTOM_CLEARANCE_V13, dy=target-b.min.y;
-      if(Number.isFinite(dy)&&Math.abs(dy)>.015) root.setPosition(p.x,p.y+dy,p.z);
-    }catch(e){}
-  }
-  const __placeCustomObjectV13 = (typeof placeCustomObject==='function') ? placeCustomObject : null;
-  if(__placeCustomObjectV13){
-    placeCustomObject=function(def,x,y,z,yaw,instanceKey){ def=normalizePokeDefV13(def); const root=__placeCustomObjectV13.apply(this,arguments); fixRootV13(root); return root; };
-    window.placeCustomObject=placeCustomObject;
-  }
-  function tickV13(){
-    try{ if(customObjectDefs){ for(const [,def] of customObjectDefs){ if(isPokeV13(def)) normalizePokeDefV13(def); } } }catch(e){}
-    try{ if(customObjectEntities){ for(const [,root] of customObjectEntities) fixRootV13(root); } }catch(e){}
-  }
-  try{ setTimeout(tickV13,100); setTimeout(tickV13,800); setInterval(tickV13,1000); if(app&&app.on) app.on('update',()=>{ tickV13.__n=(tickV13.__n||0)+1; if(tickV13.__n%18===0) tickV13(); }); }catch(e){}
-  window.applyPokemonVisualFixV13=tickV13;
+    if(obj && (!block || obj.t <= block.t + .18)) return Object.assign({place:block?block.place:last}, obj.objectHit ? {objectHit:obj.objectHit} : {});
+    if(block) return {hit:block.hit,place:block.place};
+    return oldRayBlock.apply(this,arguments);
+  };
+  window.rayBlock = rayBlock;
+  try{ console.log(VERSION+' active'); }catch(e){}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
