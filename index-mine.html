@@ -7582,177 +7582,195 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 })();
 
 
-// ===== Pokemon info texture field-size normalizer v17 =====
-// 96x96 の全セルを読み込みつつ、フィールドでは「空白込みのgrid全体」ではなく
-// 実際に色があるbboxを基準にクロップ＆センタリングして、適切な看板サイズへ正規化する。
-// これで legacy名の 30x30.generated.js に grid:30 が残っていても、cells座標から実gridを推定して全身を潰さない。
+// ===== Pokemon info texture field-size normalizer v16 =====
+// 96x96 の細かいドットデータは全部読み込む。ただしフィールド上では画面UIに被らない
+// 1体あたり約1.08mの扱いやすい看板サイズへ正規化する。
 (function(){
-  const POKEMON_FIELD_SIZE_V17 = 'pokemon-field-size-v17';
-  const POKE_FIELD_VISIBLE_SIZE = 1.36;     // 実際のポケモン本体の最大辺をこのサイズへ寄せる
+  const POKEMON_FIELD_SIZE_V16 = 'pokemon-field-size-v16';
+  const POKE_FIELD_WORLD_SIZE = 1.08;     // フィールドに置いた時の正方形全体サイズ
   const POKE_FIELD_MIN_GRID = 24;
   const POKE_FIELD_MAX_GRID = 128;
   const POKE_FIELD_MAX_CELLS = 12000;
-  const POKE_FIELD_PADDING = 2;
-
   function clampNum(v, lo, hi, fb){
     v = Number(v);
     return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fb;
   }
-  function pokeNoFromAnyV17(v){
+  function pokeNoFromAnyV16(v){
     const raw = String((v && (v.id || v.type || v.infoType || v.defId)) || v || '');
     const m = raw.match(/(?:info-poke_|poke[_-]?)(\d{1,3})/i);
     if(!m) return 0;
     const n = Math.trunc(Number(m[1]) || 0);
     return n>=1 && n<=151 ? n : 0;
   }
-  function isPokemonPlaneV17(def){
+  function isPokemonPlaneV16(def){
     if(!def) return false;
-    if(pokeNoFromAnyV17(def)) return true;
+    if(pokeNoFromAnyV16(def)) return true;
     if(def.infoRole === 'pokemon') return true;
     if(def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30 || def.pokemonFallbackCells30) return true;
     return false;
   }
-  function inferGridFromCellsV17(def){
-    let g = Math.trunc(Number(def && def.grid) || 0);
-    const cells = Array.isArray(def && def.cells) ? def.cells : [];
-    for(const c of cells){
-      const x = Math.trunc(Number(c && c.x));
-      const y = Math.trunc(Number(c && c.y));
-      if(Number.isFinite(x)) g = Math.max(g, x + 1);
-      if(Number.isFinite(y)) g = Math.max(g, y + 1);
-    }
-    // legacyファイル名が30x30でも、中身が96座標ならここで96になる。
-    // 逆に本当に30しか無い場合は30のまま扱う。
-    return Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, g || 96));
-  }
-  function cleanCellsV17(def, srcGrid){
-    const out=[];
-    const cells = Array.isArray(def && def.cells) ? def.cells : [];
-    for(const c of cells.slice(0, POKE_FIELD_MAX_CELLS)){
-      const x=Math.trunc(Number(c && c.x));
-      const y=Math.trunc(Number(c && c.y));
-      if(!Number.isFinite(x)||!Number.isFinite(y)) continue;
-      if(x<0||y<0||x>=srcGrid||y>=srcGrid) continue;
-      out.push({x,y,color:(typeof normalizeHexColor==='function' ? normalizeHexColor(c.color) : String(c.color||'#ffffff'))});
-    }
-    return out;
-  }
-  function bboxV17(cells){
-    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-    for(const c of cells){
-      if(c.x<minX) minX=c.x; if(c.x>maxX) maxX=c.x;
-      if(c.y<minY) minY=c.y; if(c.y>maxY) maxY=c.y;
-    }
-    if(!cells.length) return null;
-    return {minX,minY,maxX,maxY,w:maxX-minX+1,h:maxY-minY+1};
-  }
-  function normalizePokeDefV17(def){
-    if(!def || !isPokemonPlaneV17(def)) return def;
-    const srcGrid = inferGridFromCellsV17(def);
-    const srcCells = cleanCellsV17(def, srcGrid);
-    const box = bboxV17(srcCells);
-    if(!box) return Object.assign({}, def, {kind:'plane', grid:srcGrid, scale:POKE_FIELD_VISIBLE_SIZE/srcGrid, cells:srcCells});
-
-    // 空白の多い公式画像をそのままgrid基準で置くと小さすぎたり片寄るので、
-    // 実セルbboxを正方形にクロップして中央へ寄せる。セルは全部残す。
-    const side = Math.max(
-      POKE_FIELD_MIN_GRID,
-      Math.min(POKE_FIELD_MAX_GRID, Math.max(box.w, box.h) + POKE_FIELD_PADDING * 2)
-    );
-    const offX = Math.floor((side - box.w) / 2) - box.minX;
-    const offY = Math.floor((side - box.h) / 2) - box.minY;
-    const mapped=[];
-    for(const c of srcCells){
-      const nx = c.x + offX;
-      const ny = c.y + offY;
-      if(nx<0||ny<0||nx>=side||ny>=side) continue;
-      mapped.push({x:nx,y:ny,color:c.color});
-    }
-    const visibleSide = Math.max(box.w, box.h) || side;
-    // 実本体の最大辺が POKE_FIELD_VISIBLE_SIZE になるようにする。
-    // sideにpaddingを含めるので、全体正方形は少しだけ大きい。
-    const scale = clampNum(POKE_FIELD_VISIBLE_SIZE / visibleSide, 0.004, 0.08, POKE_FIELD_VISIBLE_SIZE / side);
+  function normalizePokeDefV16(def){
+    if(!def || !isPokemonPlaneV16(def)) return def;
+    const grid = Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, Math.trunc(Number(def.grid) || 96)));
+    const scale = POKE_FIELD_WORLD_SIZE / grid;
+    const cells = Array.isArray(def.cells)
+      ? def.cells.slice(0, Math.min(POKE_FIELD_MAX_CELLS, grid * grid)).map(c=>({
+          x:Math.trunc(Number(c.x)),
+          y:Math.trunc(Number(c.y)),
+          color:(typeof normalizeHexColor==='function' ? normalizeHexColor(c.color) : String(c.color||'#ffffff'))
+        })).filter(c=>c.x>=0 && c.x<grid && c.y>=0 && c.y<grid)
+      : def.cells;
     return Object.assign({}, def, {
       kind:'plane',
-      grid:side,
+      grid,
       scale,
-      cells:mapped.slice(0, Math.min(POKE_FIELD_MAX_CELLS, side*side)),
-      pokemonFieldScaleV17:true,
-      pokemonFieldWorldSize:POKE_FIELD_VISIBLE_SIZE,
-      pokemonSourceGridV17:srcGrid,
-      pokemonSourceBBoxV17:box,
-      pokemonDotVersion:String(def.pokemonDotVersion || '') + '|field-size-v17-bbox'
+      cells,
+      pokemonFieldScaleV16:true,
+      pokemonFieldWorldSize:POKE_FIELD_WORLD_SIZE,
+      pokemonDotVersion:String(def.pokemonDotVersion || '') + '|field-size-v16'
     });
   }
 
   try{
     const oldValidate = validateObjectDef;
     validateObjectDef = function(def){
-      const normalized = isPokemonPlaneV17(def) ? normalizePokeDefV17(def) : def;
+      const normalized = isPokemonPlaneV16(def) ? normalizePokeDefV16(def) : def;
       const clean = oldValidate.apply(this, [normalized]);
-      return isPokemonPlaneV17(clean) ? Object.assign(clean, {
-        pokemonFieldScaleV17:true,
-        pokemonFieldWorldSize:POKE_FIELD_VISIBLE_SIZE,
-        pokemonSourceGridV17:normalized && normalized.pokemonSourceGridV17,
-        pokemonSourceBBoxV17:normalized && normalized.pokemonSourceBBoxV17
+      return isPokemonPlaneV16(clean) ? Object.assign(clean, {
+        scale: POKE_FIELD_WORLD_SIZE / Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, Math.trunc(Number(clean.grid)||96))),
+        pokemonFieldScaleV16:true,
+        pokemonFieldWorldSize:POKE_FIELD_WORLD_SIZE
       }) : clean;
     };
     window.validateObjectDef = validateObjectDef;
-  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' validate hook failed', e); }
+  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V16+' validate hook failed', e); }
 
-  // 既に出ている個体は、再生成が一番安全。中途半端に子要素だけ拡大縮小すると
-  // 旧grid/旧bboxの偏りが残るため、定義をv17化して place し直す。
-  function rebuildExistingPokemonV17(){
-    try{
-      if(!window.customObjectEntities || !window.customObjectDefs || typeof placeCustomObject!=='function') return 0;
-      let rebuilt=0;
-      for(const [key,root] of Array.from(customObjectEntities.entries())){
-        const id = root && root.data && root.data.defId;
-        const def = id && customObjectDefs.get(id);
-        if(!def || !isPokemonPlaneV17(def) || !root || !root.getPosition) continue;
-        const p=root.getPosition();
-        let yaw=0;
-        try{ yaw=(root.getEulerAngles && root.getEulerAngles().y || 0) * Math.PI / 180; }catch(e){}
-        try{ root.destroy && root.destroy(); }catch(e){}
-        try{ customObjectEntities.delete(key); }catch(e){}
-        const nd = validateObjectDef(Object.assign({}, def, {id}));
-        if(nd){ customObjectDefs.set(id, nd); placeCustomObject(nd, p.x, p.y, p.z, yaw, key); rebuilt++; }
+  function resizeExistingPlaneRootV16(root, def){
+    if(!root || !def || !isPokemonPlaneV16(def) || !root.children) return;
+    const grid = Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, Math.trunc(Number(def.grid)||96)));
+    const s = POKE_FIELD_WORLD_SIZE / grid;
+    const h = grid * s;
+    for(const ch of Array.from(root.children||[])){
+      if(!ch || !ch.data) continue;
+      if(ch.data.planeTexture && ch.setLocalScale && ch.setLocalPosition){
+        try{ ch.setLocalScale(POKE_FIELD_WORLD_SIZE, POKE_FIELD_WORLD_SIZE, Math.max(.018, s*.20)); ch.setLocalPosition(0, POKE_FIELD_WORLD_SIZE/2, 0); }catch(e){}
       }
-      return rebuilt;
-    }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' rebuild existing failed', e); return 0; }
+    }
+    try{ root.data = Object.assign({}, root.data||{}, {pokemonFieldScaleV16:true, pokemonFieldWorldSize:POKE_FIELD_WORLD_SIZE}); }catch(e){}
   }
 
   try{
     const oldPlace = placeCustomObject;
     placeCustomObject = function(def,x,y,z,yaw,instanceKey){
-      const normalized = isPokemonPlaneV17(def) ? normalizePokeDefV17(def) : def;
-      return oldPlace.apply(this, [normalized,x,y,z,yaw,instanceKey]);
+      const normalized = isPokemonPlaneV16(def) ? normalizePokeDefV16(def) : def;
+      const root = oldPlace.apply(this, [normalized,x,y,z,yaw,instanceKey]);
+      try{ resizeExistingPlaneRootV16(root, normalized); }catch(e){}
+      return root;
     };
     window.placeCustomObject = placeCustomObject;
-  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' place hook failed', e); }
+  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V16+' place hook failed', e); }
 
-  function normalizeRegisteredPokemonV17(){
+  function normalizeRegisteredPokemonV16(){
     let n=0;
     try{
       if(!window.customObjectDefs) return 0;
       for(const [id,def] of Array.from(customObjectDefs.entries())){
-        if(!isPokemonPlaneV17(Object.assign({}, def, {id}))) continue;
-        const nd = (typeof validateObjectDef==='function') ? validateObjectDef(Object.assign({}, def, {id})) : normalizePokeDefV17(Object.assign({}, def, {id}));
+        if(!isPokemonPlaneV16(Object.assign({}, def, {id}))) continue;
+        const nd = (typeof validateObjectDef==='function') ? validateObjectDef(Object.assign({}, def, {id})) : normalizePokeDefV16(Object.assign({}, def, {id}));
         if(nd){ customObjectDefs.set(id, nd); n++; }
+      }
+      for(const [,root] of Array.from(customObjectEntities||[])){
+        const id = root && root.data && root.data.defId;
+        const def = id && customObjectDefs.get(id);
+        if(def && isPokemonPlaneV16(def)) resizeExistingPlaneRootV16(root, def);
       }
       try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
       try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch(e){}
-    }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' normalize failed', e); }
+    }catch(e){ console.warn(POKEMON_FIELD_SIZE_V16+' normalize failed', e); }
     return n;
   }
-  window.normalizePokemonFieldSizeV17 = normalizeRegisteredPokemonV17;
-  window.rebuildPokemonFieldObjectsV17 = rebuildExistingPokemonV17;
-  try{ normalizeRegisteredPokemonV17(); }catch(e){}
-  setTimeout(()=>{ try{ normalizeRegisteredPokemonV17(); rebuildExistingPokemonV17(); }catch(e){} }, 600);
-  setTimeout(()=>{ try{ normalizeRegisteredPokemonV17(); rebuildExistingPokemonV17(); }catch(e){} }, 2200);
-  try{ console.log(POKEMON_FIELD_SIZE_V17+' active: visible size='+POKE_FIELD_VISIBLE_SIZE+'m bbox-fit'); }catch(e){}
+  window.normalizePokemonFieldSizeV16 = normalizeRegisteredPokemonV16;
+  try{ normalizeRegisteredPokemonV16(); }catch(e){}
+  setTimeout(()=>{ try{ normalizeRegisteredPokemonV16(); }catch(e){} }, 600);
+  setTimeout(()=>{ try{ normalizeRegisteredPokemonV16(); }catch(e){} }, 2000);
+  try{ console.log(POKEMON_FIELD_SIZE_V16+' active: field world size='+POKE_FIELD_WORLD_SIZE+'m'); }catch(e){}
 })();
 
+// ===== Pokemon/info texture ground clipping fix v17 =====
+// V16でポケモン系InfoTextureを1.08m看板へ後段リサイズした結果、
+// 先に実行された地面スナップ位置と実表示サイズがズレて、下半分が地面に潜る端末があった。
+// ここでは「描画後の実メッシュ最下面」を地面より少し上に再スナップする。
+(function(){
+  const POKE_GROUND_CLIP_FIX_V17 = 'pokemon-ground-clip-fix-v17';
+  const HOVER = 0.075;
+  function pokeNoV17(v){
+    const raw=String((v&&(v.id||v.type||v.infoType||v.defId))||v||'');
+    const m=raw.match(/(?:info-poke_|poke[_-]?)(\d{1,3})/i);
+    const n=m?Math.trunc(Number(m[1])||0):0;
+    return n>=1&&n<=151?n:0;
+  }
+  function isPokemonInfoDefV17(def){
+    return !!(def && (pokeNoV17(def) || def.infoRole==='pokemon' || def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30 || def.pokemonFallbackCells30));
+  }
+  function groundYV17(x,z){
+    let g=-999;
+    try{ if(typeof heightAt==='function') g=heightAt(x,z,16); }catch(e){}
+    if(!Number.isFinite(g)||g<=-900){ try{ if(typeof terrainHeight==='function') g=terrainHeight(x,z); }catch(e){ g=0; } }
+    return (Number.isFinite(g)?g:0)+1;
+  }
+  function renderMinYV17(root){
+    if(!root||!root.children) return NaN;
+    let minY=Infinity, hit=false;
+    for(const ch of Array.from(root.children||[])){
+      if(!ch||!ch.getPosition||!ch.getLocalScale) continue;
+      if(ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)) continue;
+      const p=ch.getPosition(), sc=ch.getLocalScale();
+      const hy=Math.max(Math.abs(sc.y),.001)*.5;
+      minY=Math.min(minY,p.y-hy); hit=true;
+    }
+    return hit?minY:NaN;
+  }
+  function snapOneV17(root){
+    if(!root||!root.getPosition||!root.data) return false;
+    const def = (typeof customObjectDefs!=='undefined' && customObjectDefs) ? customObjectDefs.get(root.data.defId) : null;
+    if(!isPokemonInfoDefV17(def)) return false;
+    const p=root.getPosition();
+    const bottom=renderMinYV17(root);
+    const gy=groundYV17(p.x,p.z)+HOVER;
+    if(!Number.isFinite(bottom)||!Number.isFinite(gy)) return false;
+    const dy=gy-bottom;
+    // 大きく潜っている時は即補正。微小な上下動は揺れ防止で無視。
+    if(Math.abs(dy)>.012){ root.setPosition(p.x,p.y+dy,p.z); }
+    root.data=Object.assign({},root.data,{onGround:true,vy:0,pokemonGroundClipFixV17:true});
+    return true;
+  }
+  function snapAllV17(){
+    try{ if(typeof customObjectEntities==='undefined'||!customObjectEntities) return 0; let n=0; for(const [,root] of Array.from(customObjectEntities)){ if(snapOneV17(root)) n++; } return n; }catch(e){ return 0; }
+  }
+  try{
+    const oldPlace=placeCustomObject;
+    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+      const root=oldPlace.apply(this,arguments);
+      try{ snapOneV17(root); setTimeout(()=>snapOneV17(root),80); setTimeout(()=>snapOneV17(root),650); }catch(e){}
+      return root;
+    };
+    window.placeCustomObject=placeCustomObject;
+  }catch(e){ console.warn(POKE_GROUND_CLIP_FIX_V17+' place hook failed',e); }
+  try{
+    const oldUpdate=updateCustomObjectRuntime;
+    let acc=0;
+    updateCustomObjectRuntime=function(dt){
+      const r=oldUpdate.apply(this,arguments);
+      acc+=Number(dt)||0;
+      if(acc>.35){ acc=0; snapAllV17(); }
+      return r;
+    };
+  }catch(e){ console.warn(POKE_GROUND_CLIP_FIX_V17+' runtime hook skipped',e); }
+  window.snapPokemonInfoToGroundV17=snapAllV17;
+  setTimeout(()=>{ try{ snapAllV17(); }catch(e){} },300);
+  setTimeout(()=>{ try{ snapAllV17(); }catch(e){} },1500);
+  try{ console.log(POKE_GROUND_CLIP_FIX_V17+' active'); }catch(e){}
+})();
 
 setMsg('PlayCanvas Engine読込完了','good');
 })();
