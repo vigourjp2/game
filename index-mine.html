@@ -7793,6 +7793,72 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ console.log(VERSION+' active'); }catch(e){}
 })();
 
+
+// ===== InfoTexture field-size / ground-anchor fix =====
+// 図鑑・generated cells プレビューは触らず、ゲームフィールド上の野生情報テクスチャだけを縮小して足元接地にする。
+(function(){
+  const FIELD_INFO_MAX_HEIGHT = 1.05;
+  const FIELD_INFO_GROUND_OFFSET = 0.025;
+  function isFieldInfoPlaneDef(def){
+    return !!(def && def.infoTexture && def.kind === 'plane');
+  }
+  function fieldInfoScaleFor(def){
+    const grid = Math.max(1, Math.min(128, Math.trunc(Number(def && def.grid) || 16)));
+    const current = Number(def && def.scale) || 0.06;
+    return Math.max(0.012, Math.min(current, FIELD_INFO_MAX_HEIGHT / grid));
+  }
+  function groundYAt(x,z,fallback){
+    try{
+      if(typeof terrainHeight === 'function'){
+        const gy = Number(terrainHeight(Number(x)||0, Number(z)||0));
+        if(Number.isFinite(gy)) return gy;
+      }
+    }catch(e){}
+    return Number.isFinite(Number(fallback)) ? Number(fallback) : 0;
+  }
+  function fixFieldInfoRoot(root, def, x, z){
+    if(!root || !isFieldInfoPlaneDef(def)) return root;
+    const grid = Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || 16)));
+    const scale = fieldInfoScaleFor(def);
+    const h = grid * scale;
+    try{
+      for(const child of root.children || []){
+        if(!child || !child.data || !child.data.planeTexture) continue;
+        if(child.setLocalScale) child.setLocalScale(h, h, Math.max(.012, scale * .18));
+        if(child.setLocalPosition) child.setLocalPosition(0, h / 2, 0);
+      }
+      const p = root.getPosition ? root.getPosition() : null;
+      const gx = Number.isFinite(Number(x)) ? Number(x) : (p ? p.x : 0);
+      const gz = Number.isFinite(Number(z)) ? Number(z) : (p ? p.z : 0);
+      const gy = groundYAt(gx, gz, p ? p.y : 0) + FIELD_INFO_GROUND_OFFSET;
+      if(root.setPosition) root.setPosition(gx, gy, gz);
+      root.data = Object.assign({}, root.data || {}, {fieldInfoSizeFixed:true, fieldInfoHeight:h});
+    }catch(e){ console.warn('field info texture size fix failed', e); }
+    return root;
+  }
+  try{
+    const prevPlace = placeCustomObject;
+    placeCustomObject = function(def, x, y, z, yaw, instanceKey){
+      const originalDef = def;
+      if(isFieldInfoPlaneDef(def)) def = Object.assign({}, def, {scale: fieldInfoScaleFor(def)});
+      const root = prevPlace.apply(this, [def, x, y, z, yaw, instanceKey]);
+      return fixFieldInfoRoot(root, def || originalDef, x, z);
+    };
+  }catch(e){ console.warn('field info texture place patch failed', e); }
+  try{
+    setTimeout(function(){
+      if(!customObjectEntities || !customObjectDefs) return;
+      for(const root of customObjectEntities.values()){
+        const def = customObjectDefs.get(root && root.data && root.data.defId);
+        if(def && isFieldInfoPlaneDef(def)){
+          const p = root.getPosition ? root.getPosition() : {x:0,z:0};
+          fixFieldInfoRoot(root, def, p.x, p.z);
+        }
+      }
+    }, 500);
+  }catch(e){}
+})();
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
