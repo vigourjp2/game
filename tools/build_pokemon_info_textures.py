@@ -1,23 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Full 151 Pokemon info texture builder, based on the confirmed 001 smoke-test path.
-Downloads/caches 150x150 jpg icons, converts each to max 30x30 cell color data,
-and writes files for index-mine.html loader.
+Download archived Pokemon Gen1 hand-held icons and convert each 150x150 image into
+30x30 grid cell colors for index-mine.html information plane textures.
+
+Output:
+  generated/pokemon-info-textures.gen1.30x30.generated.js
+  generated/pokemon-info-textures.gen1.30x30.json
+  assets/pokemon-gen1-icons/pokeicon-001.jpg ... pokeicon-151.jpg
 """
 from __future__ import annotations
+import json, os, re, sys, time
+from collections import Counter
+from io import BytesIO
 from pathlib import Path
 from urllib.request import Request, urlopen
-from PIL import Image
-from collections import Counter
-import json, sys, time, socket
+from urllib.error import URLError, HTTPError
 
-socket.setdefaulttimeout(90)
+try:
+    from PIL import Image
+except Exception:
+    print("Pillow is required: pip install pillow", file=sys.stderr)
+    raise
+
 ROOT = Path(__file__).resolve().parents[1]
 ASSET_DIR = ROOT / "assets" / "pokemon-gen1-icons"
-GEN_DIR = ROOT / "generated"
+OUT_DIR = ROOT / "generated"
 ASSET_DIR.mkdir(parents=True, exist_ok=True)
-GEN_DIR.mkdir(parents=True, exist_ok=True)
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 NAMES = [
 "フシギダネ","フシギソウ","フシギバナ","ヒトカゲ","リザード","リザードン","ゼニガメ","カメール","カメックス","キャタピー",
@@ -37,79 +47,87 @@ NAMES = [
 "カブトプス","プテラ","カビゴン","フリーザー","サンダー","ファイヤー","ミニリュウ","ハクリュー","カイリュー","ミュウツー","ミュウ"
 ]
 
-URLS = [
-    "https://web.archive.org/web/20200829022319im_/https://pixel-art.tsurezure-brog.com/home/images/pokeicon-{n}-150x150.jpg",
+URL_PATTERNS = [
     "https://web.archive.org/web/20240319000051im_/https://pixel-art.tsurezure-brog.com/home/images/pokeicon-{n}-150x150.jpg",
+    "https://web.archive.org/web/20200829022319im_/https://pixel-art.tsurezure-brog.com/home/images/pokeicon-{n}-150x150.jpg",
 ]
-HEADERS = {
-    "User-Agent":"Mozilla/5.0 GitHubActions PokemonInfoTextureFull151/1.0",
-    "Accept":"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-    "Connection":"close",
-}
 
-def download(n:int) -> tuple[Path,str]:
+def url_for(n: int) -> str:
+    return URL_PATTERNS[0].format(n=n)
+
+def download(n: int) -> Path:
     out = ASSET_DIR / f"pokeicon-{n:03d}.jpg"
     if out.exists() and out.stat().st_size > 1000:
-        return out, "cached"
+        return out
     last = None
-    for attempt in range(1, 5):
-        for tmpl in URLS:
-            url = tmpl.format(n=n)
-            try:
-                print(f"DL {n:03d} attempt={attempt} url={url}", flush=True)
-                req = Request(url, headers=HEADERS)
-                with urlopen(req, timeout=90) as r:
-                    data = r.read()
-                    ctype = r.headers.get("content-type", "")
-                if len(data) < 1000:
-                    raise RuntimeError(f"too small: {len(data)} bytes content-type={ctype}")
-                out.write_bytes(data)
-                return out, url
-            except Exception as e:
-                last = e
-                print(f"NG {n:03d}: {e!r}", file=sys.stderr, flush=True)
-                time.sleep(3 * attempt)
-    raise RuntimeError(f"download failed #{n:03d}: {last!r}")
+    for pat in URL_PATTERNS:
+        url = pat.format(n=n)
+        try:
+            req = Request(url, headers={"User-Agent":"Mozilla/5.0 texture-builder"})
+            with urlopen(req, timeout=30) as r:
+                data = r.read()
+            if len(data) < 1000:
+                raise RuntimeError(f"too small: {len(data)} bytes")
+            out.write_bytes(data)
+            return out
+        except Exception as e:
+            last = e
+            time.sleep(0.25)
+    raise RuntimeError(f"download failed #{n:03d}: {last}")
 
-def is_bg(r,g,b,a):
-    if a < 16: return True
-    if r >= 235 and g >= 235 and b >= 235: return True
-    if abs(r-g) <= 8 and abs(g-b) <= 8 and r >= 170: return True
+def is_grid_or_bg(r,g,b,a=255):
+    # Archive/icon page images contain white/very-light backing and gray grid lines.
+    if a < 16:
+        return True
+    # very light background
+    if r >= 235 and g >= 235 and b >= 235:
+        return True
+    # gray grid lines, low saturation and light
+    if abs(r-g) <= 8 and abs(g-b) <= 8 and r >= 170:
+        return True
     return False
 
-def qhex(rgb):
+def quant_hex(rgb):
     r,g,b = rgb
+    # mild quantization removes JPEG noise while preserving source colors.
     q = lambda v: int(round(v/8)*8) if v < 248 else 255
     return f"#{q(r):02x}{q(g):02x}{q(b):02x}"
 
-def extract_cells(path:Path, grid:int=30):
+def analyze_image(path: Path, grid: int = 30):
     img = Image.open(path).convert("RGBA")
-    if img.size != (150, 150):
+    # The source icon is 150x150. Resize/crop only if a mirror returns a different dimension.
+    if img.size != (150,150):
         img = img.resize((150,150), Image.Resampling.NEAREST)
+    w,h = img.size
+    cell_w = w / grid
+    cell_h = h / grid
     cells = []
-    step = 150 / grid
     for y in range(grid):
         for x in range(grid):
-            x0, x1 = int(round(x*step)), int(round((x+1)*step))
-            y0, y1 = int(round(y*step)), int(round((y+1)*step))
-            pix=[]
+            x0, x1 = int(round(x*cell_w)), int(round((x+1)*cell_w))
+            y0, y1 = int(round(y*cell_h)), int(round((y+1)*cell_h))
+            pix = []
             for py in range(y0, y1):
                 for px in range(x0, x1):
-                    r,g,b,a = img.getpixel((min(px,149), min(py,149)))
-                    if not is_bg(r,g,b,a):
+                    r,g,b,a = img.getpixel((min(px,w-1), min(py,h-1)))
+                    if not is_grid_or_bg(r,g,b,a):
                         pix.append((r,g,b))
-            if pix:
-                color = Counter(qhex(p) for p in pix).most_common(1)[0][0]
-                cells.append({"x":x,"y":y,"color":color})
+            if not pix:
+                continue
+            # dominant quantized color in the 5x5 cell.
+            hexcol, count = Counter(quant_hex(p) for p in pix).most_common(1)[0]
+            # Ignore a cell if almost all surviving pixels are tiny JPG dirt.
+            if len(pix) >= 2:
+                cells.append({"x":x,"y":y,"color":hexcol})
     return cells
 
 def main():
-    defs=[]
-    failures=[]
-    for n,name in enumerate(NAMES,1):
+    defs = []
+    failures = []
+    for n, name in enumerate(NAMES, 1):
         try:
-            path, src = download(n)
-            cells = extract_cells(path, 30)
+            path = download(n)
+            cells = analyze_image(path, 30)
             if not cells:
                 raise RuntimeError("no colored cells extracted")
             defs.append({
@@ -118,28 +136,30 @@ def main():
                 "name": f"情報テクスチャ:{n:03d} {name}",
                 "kind": "plane",
                 "grid": 30,
+                "scale": 0.045,
                 "cells": cells,
                 "infoTexture": True,
                 "infoType": f"pokemon-{n:03d}",
                 "infoRole": "pokemon-gen1",
                 "infoBehavior": f"第1世代ポケモン手持ちアイコン由来の30×30情報テクスチャ: {name}",
-                "sourceUrl": URLS[0].format(n=n),
+                "infoPhysics": {"massKg": 1, "gravityScale": 1, "terminalVelocity": 18, "bounce": 0},
+                "hp": 8,
+                "sourceUrl": url_for(n),
+                "createdAt": 1,
+                "updatedAt": 1
             })
-            print(f"OK {n:03d} {name}: {len(cells)} cells src={src}", flush=True)
+            print(f"OK {n:03d} {name}: {len(cells)} cells")
         except Exception as e:
-            failures.append({"no":n,"name":name,"error":str(e)})
-            print(f"FAIL {n:03d} {name}: {e}", file=sys.stderr, flush=True)
-    payload = {"ok": len(defs)==151, "grid":30, "count":len(defs), "failures":failures, "defs":defs}
-    (GEN_DIR / "pokemon-info-textures.gen1.30x30.json").write_text(json.dumps(payload, ensure_ascii=False, separators=(",",":")), encoding="utf-8")
-    (GEN_DIR / "pokemon-info-textures.gen1.30x30.generated.js").write_text(
-        "/* Generated from 150x150 source icons, max 30x30 cells */\n" +
-        "window.POKEMON_INFO_TEXTURE_DEFS_30 = " + json.dumps(defs, ensure_ascii=False, separators=(",",":")) + ";\n",
-        encoding="utf-8"
-    )
-    print(f"FULL151_RESULT count={len(defs)} failures={len(failures)}", flush=True)
+            failures.append({"no": n, "name": name, "error": str(e)})
+            print(f"NG {n:03d} {name}: {e}", file=sys.stderr)
+    payload = {"grid":30, "count":len(defs), "defs":defs, "failures":failures}
+    (OUT_DIR / "pokemon-info-textures.gen1.30x30.json").write_text(json.dumps(payload, ensure_ascii=False, separators=(",",":")), encoding="utf-8")
+    js = "/* Generated by tools/build_pokemon_info_textures.py */\n" \
+         "window.POKEMON_INFO_TEXTURE_DEFS_30 = " + json.dumps(defs, ensure_ascii=False, separators=(",",":")) + ";\n"
+    (OUT_DIR / "pokemon-info-textures.gen1.30x30.generated.js").write_text(js, encoding="utf-8")
+    print(f"Wrote {len(defs)} definitions, failures={len(failures)}")
     if failures:
-        print(json.dumps(failures, ensure_ascii=False, indent=2), file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()
