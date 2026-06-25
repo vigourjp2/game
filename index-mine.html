@@ -1061,10 +1061,10 @@ function validateObjectDef(def){
  if(!def || !Array.isArray(def.cells)) return null;
  const kind = (def.kind==='plane') ? 'plane' : 'voxel3d';
  const gridSize = kind==='plane'
-   ? Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)))
+   ? Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || OBJECT_GRID)))
    : OBJECT_GRID;
  const cells=[];
- const maxCells = kind==='plane' ? Math.min(4096, gridSize * gridSize) : 1536;
+ const maxCells = kind==='plane' ? Math.min(16384, gridSize * gridSize) : 1536;
  for(const c of def.cells.slice(0,maxCells)){
    const x=Math.trunc(Number(c.x));
    const y=Math.trunc(Number(c.y));
@@ -1158,9 +1158,9 @@ function placeCustomObject(def, x, y, z, yaw, instanceKey){
  if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
  const root=new pc.Entity('custom_object_'+instanceKey);
  const s=def.scale;
- const gridSize = Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)));
+ const gridSize = Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || OBJECT_GRID)));
  if(def.kind==='plane'){
-   const used=def.cells.slice(0, Math.min(4096, gridSize * gridSize));
+   const used=def.cells.slice(0, Math.min(16384, gridSize * gridSize));
    for(const c of used){
      const mat=ensureCustomMat(c.color);
      const lx=(c.x-(gridSize-1)/2)*s;
@@ -4975,7 +4975,7 @@ app.on('update',function(){ __smoothFrameNo++; });
       try{
         const c = document.createElement('canvas'); c.width = grid; c.height = grid;
         const cx = c.getContext('2d', {willReadFrequently:true});
-        cx.clearRect(0,0,grid,grid); const pad=Math.max(1,Math.floor(grid*.07)); cx.drawImage(img,pad,pad,grid-pad*2,grid-pad*2);
+        cx.clearRect(0,0,grid,grid); cx.drawImage(img,0,0,grid,grid);
         const data = cx.getImageData(0,0,grid,grid).data, cells=[];
         for(let y=0;y<grid;y++) for(let x=0;x<grid;x++){
           const i=(y*grid+x)*4, a=data[i+3]; if(a<24) continue;
@@ -5686,7 +5686,7 @@ try{
 // 目的: V7の再ベイク(16x16仮アイコン)より後で、GitHub Actions生成の30x30 cellsを必ず優先する。
 // さらに ensureInfoTextureDefV3 をラップして、野生スポーン直前に再生成されても30x30へ戻す。
 (function(){
-  const POKE_DOT_V9 = 'v9-generated-pokemon-30x30-final-override';
+  const POKE_DOT_V9 = 'v11-generated-pokemon-grid96-final-override';
   function generatedPokemonDefsV9(){
     if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) return window.POKEMON_INFO_TEXTURE_DEFS_30;
     const obj = window.POKEMON_INFO_TEXTURES_GEN1_30X30 || window.POKEMON_INFO_TEXTURES || window.POKEMON_DOTDATA;
@@ -5720,7 +5720,7 @@ try{
     return Object.assign({}, base||{}, {
       id, type, infoType:type,
       name:(base && base.name) || ('情報テクスチャ:' + (d.name || ('No.'+no))),
-      kind:'plane', grid:Math.max(1, Math.min(64, Math.trunc(Number(d.grid)||30))), scale:Number(d.scale)||.085,
+      kind:'plane', grid:Math.max(1, Math.min(128, Math.trunc(Number(d.grid)||30))), scale:Number(d.scale)||.085,
       cells:d.cells.map(c=>({x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), color:normalizeHexColor(c.color)})),
       infoTexture:true, infoRole:(base&&base.infoRole)||'pokemon', hp:(base&&base.hp)||12,
       infoBehavior:(base&&base.infoBehavior)||'図鑑ドット絵セル変換済み。野生出現・撃破登録・面貼り付け対象。',
@@ -6758,7 +6758,7 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
 // 捕獲/RPG化の後でも、フィールド上の情報テクスチャが旧16x16の仮アイコンへ戻らないようにする。
 // 30x30 generated dotdata が読めている場合はそれを優先し、無い場合だけ自前30x30シルエットで復元する。
 (function(){
-  const INFO_POKE_FIELD_VISUAL_FIX_VERSION = 'v10-pokemon-field-visual-fallback-30x30';
+  const INFO_POKE_FIELD_VISUAL_FIX_VERSION = 'v11-pokemon-field-visual-grid96-safe';
   function pokeNoFromAnyV10(v){
     const raw = String((v && (v.id || v.defId || v.type || v.infoType)) || v || '');
     const m = raw.match(/(?:info[-_])?poke[-_]?(\d{1,3})/i);
@@ -6890,7 +6890,7 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
         if(ch && ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)){ keep.push(ch); continue; }
         try{ ch.destroy(); }catch{}
       }
-      const s=Number(def.scale)||.085, gridSize=Math.max(1,Math.min(64,Math.trunc(Number(def.grid)||30)));
+      const s=Number(def.scale)||.085, gridSize=Math.max(1,Math.min(128,Math.trunc(Number(def.grid)||30)));
       const used=(def.cells||[]).slice(0, Math.min(4096, gridSize*gridSize));
       for(const cell of used){
         const mat=ensureCustomMat(normalizeHexColor(cell.color));
@@ -7791,190 +7791,6 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ app.on('update', tick); }catch(e){ setInterval(()=>tick(.4),400); }
   try{ setTimeout(()=>{ for(const [ik,root] of customObjectEntities){ ensureLevel(root,{force:true}); } setMsg('野生情報テクスチャLv制ON: プレイヤーLv基準でHP/攻撃/報酬を自動スケール','good'); },900); }catch(e){}
   try{ console.log(VERSION+' active'); }catch(e){}
-})();
-
-
-
-
-// ===== Pokemon generated-cell edge padding fix =====
-// 右端・下端に絵が張り付いた30x30セルをそのままフィールドへ出すと、
-// 斜め十字ビルボード/ボックス厚み/端ピクセルで右側・下側が欠けて見える。
-// 図鑑元画像ではなく、ゲーム内に使うセル定義だけを内側へ再配置して余白を作る。
-(function(){
-  const POKE_EDGE_PAD_VERSION = 'v11-poke-generated-cell-inner-padding';
-  const POKE_EDGE_MARGIN = 2;
-  function isPokeInfoDef(def){
-    const id=String(def&&def.id||''), type=String(def&&def.type||def&&def.infoType||'');
-    return !!(def && def.kind==='plane' && (id.match(/^info-poke_\d{3}$/) || type.match(/^poke_\d{3}$/) || def.pokemonGeneratedCells30));
-  }
-  function normalizeColor(c){
-    try{ return (typeof normalizeHexColor==='function') ? normalizeHexColor(c) : String(c||'#ffffff'); }catch(e){ return String(c||'#ffffff'); }
-  }
-  function padPokeCells(cells, grid){
-    grid=Math.max(8, Math.min(64, Math.trunc(Number(grid)||30)));
-    if(!Array.isArray(cells) || !cells.length) return cells||[];
-    const valid=[];
-    for(const c of cells){
-      const x=Math.trunc(Number(c&&c.x)), y=Math.trunc(Number(c&&c.y));
-      if(x>=0&&x<grid&&y>=0&&y<grid) valid.push({x,y,color:normalizeColor(c.color)});
-    }
-    if(!valid.length) return cells;
-    const minX=Math.min(...valid.map(c=>c.x)), maxX=Math.max(...valid.map(c=>c.x));
-    const minY=Math.min(...valid.map(c=>c.y)), maxY=Math.max(...valid.map(c=>c.y));
-    const bw=maxX-minX+1, bh=maxY-minY+1;
-    const edgeTouch = minX<=0 || minY<=0 || maxX>=grid-1 || maxY>=grid-1;
-    if(!edgeTouch && minX>=POKE_EDGE_MARGIN && minY>=POKE_EDGE_MARGIN && maxX<=grid-1-POKE_EDGE_MARGIN && maxY<=grid-1-POKE_EDGE_MARGIN) return valid;
-    const inner=Math.max(1, grid-POKE_EDGE_MARGIN*2);
-    const fit=Math.min(inner/bw, inner/bh, 1);
-    const dw=Math.max(1, Math.floor(bw*fit));
-    const dh=Math.max(1, Math.floor(bh*fit));
-    const dx=Math.floor((grid-dw)/2);
-    const dy=Math.floor((grid-dh)/2);
-    try{
-      const src=document.createElement('canvas'); src.width=src.height=grid;
-      const sg=src.getContext('2d'); sg.imageSmoothingEnabled=false; sg.clearRect(0,0,grid,grid);
-      for(const c of valid){ sg.fillStyle=c.color; sg.fillRect(c.x,c.y,1,1); }
-      const dst=document.createElement('canvas'); dst.width=dst.height=grid;
-      const dg=dst.getContext('2d',{willReadFrequently:true}); dg.imageSmoothingEnabled=false; dg.clearRect(0,0,grid,grid);
-      dg.drawImage(src,minX,minY,bw,bh,dx,dy,dw,dh);
-      const data=dg.getImageData(0,0,grid,grid).data, out=[];
-      for(let y=0;y<grid;y++) for(let x=0;x<grid;x++){
-        const i=(y*grid+x)*4; if(data[i+3]<24) continue;
-        out.push({x,y,color:'#'+[data[i],data[i+1],data[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('')});
-      }
-      return out.length ? out : valid;
-    }catch(e){
-      const sx=dw/bw, sy=dh/bh, map=new Map();
-      for(const c of valid){
-        const nx=Math.max(0,Math.min(grid-1,Math.floor(dx+(c.x-minX)*sx)));
-        const ny=Math.max(0,Math.min(grid-1,Math.floor(dy+(c.y-minY)*sy)));
-        map.set(nx+','+ny,{x:nx,y:ny,color:c.color});
-      }
-      return Array.from(map.values());
-    }
-  }
-  function paddedDef(def){
-    if(!isPokeInfoDef(def) || def.pokeEdgePadVersion===POKE_EDGE_PAD_VERSION) return def;
-    const grid=Math.max(8, Math.min(64, Math.trunc(Number(def.grid)||30)));
-    const cells=padPokeCells(def.cells, grid);
-    return Object.assign({}, def, {grid, cells, pokeEdgePadVersion:POKE_EDGE_PAD_VERSION, edgePaddingCells:POKE_EDGE_MARGIN, updatedAt:Date.now()});
-  }
-  function applyAllPokePadding(){
-    try{
-      if(!window.customObjectDefs && typeof customObjectDefs==='undefined') return 0;
-      let n=0;
-      for(const [id,def] of customObjectDefs){
-        if(isPokeInfoDef(def)){
-          const nd=paddedDef(def);
-          if(nd!==def){ customObjectDefs.set(id, (typeof validateObjectDef==='function'?(validateObjectDef(nd)||nd):nd)); n++; }
-        }
-      }
-      try{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }catch(e){}
-      return n;
-    }catch(e){ console.warn('poke edge padding apply failed', e); return 0; }
-  }
-  function rebuildExistingPokeRoots(){
-    try{
-      if(!customObjectEntities || !customObjectDefs) return;
-      for(const root of customObjectEntities.values()){
-        const def=customObjectDefs.get(root&&root.data&&root.data.defId);
-        if(!isPokeInfoDef(def)) continue;
-        if(typeof rebuildRootVisualV10==='function') rebuildRootVisualV10(root,def);
-        const p=root.getPosition?root.getPosition():null;
-        if(p && typeof terrainHeight==='function') root.setPosition(p.x, terrainHeight(p.x,p.z)+0.025, p.z);
-      }
-    }catch(e){ console.warn('poke root rebuild after padding failed', e); }
-  }
-  try{
-    const oldEnsure=ensureInfoTextureDefV3;
-    ensureInfoTextureDefV3=function(meta){
-      const def=oldEnsure.apply(this,arguments);
-      try{
-        const nd=paddedDef(def);
-        if(nd && nd!==def){ customObjectDefs.set(nd.id, (typeof validateObjectDef==='function'?(validateObjectDef(nd)||nd):nd)); return customObjectDefs.get(nd.id)||nd; }
-      }catch(e){}
-      return def;
-    };
-    window.ensureInfoTextureDefV3=ensureInfoTextureDefV3;
-  }catch(e){}
-  try{
-    const oldPlace=placeCustomObject;
-    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-      try{ if(isPokeInfoDef(def)) def=paddedDef(def); }catch(e){}
-      return oldPlace.apply(this,[def,x,y,z,yaw,instanceKey]);
-    };
-  }catch(e){}
-  window.applyPokeGeneratedEdgePadding = function(){ const n=applyAllPokePadding(); rebuildExistingPokeRoots(); return n; };
-  try{ applyAllPokePadding(); }catch(e){}
-  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 350);
-  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 1600);
-  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 2600);
-  setTimeout(()=>{ try{ applyAllPokePadding(); rebuildExistingPokeRoots(); }catch(e){} }, 5200);
-})();
-
-// ===== InfoTexture field-size / ground-anchor fix =====
-// 図鑑・generated cells プレビューは触らず、ゲームフィールド上の野生情報テクスチャだけを縮小して足元接地にする。
-(function(){
-  const FIELD_INFO_MAX_HEIGHT = 1.05;
-  const FIELD_INFO_GROUND_OFFSET = 0.025;
-  function isFieldInfoPlaneDef(def){
-    return !!(def && def.infoTexture && def.kind === 'plane');
-  }
-  function fieldInfoScaleFor(def){
-    const grid = Math.max(1, Math.min(128, Math.trunc(Number(def && def.grid) || 16)));
-    const current = Number(def && def.scale) || 0.06;
-    return Math.max(0.012, Math.min(current, FIELD_INFO_MAX_HEIGHT / grid));
-  }
-  function groundYAt(x,z,fallback){
-    try{
-      if(typeof terrainHeight === 'function'){
-        const gy = Number(terrainHeight(Number(x)||0, Number(z)||0));
-        if(Number.isFinite(gy)) return gy;
-      }
-    }catch(e){}
-    return Number.isFinite(Number(fallback)) ? Number(fallback) : 0;
-  }
-  function fixFieldInfoRoot(root, def, x, z){
-    if(!root || !isFieldInfoPlaneDef(def)) return root;
-    const grid = Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || 16)));
-    const scale = fieldInfoScaleFor(def);
-    const h = grid * scale;
-    try{
-      for(const child of root.children || []){
-        if(!child || !child.data || !child.data.planeTexture) continue;
-        if(child.setLocalScale) child.setLocalScale(h, h, Math.max(.012, scale * .18));
-        if(child.setLocalPosition) child.setLocalPosition(0, h / 2, 0);
-      }
-      const p = root.getPosition ? root.getPosition() : null;
-      const gx = Number.isFinite(Number(x)) ? Number(x) : (p ? p.x : 0);
-      const gz = Number.isFinite(Number(z)) ? Number(z) : (p ? p.z : 0);
-      const gy = groundYAt(gx, gz, p ? p.y : 0) + FIELD_INFO_GROUND_OFFSET;
-      if(root.setPosition) root.setPosition(gx, gy, gz);
-      root.data = Object.assign({}, root.data || {}, {fieldInfoSizeFixed:true, fieldInfoHeight:h});
-    }catch(e){ console.warn('field info texture size fix failed', e); }
-    return root;
-  }
-  try{
-    const prevPlace = placeCustomObject;
-    placeCustomObject = function(def, x, y, z, yaw, instanceKey){
-      const originalDef = def;
-      if(isFieldInfoPlaneDef(def)) def = Object.assign({}, def, {scale: fieldInfoScaleFor(def)});
-      const root = prevPlace.apply(this, [def, x, y, z, yaw, instanceKey]);
-      return fixFieldInfoRoot(root, def || originalDef, x, z);
-    };
-  }catch(e){ console.warn('field info texture place patch failed', e); }
-  try{
-    setTimeout(function(){
-      if(!customObjectEntities || !customObjectDefs) return;
-      for(const root of customObjectEntities.values()){
-        const def = customObjectDefs.get(root && root.data && root.data.defId);
-        if(def && isFieldInfoPlaneDef(def)){
-          const p = root.getPosition ? root.getPosition() : {x:0,z:0};
-          fixFieldInfoRoot(root, def, p.x, p.z);
-        }
-      }
-    }, 500);
-  }catch(e){}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
