@@ -51,173 +51,26 @@ POKEMON_NAMES_JA = [
 
 
 
-# -----------------------------------------------------------------------------
-# Gen1 Pokemon individual nanoblock-style 3D model generator
-# -----------------------------------------------------------------------------
-# 151体をテンプレ1個に逃がさず、No.ごとの個別スペックを持たせる。
-# 形状は個別スペック、色は各pokeicon画像から抽出した2Dセル色を使う。
-MODEL_SPECS_RAW = """
-001|quad|0.88|bulb,ears,spots,short_tail
-002|quad|1.04|big_bulb,ears,spots,claws
-003|quad|1.24|flower,ears,spots,claws,wide_body
-004|biped|0.82|flame_tail,claws,small_head
-005|biped|1.00|flame_tail,claws,horn_head
-006|dragon|1.30|wings,flame_tail,horns,claws,long_neck
-007|biped|0.78|shell_back,round_head,short_tail
-008|biped|0.96|shell_back,tail,ears
-009|turtle|1.18|cannons,shell_back,tail,claws
-010|worm|0.62|segments,antenna,feet
-011|cocoon|0.72|shell,eyes
-012|butterfly|0.95|large_wings,antenna,thin_body
-013|worm|0.56|segments,horn_tail,feet
-014|cocoon|0.76|shell,spikes,eyes
-015|insect|1.02|large_wings,stingers,arms,legs
-016|bird|0.70|wings,beak,tail_feathers
-017|bird|0.92|wings,crest,tail_feathers
-018|bird|1.16|large_wings,crest,long_tail
-019|quad|0.58|big_ears,whiskers,tail
-020|quad|0.82|big_teeth,whiskers,tail,large_body
-021|bird|0.70|wings,beak,tail_feathers,crest
-022|bird|1.10|large_wings,long_beak,crest,long_tail
-023|serpent|0.82|snake_body,tongue,tail_rattle
-024|serpent|1.04|cobra_hood,tongue,marking
-025|biped|0.74|long_ears,tail_bolt,cheeks
-026|biped|0.96|long_ears,tail_bolt,cheeks,big_feet
-027|biped|0.72|claws,spines,round_body
-028|biped|0.98|claws,spines,slasher_arms
-029|quad|0.66|ears,horn_head,spots,small_body
-030|quad|0.86|ears,horn_head,spots,claws
-031|kaiju|1.16|horn_head,ears,spikes,tail,wide_body
-032|quad|0.66|ears,horn_head,spikes,small_body
-033|quad|0.86|ears,horn_head,spikes,claws
-034|kaiju|1.18|horn_head,ears,spikes,tail,wide_body
-035|biped|0.72|round_body,ears,small_wings
-036|biped|0.95|round_body,ears,small_wings,tail
-037|quad|0.72|many_tails,ears,fox_body
-038|quad|1.02|many_tails,ears,fox_body,mane
-039|balloon|0.64|round_body,ears,curl
-040|balloon|0.88|round_body,ears,curl,big_arms
-041|bat|0.66|wings,big_mouth,ears
-042|bat|0.96|large_wings,big_mouth,ears,feet
-043|plant|0.58|leaf_head,feet,round_body
-044|plant|0.78|leaf_head,drool,feet
-045|plant|0.96|flower,petals,feet,round_body
-046|insect|0.70|mushroom_back,claws,legs
-047|insect|0.94|big_mushroom,claws,legs
-048|insect|0.76|antenna,big_eyes,legs
-049|moth|0.96|large_wings,antenna,thin_body
-050|mole|0.55|head_only,nose
-051|mole_trio|0.80|triple_heads,noses
-052|quad|0.68|cat_ears,whiskers,tail,coin
-053|quad|0.94|cat_ears,whiskers,tail,slender
-054|duck|0.72|bill,tail,web_feet,round_body
-055|duck|0.96|bill,web_feet,arms,spikes
-056|biped|0.72|monkey_tail,arms,feet
-057|biped|0.96|monkey_tail,boxing_arms,angry_brow
-058|quad|0.80|dog_mane,tail,ears
-059|quad|1.16|dog_mane,big_tail,ears,large_body
-060|balloon|0.62|swirl_belly,tail,feet
-061|biped|0.82|swirl_belly,arms,feet
-062|biped|1.02|swirl_belly,boxing_arms,feet
-063|biped|0.66|fox_head,tail,spoon
-064|biped|0.90|fox_head,tail,spoon,ears
-065|biped|1.06|fox_head,tail,two_spoons,mustache
-066|biped|0.76|muscle_arms,feet
-067|biped|0.98|muscle_arms,belt,feet
-068|biped|1.15|four_arms,belt,feet
-069|plant|0.72|vine_body,leaf_head,feet
-070|plant|0.90|bell_head,vine_body,leaf_arms
-071|plant|1.06|big_mouth,leaf_arms,vine_body
-072|jellyfish|0.70|tentacles,head_orb
-073|jellyfish|1.02|many_tentacles,head_orb,spikes
-074|rock|0.66|rock_ball,arms
-075|rock|0.88|rock_ball,arms,chunky
-076|rock|1.12|rock_ball,arms,legs,chunky
-077|quad|0.86|horse_body,mane,tail_flame
-078|quad|1.10|horse_body,mane,tail_flame,horn_head
-079|quad|0.82|hippo_body,tail,round_head
-080|quad|1.02|hippo_body,shell_tail,round_head
-081|magnet|0.58|magnet_sides,screw,eye
-082|magnet|0.90|triple_magnets,screws,eyes
-083|bird|0.80|leek,beak,wings,tail_feathers
-084|bird|0.80|two_heads,legs,tail_feathers
-085|bird|1.05|three_heads,legs,tail_feathers
-086|seal|0.78|seal_body,tail,flippers,horn_head
-087|seal|1.02|seal_body,tail,flippers,horn_head
-088|slime|0.78|blob_body,arms,drip
-089|slime|1.04|blob_body,arms,drip,wide_body
-090|shell|0.66|shell_body,tongue,spikes
-091|shell|0.96|shell_body,spikes,horn_head
-092|ghost|0.68|gas_cloud,face
-093|ghost|0.90|gas_cloud,hands,face
-094|ghost|1.05|spiky_ghost,arms,face
-095|serpent|1.18|rock_segments,horn_head,long_body
-096|biped|0.78|tapir_head,pendulum,ears
-097|biped|1.00|tapir_head,pendulum,collar
-098|crab|0.76|claws,legs,shell_body
-099|crab|1.00|big_claws,legs,shell_body,spikes
-100|ball|0.62|sphere,face_band
-101|ball|0.82|sphere,face_band,inverted
-102|plant_cluster|0.70|six_eggs,faces
-103|palm|1.08|triple_heads,palm_leaves,legs
-104|biped|0.72|skull_head,bone_club,tail
-105|biped|0.92|skull_head,bone_club,spikes
-106|biped|0.96|long_legs,kicking_pose
-107|biped|0.92|boxing_gloves,arms
-108|quad|0.82|long_tongue,tail,round_body
-109|gas|0.76|gas_orbs,skull_face
-110|gas|1.02|double_gas_orbs,skull_face
-111|quad|0.90|rhino_body,horn_head,tail,spikes
-112|kaiju|1.12|rhino_body,horn_head,tail,drill,wide_body
-113|balloon|0.98|egg_body,arms,hair
-114|vine|0.86|vine_ball,red_feet
-115|kaiju|1.10|kangaroo_body,pouch,tail,ears
-116|fish|0.58|seahorse_body,snout,fin
-117|fish|0.82|seahorse_body,snout,fin,spikes
-118|fish|0.64|fish_body,fins,horn_head,tail_fin
-119|fish|0.92|fish_body,fins,horn_head,tail_fin
-120|star|0.78|star_body,gem
-121|star|1.00|double_star,gem
-122|biped|0.92|mime_hands,round_head,feet
-123|insect|1.02|scythe_arms,wings,legs
-124|biped|0.92|dress_body,hair,arms
-125|biped|0.98|electric_arms,horns,tail
-126|biped|0.96|flame_head,tail,duck_bill
-127|insect|1.04|horn_head,big_claws,legs
-128|quad|1.02|bull_body,horns,three_tails
-129|fish|0.58|fish_body,fins,whiskers,tail_fin
-130|serpent|1.30|sea_dragon,crest,whiskers,long_body
-131|sea|1.22|shell_back,long_neck,flippers
-132|blob|0.70|blob_body,face
-133|quad|0.68|fox_body,big_ears,tail_mane
-134|quad|0.96|fish_tail,neck_fin,fox_body
-135|quad|0.92|spikes,fox_body,big_ears
-136|quad|0.96|flame_mane,fox_body,big_ears
-137|poly|0.72|lowpoly_body,duck_bill,tail
-138|shell|0.72|spiral_shell,tentacles
-139|shell|0.96|spiral_shell,tentacles,spikes
-140|crab|0.68|shell_body,legs,claws
-141|crab|0.96|blade_arms,shell_body,legs
-142|dragon|1.12|large_wings,beak,tail,claws
-143|giant|1.25|huge_body,short_arms,feet
-144|bird|1.18|large_wings,crest,long_tail
-145|bird|1.16|large_wings,spiky_wings,beak
-146|bird|1.16|large_wings,flame_wings,crest
-147|serpent|0.82|snake_body,round_head,ear_fins
-148|serpent|1.02|snake_body,ear_fins,horn_head
-149|dragon|1.26|small_wings,horns,tail,belly
-150|biped|1.22|alien_body,tail,horns,three_fingers
-151|biped|0.72|cat_head,long_tail,small_body
-"""
 
-def parse_model_specs() -> Dict[int, Dict[str, Any]]:
-    specs: Dict[int, Dict[str, Any]] = {}
-    for raw in MODEL_SPECS_RAW.strip().splitlines():
-        no_s, archetype, scale_s, feats_s = raw.strip().split('|')
-        specs[int(no_s)] = {'archetype': archetype, 'modelScale': float(scale_s), 'features': [x for x in feats_s.split(',') if x]}
-    return specs
+# -----------------------------------------------------------------------------
+# Pokemon field3d model generator - REAL 96x96x96 full-grid source volume v6
+# -----------------------------------------------------------------------------
+# 根本原因:
+#   前の3D生成は、いったん 16x16 に縮小したり、耳/尻尾/羽/球根などを
+#   仕様表から「想像」で足していた。だから元画像に無い巨大耳・謎パーツが出た。
+#
+# v6方針:
+#   - field3d の座標空間は必ず 96x96x96。
+#   - 2D情報テクスチャの 96x96 cells を、そのまま前面シルエットとして使う。
+#   - 16x16縮小は禁止。
+#   - No別の fake parts 表は禁止。
+#   - 元画像に無い耳/尻尾/羽/角/球根は足さない。
+#   - ただし板ではなく、シルエットを奥行き方向へ膨らませた「表面ボリューム」にする。
+#   - 出力セルは数千〜数万。確認HTML/本番側で外面描画する前提。
+FIELD3D_GENERATOR_VERSION = 'REAL_96X96X96_SOURCE_VOLUME_V6_FULLGRID_NO_FAKE_PARTS'
+FIELD3D_GRID = 96
+FIELD3D_MAX_CELLS = 36000
 
-MODEL_SPECS = parse_model_specs()
 
 def _hex_to_rgb(c: str) -> Tuple[int, int, int]:
     c = str(c or '#888888').strip()
@@ -225,165 +78,210 @@ def _hex_to_rgb(c: str) -> Tuple[int, int, int]:
         return (int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16))
     return (136, 136, 136)
 
+
 def _rgb_to_hex(rgb: Tuple[int, int, int]) -> str:
     return '#%02x%02x%02x' % tuple(int(max(0, min(255, v))) for v in rgb)
 
+
 def _mix(c1: str, c2: str, t: float) -> str:
-    a = _hex_to_rgb(c1); b = _hex_to_rgb(c2); t=max(0,min(1,float(t)))
-    return _rgb_to_hex(tuple(round(a[i]*(1-t)+b[i]*t) for i in range(3)))
+    a = _hex_to_rgb(c1)
+    b = _hex_to_rgb(c2)
+    t = max(0, min(1, float(t)))
+    return _rgb_to_hex(tuple(round(a[i] * (1 - t) + b[i] * t) for i in range(3)))
+
 
 def _luma(c: str) -> float:
-    r,g,b = _hex_to_rgb(c); return 0.2126*r + 0.7152*g + 0.0722*b
+    r, g, b = _hex_to_rgb(c)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
 
 def _sat(c: str) -> float:
-    r,g,b=_hex_to_rgb(c); return max(r,g,b)-min(r,g,b)
+    r, g, b = _hex_to_rgb(c)
+    return max(r, g, b) - min(r, g, b)
 
-def _palette_from_cells(cells: List[Dict]) -> Dict[str, str]:
-    colors = [str(c.get('color', '#888888')).lower() for c in cells if re.fullmatch(r'#[0-9a-fA-F]{6}', str(c.get('color', '')))]
-    if not colors: colors = ['#88aa66', '#1f2937', '#f8fafc']
-    counts: Dict[str, int] = {}
-    for c in colors: counts[c] = counts.get(c, 0) + 1
-    ranked = sorted(counts, key=lambda c: counts[c], reverse=True)
-    non_white = [c for c in ranked if not (_luma(c) > 238 and _sat(c) < 26)]
-    base_pool = non_white or ranked
-    body = base_pool[0]; dark = min(base_pool, key=_luma); light = max(base_pool, key=_luma)
-    accent = max(base_pool, key=lambda c: _sat(c) * 1.4 + abs(_luma(c)-145) * .15)
-    mid2 = base_pool[min(1, len(base_pool)-1)]
-    return {'body': body, 'dark': dark, 'light': light, 'accent': accent, 'mid2': mid2, 'eye': '#101010', 'white': '#f8fafc', 'shadow': _mix(body, '#000000', .32), 'hi': _mix(body, '#ffffff', .35)}
+
+def _is_backgroundish(c: str) -> bool:
+    # 完全な外周白背景は image_to_cells 側で除外済み。
+    # ここでは field3d の膨張対象から、ほぼ白の残りカスだけ落とす。
+    return _luma(c) > 248 and _sat(c) < 16
+
+
+def _dominant_cell_color(counts: Dict[str, int]) -> str:
+    ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+    for c, _ in ranked:
+        if not _is_backgroundish(c):
+            return c
+    return ranked[0][0] if ranked else '#888888'
+
+
+def _normalize_plane_cells_to_96(plane_cells: List[Dict], source_grid: int) -> Dict[Tuple[int, int], str]:
+    """plane cells を 96x96 座標へ正規化する。16x16等への縮小は一切しない。"""
+    src = max(1, int(source_grid or 96))
+    buckets: Dict[Tuple[int, int], Dict[str, int]] = {}
+    for c in plane_cells:
+        try:
+            gx = int(c.get('x', 0))
+            gy = int(c.get('y', 0))
+        except Exception:
+            continue
+        color = str(c.get('color', '#888888')).lower()
+        if not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
+            continue
+        if _is_backgroundish(color):
+            continue
+        # source_grid が96ならそのまま。そうでなくても96座標へ拡大する。
+        x = max(0, min(95, int(round(gx * 95 / max(1, src - 1)))))
+        y = max(0, min(95, int(round(gy * 95 / max(1, src - 1)))))
+        buckets.setdefault((x, y), {})[color] = buckets.setdefault((x, y), {}).get(color, 0) + 1
+
+    pix: Dict[Tuple[int, int], str] = {}
+    for key, counts in buckets.items():
+        pix[key] = _dominant_cell_color(counts)
+    return pix
+
+
+def _remove_isolated_noise(pix: Dict[Tuple[int, int], str]) -> Dict[Tuple[int, int], str]:
+    if len(pix) < 8:
+        return pix
+    out: Dict[Tuple[int, int], str] = {}
+    for (x, y), color in pix.items():
+        n8 = sum((x + dx, y + dy) in pix
+                 for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                 if not (dx == 0 and dy == 0))
+        if n8 >= 1:
+            out[(x, y)] = color
+    return out or pix
+
+
+def _boundary_and_ring_depth(pix: Dict[Tuple[int, int], str]) -> Tuple[set, Dict[Tuple[int, int], int]]:
+    """外周境界と、境界からの距離っぽい値を返す。距離が大きいほど厚くする。"""
+    boundary = set()
+    for x, y in pix:
+        if sum((x + dx, y + dy) in pix for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))) < 4:
+            boundary.add((x, y))
+    # BFSで境界距離をざっくり出す。96x96なので軽い。
+    dist: Dict[Tuple[int, int], int] = {p: 0 for p in boundary}
+    queue = list(boundary)
+    head = 0
+    while head < len(queue):
+        x, y = queue[head]
+        head += 1
+        nd = dist[(x, y)] + 1
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            q = (x + dx, y + dy)
+            if q in pix and q not in dist:
+                dist[q] = nd
+                queue.append(q)
+    return boundary, dist
+
 
 def build_pokemon_voxel3d_cells(no: int, name: str, plane_cells: List[Dict], grid: int) -> List[Dict]:
-    spec = MODEL_SPECS.get(no, {'archetype': 'biped', 'modelScale': 1.0, 'features': []})
-    feats = set(spec['features']); p = _palette_from_cells(plane_cells); scale = float(spec.get('modelScale', 1.0))
-    cells: List[Dict[str, Any]] = []; occupied = set()
-    def add(x:int,y:int,z:int,color:str,size:float=0.115):
-        x=int(round(x)); y=int(round(y)); z=int(round(z))
-        if not (0 <= x < 16 and 0 <= y < 16 and 0 <= z < 16): return
-        key=(x,y,z)
-        if key in occupied: return
-        occupied.add(key); cells.append({'x':x,'y':y,'z':z,'color':color,'size':size})
-    def box(x1,x2,y1,y2,z1,z2,color,size=0.115):
-        for y in range(int(y1), int(y2)+1):
-            for x in range(int(x1), int(x2)+1):
-                for z in range(int(z1), int(z2)+1): add(x,y,z,color,size)
-    def ellipsoid(cx,cy,cz,rx,ry,rz,color,size=0.115,hollow=False):
-        for y in range(math.floor(cy-ry), math.ceil(cy+ry)+1):
-            for x in range(math.floor(cx-rx), math.ceil(cx+rx)+1):
-                for z in range(math.floor(cz-rz), math.ceil(cz+rz)+1):
-                    v=((x-cx)/(rx or 1))**2+((y-cy)/(ry or 1))**2+((z-cz)/(rz or 1))**2
-                    if v <= 1.0 and (not hollow or v > .55): add(x,y,z,color,size)
-    def eye_pair(y=9,z=3,sep=1): add(7-sep,y,z,p['eye']); add(8+sep,y,z,p['eye'])
-    def horns(y=12,z=5):
-        add(5,y,z,p['light']); add(10,y,z,p['light']); add(5,y+1,z,p['light']); add(10,y+1,z,p['light'])
-    def ears(y=11,z=5):
-        add(5,y,z,p['accent']); add(10,y,z,p['accent']); add(5,y+1,z,p['dark']); add(10,y+1,z,p['dark'])
-    def tail(x=8,y=6,z=11,length=3,color=None):
-        color=color or p['accent']
-        for i in range(length): add(x, y+i//2, z+i, color)
-    arch = spec['archetype']
-    if arch in ('quad','kaiju'):
-        ellipsoid(8,5,8,3.4*scale,2.0*scale,3.0*scale,p['body']); ellipsoid(8,8,4,2.0*scale,1.8*scale,1.8*scale,p['body'])
-        for lx,lz in [(5,6),(11,6),(5,10),(11,10)]: box(lx,lx+1,1,3,lz,lz,p['dark'])
-        eye_pair(9,3)
-        if 'wide_body' in feats or arch=='kaiju': ellipsoid(8,5,8,4.4*scale,2.2*scale,3.5*scale,p['body'])
-        if {'ears','big_ears','cat_ears'} & feats: ears(10,4)
-        if {'horn_head','horns'} & feats: horns(10,4)
-        if {'tail','short_tail','fox_body'} & feats: tail(8,5,11,4,p['accent'])
-    elif arch in ('biped','duck'):
-        ellipsoid(8,8,5,2.1*scale,2.0*scale,1.8*scale,p['body']); ellipsoid(8,5,8,2.4*scale,2.4*scale,2.0*scale,p['body'])
-        box(5,6,4,7,7,8,p['body']); box(10,11,4,7,7,8,p['body']); box(6,7,1,4,7,8,p['dark']); box(9,10,1,4,7,8,p['dark'])
-        eye_pair(9,4)
-        if {'long_ears','ears','fox_head','cat_head'} & feats: ears(10,4)
-        if {'horn_head','horns'} & feats: horns(10,4)
-        if {'tail','long_tail','monkey_tail'} & feats: tail(8,4,10,5,p['accent'])
-    elif arch == 'dragon':
-        ellipsoid(8,6,8,3.2*scale,2.2*scale,2.7*scale,p['body']); ellipsoid(8,10,4,2.1*scale,1.8*scale,1.7*scale,p['body']); box(7,8,7,10,5,6,p['body'])
-        for lx,lz in [(5,7),(11,7),(6,11),(10,11)]: box(lx,lx,1,4,lz,lz,p['dark'])
-        eye_pair(11,3); horns(12,4); tail(8,5,11,5,p['accent'])
-        box(2,5,7,10,8,8,p['light']); box(11,14,7,10,8,8,p['light']); box(3,4,6,8,9,9,p['accent']); box(12,13,6,8,9,9,p['accent'])
-    elif arch in ('bird','bat','butterfly','moth'):
-        ellipsoid(8,6,7,2.2*scale,2.1*scale,2.0*scale,p['body']); ellipsoid(8,9,4,1.7*scale,1.5*scale,1.4*scale,p['body']); eye_pair(10,3)
-        box(4,6,6,8,7,7,p['light']); box(10,12,6,8,7,7,p['light'])
-        if 'large_wings' in feats or arch in ('bat','butterfly','moth'): box(1,5,6,10,7,8,p['accent']); box(11,15,6,10,7,8,p['accent'])
-        if {'beak','long_beak'} & feats: box(7,8,8,8,2,2,p['accent'])
-        if 'crest' in feats: box(7,8,11,12,4,4,p['accent'])
-        tail(8,5,10,3,p['dark'])
-    elif arch in ('fish','seal','sea'):
-        ellipsoid(8,6,7,3.5*scale,1.8*scale,2.1*scale,p['body']); box(4,5,6,8,7,7,p['accent']); box(11,12,6,8,7,7,p['accent']); box(7,9,5,8,11,12,p['accent']); eye_pair(7,4)
-        if 'horn_head' in feats: horns(8,4)
-        if 'long_neck' in feats: box(7,9,8,11,5,6,p['body'])
-    elif arch in ('serpent','worm'):
-        length = 7 if arch=='serpent' else 5
-        for i in range(length): ellipsoid(8+int(math.sin(i*.8)*2),4+i//3,4+i,1.7*scale,1.2*scale,1.4*scale,p['body'])
-        ellipsoid(8,7,3,2.0*scale,1.6*scale,1.5*scale,p['body']); eye_pair(8,2)
-        if 'cobra_hood' in feats: box(5,11,6,9,3,4,p['accent'])
-        if 'rock_segments' in feats:
-            for i in range(3): ellipsoid(6+i*2,5+i//2,6+i*2,1.6,1.3,1.3,p['dark'],hollow=True)
-    elif arch in ('insect','crab'):
-        ellipsoid(8,5,7,3.0*scale,1.7*scale,2.2*scale,p['body']); ellipsoid(8,7,4,1.9*scale,1.5*scale,1.5*scale,p['body']); eye_pair(8,3)
-        for yy in [4,5,6]: box(3,5,yy,yy,6,6,p['dark']); box(11,13,yy,yy,6,6,p['dark'])
-        if {'big_claws','claws'} & feats: box(2,4,6,8,3,4,p['accent']); box(12,14,6,8,3,4,p['accent'])
-        if {'wings','large_wings'} & feats: box(3,6,8,10,7,8,p['light']); box(10,13,8,10,7,8,p['light'])
-        if 'horn_head' in feats: horns(9,4)
-    elif arch in ('rock','ball','balloon','blob','slime','ghost','gas'):
-        ellipsoid(8,6,7,3.0*scale,3.0*scale,3.0*scale,p['body'],hollow=(arch=='ghost'))
-        eye_pair(7,4)
-        if arch in ('rock','gas'): box(4,5,5,7,6,7,p['dark']); box(11,12,5,7,6,7,p['dark'])
-        if {'arms','big_arms'} & feats: box(4,5,5,7,6,7,p['body']); box(11,12,5,7,6,7,p['body'])
-        if 'face_band' in feats: box(5,11,6,7,4,4,p['dark'])
-    elif arch in ('plant','plant_cluster','palm','vine'):
-        ellipsoid(8,5,7,2.5*scale,2.2*scale,2.0*scale,p['body']); eye_pair(6,4)
-        if {'leaf_head','palm_leaves'} & feats:
-            for dx,dz in [(-2,0),(2,0),(0,-2),(0,2)]: box(7+dx,8+dx,8,10,6+dz,7+dz,p['accent'])
-        if {'flower','petals'} & feats:
-            for dx,dz in [(-2,0),(2,0),(0,-2),(0,2),(0,0)]: ellipsoid(8+dx,9,6+dz,1.2,1.0,1.2,p['accent'])
-        if 'six_eggs' in feats:
-            cells.clear(); occupied.clear()
-            for cx,cz in [(6,5),(9,5),(5,8),(8,8),(11,8),(7,11)]: ellipsoid(cx,4,cz,1.3,1.2,1.3,p['body']); add(cx,5,cz-1,p['eye'])
-    elif arch in ('jellyfish','shell','star','poly','magnet','mole','mole_trio','giant','turtle','cocoon'):
-        ellipsoid(8,6,7,3.0*scale,2.4*scale,2.6*scale,p['body']); eye_pair(7,4)
-        if arch=='star':
-            cells.clear(); occupied.clear()
-            for dx,dz in [(0,0),(0,-2),(-2,0),(2,0),(0,2)]: box(7+dx,9+dx,5,7,6+dz,8+dz,p['body'])
-            add(8,7,5,p['accent']); add(8,7,6,p['accent'])
-        if {'tentacles','many_tentacles'} & feats:
-            for x in [5,7,9,11]: box(x,x,1,4,8,8,p['accent'])
-        if {'magnet_sides','triple_magnets'} & feats: box(3,4,5,7,7,7,p['accent']); box(12,13,5,7,7,7,p['accent'])
-        if 'triple_heads' in feats or arch=='mole_trio':
-            cells.clear(); occupied.clear()
-            for cx,cz in [(6,6),(10,6),(8,10)]: ellipsoid(cx,5,cz,1.8,1.8,1.6,p['body']); add(cx-1,6,cz-1,p['eye']); add(cx+1,6,cz-1,p['eye'])
-    else:
-        ellipsoid(8,6,7,3,3,3,p['body']); eye_pair(7,4)
-    if 'bulb' in feats: ellipsoid(8,8,9,1.8,1.5,1.8,p['accent'])
-    if 'big_bulb' in feats: ellipsoid(8,9,9,2.4,1.8,2.2,p['accent'])
-    if 'flower' in feats:
-        for dx,dz in [(-2,0),(2,0),(0,-2),(0,2)]: ellipsoid(8+dx,10,8+dz,1.2,1.0,1.2,p['accent'])
-        ellipsoid(8,10,8,1.1,1.0,1.1,p['light'])
-    if {'flame_tail','tail_flame'} & feats: tail(8,6,11,3,p['accent']); add(8,8,14,'#ff7a18'); add(8,9,14,'#ffd166')
-    if {'shell_back','shell_body'} & feats: ellipsoid(8,6,9,3.0,2.0,2.2,p['dark'],hollow=True)
-    if 'cannons' in feats: box(5,6,9,11,8,9,p['dark']); box(10,11,9,11,8,9,p['dark'])
-    if {'spikes','spines'} & feats:
-        for z in [5,7,9,11]: add(8,10,z,p['light']); add(8,11,z,p['light'])
-    if 'many_tails' in feats:
-        for dx in [-2,-1,0,1,2]: tail(8+dx,5,11,4,p['accent'])
-    if {'wings','small_wings'} & feats: box(3,5,7,9,8,8,p['light']); box(11,13,7,9,8,8,p['light'])
-    if 'large_wings' in feats: box(1,5,7,11,8,9,p['light']); box(11,15,7,11,8,9,p['light'])
-    if {'scythe_arms','blade_arms'} & feats: box(2,4,6,9,4,4,p['light']); box(12,14,6,9,4,4,p['light'])
-    if {'boxing_gloves','boxing_arms'} & feats: ellipsoid(4,6,5,1.3,1.3,1.3,p['accent']); ellipsoid(12,6,5,1.3,1.3,1.3,p['accent'])
-    if {'bone_club','leek','spoon','two_spoons'} & feats:
-        box(3,3,5,9,4,4,p['light'])
-        if 'two_spoons' in feats: box(13,13,5,9,4,4,p['light'])
-    if 'long_tongue' in feats: box(8,8,5,5,1,3,'#ff6b9a')
-    if 'gem' in feats: add(8,7,4,p['accent']); add(8,8,4,p['light'])
-    if 'cheeks' in feats: add(5,7,4,'#ef4444'); add(11,7,4,'#ef4444')
-    if 'coin' in feats: add(8,11,4,'#facc15')
-    if 'swirl_belly' in feats: add(8,5,4,p['light']); add(9,5,4,p['light']); add(9,6,4,p['dark'])
-    if 'belt' in feats: box(5,11,5,5,6,7,p['dark'])
-    if 'pouch' in feats: box(7,9,5,6,4,4,p['light'])
-    if 'three_tails' in feats:
-        for dx in [-1,0,1]: tail(8+dx,5,11,4,p['dark'])
-    if 'whiskers' in feats: box(4,5,8,8,3,3,p['dark']); box(11,12,8,8,3,3,p['dark'])
-    if {'mane','dog_mane','flame_mane'} & feats: ellipsoid(8,8,5,2.8,2.2,2.2,p['accent'],hollow=True)
-    return cells[:720]
+    """
+    96x96 の元ドット絵 cells から、96x96x96 の3Dボクセルモデルを生成する。
+
+    重要:
+      - 16x16縮小なし。
+      - 偽パーツなし。
+      - 元画像の全シルエットを前面として保持。
+      - 奥行きは shell/volume として付与。
+      - grid は field3d 側では必ず96。
+    """
+    pix = _normalize_plane_cells_to_96(plane_cells, grid)
+    pix = _remove_isolated_noise(pix)
+    if not pix:
+        return []
+
+    xs = [x for x, _ in pix]
+    ys = [y for _, y in pix]
+    minx, maxx = min(xs), max(xs)
+    miny, maxy = min(ys), max(ys)
+    w = max(1, maxx - minx + 1)
+    h = max(1, maxy - miny + 1)
+    cx = (minx + maxx) / 2.0
+    cy = (miny + maxy) / 2.0
+
+    boundary, ring_dist = _boundary_and_ring_depth(pix)
+    max_ring = max(ring_dist.values() or [1])
+
+    model_grid = FIELD3D_GRID
+    cell_size = round(2.55 / model_grid, 6)
+    z_front = 78
+    # 最大奥行き。小型でも厚みを出し、大型はさらに厚く。
+    max_depth = max(18, min(52, int(round(max(w, h) * 0.48))))
+
+    cells: List[Dict[str, Any]] = []
+    occupied = set()
+
+    def put(x: int, y_img: int, z: int, color: str, shade: float = 0.0, priority: int = 2) -> None:
+        yy = model_grid - 1 - int(y_img)  # field3dではy=0下
+        if not (0 <= x < model_grid and 0 <= yy < model_grid and 0 <= z < model_grid):
+            return
+        key = (int(x), int(yy), int(z))
+        if key in occupied:
+            return
+        occupied.add(key)
+        cc = _mix(color, '#000000', shade) if shade > 0 else color
+        cells.append({'x': int(x), 'y': int(yy), 'z': int(z), 'color': cc, 'size': cell_size, '_p': int(priority)})
+
+    def depth_for(x: int, y: int) -> int:
+        # 境界から遠い中心部ほど厚い。さらに縦横中心からの楕円距離でも丸みをつける。
+        ring = ring_dist.get((x, y), 0) / max(1, max_ring)
+        nx = abs((x - cx) / max(1.0, w / 2.0))
+        ny = abs((y - cy) / max(1.0, h / 2.0))
+        radial = min(1.0, math.sqrt(nx * nx + ny * ny))
+        d = 8 + max_depth * (0.30 + 0.50 * ring + 0.20 * (1.0 - radial))
+        return max(8, min(max_depth, int(round(d))))
+
+    # 1) 前面: 96x96元画像シルエットそのもの。最優先。
+    for (x, y), color in pix.items():
+        put(x, y, z_front, color, 0.0, priority=0)
+
+    # 2) 背面: 前面と同じ形を奥に置いて、板ではなく厚みを持たせる。
+    for (x, y), color in pix.items():
+        d = depth_for(x, y)
+        z_back = max(1, z_front - d)
+        put(x, y, z_back, color, 0.24, priority=1)
+
+    # 3) 外周側面: 境界は全奥行きでつなぐ。これで横から見てもスカスカ板にならない。
+    for (x, y) in boundary:
+        color = pix[(x, y)]
+        d = depth_for(x, y)
+        z_back = max(1, z_front - d)
+        for z in range(z_back + 1, z_front):
+            shade = 0.08 + 0.16 * ((z_front - z) / max(1, d))
+            put(x, y, z, color, shade, priority=1)
+
+    # 4) 内部の曲面サンプル: 全埋めは重すぎるので、見える曲面っぽく間引きながら数層入れる。
+    for (x, y), color in pix.items():
+        if (x, y) in boundary:
+            continue
+        d = depth_for(x, y)
+        z_back = max(1, z_front - d)
+        # 中心部は複数層、端は少なめ。96^3空間内でちゃんと奥行きを使う。
+        samples = (2, 3, 4) if ring_dist.get((x, y), 0) > max_ring * 0.45 else (2,)
+        for k in samples:
+            if ((x * 17 + y * 31 + no + k) % (3 if k == 2 else 5)) != 0:
+                continue
+            z = z_front - max(1, int(round(d * k / 5.0)))
+            if z_back < z < z_front:
+                put(x, y, z, color, 0.10 + 0.04 * k, priority=3)
+
+    # 5) 接地補強: 下端だけ少し奥行きを太くする。元シルエット範囲しか使わない。
+    bottom_y = maxy
+    for (x, y), color in pix.items():
+        if y >= bottom_y - 1 and ((x + no) % 2) == 0:
+            d = min(max_depth, depth_for(x, y) + 4)
+            for z in range(max(1, z_front - d), z_front + 1, 2):
+                put(x, min(95, y + 1), z, color, 0.18, priority=2)
+
+    # 上限を超えた場合も、前面・背面・外周側面を優先して残す。
+    if len(cells) > FIELD3D_MAX_CELLS:
+        cells.sort(key=lambda c: (c.get('_p', 9), abs(int(c.get('z', 0)) - z_front)))
+        cells = cells[:FIELD3D_MAX_CELLS]
+
+    for c in cells:
+        c.pop('_p', None)
+    return cells
 
 def hex_color(rgb: Tuple[int, int, int]) -> str:
     return '#%02x%02x%02x' % tuple(int(max(0, min(255, v))) for v in rgb)
@@ -677,7 +575,7 @@ def build(input_dir: Path, out_file: Path, grid: int, safe_pad: float = 0.22, sc
             data = image_to_cells(p, grid, safe_pad=safe_pad)
             name = POKEMON_NAMES_JA[no] if no < len(POKEMON_NAMES_JA) else f'No.{no:03d}'
             field3d_cells = build_pokemon_voxel3d_cells(no, name, data['cells'], grid)
-            spec = MODEL_SPECS.get(no, {'archetype': 'biped', 'modelScale': 1.0, 'features': []})
+            spec = {'archetype': FIELD3D_GENERATOR_VERSION, 'modelScale': 1.0, 'features': ['real_96x96x96_source_volume', 'no_fake_parts', 'no_16x16_downscale', 'generated_from_cells']}
             rows.append({
                 'id': f'info-poke_{no:03d}',
                 'type': f'poke_{no:03d}',
@@ -691,8 +589,8 @@ def build(input_dir: Path, out_file: Path, grid: int, safe_pad: float = 0.22, sc
                     'type': f'poke_{no:03d}',
                     'name': f'No.{no:03d} {name} 3D',
                     'kind': 'voxel3d',
-                    'grid': 16,
-                    'scale': 0.115,
+                    'grid': FIELD3D_GRID,
+                    'scale': round(2.55 / float(FIELD3D_GRID), 6),
                     'cells': field3d_cells,
                     'archetype': spec.get('archetype'),
                     'features': spec.get('features', []),
@@ -707,7 +605,7 @@ def build(input_dir: Path, out_file: Path, grid: int, safe_pad: float = 0.22, sc
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(rows, ensure_ascii=False, separators=(',', ':'))
-    js = f"""// Auto-generated by tools/build-pokemon-info-textures.py. Do not hand edit.\n// Source: assets/pokemon-gen1-icons/pokeicon-###.jpg -> generated cropped dot cells + individual field3d nanoblock models.\n// Important: d.cells is the plane info texture. d.field3d is the per-Pokemon individual 3D field model.\n(function(){{\n  const defs = {payload};\n  window.POKEMON_INFO_TEXTURE_DEFS_30 = defs;\n  window.POKEMON_INFO_TEXTURE_DEFS = defs;\n  window.POKEMON_INFO_TEXTURE_FIELD3D_DEFS = defs.map(d=>d.field3d).filter(Boolean);\n  function normalizeHex(c){{ c=String(c||'#22c55e'); if(/^#[0-9a-fA-F]{{6}}$/.test(c)) return c.toLowerCase(); return '#22c55e'; }}\n  function buildField3d(d, plane){{\n    const f=d&&d.field3d; if(!f || !Array.isArray(f.cells) || !f.cells.length) return null;\n    const no=String(d.no||'').padStart(3,'0'); const id=f.id||('info-poke3d_'+no); const type=d.type||('poke_'+no);\n    return {{\n      id, type, infoType:type, name:'情報テクスチャ3D:'+d.name, kind:'voxel3d', grid:16, scale:Number(f.scale)||0.115,\n      cells:f.cells.map(c=>({{x:Math.trunc(Number(c.x)),y:Math.trunc(Number(c.y)),z:Math.trunc(Number(c.z)),color:normalizeHex(c.color),size:Number(c.size)||0.115}})),\n      infoTexture:false, infoTextureIds:[plane.id], sourceInfoTextureId:plane.id, infoRole:'pokemon', hp:12,\n      infoPhysics:{{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0}},\n      behavior:'151体個別ナノブロック3Dモデル。フィールド表示用。図鑑/貼付は平面情報テクスチャを使用。',\n      pokemonIndividual3d:true, pokemon3dArchetype:f.archetype||'', pokemon3dFeatures:f.features||[],\n      createdAt:1, updatedAt:Date.now()\n    }};\n  }}\n  function apply(){{\n    if(!Array.isArray(defs)) return false;\n    const hasMaps = !!(window.customObjectDefs && window.INFO_TEXTURE_META_V3);\n    for(const d of defs){{\n      const id = d.id || ('info-poke_'+String(d.no).padStart(3,'0'));\n      const type = d.type || ('poke_'+String(d.no).padStart(3,'0'));\n      const grid = Number(d.grid || {grid});\n      const plane = {{\n        id, type, infoType:type, name:'情報テクスチャ:'+d.name, kind:'plane', grid:grid, scale:d.scale||{scale},\n        cells:d.cells||[], infoTexture:true, infoRole:'pokemon', hp:12,\n        infoPhysics:{{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0}},\n        behavior:'図鑑ドット絵セル変換済み。野生出現・撃破登録・面貼り付け対象。',\n        field3dId:(d.field3d&&d.field3d.id)||'', pokemonHasIndividual3d:!!(d.field3d&&d.field3d.cells&&d.field3d.cells.length),\n        createdAt:1, updatedAt:Date.now()\n      }};\n      if(window.customObjectDefs){{\n        window.customObjectDefs.set(id, plane);\n        const field3d = buildField3d(d, plane);\n        if(field3d) window.customObjectDefs.set(field3d.id, field3d);\n      }}\n      if(window.INFO_TEXTURE_META_V3){{\n        const meta = window.INFO_TEXTURE_META_V3[id] || window.INFO_TEXTURE_META_V3[type] || {{}};\n        Object.assign(meta, {{id,type,name:d.name,generatedCells:true,generatedCells30:true,iconUrl:'',cells:d.cells,grid:grid,scale:d.scale||{scale},field3d:d.field3d||null,field3dId:(d.field3d&&d.field3d.id)||''}});\n        window.INFO_TEXTURE_META_V3[id] = meta;\n        window.INFO_TEXTURE_META_V3[type] = meta;\n      }}\n    }}\n    try{{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }}catch(e){{}}\n    return hasMaps;\n  }}\n  window.applyPokemonGeneratedInfoTextures30 = apply;\n  window.applyPokemonGeneratedInfoTextures = apply;\n  if(!apply()) window.addEventListener('load', apply);\n  setTimeout(apply, 300);\n}})();\n"""
+    js = f"""// Auto-generated by tools/build-pokemon-info-textures.py. Do not hand edit.\n// Generator: {FIELD3D_GENERATOR_VERSION}; field3d grid={FIELD3D_GRID}, max_cells={FIELD3D_MAX_CELLS}.\n// Source: assets/pokemon-gen1-icons/pokeicon-###.jpg -> generated cropped dot cells + real 96x96x96 source-volume field3d models. No fake parts.\n// Important: d.cells is the plane info texture. d.field3d is the per-Pokemon individual 3D field model.\n(function(){{\n  const defs = {payload};\n  window.POKEMON_INFO_TEXTURE_DEFS_30 = defs;\n  window.POKEMON_INFO_TEXTURE_DEFS = defs;\n  window.POKEMON_INFO_TEXTURE_FIELD3D_DEFS = defs.map(d=>d.field3d).filter(Boolean);\n  function normalizeHex(c){{ c=String(c||'#22c55e'); if(/^#[0-9a-fA-F]{{6}}$/.test(c)) return c.toLowerCase(); return '#22c55e'; }}\n  function buildField3d(d, plane){{\n    const f=d&&d.field3d; if(!f || !Array.isArray(f.cells) || !f.cells.length) return null;\n    const no=String(d.no||'').padStart(3,'0'); const id=f.id||('info-poke3d_'+no); const type=d.type||('poke_'+no);\n    return {{\n      id, type, infoType:type, name:'情報テクスチャ3D:'+d.name, kind:'voxel3d', grid:Math.max(1,Math.min(128,Math.trunc(Number(f.grid)||96))), scale:Number(f.scale)||Number(d.field3d&&d.field3d.scale)||(2.55/96),\n      cells:f.cells.map(c=>({{x:Math.trunc(Number(c.x)),y:Math.trunc(Number(c.y)),z:Math.trunc(Number(c.z)),color:normalizeHex(c.color),size:Number(c.size)||Number(f.scale)||(2.55/96)}})),\n      infoTexture:false, infoTextureIds:[plane.id], sourceInfoTextureId:plane.id, infoRole:'pokemon', hp:12,\n      infoPhysics:{{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0}},\n      behavior:'96x96元画像シルエットから生成した個別3Dボリュームモデル。16縮小なし。偽耳/偽尻尾などの想像パーツは追加しない。',\n      pokemonIndividual3d:true, pokemon3dArchetype:f.archetype||'', pokemon3dFeatures:f.features||[],\n      createdAt:1, updatedAt:Date.now()\n    }};\n  }}\n  function apply(){{\n    if(!Array.isArray(defs)) return false;\n    const hasMaps = !!(window.customObjectDefs && window.INFO_TEXTURE_META_V3);\n    for(const d of defs){{\n      const id = d.id || ('info-poke_'+String(d.no).padStart(3,'0'));\n      const type = d.type || ('poke_'+String(d.no).padStart(3,'0'));\n      const grid = Number(d.grid || {grid});\n      const plane = {{\n        id, type, infoType:type, name:'情報テクスチャ:'+d.name, kind:'plane', grid:grid, scale:d.scale||{scale},\n        cells:d.cells||[], infoTexture:true, infoRole:'pokemon', hp:12,\n        infoPhysics:{{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0}},\n        behavior:'図鑑ドット絵セル変換済み。野生出現・撃破登録・面貼り付け対象。',\n        field3dId:(d.field3d&&d.field3d.id)||'', pokemonHasIndividual3d:!!(d.field3d&&d.field3d.cells&&d.field3d.cells.length),\n        createdAt:1, updatedAt:Date.now()\n      }};\n      if(window.customObjectDefs){{\n        window.customObjectDefs.set(id, plane);\n        const field3d = buildField3d(d, plane);\n        if(field3d) window.customObjectDefs.set(field3d.id, field3d);\n      }}\n      if(window.INFO_TEXTURE_META_V3){{\n        const meta = window.INFO_TEXTURE_META_V3[id] || window.INFO_TEXTURE_META_V3[type] || {{}};\n        Object.assign(meta, {{id,type,name:d.name,generatedCells:true,generatedCells30:true,iconUrl:'',cells:d.cells,grid:grid,scale:d.scale||{scale},field3d:d.field3d||null,field3dId:(d.field3d&&d.field3d.id)||''}});\n        window.INFO_TEXTURE_META_V3[id] = meta;\n        window.INFO_TEXTURE_META_V3[type] = meta;\n      }}\n    }}\n    try{{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }}catch(e){{}}\n    return hasMaps;\n  }}\n  window.applyPokemonGeneratedInfoTextures30 = apply;\n  window.applyPokemonGeneratedInfoTextures = apply;\n  if(!apply()) window.addEventListener('load', apply);\n  setTimeout(apply, 300);\n}})();\n"""
     out_file.write_text(js, encoding='utf-8')
     print(f'WROTE {out_file} entries={len(rows)} grid={grid} safe_pad={safe_pad} scale={scale} white=border_flood_preserve_internal')
     return rows
@@ -720,7 +618,14 @@ def main() -> None:
     ap.add_argument('--grid', type=int, default=96, help='cell grid resolution. 96 recommended for high-res info texture')
     ap.add_argument('--safe-pad', type=float, default=0.22, help='safe blank margin ratio around detected pokemon body')
     ap.add_argument('--scale', type=float, default=None, help='plane scale written to generated definitions. Default keeps old visual size: 2.55 / grid')
+    ap.add_argument('--field3d-grid', type=int, default=96, help='3D voxel coordinate grid. Default 96 means real 96x96x96 output.')
+    ap.add_argument('--field3d-max-cells', type=int, default=36000, help='safety cap for 3D cells per Pokemon. Raise if needed for denser models.')
     args = ap.parse_args()
+
+    global FIELD3D_GRID, FIELD3D_MAX_CELLS
+    FIELD3D_GRID = max(16, min(128, int(args.field3d_grid)))
+    FIELD3D_MAX_CELLS = max(1000, int(args.field3d_max_cells))
+
     build(Path(args.input), Path(args.out), args.grid, safe_pad=args.safe_pad, scale=args.scale)
 
 
