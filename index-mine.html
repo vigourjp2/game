@@ -7580,6 +7580,219 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ ensureStyle(); updateHud(); setTimeout(()=>setMsg('捕獲登録修正: 成功時は捕獲専用ルートで一覧登録 / 95%確定・失敗補正は廃止','good'),1000); console.log(VERSION+' active'); }catch(e){}
 })();
 
+
+
+// ===== Wild InfoTexture Level Scaling / Hot Battle v16 =====
+// 野生の情報テクスチャにレベルを付与し、プレイヤーLvに追従して白熱バトルになるようにする。
+(function(){
+  const VERSION='wild-info-level-scaling-v16';
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const now=()=> (performance&&performance.now)?performance.now():Date.now();
+  function hash01(str){
+    str=String(str||'wild'); let h=2166136261;
+    for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); }
+    return ((h>>>0)%100000)/100000;
+  }
+  function playerLv(){
+    try{ return Math.max(1, Math.trunc(Number(infoPlayerProgress&&infoPlayerProgress.level)||1)); }catch(e){ return 1; }
+  }
+  function idsOf(root){
+    try{ return (typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):((typeof rootInfoTextureIds==='function')?rootInfoTextureIds(root):[]); }catch(e){ return []; }
+  }
+  function isInfoRoot(root){ return !!(root && root.data && idsOf(root).length); }
+  function isWild(root){
+    try{
+      const d=(root&&root.data)||{}, ik=String(d.instanceKey||'');
+      if(d.summonedByLocalPlayer || d.ownerClientId==='local' || d.isFriendlySummon) return false;
+      if(d.wildInfoTexture || d.worldSharedSpawn || d.ownerClientId==='world') return true;
+      if(/^infoTexture(?::|V3:)/.test(ik) || /^infoShared/i.test(ik)) return true;
+      return false;
+    }catch(e){ return false; }
+  }
+  function baseMeta(root){
+    try{ return (typeof __wildLevelBaseRootInfoMetaV16==='function') ? __wildLevelBaseRootInfoMetaV16(root) : null; }catch(e){ return null; }
+  }
+  function targetLevelFor(root){
+    const pl=playerLv();
+    const d=(root&&root.data)||{};
+    const key=String(d.instanceKey||d.defId||Math.random());
+    const r=hash01(key);
+    const jitter = r<.12 ? -2 : (r<.34 ? -1 : (r<.72 ? 0 : (r<.93 ? 1 : 2)));
+    const meta=baseMeta(root);
+    const role=String(meta&&meta.role||'');
+    const type=String(meta&&meta.type||'');
+    let bonus=0;
+    if(role==='hostile') bonus+=1;
+    if(/creeper|warden|ravager|enderman|zombie|skeleton|spider|witch|blaze/.test(type)) bonus+=1;
+    if(role==='passive') bonus-=1;
+    // 近場はプレイヤー周辺Lv、遠方や危険Mobは少しだけ上振れ。最低でも雑魚すぎない範囲にする。
+    return clamp(pl + jitter + bonus, Math.max(1, pl-2), pl+4);
+  }
+  function scaledStats(root, lv){
+    const meta=baseMeta(root)||{};
+    const baseHp=Math.max(6, Number((root&&root.data&&root.data.baseWildHp)||meta.hp)||10);
+    const baseDmg=Math.max(0, Number((root&&root.data&&root.data.baseWildDamage)||meta.damage)||2);
+    const role=String(meta.role||'');
+    const hostileBoost = role==='hostile' ? 1.12 : (role==='neutral'?1.04:.92);
+    const hp=Math.round((baseHp*(1+(lv-1)*0.30) + lv*2.4) * hostileBoost);
+    const dmg=Math.max(1, Math.round((baseDmg + lv*0.58) * (role==='passive'?0.72:1)));
+    const xp=Math.max(6, Math.round(hp*.55 + dmg*3 + lv*2));
+    const gold=Math.max(2, Math.round(hp*.16 + dmg*1.4 + lv));
+    return {hp,dmg,xp,gold};
+  }
+  function ensureLevel(root, opts){
+    opts=opts||{};
+    if(!isInfoRoot(root) || !isWild(root)) return null;
+    root.data=root.data||{};
+    const d=root.data;
+    const oldMax=Math.max(1, Number(d.maxHp||d.hp)||1);
+    const oldHp=clamp(Number(d.hp||oldMax),0,oldMax);
+    const hpRatio=oldMax>0 ? oldHp/oldMax : 1;
+    const target=targetLevelFor(root);
+    const current=Math.max(0, Math.trunc(Number(d.infoLevel)||0));
+    const fighting = d.lastPlayerHitAt && now()-Number(d.lastPlayerHitAt)<12000;
+    const canRescale = opts.force || !current || (!fighting && hpRatio>.88 && Math.abs(current-target)>=2);
+    if(!canRescale) return {level:current, stats:scaledStats(root,current)};
+    const lv=target;
+    const meta=baseMeta(root)||{};
+    if(!d.baseWildHp) d.baseWildHp=Math.max(6, Number(meta.hp)||Number(d.maxHp)||Number(d.hp)||10);
+    if(!d.baseWildDamage) d.baseWildDamage=Math.max(0, Number(meta.damage)||2);
+    const st=scaledStats(root, lv);
+    d.infoLevel=lv;
+    d.infoLevelText='Lv.'+lv;
+    d.scaledDamage=st.dmg;
+    d.rewardXp=st.xp;
+    d.rewardGold=st.gold;
+    d.maxHp=st.hp;
+    d.hp=clamp(Math.round(st.hp*hpRatio), 1, st.hp);
+    d.levelScaledAt=now();
+    return {level:lv, stats:st};
+  }
+  function levelText(root){
+    const x=ensureLevel(root)||{}; const lv=x.level || (root&&root.data&&root.data.infoLevel) || 1;
+    return 'Lv.'+lv;
+  }
+
+  try{ window.__wildLevelBaseRootInfoMetaV16 = rootInfoMetaV3; }catch(e){}
+  try{
+    const oldHydrate=hydrateRootRuntime;
+    hydrateRootRuntime=function(root,def){
+      root=oldHydrate.apply(this,arguments);
+      try{ ensureLevel(root,{force:true}); }catch(e){}
+      return root;
+    };
+  }catch(e){}
+  try{
+    const oldPlace=placeCustomObject;
+    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+      const root=oldPlace.apply(this,arguments);
+      try{ ensureLevel(root,{force:true}); }catch(e){}
+      return root;
+    };
+  }catch(e){}
+  try{
+    rootInfoMetaV3=function(root){
+      const meta=window.__wildLevelBaseRootInfoMetaV16(root);
+      try{
+        const lev=ensureLevel(root);
+        if(meta && lev && isWild(root)){
+          const st=lev.stats||scaledStats(root,lev.level);
+          return Object.assign({}, meta, {
+            hp: st.hp,
+            damage: st.dmg,
+            name: String(meta.name||'情報テクスチャ') + ' ' + levelText(root),
+            level: lev.level,
+            wildLevel: lev.level
+          });
+        }
+      }catch(e){}
+      return meta;
+    };
+  }catch(e){ console.warn('wild level meta hook failed',e); }
+
+  try{
+    const oldDamage=damageObjectRoot;
+    damageObjectRoot=function(root,amount){
+      try{ ensureLevel(root); }catch(e){}
+      return oldDamage.apply(this,arguments);
+    };
+  }catch(e){}
+
+  try{
+    const oldReward=addInfoDefeatReward;
+    addInfoDefeatReward=function(root){
+      if(root&&root.data&&root.data.infoLevel){
+        const xp=Math.max(1,Math.round(Number(root.data.rewardXp)||8));
+        const gold=Math.max(1,Math.round(Number(root.data.rewardGold)||3));
+        try{
+          infoPlayerProgress.exp += xp; infoPlayerProgress.totalExp += xp; infoPlayerProgress.gold += gold; infoPlayerProgress.defeats += 1;
+          let ups=0;
+          while(infoPlayerProgress.exp >= infoXpNeed(infoPlayerProgress.level)){
+            infoPlayerProgress.exp -= infoXpNeed(infoPlayerProgress.level); infoPlayerProgress.level += 1; ups++;
+          }
+          playerHp = Math.min(infoPlayerMaxHp(), Math.max(1, Number(playerHp)||1) + (ups?infoPlayerMaxHp():0));
+          saveInfoPlayerProgress();
+          const nm=(typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ';
+          if(ups) setMsg('LEVEL UP! Lv.'+infoPlayerProgress.level+' / 撃破報酬 +'+xp+'EXP +'+gold+'G','good');
+          else setMsg('撃破: '+nm+' / +'+xp+'EXP / +'+gold+'G（登録なし）','good');
+          if(typeof updateInfoHud==='function') updateInfoHud();
+          return;
+        }catch(e){}
+      }
+      return oldReward.apply(this,arguments);
+    };
+  }catch(e){}
+
+  try{
+    const oldCan=canCaptureInfoRoot;
+    canCaptureInfoRoot=function(root){
+      try{ ensureLevel(root); }catch(e){}
+      const r=oldCan.apply(this,arguments);
+      try{ if(r&&root&&root.data&&root.data.infoLevel){ r.level=root.data.infoLevel; r.reason=(r.reason||'') + (r.ok?' / '+levelText(root):''); } }catch(e){}
+      return r;
+    };
+  }catch(e){}
+
+  try{
+    const oldChance=captureChanceForRoot;
+    captureChanceForRoot=function(root,c){
+      const ch=oldChance.apply(this,arguments);
+      try{
+        const lv=(root&&root.data&&Number(root.data.infoLevel))||playerLv();
+        const diff=lv-playerLv();
+        // 高Lv野生は少し捕まりにくい。確率の水増しではなく、表示と実抽選を一致させる。
+        return clamp(ch - Math.max(0,diff)*0.025 + Math.max(0,-diff)*0.015, .05, .95);
+      }catch(e){ return ch; }
+    };
+  }catch(e){}
+
+  // AI攻撃は既存updateCats内でmeta.damageを見るため、rootInfoMetaV3の差し替えで基本対応済み。
+  // 直接damagePlayerを呼ぶ特殊攻撃だけ、直前の攻撃Mob名にLvが乗る。
+  let acc=0;
+  function tick(dt){
+    acc += Number(dt)||0; if(acc<.35) return; acc=0;
+    try{
+      if(!customObjectEntities) return;
+      for(const [ik,root] of customObjectEntities){
+        if(!root||!root.getPosition) continue;
+        const x=ensureLevel(root);
+        if(!x) continue;
+        // 近くにいる野生だけ、たまにレベルを見せる。うるさくしすぎない。
+        const p=root.getPosition(); const dist=Math.hypot(p.x-player.x,p.z-player.z);
+        if(dist<7 && (!root.data.levelMsgAt || now()-root.data.levelMsgAt>6500)){
+          root.data.levelMsgAt=now();
+          const hp=Math.ceil(root.data.hp||0), mh=Math.ceil(root.data.maxHp||0);
+          const name=(typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ';
+          setMsg(name+' '+levelText(root)+' / HP '+hp+'/'+mh+' / 攻撃 '+(root.data.scaledDamage||'?'), 'info');
+        }
+      }
+    }catch(e){}
+  }
+  try{ app.on('update', tick); }catch(e){ setInterval(()=>tick(.4),400); }
+  try{ setTimeout(()=>{ for(const [ik,root] of customObjectEntities){ ensureLevel(root,{force:true}); } setMsg('野生情報テクスチャLv制ON: プレイヤーLv基準でHP/攻撃/報酬を自動スケール','good'); },900); }catch(e){}
+  try{ console.log(VERSION+' active'); }catch(e){}
+})();
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
