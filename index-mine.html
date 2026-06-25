@@ -215,7 +215,7 @@
 </div></div>
 <div id="error"></div>
 <script src="https://cdn.jsdelivr.net/npm/playcanvas@latest/build/playcanvas.min.js"></script>
-<script src="./generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
+<script src="./generated/pokemon-info-textures.gen1.96x96.generated.js"></script>
 <script>
 (function(){
 'use strict';
@@ -1061,10 +1061,10 @@ function validateObjectDef(def){
  if(!def || !Array.isArray(def.cells)) return null;
  const kind = (def.kind==='plane') ? 'plane' : 'voxel3d';
  const gridSize = kind==='plane'
-   ? Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)))
+   ? Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || OBJECT_GRID)))
    : OBJECT_GRID;
  const cells=[];
- const maxCells = kind==='plane' ? Math.min(4096, gridSize * gridSize) : 1536;
+ const maxCells = kind==='plane' ? Math.min(12000, gridSize * gridSize) : 1536;
  for(const c of def.cells.slice(0,maxCells)){
    const x=Math.trunc(Number(c.x));
    const y=Math.trunc(Number(c.y));
@@ -1158,9 +1158,9 @@ function placeCustomObject(def, x, y, z, yaw, instanceKey){
  if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
  const root=new pc.Entity('custom_object_'+instanceKey);
  const s=def.scale;
- const gridSize = Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)));
+ const gridSize = Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || OBJECT_GRID)));
  if(def.kind==='plane'){
-   const used=def.cells.slice(0, Math.min(4096, gridSize * gridSize));
+   const used=def.cells.slice(0, Math.min(12000, gridSize * gridSize));
    for(const c of used){
      const mat=ensureCustomMat(c.color);
      const lx=(c.x-(gridSize-1)/2)*s;
@@ -5682,18 +5682,19 @@ try{
  }catch(e){ console.warn('info texture v7 init failed',e); }
 
 
-// ===== Pokemon generated 30x30 dotdata final override v9 =====
-// 目的: V7の再ベイク(16x16仮アイコン)より後で、GitHub Actions生成の30x30 cellsを必ず優先する。
-// さらに ensureInfoTextureDefV3 をラップして、野生スポーン直前に再生成されても30x30へ戻す。
+// ===== Pokemon generated 96x96 dotdata final override v11 =====
+// 目的: V7の再ベイク(16x16仮アイコン)より後で、GitHub Actions生成の96x96 cellsを必ず優先する。
+// さらに ensureInfoTextureDefV3 をラップして、野生スポーン直前に再生成されても96x96へ戻す。
 (function(){
-  const POKE_DOT_V9 = 'v9-generated-pokemon-30x30-final-override';
+  const POKE_DOT_V9 = 'v11-generated-pokemon-96x96-final-override';
   function generatedPokemonDefsV9(){
+    if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_96)) return window.POKEMON_INFO_TEXTURE_DEFS_96;
     if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) return window.POKEMON_INFO_TEXTURE_DEFS_30;
-    const obj = window.POKEMON_INFO_TEXTURES_GEN1_30X30 || window.POKEMON_INFO_TEXTURES || window.POKEMON_DOTDATA;
+    const obj = window.POKEMON_INFO_TEXTURES_GEN1_96X96 || window.POKEMON_INFO_TEXTURES_GEN1_30X30 || window.POKEMON_INFO_TEXTURES || window.POKEMON_DOTDATA;
     if(obj && typeof obj === 'object'){
       return Object.keys(obj).map(k=>{
         const d=obj[k]||{}; const no=String(d.no||k).replace(/\D/g,'').padStart(3,'0').slice(-3);
-        return Object.assign({id:'info-poke_'+no,type:'poke_'+no,no:Number(no),name:'No.'+no,grid:30,scale:.085}, d);
+        return Object.assign({id:'info-poke_'+no,type:'poke_'+no,no:Number(no),name:'No.'+no,grid:96,scale:(1.08/96)}, d);
       });
     }
     return [];
@@ -5720,13 +5721,13 @@ try{
     return Object.assign({}, base||{}, {
       id, type, infoType:type,
       name:(base && base.name) || ('情報テクスチャ:' + (d.name || ('No.'+no))),
-      kind:'plane', grid:Math.max(1, Math.min(64, Math.trunc(Number(d.grid)||30))), scale:Number(d.scale)||.085,
+      kind:'plane', grid:Math.max(1, Math.min(128, Math.trunc(Number(d.grid)||96))), scale:Number(d.scale)||(1.08/96),
       cells:d.cells.map(c=>({x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), color:normalizeHexColor(c.color)})),
       infoTexture:true, infoRole:(base&&base.infoRole)||'pokemon', hp:(base&&base.hp)||12,
       infoBehavior:(base&&base.infoBehavior)||'図鑑ドット絵セル変換済み。野生出現・撃破登録・面貼り付け対象。',
       infoPhysics:(base&&base.infoPhysics)||{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},
-      pokemonGeneratedCells30:true, pokemonDotVersion:POKE_DOT_V9,
-      iconUrl:'', sourceFile:d.source||'', updatedAt:Date.now(), createdAt:(base&&base.createdAt)||1
+      pokemonGeneratedCells96:true, pokemonGeneratedCells30:true, pokemonDotVersion:POKE_DOT_V9,
+      iconUrl:'', sourceFile:d.source||d.sourceUrl||d.sourceImageUrl||'', updatedAt:Date.now(), createdAt:(base&&base.createdAt)||1
     });
   }
   function applyPokemonGeneratedFinalV9(){
@@ -6756,9 +6757,9 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
 
 // ===== InfoTexture Pokemon field visual regression fix v10 =====
 // 捕獲/RPG化の後でも、フィールド上の情報テクスチャが旧16x16の仮アイコンへ戻らないようにする。
-// 30x30 generated dotdata が読めている場合はそれを優先し、無い場合だけ自前30x30シルエットで復元する。
+// 96x96 generated dotdata が読めている場合はそれを優先し、無い場合だけ自前30x30シルエットで復元する。
 (function(){
-  const INFO_POKE_FIELD_VISUAL_FIX_VERSION = 'v10-pokemon-field-visual-fallback-30x30';
+  const INFO_POKE_FIELD_VISUAL_FIX_VERSION = 'v11-pokemon-field-visual-generated-96x96';
   function pokeNoFromAnyV10(v){
     const raw = String((v && (v.id || v.defId || v.type || v.infoType)) || v || '');
     const m = raw.match(/(?:info[-_])?poke[-_]?(\d{1,3})/i);
@@ -6879,7 +6880,7 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
   function fallbackCellsForPokeV10(no, meta, base){ return canvasCellsV10(drawPixelPokemonV10(no, meta, base)); }
   function needsPokeFieldFixV10(def){
     if(!isPokeDefV10(def)) return false;
-    if(def.pokemonGeneratedCells30 && Number(def.grid)>=24 && Array.isArray(def.cells) && def.cells.length>180) return false;
+    if((def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30) && Number(def.grid)>=24 && Array.isArray(def.cells) && def.cells.length>180) return false;
     return Number(def.grid||0)<24 || !Array.isArray(def.cells) || def.cells.length<180 || String(def.pokemonDotVersion||'').indexOf('fallback')>=0;
   }
   function rebuildRootVisualV10(root, def){
@@ -6890,8 +6891,8 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
         if(ch && ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)){ keep.push(ch); continue; }
         try{ ch.destroy(); }catch{}
       }
-      const s=Number(def.scale)||.085, gridSize=Math.max(1,Math.min(64,Math.trunc(Number(def.grid)||30)));
-      const used=(def.cells||[]).slice(0, Math.min(4096, gridSize*gridSize));
+      const s=Number(def.scale)||(1.08/96), gridSize=Math.max(1,Math.min(128,Math.trunc(Number(def.grid)||96)));
+      const used=(def.cells||[]).slice(0, Math.min(12000, gridSize*gridSize));
       for(const cell of used){
         const mat=ensureCustomMat(normalizeHexColor(cell.color));
         const lx=(Number(cell.x)-(gridSize-1)/2)*s;
@@ -6916,13 +6917,13 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
       if(!cells.length) continue;
       const fixed=Object.assign({}, cur, {
         id, type, infoType:type, name:(cur.name && !/^情報テクスチャ:No\./.test(cur.name))?cur.name:('情報テクスチャ:'+(meta.name||('No.'+String(no).padStart(3,'0')))),
-        kind:'plane', grid:30, scale:Number(cur.scale)||.085, cells, infoTexture:true,
+        kind:'plane', grid:96, scale:(1.08/96), cells, infoTexture:true,
         infoRole:cur.infoRole||meta.role||'pokemon', infoBehavior:cur.infoBehavior||meta.behavior||'', hp:cur.hp||meta.hp||12,
         infoPhysics:cur.infoPhysics||{massKg:meta.massKg||1,gravityScale:(meta.gravityScale==null?1:meta.gravityScale),terminalVelocity:18,bounce:0},
         pokemonFallbackCells30:true, pokemonDotVersion:'v10-fallback-field-visual', updatedAt:Date.now()
       });
       customObjectDefs.set(id, validateObjectDef(fixed)||fixed);
-      if(window.INFO_TEXTURE_META_V3){ window.INFO_TEXTURE_META_V3[id]=Object.assign({},window.INFO_TEXTURE_META_V3[id]||meta,{id,type,grid:30,cells,pokemonFallbackCells30:true}); window.INFO_TEXTURE_META_V3[type]=window.INFO_TEXTURE_META_V3[id]; }
+      if(window.INFO_TEXTURE_META_V3){ window.INFO_TEXTURE_META_V3[id]=Object.assign({},window.INFO_TEXTURE_META_V3[id]||meta,{id,type,grid:96,cells,pokemonFallbackCells30:true}); window.INFO_TEXTURE_META_V3[type]=window.INFO_TEXTURE_META_V3[id]; }
       applied++;
     }
     for(const [,root] of customObjectEntities){
@@ -6946,7 +6947,7 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
     };
     window.ensureInfoTextureDefV3 = ensureInfoTextureDefV3;
   }
-  try{ const n=applyPokeFieldVisualFixV10(); if(n) setMsg('情報テクスチャ表示デグレ修正: フィールド画像30x30復元 '+n+'種','good'); }catch(e){ console.warn('poke field visual fix init failed', e); }
+  try{ const n=applyPokeFieldVisualFixV10(); if(n) setMsg('情報テクスチャ表示デグレ修正: フィールド画像96x96優先 '+n+'種','good'); }catch(e){ console.warn('poke field visual fix init failed', e); }
   try{ setTimeout(applyPokeFieldVisualFixV10, 700); setTimeout(applyPokeFieldVisualFixV10, 2300); setInterval(()=>{ try{ applyPokeFieldVisualFixV10(); }catch{} }, 5000); }catch{}
   window.applyPokeFieldVisualFixV10 = applyPokeFieldVisualFixV10;
 })();
@@ -7581,216 +7582,118 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 })();
 
 
-
-// ===== Wild InfoTexture Level Scaling / Hot Battle v16 =====
-// 野生の情報テクスチャにレベルを付与し、プレイヤーLvに追従して白熱バトルになるようにする。
+// ===== Pokemon info texture field-size normalizer v16 =====
+// 96x96 の細かいドットデータは全部読み込む。ただしフィールド上では画面UIに被らない
+// 1体あたり約1.08mの扱いやすい看板サイズへ正規化する。
 (function(){
-  const VERSION='wild-info-level-scaling-v16';
-  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  const now=()=> (performance&&performance.now)?performance.now():Date.now();
-  function hash01(str){
-    str=String(str||'wild'); let h=2166136261;
-    for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619); }
-    return ((h>>>0)%100000)/100000;
+  const POKEMON_FIELD_SIZE_V16 = 'pokemon-field-size-v16';
+  const POKE_FIELD_WORLD_SIZE = 1.08;     // フィールドに置いた時の正方形全体サイズ
+  const POKE_FIELD_MIN_GRID = 24;
+  const POKE_FIELD_MAX_GRID = 128;
+  const POKE_FIELD_MAX_CELLS = 12000;
+  function clampNum(v, lo, hi, fb){
+    v = Number(v);
+    return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fb;
   }
-  function playerLv(){
-    try{ return Math.max(1, Math.trunc(Number(infoPlayerProgress&&infoPlayerProgress.level)||1)); }catch(e){ return 1; }
+  function pokeNoFromAnyV16(v){
+    const raw = String((v && (v.id || v.type || v.infoType || v.defId)) || v || '');
+    const m = raw.match(/(?:info-poke_|poke[_-]?)(\d{1,3})/i);
+    if(!m) return 0;
+    const n = Math.trunc(Number(m[1]) || 0);
+    return n>=1 && n<=151 ? n : 0;
   }
-  function idsOf(root){
-    try{ return (typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):((typeof rootInfoTextureIds==='function')?rootInfoTextureIds(root):[]); }catch(e){ return []; }
+  function isPokemonPlaneV16(def){
+    if(!def) return false;
+    if(pokeNoFromAnyV16(def)) return true;
+    if(def.infoRole === 'pokemon') return true;
+    if(def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30 || def.pokemonFallbackCells30) return true;
+    return false;
   }
-  function isInfoRoot(root){ return !!(root && root.data && idsOf(root).length); }
-  function isWild(root){
-    try{
-      const d=(root&&root.data)||{}, ik=String(d.instanceKey||'');
-      if(d.summonedByLocalPlayer || d.ownerClientId==='local' || d.isFriendlySummon) return false;
-      if(d.wildInfoTexture || d.worldSharedSpawn || d.ownerClientId==='world') return true;
-      if(/^infoTexture(?::|V3:)/.test(ik) || /^infoShared/i.test(ik)) return true;
-      return false;
-    }catch(e){ return false; }
-  }
-  function baseMeta(root){
-    try{ return (typeof __wildLevelBaseRootInfoMetaV16==='function') ? __wildLevelBaseRootInfoMetaV16(root) : null; }catch(e){ return null; }
-  }
-  function targetLevelFor(root){
-    const pl=playerLv();
-    const d=(root&&root.data)||{};
-    const key=String(d.instanceKey||d.defId||Math.random());
-    const r=hash01(key);
-    const jitter = r<.12 ? -2 : (r<.34 ? -1 : (r<.72 ? 0 : (r<.93 ? 1 : 2)));
-    const meta=baseMeta(root);
-    const role=String(meta&&meta.role||'');
-    const type=String(meta&&meta.type||'');
-    let bonus=0;
-    if(role==='hostile') bonus+=1;
-    if(/creeper|warden|ravager|enderman|zombie|skeleton|spider|witch|blaze/.test(type)) bonus+=1;
-    if(role==='passive') bonus-=1;
-    // 近場はプレイヤー周辺Lv、遠方や危険Mobは少しだけ上振れ。最低でも雑魚すぎない範囲にする。
-    return clamp(pl + jitter + bonus, Math.max(1, pl-2), pl+4);
-  }
-  function scaledStats(root, lv){
-    const meta=baseMeta(root)||{};
-    const baseHp=Math.max(6, Number((root&&root.data&&root.data.baseWildHp)||meta.hp)||10);
-    const baseDmg=Math.max(0, Number((root&&root.data&&root.data.baseWildDamage)||meta.damage)||2);
-    const role=String(meta.role||'');
-    const hostileBoost = role==='hostile' ? 1.12 : (role==='neutral'?1.04:.92);
-    const hp=Math.round((baseHp*(1+(lv-1)*0.30) + lv*2.4) * hostileBoost);
-    const dmg=Math.max(1, Math.round((baseDmg + lv*0.58) * (role==='passive'?0.72:1)));
-    const xp=Math.max(6, Math.round(hp*.55 + dmg*3 + lv*2));
-    const gold=Math.max(2, Math.round(hp*.16 + dmg*1.4 + lv));
-    return {hp,dmg,xp,gold};
-  }
-  function ensureLevel(root, opts){
-    opts=opts||{};
-    if(!isInfoRoot(root) || !isWild(root)) return null;
-    root.data=root.data||{};
-    const d=root.data;
-    const oldMax=Math.max(1, Number(d.maxHp||d.hp)||1);
-    const oldHp=clamp(Number(d.hp||oldMax),0,oldMax);
-    const hpRatio=oldMax>0 ? oldHp/oldMax : 1;
-    const target=targetLevelFor(root);
-    const current=Math.max(0, Math.trunc(Number(d.infoLevel)||0));
-    const fighting = d.lastPlayerHitAt && now()-Number(d.lastPlayerHitAt)<12000;
-    const canRescale = opts.force || !current || (!fighting && hpRatio>.88 && Math.abs(current-target)>=2);
-    if(!canRescale) return {level:current, stats:scaledStats(root,current)};
-    const lv=target;
-    const meta=baseMeta(root)||{};
-    if(!d.baseWildHp) d.baseWildHp=Math.max(6, Number(meta.hp)||Number(d.maxHp)||Number(d.hp)||10);
-    if(!d.baseWildDamage) d.baseWildDamage=Math.max(0, Number(meta.damage)||2);
-    const st=scaledStats(root, lv);
-    d.infoLevel=lv;
-    d.infoLevelText='Lv.'+lv;
-    d.scaledDamage=st.dmg;
-    d.rewardXp=st.xp;
-    d.rewardGold=st.gold;
-    d.maxHp=st.hp;
-    d.hp=clamp(Math.round(st.hp*hpRatio), 1, st.hp);
-    d.levelScaledAt=now();
-    return {level:lv, stats:st};
-  }
-  function levelText(root){
-    const x=ensureLevel(root)||{}; const lv=x.level || (root&&root.data&&root.data.infoLevel) || 1;
-    return 'Lv.'+lv;
+  function normalizePokeDefV16(def){
+    if(!def || !isPokemonPlaneV16(def)) return def;
+    const grid = Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, Math.trunc(Number(def.grid) || 96)));
+    const scale = POKE_FIELD_WORLD_SIZE / grid;
+    const cells = Array.isArray(def.cells)
+      ? def.cells.slice(0, Math.min(POKE_FIELD_MAX_CELLS, grid * grid)).map(c=>({
+          x:Math.trunc(Number(c.x)),
+          y:Math.trunc(Number(c.y)),
+          color:(typeof normalizeHexColor==='function' ? normalizeHexColor(c.color) : String(c.color||'#ffffff'))
+        })).filter(c=>c.x>=0 && c.x<grid && c.y>=0 && c.y<grid)
+      : def.cells;
+    return Object.assign({}, def, {
+      kind:'plane',
+      grid,
+      scale,
+      cells,
+      pokemonFieldScaleV16:true,
+      pokemonFieldWorldSize:POKE_FIELD_WORLD_SIZE,
+      pokemonDotVersion:String(def.pokemonDotVersion || '') + '|field-size-v16'
+    });
   }
 
-  try{ window.__wildLevelBaseRootInfoMetaV16 = rootInfoMetaV3; }catch(e){}
   try{
-    const oldHydrate=hydrateRootRuntime;
-    hydrateRootRuntime=function(root,def){
-      root=oldHydrate.apply(this,arguments);
-      try{ ensureLevel(root,{force:true}); }catch(e){}
+    const oldValidate = validateObjectDef;
+    validateObjectDef = function(def){
+      const normalized = isPokemonPlaneV16(def) ? normalizePokeDefV16(def) : def;
+      const clean = oldValidate.apply(this, [normalized]);
+      return isPokemonPlaneV16(clean) ? Object.assign(clean, {
+        scale: POKE_FIELD_WORLD_SIZE / Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, Math.trunc(Number(clean.grid)||96))),
+        pokemonFieldScaleV16:true,
+        pokemonFieldWorldSize:POKE_FIELD_WORLD_SIZE
+      }) : clean;
+    };
+    window.validateObjectDef = validateObjectDef;
+  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V16+' validate hook failed', e); }
+
+  function resizeExistingPlaneRootV16(root, def){
+    if(!root || !def || !isPokemonPlaneV16(def) || !root.children) return;
+    const grid = Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, Math.trunc(Number(def.grid)||96)));
+    const s = POKE_FIELD_WORLD_SIZE / grid;
+    const h = grid * s;
+    for(const ch of Array.from(root.children||[])){
+      if(!ch || !ch.data) continue;
+      if(ch.data.planeTexture && ch.setLocalScale && ch.setLocalPosition){
+        try{ ch.setLocalScale(POKE_FIELD_WORLD_SIZE, POKE_FIELD_WORLD_SIZE, Math.max(.018, s*.20)); ch.setLocalPosition(0, POKE_FIELD_WORLD_SIZE/2, 0); }catch(e){}
+      }
+    }
+    try{ root.data = Object.assign({}, root.data||{}, {pokemonFieldScaleV16:true, pokemonFieldWorldSize:POKE_FIELD_WORLD_SIZE}); }catch(e){}
+  }
+
+  try{
+    const oldPlace = placeCustomObject;
+    placeCustomObject = function(def,x,y,z,yaw,instanceKey){
+      const normalized = isPokemonPlaneV16(def) ? normalizePokeDefV16(def) : def;
+      const root = oldPlace.apply(this, [normalized,x,y,z,yaw,instanceKey]);
+      try{ resizeExistingPlaneRootV16(root, normalized); }catch(e){}
       return root;
     };
-  }catch(e){}
-  try{
-    const oldPlace=placeCustomObject;
-    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-      const root=oldPlace.apply(this,arguments);
-      try{ ensureLevel(root,{force:true}); }catch(e){}
-      return root;
-    };
-  }catch(e){}
-  try{
-    rootInfoMetaV3=function(root){
-      const meta=window.__wildLevelBaseRootInfoMetaV16(root);
-      try{
-        const lev=ensureLevel(root);
-        if(meta && lev && isWild(root)){
-          const st=lev.stats||scaledStats(root,lev.level);
-          return Object.assign({}, meta, {
-            hp: st.hp,
-            damage: st.dmg,
-            name: String(meta.name||'情報テクスチャ') + ' ' + levelText(root),
-            level: lev.level,
-            wildLevel: lev.level
-          });
-        }
-      }catch(e){}
-      return meta;
-    };
-  }catch(e){ console.warn('wild level meta hook failed',e); }
+    window.placeCustomObject = placeCustomObject;
+  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V16+' place hook failed', e); }
 
-  try{
-    const oldDamage=damageObjectRoot;
-    damageObjectRoot=function(root,amount){
-      try{ ensureLevel(root); }catch(e){}
-      return oldDamage.apply(this,arguments);
-    };
-  }catch(e){}
-
-  try{
-    const oldReward=addInfoDefeatReward;
-    addInfoDefeatReward=function(root){
-      if(root&&root.data&&root.data.infoLevel){
-        const xp=Math.max(1,Math.round(Number(root.data.rewardXp)||8));
-        const gold=Math.max(1,Math.round(Number(root.data.rewardGold)||3));
-        try{
-          infoPlayerProgress.exp += xp; infoPlayerProgress.totalExp += xp; infoPlayerProgress.gold += gold; infoPlayerProgress.defeats += 1;
-          let ups=0;
-          while(infoPlayerProgress.exp >= infoXpNeed(infoPlayerProgress.level)){
-            infoPlayerProgress.exp -= infoXpNeed(infoPlayerProgress.level); infoPlayerProgress.level += 1; ups++;
-          }
-          playerHp = Math.min(infoPlayerMaxHp(), Math.max(1, Number(playerHp)||1) + (ups?infoPlayerMaxHp():0));
-          saveInfoPlayerProgress();
-          const nm=(typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ';
-          if(ups) setMsg('LEVEL UP! Lv.'+infoPlayerProgress.level+' / 撃破報酬 +'+xp+'EXP +'+gold+'G','good');
-          else setMsg('撃破: '+nm+' / +'+xp+'EXP / +'+gold+'G（登録なし）','good');
-          if(typeof updateInfoHud==='function') updateInfoHud();
-          return;
-        }catch(e){}
-      }
-      return oldReward.apply(this,arguments);
-    };
-  }catch(e){}
-
-  try{
-    const oldCan=canCaptureInfoRoot;
-    canCaptureInfoRoot=function(root){
-      try{ ensureLevel(root); }catch(e){}
-      const r=oldCan.apply(this,arguments);
-      try{ if(r&&root&&root.data&&root.data.infoLevel){ r.level=root.data.infoLevel; r.reason=(r.reason||'') + (r.ok?' / '+levelText(root):''); } }catch(e){}
-      return r;
-    };
-  }catch(e){}
-
-  try{
-    const oldChance=captureChanceForRoot;
-    captureChanceForRoot=function(root,c){
-      const ch=oldChance.apply(this,arguments);
-      try{
-        const lv=(root&&root.data&&Number(root.data.infoLevel))||playerLv();
-        const diff=lv-playerLv();
-        // 高Lv野生は少し捕まりにくい。確率の水増しではなく、表示と実抽選を一致させる。
-        return clamp(ch - Math.max(0,diff)*0.025 + Math.max(0,-diff)*0.015, .05, .95);
-      }catch(e){ return ch; }
-    };
-  }catch(e){}
-
-  // AI攻撃は既存updateCats内でmeta.damageを見るため、rootInfoMetaV3の差し替えで基本対応済み。
-  // 直接damagePlayerを呼ぶ特殊攻撃だけ、直前の攻撃Mob名にLvが乗る。
-  let acc=0;
-  function tick(dt){
-    acc += Number(dt)||0; if(acc<.35) return; acc=0;
+  function normalizeRegisteredPokemonV16(){
+    let n=0;
     try{
-      if(!customObjectEntities) return;
-      for(const [ik,root] of customObjectEntities){
-        if(!root||!root.getPosition) continue;
-        const x=ensureLevel(root);
-        if(!x) continue;
-        // 近くにいる野生だけ、たまにレベルを見せる。うるさくしすぎない。
-        const p=root.getPosition(); const dist=Math.hypot(p.x-player.x,p.z-player.z);
-        if(dist<7 && (!root.data.levelMsgAt || now()-root.data.levelMsgAt>6500)){
-          root.data.levelMsgAt=now();
-          const hp=Math.ceil(root.data.hp||0), mh=Math.ceil(root.data.maxHp||0);
-          const name=(typeof infoRootLabel==='function')?infoRootLabel(root):'情報テクスチャ';
-          setMsg(name+' '+levelText(root)+' / HP '+hp+'/'+mh+' / 攻撃 '+(root.data.scaledDamage||'?'), 'info');
-        }
+      if(!window.customObjectDefs) return 0;
+      for(const [id,def] of Array.from(customObjectDefs.entries())){
+        if(!isPokemonPlaneV16(Object.assign({}, def, {id}))) continue;
+        const nd = (typeof validateObjectDef==='function') ? validateObjectDef(Object.assign({}, def, {id})) : normalizePokeDefV16(Object.assign({}, def, {id}));
+        if(nd){ customObjectDefs.set(id, nd); n++; }
       }
-    }catch(e){}
+      for(const [,root] of Array.from(customObjectEntities||[])){
+        const id = root && root.data && root.data.defId;
+        const def = id && customObjectDefs.get(id);
+        if(def && isPokemonPlaneV16(def)) resizeExistingPlaneRootV16(root, def);
+      }
+      try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
+      try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch(e){}
+    }catch(e){ console.warn(POKEMON_FIELD_SIZE_V16+' normalize failed', e); }
+    return n;
   }
-  try{ app.on('update', tick); }catch(e){ setInterval(()=>tick(.4),400); }
-  try{ setTimeout(()=>{ for(const [ik,root] of customObjectEntities){ ensureLevel(root,{force:true}); } setMsg('野生情報テクスチャLv制ON: プレイヤーLv基準でHP/攻撃/報酬を自動スケール','good'); },900); }catch(e){}
-  try{ console.log(VERSION+' active'); }catch(e){}
+  window.normalizePokemonFieldSizeV16 = normalizeRegisteredPokemonV16;
+  try{ normalizeRegisteredPokemonV16(); }catch(e){}
+  setTimeout(()=>{ try{ normalizeRegisteredPokemonV16(); }catch(e){} }, 600);
+  setTimeout(()=>{ try{ normalizeRegisteredPokemonV16(); }catch(e){} }, 2000);
+  try{ console.log(POKEMON_FIELD_SIZE_V16+' active: field world size='+POKE_FIELD_WORLD_SIZE+'m'); }catch(e){}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
