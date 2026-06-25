@@ -26,11 +26,13 @@ jobs:
         run: |
           python tools/build-pokemon-info-textures.py \
             --grid 96 \
+            --safe-pad 0.22 \
+            --scale 0.085 \
             --input assets/pokemon-gen1-icons \
             --out generated/pokemon-info-textures.gen1.30x30.generated.js
 
       - name: commit generated dotdata
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 'Generate high-res pokemon dot texture data'
+          commit_message: 'Generate high-res pokemon dot texture data with safe padding'
           file_pattern: generated/pokemon-info-textures.gen1.30x30.generated.js
