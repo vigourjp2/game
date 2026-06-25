@@ -215,7 +215,7 @@
 </div></div>
 <div id="error"></div>
 <script src="https://cdn.jsdelivr.net/npm/playcanvas@latest/build/playcanvas.min.js"></script>
-<script src="./generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
+<script src="./generated/pokemon-info-textures.gen1.96x96.generated.js"></script>
 <script>
 (function(){
 'use strict';
@@ -1061,10 +1061,10 @@ function validateObjectDef(def){
  if(!def || !Array.isArray(def.cells)) return null;
  const kind = (def.kind==='plane') ? 'plane' : 'voxel3d';
  const gridSize = kind==='plane'
-   ? Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)))
+   ? Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || OBJECT_GRID)))
    : OBJECT_GRID;
  const cells=[];
- const maxCells = kind==='plane' ? Math.min(4096, gridSize * gridSize) : 1536;
+ const maxCells = kind==='plane' ? Math.min(12000, gridSize * gridSize) : 1536;
  for(const c of def.cells.slice(0,maxCells)){
    const x=Math.trunc(Number(c.x));
    const y=Math.trunc(Number(c.y));
@@ -1158,9 +1158,9 @@ function placeCustomObject(def, x, y, z, yaw, instanceKey){
  if(customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
  const root=new pc.Entity('custom_object_'+instanceKey);
  const s=def.scale;
- const gridSize = Math.max(1, Math.min(64, Math.trunc(Number(def.grid) || OBJECT_GRID)));
+ const gridSize = Math.max(1, Math.min(128, Math.trunc(Number(def.grid) || OBJECT_GRID)));
  if(def.kind==='plane'){
-   const used=def.cells.slice(0, Math.min(4096, gridSize * gridSize));
+   const used=def.cells.slice(0, Math.min(12000, gridSize * gridSize));
    for(const c of used){
      const mat=ensureCustomMat(c.color);
      const lx=(c.x-(gridSize-1)/2)*s;
@@ -5682,18 +5682,19 @@ try{
  }catch(e){ console.warn('info texture v7 init failed',e); }
 
 
-// ===== Pokemon generated 30x30 dotdata final override v9 =====
-// 目的: V7の再ベイク(16x16仮アイコン)より後で、GitHub Actions生成の30x30 cellsを必ず優先する。
-// さらに ensureInfoTextureDefV3 をラップして、野生スポーン直前に再生成されても30x30へ戻す。
+// ===== Pokemon generated 96x96 dotdata final override v11 =====
+// 目的: V7の再ベイク(16x16仮アイコン)より後で、GitHub Actions生成の96x96 cellsを必ず優先する。
+// さらに ensureInfoTextureDefV3 をラップして、野生スポーン直前に再生成されても96x96へ戻す。
 (function(){
-  const POKE_DOT_V9 = 'v9-generated-pokemon-30x30-final-override';
+  const POKE_DOT_V9 = 'v11-generated-pokemon-96x96-final-override';
   function generatedPokemonDefsV9(){
+    if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_96)) return window.POKEMON_INFO_TEXTURE_DEFS_96;
     if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) return window.POKEMON_INFO_TEXTURE_DEFS_30;
-    const obj = window.POKEMON_INFO_TEXTURES_GEN1_30X30 || window.POKEMON_INFO_TEXTURES || window.POKEMON_DOTDATA;
+    const obj = window.POKEMON_INFO_TEXTURES_GEN1_96X96 || window.POKEMON_INFO_TEXTURES_GEN1_30X30 || window.POKEMON_INFO_TEXTURES || window.POKEMON_DOTDATA;
     if(obj && typeof obj === 'object'){
       return Object.keys(obj).map(k=>{
         const d=obj[k]||{}; const no=String(d.no||k).replace(/\D/g,'').padStart(3,'0').slice(-3);
-        return Object.assign({id:'info-poke_'+no,type:'poke_'+no,no:Number(no),name:'No.'+no,grid:30,scale:.045}, d);
+        return Object.assign({id:'info-poke_'+no,type:'poke_'+no,no:Number(no),name:'No.'+no,grid:96,scale:(1.08/96)}, d);
       });
     }
     return [];
@@ -5720,13 +5721,13 @@ try{
     return Object.assign({}, base||{}, {
       id, type, infoType:type,
       name:(base && base.name) || ('情報テクスチャ:' + (d.name || ('No.'+no))),
-      kind:'plane', grid:Math.max(1, Math.min(64, Math.trunc(Number(d.grid)||30))), scale:Math.min(Number(d.scale)||.045,.045),
+      kind:'plane', grid:Math.max(1, Math.min(128, Math.trunc(Number(d.grid)||96))), scale:Number(d.scale)||(1.08/96),
       cells:d.cells.map(c=>({x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), color:normalizeHexColor(c.color)})),
       infoTexture:true, infoRole:(base&&base.infoRole)||'pokemon', hp:(base&&base.hp)||12,
       infoBehavior:(base&&base.infoBehavior)||'図鑑ドット絵セル変換済み。野生出現・撃破登録・面貼り付け対象。',
       infoPhysics:(base&&base.infoPhysics)||{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},
-      pokemonGeneratedCells30:true, pokemonDotVersion:POKE_DOT_V9,
-      iconUrl:'', sourceFile:d.source||'', updatedAt:Date.now(), createdAt:(base&&base.createdAt)||1
+      pokemonGeneratedCells96:true, pokemonGeneratedCells30:true, pokemonDotVersion:POKE_DOT_V9,
+      iconUrl:'', sourceFile:d.source||d.sourceUrl||d.sourceImageUrl||'', updatedAt:Date.now(), createdAt:(base&&base.createdAt)||1
     });
   }
   function applyPokemonGeneratedFinalV9(){
@@ -6756,9 +6757,9 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
 
 // ===== InfoTexture Pokemon field visual regression fix v10 =====
 // 捕獲/RPG化の後でも、フィールド上の情報テクスチャが旧16x16の仮アイコンへ戻らないようにする。
-// 30x30 generated dotdata が読めている場合はそれを優先し、無い場合だけ自前30x30シルエットで復元する。
+// 96x96 generated dotdata が読めている場合はそれを優先し、無い場合だけ自前30x30シルエットで復元する。
 (function(){
-  const INFO_POKE_FIELD_VISUAL_FIX_VERSION = 'v10-pokemon-field-visual-fallback-30x30';
+  const INFO_POKE_FIELD_VISUAL_FIX_VERSION = 'v11-pokemon-field-visual-generated-96x96';
   function pokeNoFromAnyV10(v){
     const raw = String((v && (v.id || v.defId || v.type || v.infoType)) || v || '');
     const m = raw.match(/(?:info[-_])?poke[-_]?(\d{1,3})/i);
@@ -6879,7 +6880,7 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
   function fallbackCellsForPokeV10(no, meta, base){ return canvasCellsV10(drawPixelPokemonV10(no, meta, base)); }
   function needsPokeFieldFixV10(def){
     if(!isPokeDefV10(def)) return false;
-    if(def.pokemonGeneratedCells30 && Number(def.grid)>=24 && Array.isArray(def.cells) && def.cells.length>180) return false;
+    if((def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30) && Number(def.grid)>=24 && Array.isArray(def.cells) && def.cells.length>180) return false;
     return Number(def.grid||0)<24 || !Array.isArray(def.cells) || def.cells.length<180 || String(def.pokemonDotVersion||'').indexOf('fallback')>=0;
   }
   function rebuildRootVisualV10(root, def){
@@ -6890,8 +6891,8 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
         if(ch && ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)){ keep.push(ch); continue; }
         try{ ch.destroy(); }catch{}
       }
-      const s=Number(def.scale)||.085, gridSize=Math.max(1,Math.min(64,Math.trunc(Number(def.grid)||30)));
-      const used=(def.cells||[]).slice(0, Math.min(4096, gridSize*gridSize));
+      const s=Number(def.scale)||(1.08/96), gridSize=Math.max(1,Math.min(128,Math.trunc(Number(def.grid)||96)));
+      const used=(def.cells||[]).slice(0, Math.min(12000, gridSize*gridSize));
       for(const cell of used){
         const mat=ensureCustomMat(normalizeHexColor(cell.color));
         const lx=(Number(cell.x)-(gridSize-1)/2)*s;
@@ -6916,13 +6917,13 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
       if(!cells.length) continue;
       const fixed=Object.assign({}, cur, {
         id, type, infoType:type, name:(cur.name && !/^情報テクスチャ:No\./.test(cur.name))?cur.name:('情報テクスチャ:'+(meta.name||('No.'+String(no).padStart(3,'0')))),
-        kind:'plane', grid:30, scale:Number(cur.scale)||.085, cells, infoTexture:true,
+        kind:'plane', grid:96, scale:(1.08/96), cells, infoTexture:true,
         infoRole:cur.infoRole||meta.role||'pokemon', infoBehavior:cur.infoBehavior||meta.behavior||'', hp:cur.hp||meta.hp||12,
         infoPhysics:cur.infoPhysics||{massKg:meta.massKg||1,gravityScale:(meta.gravityScale==null?1:meta.gravityScale),terminalVelocity:18,bounce:0},
         pokemonFallbackCells30:true, pokemonDotVersion:'v10-fallback-field-visual', updatedAt:Date.now()
       });
       customObjectDefs.set(id, validateObjectDef(fixed)||fixed);
-      if(window.INFO_TEXTURE_META_V3){ window.INFO_TEXTURE_META_V3[id]=Object.assign({},window.INFO_TEXTURE_META_V3[id]||meta,{id,type,grid:30,cells,pokemonFallbackCells30:true}); window.INFO_TEXTURE_META_V3[type]=window.INFO_TEXTURE_META_V3[id]; }
+      if(window.INFO_TEXTURE_META_V3){ window.INFO_TEXTURE_META_V3[id]=Object.assign({},window.INFO_TEXTURE_META_V3[id]||meta,{id,type,grid:96,cells,pokemonFallbackCells30:true}); window.INFO_TEXTURE_META_V3[type]=window.INFO_TEXTURE_META_V3[id]; }
       applied++;
     }
     for(const [,root] of customObjectEntities){
@@ -6946,7 +6947,7 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
     };
     window.ensureInfoTextureDefV3 = ensureInfoTextureDefV3;
   }
-  try{ const n=applyPokeFieldVisualFixV10(); if(n) setMsg('情報テクスチャ表示デグレ修正: フィールド画像30x30復元 '+n+'種','good'); }catch(e){ console.warn('poke field visual fix init failed', e); }
+  try{ const n=applyPokeFieldVisualFixV10(); if(n) setMsg('情報テクスチャ表示デグレ修正: フィールド画像96x96優先 '+n+'種','good'); }catch(e){ console.warn('poke field visual fix init failed', e); }
   try{ setTimeout(applyPokeFieldVisualFixV10, 700); setTimeout(applyPokeFieldVisualFixV10, 2300); setInterval(()=>{ try{ applyPokeFieldVisualFixV10(); }catch{} }, 5000); }catch{}
   window.applyPokeFieldVisualFixV10 = applyPokeFieldVisualFixV10;
 })();
@@ -7581,178 +7582,177 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 })();
 
 
-// ===== Regression fix: InfoTexture aim / attack / capture target hitbox v16 =====
-// 見た目を30x30ドット絵へ作り直した後、薄い平面・分割セル・回転OBJが rayBlock() の点サンプリングから漏れて
-// 「見えているのに照準対象なし」になるデグレをここで最後に潰す。
+// ===== Pokemon info texture field-size normalizer v17 =====
+// 96x96 の全セルを読み込みつつ、フィールドでは「空白込みのgrid全体」ではなく
+// 実際に色があるbboxを基準にクロップ＆センタリングして、適切な看板サイズへ正規化する。
+// これで legacy名の 30x30.generated.js に grid:30 が残っていても、cells座標から実gridを推定して全身を潰さない。
 (function(){
-  'use strict';
-  const VERSION='info-target-hitbox-v16';
-  const oldRayBlock = (typeof rayBlock === 'function') ? rayBlock : null;
-  function num(v,d){ v=Number(v); return Number.isFinite(v)?v:d; }
-  function isInfoRootV16(root){
-    try{ if(rootInfoMetaV3(root)) return true; }catch(e){}
-    try{ const ids=(typeof rootInfoTextureIdsV3==='function')?rootInfoTextureIdsV3(root):(typeof rootInfoTextureIds==='function'?rootInfoTextureIds(root):[]); if(ids&&ids.length) return true; }catch(e){}
-    try{ const def=customObjectDefs.get(root&&root.data&&root.data.defId); if(def && (def.infoTexture || (Array.isArray(def.infoTextureIds)&&def.infoTextureIds.length))) return true; }catch(e){}
+  const POKEMON_FIELD_SIZE_V17 = 'pokemon-field-size-v17';
+  const POKE_FIELD_VISIBLE_SIZE = 1.36;     // 実際のポケモン本体の最大辺をこのサイズへ寄せる
+  const POKE_FIELD_MIN_GRID = 24;
+  const POKE_FIELD_MAX_GRID = 128;
+  const POKE_FIELD_MAX_CELLS = 12000;
+  const POKE_FIELD_PADDING = 2;
+
+  function clampNum(v, lo, hi, fb){
+    v = Number(v);
+    return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : fb;
+  }
+  function pokeNoFromAnyV17(v){
+    const raw = String((v && (v.id || v.type || v.infoType || v.defId)) || v || '');
+    const m = raw.match(/(?:info-poke_|poke[_-]?)(\d{1,3})/i);
+    if(!m) return 0;
+    const n = Math.trunc(Number(m[1]) || 0);
+    return n>=1 && n<=151 ? n : 0;
+  }
+  function isPokemonPlaneV17(def){
+    if(!def) return false;
+    if(pokeNoFromAnyV17(def)) return true;
+    if(def.infoRole === 'pokemon') return true;
+    if(def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30 || def.pokemonFallbackCells30) return true;
     return false;
   }
-  function inflateAabb(a, pad){
-    pad=num(pad,.12);
-    return {minX:num(a.minX, a.min&&a.min.x)-pad, maxX:num(a.maxX, a.max&&a.max.x)+pad,
-      minY:num(a.minY, a.min&&a.min.y)-pad, maxY:num(a.maxY, a.max&&a.max.y)+pad,
-      minZ:num(a.minZ, a.min&&a.min.z)-pad, maxZ:num(a.maxZ, a.max&&a.max.z)+pad};
-  }
-  function rootAabbV16(root){
-    try{
-      if(typeof ultraObjectBounds==='function'){
-        const b=ultraObjectBounds(root);
-        if(b&&b.min&&b.max) return {minX:b.min.x,maxX:b.max.x,minY:b.min.y,maxY:b.max.y,minZ:b.min.z,maxZ:b.max.z};
-      }
-    }catch(e){}
-    try{
-      const p=root.getPosition(); return {minX:p.x-.6,maxX:p.x+.6,minY:p.y-.1,maxY:p.y+1.8,minZ:p.z-.6,maxZ:p.z+.6};
-    }catch(e){ return null; }
-  }
-  function rayAabbT(o,d,a,maxDist){
-    let tmin=0, tmax=maxDist;
-    const axes=[['x','minX','maxX'],['y','minY','maxY'],['z','minZ','maxZ']];
-    for(const [ax,mn,mx] of axes){
-      const ov=o[ax], dv=d[ax];
-      if(Math.abs(dv)<1e-6){ if(ov<a[mn]||ov>a[mx]) return null; continue; }
-      let t1=(a[mn]-ov)/dv, t2=(a[mx]-ov)/dv;
-      if(t1>t2){ const tmp=t1; t1=t2; t2=tmp; }
-      tmin=Math.max(tmin,t1); tmax=Math.min(tmax,t2);
-      if(tmax<tmin) return null;
+  function inferGridFromCellsV17(def){
+    let g = Math.trunc(Number(def && def.grid) || 0);
+    const cells = Array.isArray(def && def.cells) ? def.cells : [];
+    for(const c of cells){
+      const x = Math.trunc(Number(c && c.x));
+      const y = Math.trunc(Number(c && c.y));
+      if(Number.isFinite(x)) g = Math.max(g, x + 1);
+      if(Number.isFinite(y)) g = Math.max(g, y + 1);
     }
-    return (tmax>=0 && tmin<=maxDist) ? Math.max(0,tmin) : null;
+    // legacyファイル名が30x30でも、中身が96座標ならここで96になる。
+    // 逆に本当に30しか無い場合は30のまま扱う。
+    return Math.max(POKE_FIELD_MIN_GRID, Math.min(POKE_FIELD_MAX_GRID, g || 96));
   }
-  function bestObjectHitV16(origin,dir,maxDist){
-    let best=null;
-    try{
-      for(const [instanceKey,root] of customObjectEntities){
-        if(!root||!root.getPosition||!root.children) continue;
-        const info=isInfoRootV16(root);
-        const rootPad=info?.55:.18;
-        const rb=rootAabbV16(root); if(!rb) continue;
-        const rt=rayAabbT(origin,dir,inflateAabb(rb,rootPad),maxDist);
-        if(rt==null) continue;
-        let hitCell=null, hitAabb=inflateAabb(rb,rootPad);
-        // セル単位でも確認。ただし情報テクスチャは見た目優先なのでroot全体AABBをヒット可能にする。
-        let cellBestT=null;
-        try{
-          for(const cell of root.children){
-            if(!cell||!cell.getPosition||!cell.getLocalScale) continue;
-            const ca=(typeof customObjectCellAabb==='function')?customObjectCellAabb(cell):null;
-            if(!ca) continue;
-            const pad=info?.20:.08;
-            const ia=inflateAabb(ca,pad);
-            const ct=rayAabbT(origin,dir,ia,maxDist);
-            if(ct!=null && (cellBestT==null||ct<cellBestT)){ cellBestT=ct; hitCell=cell; hitAabb=ia; }
-          }
-        }catch(e){}
-        const t=(cellBestT!=null)?cellBestT:rt;
-        if(!best || t<best.t){ best={t, objectHit:{root,cell:hitCell,instanceKey,defId:root.data&&root.data.defId,aabb:hitAabb,infoTarget:info}}; }
-      }
-    }catch(e){}
-    return best;
-  }
-  rayBlock = function(){
-    if(!oldRayBlock) return null;
-    const dir=forwardVec();
-    const origin={x:player.x,y:player.y+1.45,z:player.z};
-    const maxDist=8.8;
-    const obj=bestObjectHitV16(origin,dir,maxDist);
-    let block=null, last=[Math.round(player.x),Math.floor(player.y+1.35),Math.round(player.z)];
-    for(let t=.16;t<maxDist;t+=.06){
-      const px=origin.x+dir.x*t, py=origin.y+dir.y*t, pz=origin.z+dir.z*t;
-      const bx=Math.floor(px+.5), by=Math.floor(py), bz=Math.floor(pz+.5);
-      const b=blockAt(bx,by,bz);
-      if(b&&isSolidType(b.data.type)){ block={t,hit:b,place:last}; break; }
-      last=[bx,by,bz];
+  function cleanCellsV17(def, srcGrid){
+    const out=[];
+    const cells = Array.isArray(def && def.cells) ? def.cells : [];
+    for(const c of cells.slice(0, POKE_FIELD_MAX_CELLS)){
+      const x=Math.trunc(Number(c && c.x));
+      const y=Math.trunc(Number(c && c.y));
+      if(!Number.isFinite(x)||!Number.isFinite(y)) continue;
+      if(x<0||y<0||x>=srcGrid||y>=srcGrid) continue;
+      out.push({x,y,color:(typeof normalizeHexColor==='function' ? normalizeHexColor(c.color) : String(c.color||'#ffffff'))});
     }
-    if(obj && (!block || obj.t <= block.t + .18)) return Object.assign({place:block?block.place:last}, obj.objectHit ? {objectHit:obj.objectHit} : {});
-    if(block) return {hit:block.hit,place:block.place};
-    return oldRayBlock.apply(this,arguments);
-  };
-  window.rayBlock = rayBlock;
-  try{ console.log(VERSION+' active'); }catch(e){}
+    return out;
+  }
+  function bboxV17(cells){
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(const c of cells){
+      if(c.x<minX) minX=c.x; if(c.x>maxX) maxX=c.x;
+      if(c.y<minY) minY=c.y; if(c.y>maxY) maxY=c.y;
+    }
+    if(!cells.length) return null;
+    return {minX,minY,maxX,maxY,w:maxX-minX+1,h:maxY-minY+1};
+  }
+  function normalizePokeDefV17(def){
+    if(!def || !isPokemonPlaneV17(def)) return def;
+    const srcGrid = inferGridFromCellsV17(def);
+    const srcCells = cleanCellsV17(def, srcGrid);
+    const box = bboxV17(srcCells);
+    if(!box) return Object.assign({}, def, {kind:'plane', grid:srcGrid, scale:POKE_FIELD_VISIBLE_SIZE/srcGrid, cells:srcCells});
+
+    // 空白の多い公式画像をそのままgrid基準で置くと小さすぎたり片寄るので、
+    // 実セルbboxを正方形にクロップして中央へ寄せる。セルは全部残す。
+    const side = Math.max(
+      POKE_FIELD_MIN_GRID,
+      Math.min(POKE_FIELD_MAX_GRID, Math.max(box.w, box.h) + POKE_FIELD_PADDING * 2)
+    );
+    const offX = Math.floor((side - box.w) / 2) - box.minX;
+    const offY = Math.floor((side - box.h) / 2) - box.minY;
+    const mapped=[];
+    for(const c of srcCells){
+      const nx = c.x + offX;
+      const ny = c.y + offY;
+      if(nx<0||ny<0||nx>=side||ny>=side) continue;
+      mapped.push({x:nx,y:ny,color:c.color});
+    }
+    const visibleSide = Math.max(box.w, box.h) || side;
+    // 実本体の最大辺が POKE_FIELD_VISIBLE_SIZE になるようにする。
+    // sideにpaddingを含めるので、全体正方形は少しだけ大きい。
+    const scale = clampNum(POKE_FIELD_VISIBLE_SIZE / visibleSide, 0.004, 0.08, POKE_FIELD_VISIBLE_SIZE / side);
+    return Object.assign({}, def, {
+      kind:'plane',
+      grid:side,
+      scale,
+      cells:mapped.slice(0, Math.min(POKE_FIELD_MAX_CELLS, side*side)),
+      pokemonFieldScaleV17:true,
+      pokemonFieldWorldSize:POKE_FIELD_VISIBLE_SIZE,
+      pokemonSourceGridV17:srcGrid,
+      pokemonSourceBBoxV17:box,
+      pokemonDotVersion:String(def.pokemonDotVersion || '') + '|field-size-v17-bbox'
+    });
+  }
+
+  try{
+    const oldValidate = validateObjectDef;
+    validateObjectDef = function(def){
+      const normalized = isPokemonPlaneV17(def) ? normalizePokeDefV17(def) : def;
+      const clean = oldValidate.apply(this, [normalized]);
+      return isPokemonPlaneV17(clean) ? Object.assign(clean, {
+        pokemonFieldScaleV17:true,
+        pokemonFieldWorldSize:POKE_FIELD_VISIBLE_SIZE,
+        pokemonSourceGridV17:normalized && normalized.pokemonSourceGridV17,
+        pokemonSourceBBoxV17:normalized && normalized.pokemonSourceBBoxV17
+      }) : clean;
+    };
+    window.validateObjectDef = validateObjectDef;
+  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' validate hook failed', e); }
+
+  // 既に出ている個体は、再生成が一番安全。中途半端に子要素だけ拡大縮小すると
+  // 旧grid/旧bboxの偏りが残るため、定義をv17化して place し直す。
+  function rebuildExistingPokemonV17(){
+    try{
+      if(!window.customObjectEntities || !window.customObjectDefs || typeof placeCustomObject!=='function') return 0;
+      let rebuilt=0;
+      for(const [key,root] of Array.from(customObjectEntities.entries())){
+        const id = root && root.data && root.data.defId;
+        const def = id && customObjectDefs.get(id);
+        if(!def || !isPokemonPlaneV17(def) || !root || !root.getPosition) continue;
+        const p=root.getPosition();
+        let yaw=0;
+        try{ yaw=(root.getEulerAngles && root.getEulerAngles().y || 0) * Math.PI / 180; }catch(e){}
+        try{ root.destroy && root.destroy(); }catch(e){}
+        try{ customObjectEntities.delete(key); }catch(e){}
+        const nd = validateObjectDef(Object.assign({}, def, {id}));
+        if(nd){ customObjectDefs.set(id, nd); placeCustomObject(nd, p.x, p.y, p.z, yaw, key); rebuilt++; }
+      }
+      return rebuilt;
+    }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' rebuild existing failed', e); return 0; }
+  }
+
+  try{
+    const oldPlace = placeCustomObject;
+    placeCustomObject = function(def,x,y,z,yaw,instanceKey){
+      const normalized = isPokemonPlaneV17(def) ? normalizePokeDefV17(def) : def;
+      return oldPlace.apply(this, [normalized,x,y,z,yaw,instanceKey]);
+    };
+    window.placeCustomObject = placeCustomObject;
+  }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' place hook failed', e); }
+
+  function normalizeRegisteredPokemonV17(){
+    let n=0;
+    try{
+      if(!window.customObjectDefs) return 0;
+      for(const [id,def] of Array.from(customObjectDefs.entries())){
+        if(!isPokemonPlaneV17(Object.assign({}, def, {id}))) continue;
+        const nd = (typeof validateObjectDef==='function') ? validateObjectDef(Object.assign({}, def, {id})) : normalizePokeDefV17(Object.assign({}, def, {id}));
+        if(nd){ customObjectDefs.set(id, nd); n++; }
+      }
+      try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
+      try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch(e){}
+    }catch(e){ console.warn(POKEMON_FIELD_SIZE_V17+' normalize failed', e); }
+    return n;
+  }
+  window.normalizePokemonFieldSizeV17 = normalizeRegisteredPokemonV17;
+  window.rebuildPokemonFieldObjectsV17 = rebuildExistingPokemonV17;
+  try{ normalizeRegisteredPokemonV17(); }catch(e){}
+  setTimeout(()=>{ try{ normalizeRegisteredPokemonV17(); rebuildExistingPokemonV17(); }catch(e){} }, 600);
+  setTimeout(()=>{ try{ normalizeRegisteredPokemonV17(); rebuildExistingPokemonV17(); }catch(e){} }, 2200);
+  try{ console.log(POKEMON_FIELD_SIZE_V17+' active: visible size='+POKE_FIELD_VISIBLE_SIZE+'m bbox-fit'); }catch(e){}
 })();
 
-
-// ===== Regression fix: Pokemon InfoTexture visual size / clipping v17 =====
-// 30x30化で見た目は良くなったが、1セル .085 のままだと 30*.085=2.55m になり、
-// スマホ画面では巨大・画面外にはみ出しに見える。ポケモン系だけ 1.35m 前後へ正規化する。
-(function(){
-  'use strict';
-  const VERSION='pokemon-info-visual-size-v17';
-  const POKE_CELL_SCALE=.045; // 30px * .045 = 1.35m。近距離でも全身が画面内に収まりやすい。
-  function isPokeId(id){ return /^info-poke_\d{3}$/i.test(String(id||'')); }
-  function clampPokeDef(def){
-    if(!def || !isPokeId(def.id)) return def;
-    if(def.kind==='plane'){
-      def.grid=Math.max(24,Math.min(64,Math.trunc(Number(def.grid)||30)));
-      def.scale=Math.min(Number(def.scale)||POKE_CELL_SCALE, POKE_CELL_SCALE);
-      def.visualSizeFixedV17=true;
-      def.updatedAt=Date.now();
-    }
-    return def;
-  }
-  function fixDefs(){
-    try{
-      if(!window.customObjectDefs) return;
-      for(const [id,def] of customObjectDefs){
-        if(isPokeId(id)) customObjectDefs.set(id, clampPokeDef(def));
-      }
-    }catch(e){}
-  }
-  function resizeExistingRoots(){
-    try{
-      if(!window.customObjectEntities || !window.customObjectDefs) return;
-      for(const [ik,root] of customObjectEntities){
-        if(!root||!root.data) continue;
-        const id=String(root.data.defId||'');
-        if(!isPokeId(id)) continue;
-        const def=clampPokeDef(customObjectDefs.get(id));
-        if(!def) continue;
-        const size=(Number(def.grid)||30)*(Number(def.scale)||POKE_CELL_SCALE);
-        for(const ch of root.children||[]){
-          if(ch && ch.data && ch.data.planeTexture && ch.setLocalScale && ch.setLocalPosition){
-            ch.setLocalScale(size, size, Math.max(.014,(Number(def.scale)||POKE_CELL_SCALE)*.20));
-            ch.setLocalPosition(0, size/2, 0);
-          }
-        }
-      }
-    }catch(e){}
-  }
-  const baseEnsure = (typeof ensureInfoTextureDefV3==='function') ? ensureInfoTextureDefV3 : null;
-  if(baseEnsure){
-    ensureInfoTextureDefV3=function(meta){
-      const def=baseEnsure.apply(this, arguments);
-      try{
-        if(def && isPokeId(def.id)){
-          const fixed=clampPokeDef(def);
-          if(window.customObjectDefs) customObjectDefs.set(fixed.id, fixed);
-          return fixed;
-        }
-      }catch(e){}
-      return def;
-    };
-    window.ensureInfoTextureDefV3=ensureInfoTextureDefV3;
-  }
-  const basePlace = (typeof placeCustomObject==='function') ? placeCustomObject : null;
-  if(basePlace){
-    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-      try{ def=clampPokeDef(def); }catch(e){}
-      const root=basePlace.apply(this, arguments);
-      try{ fixDefs(); resizeExistingRoots(); }catch(e){}
-      return root;
-    };
-    window.placeCustomObject=placeCustomObject;
-  }
-  try{ fixDefs(); resizeExistingRoots(); }catch(e){}
-  setTimeout(()=>{ try{ fixDefs(); resizeExistingRoots(); }catch(e){} }, 300);
-  setTimeout(()=>{ try{ fixDefs(); resizeExistingRoots(); }catch(e){} }, 1500);
-  try{ console.log(VERSION+' active'); }catch(e){}
-})();
 
 setMsg('PlayCanvas Engine読込完了','good');
 })();
