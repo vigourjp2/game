@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Pokemon Field3D Check</title>
+<style>
+  :root{--bg:#101114;--panel:#1b1d22;--line:#3d424d;--txt:#eef2ff;--muted:#aab2c5;--ok:#82f08c;--bad:#ff8080;--warn:#ffd36a;--accent:#7db7ff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overscroll-behavior:none}
+  header{padding:12px 14px;border-bottom:1px solid var(--line);background:#15171c;position:sticky;top:0;z-index:5}
+  h1{font-size:18px;margin:0 0 6px;line-height:1.25}
+  .sub{font-size:12px;color:var(--muted);line-height:1.35}
+  main{display:grid;grid-template-columns:minmax(280px,1fr) 330px;gap:10px;padding:10px;max-width:1280px;margin:0 auto}
+  @media(max-width:860px){main{grid-template-columns:1fr;padding:8px}.side{order:-1}.desktopOnly{display:none}}
+  .viewer,.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .viewer{position:relative;min-height:360px;height:calc(100vh - 170px)}
+  @media(max-width:860px){.viewer{height:58vh;min-height:360px}}
+  canvas#view{display:block;width:100%;height:100%;background:linear-gradient(#11151e,#0b0d12);touch-action:none;cursor:grab}
+  canvas#view:active{cursor:grabbing}
+  .hud{position:absolute;left:10px;top:10px;background:rgba(0,0,0,.48);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.45;max-width:74%;backdrop-filter:blur(4px)}
+  .hint{position:absolute;right:10px;bottom:10px;background:rgba(0,0,0,.48);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted);line-height:1.4;max-width:78%}
+  .card{padding:10px;margin-bottom:10px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  label{font-size:12px;color:var(--muted);display:block;margin:9px 0 3px}
+  input,select,button{font:inherit;border-radius:8px;border:1px solid #555c6b;background:#242832;color:var(--txt);padding:8px 9px}
+  input[type=number]{width:76px}
+  input[type=range]{width:100%;padding:0}
+  button{background:#2b3240;cursor:pointer}
+  button:active{transform:translateY(1px)}
+  button.primary{border-color:#5d8ee8;background:#244574}
+  .ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+  pre{white-space:pre-wrap;word-break:break-word;background:#0b0c10;border:1px solid #30333c;border-radius:8px;padding:8px;max-height:180px;overflow:auto;font-size:12px;color:#d9e0f5}
+  .mini{font-size:12px;color:var(--muted)}
+  .imgrow{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+  img{image-rendering:pixelated;border:1px solid #555;background:#111;border-radius:8px;width:96px;height:96px;object-fit:contain}
+  canvas#plane{image-rendering:pixelated;border:1px solid #555;background:#111;border-radius:8px;width:96px;height:96px}
+</style>
+</head>
+<body>
+<header>
+  <h1>ポケモン情報テクスチャ 3Dモデル確認HTML <span id="titleNo">---</span></h1>
+  <div class="sub">generated/pokemon-info-textures.gen1.30x30.generated.js の <code>field3d</code> を直接読み、151体の個別ナノブロック風3Dセルをグリグリ確認する。</div>
+</header>
+<main>
+  <section class="viewer">
+    <canvas id="view"></canvas>
+    <div class="hud" id="hud">loading...</div>
+    <div class="hint">ドラッグ: 回転 / ホイール・ピンチ: ズーム<br>ダブルタップ: 正面リセット / 2本指ドラッグ: 移動</div>
+  </section>
+  <aside class="side">
+    <div class="card">
+      <div class="row">
+        <label style="margin:0">No.</label>
+        <input id="no" type="number" min="1" max="151" value="39" />
+        <button onclick="prevNo()">◀</button>
+        <button class="primary" onclick="loadNo()">表示</button>
+        <button onclick="nextNo()">▶</button>
+      </div>
+      <label>一覧</label>
+      <select id="select" onchange="document.getElementById('no').value=this.value;loadNo();"></select>
+      <div id="status" class="warn mini" style="margin-top:8px">generated読込待ち...</div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button onclick="resetView()">正面</button>
+        <button onclick="topView()">上から</button>
+        <button onclick="sideView()">横から</button>
+        <button onclick="fitView()">フィット</button>
+      </div>
+      <label>Yaw 横回転 <span id="yawText"></span></label>
+      <input id="yaw" type="range" min="-180" max="180" value="35" oninput="syncSliders();draw()" />
+      <label>Pitch 縦回転 <span id="pitchText"></span></label>
+      <input id="pitch" type="range" min="-85" max="85" value="-25" oninput="syncSliders();draw()" />
+      <label>近さ / Zoom <span id="zoomText"></span></label>
+      <input id="zoom" type="range" min="12" max="90" value="38" oninput="syncSliders();draw()" />
+      <label>ブロック隙間 <span id="gapText"></span></label>
+      <input id="gap" type="range" min="70" max="110" value="96" oninput="syncSliders();draw()" />
+      <div class="row" style="margin-top:8px">
+        <label><input id="auto" type="checkbox" onchange="draw()"> 自動回転</label>
+        <label><input id="wire" type="checkbox" onchange="draw()"> 線</label>
+        <label><input id="axes" type="checkbox" checked onchange="draw()"> 軸</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="imgrow">
+        <div><div class="mini">元画像</div><img id="srcImg" alt="source" /></div>
+        <div><div class="mini">2D cells</div><canvas id="plane" width="96" height="96"></canvas></div>
+      </div>
+      <pre id="info"></pre>
+    </div>
+  </aside>
+</main>
+<script src="generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const canvas = $('view');
+const ctx = canvas.getContext('2d');
+let defs = [];
+let currentDef = null;
+let currentPlane = null;
+let yaw = 35 * Math.PI/180;
+let pitch = -25 * Math.PI/180;
+let zoom = 38;
+let gap = 0.96;
+let panX = 0, panY = 0;
+let dragging = false, lastX=0, lastY=0, lastTap=0;
+let pinchDist = 0, twoFinger = false;
+
+function pad3(n){ return String(Math.max(1, Math.min(151, parseInt(n,10)||39))).padStart(3,'0'); }
+function num(n){ return Math.max(1, Math.min(151, parseInt(n,10)||39)); }
+function deg(rad){ return Math.round(rad*180/Math.PI); }
+function rad(d){ return d*Math.PI/180; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function getAllDefs(){
+  const a = window.POKEMON_INFO_TEXTURE_DEFS_30 || window.POKEMON_INFO_TEXTURE_DEFS || [];
+  if(Array.isArray(a) && a.length) return a;
+  const f = window.POKEMON_INFO_TEXTURE_FIELD3D_DEFS || [];
+  if(Array.isArray(f) && f.length) return f.map(x=>({no:Number((x.type||'').replace(/\D/g,'')), name:x.name, field3d:x}));
+  return [];
+}
+function init(){
+  resize();
+  defs = getAllDefs();
+  const sel = $('select');
+  sel.innerHTML = '';
+  for(const d of defs){
+    const no = Number(d.no || String(d.id||d.type||'').replace(/\D/g,''));
+    if(!no) continue;
+    const opt = document.createElement('option');
+    opt.value = no;
+    opt.textContent = `${pad3(no)} ${String(d.name||d.field3d?.name||'').replace(/ 3D$/,'')}`;
+    sel.appendChild(opt);
+  }
+  if(!defs.length){
+    $('status').className='bad mini';
+    $('status').textContent='NG: generated JSが読めてない。generated/pokemon-info-textures.gen1.30x30.generated.js の配置を確認。';
+    drawEmpty();
+    return;
+  }
+  loadNo();
+  requestAnimationFrame(tick);
+}
+function findDef(no){
+  no = Number(no);
+  return defs.find(d => Number(d.no)===no || Number(String(d.id||d.type||'').replace(/\D/g,''))===no) || null;
+}
+function loadNo(){
+  const n = num($('no').value);
+  $('no').value = n;
+  $('select').value = String(n);
+  currentPlane = findDef(n);
+  currentDef = currentPlane ? (currentPlane.field3d || currentPlane) : null;
+  $('titleNo').textContent = pad3(n);
+  const imgPath = `assets/pokemon-gen1-icons/pokeicon-${pad3(n)}.jpg`;
+  $('srcImg').src = imgPath + '?v=' + Date.now();
+  if(!currentDef || !Array.isArray(currentDef.cells) || !currentDef.cells.length){
+    $('status').className='bad mini';
+    $('status').textContent=`NG: No.${pad3(n)} の field3d が無い。生成JS内の field3d を確認。`;
+  }else{
+    $('status').className='ok mini';
+    $('status').textContent=`OK: No.${pad3(n)} / field3d cells=${currentDef.cells.length}`;
+  }
+  panX = 0; panY = 0; fitView(); drawPlane(); updateInfo(); draw();
+}
+function prevNo(){ $('no').value = Math.max(1,num($('no').value)-1); loadNo(); }
+function nextNo(){ $('no').value = Math.min(151,num($('no').value)+1); loadNo(); }
+function bounds(cells){
+  const xs=cells.map(c=>+c.x), ys=cells.map(c=>+c.y), zs=cells.map(c=>+c.z);
+  return {minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys),minZ:Math.min(...zs),maxZ:Math.max(...zs)};
+}
+function fitView(){
+  if(currentDef && currentDef.cells && currentDef.cells.length){
+    const b=bounds(currentDef.cells);
+    const span=Math.max(b.maxX-b.minX+1,b.maxY-b.minY+1,b.maxZ-b.minZ+1,8);
+    const base=Math.min(canvas.clientWidth,canvas.clientHeight);
+    zoom = clamp((base/(span*1.8)) || 38, 14, 90);
+  }
+  syncToSliders(); draw();
+}
+function resetView(){ yaw=rad(35); pitch=rad(-25); panX=0; panY=0; fitView(); }
+function topView(){ yaw=rad(0); pitch=rad(-80); panX=0; panY=0; syncToSliders(); draw(); }
+function sideView(){ yaw=rad(90); pitch=rad(-10); panX=0; panY=0; syncToSliders(); draw(); }
+function syncToSliders(){ $('yaw').value=deg(yaw); $('pitch').value=deg(pitch); $('zoom').value=Math.round(zoom); $('gap').value=Math.round(gap*100); syncSliders(false); }
+function syncSliders(read=true){
+  if(read){ yaw=rad(+$('yaw').value); pitch=rad(+$('pitch').value); zoom=+$('zoom').value; gap=(+$('gap').value)/100; }
+  $('yawText').textContent=deg(yaw)+'°'; $('pitchText').textContent=deg(pitch)+'°'; $('zoomText').textContent=Math.round(zoom); $('gapText').textContent=Math.round(gap*100)+'%';
+}
+function resize(){
+  const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio||1));
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.floor(rect.width*dpr));
+  canvas.height = Math.max(1, Math.floor(rect.height*dpr));
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+function rotatePoint(p){
+  const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  let x=p.x, y=p.y, z=p.z;
+  let x1=x*cy - z*sy;
+  let z1=x*sy + z*cy;
+  let y1=y*cp - z1*sp;
+  let z2=y*sp + z1*cp;
+  return {x:x1,y:y1,z:z2};
+}
+function project(p,cx,cy){
+  const r=rotatePoint(p);
+  return {x:cx + r.x*zoom + panX, y:cy - r.y*zoom + panY, z:r.z};
+}
+function shade(hex, mul){
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex||'');
+  if(!m) return hex || '#ff00ff';
+  const n=parseInt(m[1],16);
+  let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=clamp(Math.round(r*mul),0,255); g=clamp(Math.round(g*mul),0,255); b=clamp(Math.round(b*mul),0,255);
+  return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+function drawPoly(pts, fill){
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  if($('wire').checked){ ctx.strokeStyle='rgba(0,0,0,.42)'; ctx.lineWidth=1; ctx.stroke(); }
+}
+function drawAxes(cx,cy){
+  if(!$('axes').checked) return;
+  const o={x:0,y:0,z:0};
+  const axes=[['X',{x:5,y:0,z:0},'#ff7070'],['Y',{x:0,y:5,z:0},'#70ff90'],['Z',{x:0,y:0,z:5},'#70a7ff']];
+  const po=project(o,cx,cy);
+  ctx.lineWidth=2;
+  ctx.font='12px system-ui';
+  for(const [label,p,color] of axes){
+    const pp=project(p,cx,cy);
+    ctx.strokeStyle=color; ctx.beginPath(); ctx.moveTo(po.x,po.y); ctx.lineTo(pp.x,pp.y); ctx.stroke();
+    ctx.fillStyle=color; ctx.fillText(label,pp.x+4,pp.y+4);
+  }
+}
+function draw(){
+  if(!ctx) return;
+  const w=canvas.clientWidth||canvas.width, h=canvas.clientHeight||canvas.height;
+  ctx.clearRect(0,0,w,h);
+  const grad=ctx.createLinearGradient(0,0,0,h); grad.addColorStop(0,'#121824'); grad.addColorStop(1,'#090b10'); ctx.fillStyle=grad; ctx.fillRect(0,0,w,h);
+  if(!currentDef || !currentDef.cells || !currentDef.cells.length){ drawEmpty(); return; }
+  const cells=currentDef.cells;
+  const b=bounds(cells);
+  const center={x:(b.minX+b.maxX+1)/2,y:(b.minY+b.maxY+1)/2,z:(b.minZ+b.maxZ+1)/2};
+  const cx=w/2, cy=h/2+20;
+  const faces=[];
+  const s=0.5*gap;
+  const faceDefs=[
+    {name:'top', idx:[2,3,7,6], mul:1.16},
+    {name:'front', idx:[0,1,3,2], mul:1.00},
+    {name:'right', idx:[1,5,7,3], mul:.82},
+    {name:'left', idx:[4,0,2,6], mul:.74},
+    {name:'back', idx:[5,4,6,7], mul:.62},
+    {name:'bottom', idx:[4,5,1,0], mul:.55},
+  ];
+  for(const c of cells){
+    const x=(+c.x-center.x), y=-(+c.y-center.y), z=(+c.z-center.z);
+    const v=[
+      {x:x-s,y:y-s,z:z-s},{x:x+s,y:y-s,z:z-s},{x:x-s,y:y+s,z:z-s},{x:x+s,y:y+s,z:z-s},
+      {x:x-s,y:y-s,z:z+s},{x:x+s,y:y-s,z:z+s},{x:x-s,y:y+s,z:z+s},{x:x+s,y:y+s,z:z+s},
+    ];
+    const pv=v.map(p=>project(p,cx,cy));
+    for(const fd of faceDefs){
+      const pts=fd.idx.map(i=>pv[i]);
+      const depth=pts.reduce((a,p)=>a+p.z,0)/4;
+      faces.push({pts, depth, color:shade(c.color, fd.mul)});
+    }
+  }
+  faces.sort((a,b)=>a.depth-b.depth);
+  for(const f of faces) drawPoly(f.pts,f.color);
+  drawAxes(cx,cy);
+  $('hud').innerHTML = `<b>${currentDef.name||currentPlane?.name||''}</b><br>`+
+    `cells: ${cells.length} / archetype: ${currentDef.archetype||'-'}<br>`+
+    `features: ${(currentDef.features||[]).join(', ')||'-'}<br>`+
+    `yaw ${deg(yaw)}° / pitch ${deg(pitch)}° / zoom ${Math.round(zoom)}`;
+}
+function drawEmpty(){
+  const w=canvas.clientWidth||canvas.width, h=canvas.clientHeight||canvas.height;
+  ctx.fillStyle='#ff8080'; ctx.font='16px system-ui'; ctx.fillText('field3d が読めない', 20, 36);
+  $('hud').textContent='field3d無し';
+}
+function drawPlane(){
+  const p=$('plane'); const pctx=p.getContext('2d');
+  pctx.clearRect(0,0,p.width,p.height); pctx.fillStyle='#050607'; pctx.fillRect(0,0,p.width,p.height);
+  if(!currentPlane || !currentPlane.cells) return;
+  const grid=Number(currentPlane.grid||24); const cell=p.width/grid;
+  for(const c of currentPlane.cells){ pctx.fillStyle=c.color||'#f0f'; pctx.fillRect(c.x*cell,c.y*cell,Math.ceil(cell),Math.ceil(cell)); }
+}
+function updateInfo(){
+  const cells = currentDef?.cells || [];
+  if(!cells.length){ $('info').textContent='field3dなし'; return; }
+  const b=bounds(cells);
+  const colors=new Map(); for(const c of cells) colors.set((c.color||'').toLowerCase(),(colors.get((c.color||'').toLowerCase())||0)+1);
+  $('info').textContent=JSON.stringify({
+    planeId:currentPlane?.id, field3dId:currentDef?.id, no:currentPlane?.no, name:currentDef?.name,
+    archetype:currentDef?.archetype, features:currentDef?.features, cellCount:cells.length, colorCount:colors.size,
+    bounds:b, topColors:Array.from(colors.entries()).sort((a,b)=>b[1]-a[1]).slice(0,8)
+  },null,2);
+}
+function pointerXY(e){
+  if(e.touches && e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY};
+  return {x:e.clientX,y:e.clientY};
+}
+canvas.addEventListener('mousedown',e=>{dragging=true; const p=pointerXY(e); lastX=p.x; lastY=p.y;});
+window.addEventListener('mouseup',()=>dragging=false);
+window.addEventListener('mousemove',e=>{ if(!dragging) return; const p=pointerXY(e); yaw += (p.x-lastX)*0.01; pitch=clamp(pitch+(p.y-lastY)*0.01,rad(-85),rad(85)); lastX=p.x; lastY=p.y; syncToSliders(); draw(); });
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); zoom=clamp(zoom*(e.deltaY>0?.90:1.10),12,90); syncToSliders(); draw(); },{passive:false});
+canvas.addEventListener('touchstart',e=>{
+  const now=Date.now(); if(e.touches.length===1 && now-lastTap<300){ resetView(); } lastTap=now;
+  if(e.touches.length===2){ twoFinger=true; const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY; pinchDist=Math.hypot(dx,dy); lastX=(e.touches[0].clientX+e.touches[1].clientX)/2; lastY=(e.touches[0].clientY+e.touches[1].clientY)/2; }
+  else { twoFinger=false; const p=pointerXY(e); lastX=p.x; lastY=p.y; }
+},{passive:false});
+canvas.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(e.touches.length===2){
+    const dx=e.touches[0].clientX-e.touches[1].clientX, dy=e.touches[0].clientY-e.touches[1].clientY; const d=Math.hypot(dx,dy);
+    const mx=(e.touches[0].clientX+e.touches[1].clientX)/2, my=(e.touches[0].clientY+e.touches[1].clientY)/2;
+    if(pinchDist){ zoom=clamp(zoom*(d/pinchDist),12,90); }
+    panX += (mx-lastX); panY += (my-lastY); pinchDist=d; lastX=mx; lastY=my; syncToSliders(); draw(); return;
+  }
+  const p=pointerXY(e); yaw += (p.x-lastX)*0.01; pitch=clamp(pitch+(p.y-lastY)*0.01,rad(-85),rad(85)); lastX=p.x; lastY=p.y; syncToSliders(); draw();
+},{passive:false});
+canvas.addEventListener('touchend',()=>{pinchDist=0; twoFinger=false;},{passive:true});
+window.addEventListener('resize',resize);
+function tick(){ if($('auto')?.checked){ yaw += 0.008; syncToSliders(); draw(); } requestAnimationFrame(tick); }
+window.addEventListener('load',()=>{ syncToSliders(); init(); });
+</script>
+</body>
+</html>
