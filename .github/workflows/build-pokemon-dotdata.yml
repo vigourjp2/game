@@ -27,7 +27,6 @@ jobs:
           python tools/build-pokemon-info-textures.py \
             --grid 96 \
             --safe-pad 0.22 \
-            --scale 0.085 \
             --input assets/pokemon-gen1-icons \
             --out generated/pokemon-info-textures.gen1.30x30.generated.js
 
