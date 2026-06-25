@@ -150,7 +150,6 @@
       <button id="bpCloseBtn">閉じる</button>
       <button id="bpResetWorldBtn" class="badBtn">地形リセット</button>
       <button id="bpResetObjectsBtn" class="badBtn">配置OBJリセット</button>
-      <button id="bpResetPlayerBtn" class="badBtn">Lv/EXP/お金リセット</button>
       <button id="bpClearLocalBtn" class="badBtn">端末キャッシュ全消し</button>
     </div>
     <div id="bpList" class="bpGrid"></div>
@@ -1094,22 +1093,20 @@ function loadCustomObjectsLocal(){
 }
 
 function clearLocalBlueprintCache(reason){
- // 端末キャッシュ全消しは、OBJ定義だけでなく「情報テクスチャ入手済み」フラグとRPG進行も消す。
- // これを消さないと、一覧やLv/EXP/所持金だけが残って「リセットしたのに残ってる」状態になる。
+ // 端末キャッシュ全消しは、OBJ定義だけでなく「情報テクスチャ入手済み」フラグも消す。
+ // これを消さないと、プレイヤーが倒していない情報テクスチャが一覧に残り続ける。
  try{ localStorage.removeItem(OBJECT_STORAGE_KEY); }catch{}
  try{ localStorage.removeItem('mineInfoTextureDefeatedByLocalPlayer.v3'); }catch{}
  try{ localStorage.removeItem('mineInfoTextureDefeatedByPlayer.v2'); }catch{}
  try{ localStorage.removeItem('mineInfoTextureDefeated.v1'); }catch{}
- try{ localStorage.removeItem('mineInfoTexturePlayerProgress.v1'); }catch{}
  try{ if(typeof infoTextureGranted!=='undefined' && infoTextureGranted && infoTextureGranted.clear) infoTextureGranted.clear(); }catch{}
- try{ if(typeof resetInfoPlayerProgressLocal==='function') resetInfoPlayerProgressLocal('端末キャッシュ全消し: Lv/EXP/お金もリセット', true); }catch{}
  try{ customObjectDefs.clear(); }catch{}
  try{ if(typeof ensureAllInfoTexturesV3==='function') ensureAllInfoTexturesV3(); }catch{}
  try{ if(typeof ensureCatInfoTexture==='function') ensureCatInfoTexture(); }catch{}
  try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch{}
  try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch{}
  try{ setObjHud(); }catch{}
- try{ setMsg(reason || '端末キャッシュ全消し: OBJ定義・情報テクスチャ解禁履歴・Lv/EXP/お金を削除', 'good'); }catch{}
+ try{ setMsg(reason || '端末キャッシュ全消し: OBJ定義と情報テクスチャ解禁履歴を削除', 'good'); }catch{}
 }
 function registerCustomObjectDef(def, source){
  def=normalizeInfoTextureDefIdsV8(def);
@@ -1510,8 +1507,7 @@ function bindObjectEditorUi(){
  const bc=$('bpCloseBtn'); if(bc)bc.onclick=closeObjectManager;
  const brw=$('bpResetWorldBtn'); if(brw)brw.onclick=requestWorldReset;
  const bro=$('bpResetObjectsBtn'); if(bro)bro.onclick=requestObjectWorldReset;
- const brp=$('bpResetPlayerBtn'); if(brp)brp.onclick=requestPlayerProgressReset;
- const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\n情報テクスチャの入手済み履歴とLv/EXP/お金も消します。\nCloudflare側に残っている通常OBJは再接続で戻る可能性あり。')){clearLocalBlueprintCache();}};
+ const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\n情報テクスチャの入手済み履歴も消します。\nCloudflare側に残っている通常OBJは再接続で戻る可能性あり。')){clearLocalBlueprintCache();}};
  const oc=$('objCanvas'); if(oc){oc.addEventListener('pointerdown',e=>{objPointerDown=true;oc.setPointerCapture(e.pointerId);paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointermove',e=>{if(objPointerDown&&objTool!=='pick')paintObjAtEvent(e);e.preventDefault();});oc.addEventListener('pointerup',()=>{objPointerDown=false;});oc.addEventListener('pointercancel',()=>{objPointerDown=false;});}
  const pal=$('objPalette'); if(pal){pal.addEventListener('pointerdown',e=>{const r=pal.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)/r.width*pal.width),y=Math.floor((e.clientY-r.top)/r.height*pal.height);const d=pal.getContext('2d').getImageData(Math.max(0,Math.min(pal.width-1,x)),Math.max(0,Math.min(pal.height-1,y)),1,1).data;setObjColor('#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''));setObjTool('paint');});}
  const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
@@ -1956,8 +1952,7 @@ function bindObjectEditorUi(){
  const bc=$('bpCloseBtn'); if(bc)bc.onclick=closeObjectManager;
  const brw=$('bpResetWorldBtn'); if(brw)brw.onclick=requestWorldReset;
  const bro=$('bpResetObjectsBtn'); if(bro)bro.onclick=requestObjectWorldReset;
- const brp=$('bpResetPlayerBtn'); if(brp)brp.onclick=requestPlayerProgressReset;
- const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\n情報テクスチャの入手済み履歴とLv/EXP/お金も消します。\nCloudflare側に残っている通常OBJは再接続で戻る可能性あり。')){clearLocalBlueprintCache();}};
+ const bcl=$('bpClearLocalBtn'); if(bcl)bcl.onclick=()=>{if(confirm('端末内キャッシュだけ全消しする？\n情報テクスチャの入手済み履歴も消します。\nCloudflare側に残っている通常OBJは再接続で戻る可能性あり。')){clearLocalBlueprintCache();}};
  const col=$('objColor'); if(col)col.oninput=()=>setObjColor(col.value);
  const cbtn=$('objColorCustomBtn'); if(cbtn)cbtn.onclick=openObjColorPanel;
  buildObjColorPresets();
@@ -2073,18 +2068,45 @@ blueprintThumb = function(def){
  def=validateObjectDef(def);
  if(!def) return '';
  if(def.kind!=='plane') return __baseBlueprintThumb(def);
- const canvas=document.createElement('canvas'); canvas.width=112; canvas.height=78;
+
+ // 平面/情報テクスチャのサムネを、立体OBJと同じ 180x130 に戻す。
+ // 旧 112x78 の固定64px枠だと、リザードン等の縦長・横長ドット絵が
+ // 下部のラベルに食い込んだり、カード内で大きく見えたりして崩れる。
+ const canvas=document.createElement('canvas'); canvas.width=180; canvas.height=130;
  const g=canvas.getContext('2d');
+ g.imageSmoothingEnabled=false;
  g.fillStyle='rgba(15,23,42,.95)'; g.fillRect(0,0,canvas.width,canvas.height);
- const grid=def.grid||PLANE_TEX_GRID_DEFAULT;
- const size=64, ox=24, oy=8;
- g.fillStyle='rgba(255,255,255,.10)'; g.fillRect(ox,oy,size,size);
- for(const c of def.cells||[]){
-   g.fillStyle=normalizeHexColor(c.color);
-   g.fillRect(ox + c.x/grid*size, oy + c.y/grid*size, Math.max(1,size/grid), Math.max(1,size/grid));
+ g.strokeStyle='rgba(255,255,255,.18)'; g.strokeRect(.5,.5,canvas.width-1,canvas.height-1);
+ const grid=Math.max(1, Number(def.grid)||PLANE_TEX_GRID_DEFAULT);
+ const cells=Array.isArray(def.cells)?def.cells:[];
+ if(!cells.length){
+   g.fillStyle='rgba(255,255,255,.45)'; g.font='12px system-ui'; g.fillText('empty',72,68);
+   return canvas.toDataURL('image/png');
  }
- g.fillStyle='rgba(191,219,254,.95)'; g.font='10px system-ui';
- g.fillText('平面 '+grid+'x'+grid+' / '+(def.scale||0).toFixed(3),6,74);
+
+ // 非透明セルの外接矩形で切り出して、プレビュー枠へ等倍比率でフィット。
+ // マルマインのような正方形系は従来どおり中央、リザードンのような大きい絵も正常に収める。
+ let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+ for(const c of cells){
+   const x=Math.max(0,Math.min(grid-1,Math.trunc(Number(c.x)||0)));
+   const y=Math.max(0,Math.min(grid-1,Math.trunc(Number(c.y)||0)));
+   if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+ }
+ const srcW=Math.max(1,maxX-minX+1), srcH=Math.max(1,maxY-minY+1);
+ const boxX=22, boxY=8, boxW=136, boxH=94;
+ g.fillStyle='rgba(255,255,255,.08)'; g.fillRect(boxX,boxY,boxW,boxH);
+ const px=Math.max(1, Math.floor(Math.min(boxW/srcW, boxH/srcH)));
+ const drawW=srcW*px, drawH=srcH*px;
+ const ox=Math.floor(boxX+(boxW-drawW)/2), oy=Math.floor(boxY+(boxH-drawH)/2);
+ for(const c of cells){
+   const x=Math.trunc(Number(c.x)||0), y=Math.trunc(Number(c.y)||0);
+   if(x<minX||x>maxX||y<minY||y>maxY) continue;
+   g.fillStyle=normalizeHexColor(c.color);
+   g.fillRect(ox+(x-minX)*px, oy+(y-minY)*px, px, px);
+ }
+ g.fillStyle='rgba(2,6,23,.72)'; g.fillRect(0,106,canvas.width,24);
+ g.fillStyle='rgba(191,219,254,.95)'; g.font='12px system-ui';
+ g.fillText('平面 '+Math.trunc(grid)+'x'+Math.trunc(grid)+' / '+(def.scale||0).toFixed(3),8,123);
  return canvas.toDataURL('image/png');
 };
 
@@ -6578,17 +6600,6 @@ try{
   if(saved && typeof saved==='object') infoPlayerProgress = Object.assign(infoPlayerProgress, saved);
 }catch{}
 function saveInfoPlayerProgress(){ try{ localStorage.setItem(INFO_CAPTURE_PROGRESS_KEY, JSON.stringify(infoPlayerProgress)); }catch{} }
-function resetInfoPlayerProgressLocal(reason, skipSave){
-  infoPlayerProgress = { level:1, exp:0, gold:0, totalExp:0, captures:0, defeats:0 };
-  if(!skipSave) saveInfoPlayerProgress();
-  try{ playerHp = (typeof infoPlayerMaxHp==='function') ? infoPlayerMaxHp() : 20; }catch{}
-  try{ if(typeof updateInfoHud==='function') updateInfoHud(); }catch{}
-  try{ setMsg(reason || 'Lv/EXP/お金を初期化: Lv.1 / EXP 0 / 0G', 'good'); }catch{}
-}
-function requestPlayerProgressReset(){
-  if(!confirm('Lv/EXP/所持金をリセットする？\nLv.1 / EXP 0 / 0G に戻します。')) return;
-  resetInfoPlayerProgressLocal('Lv/EXP/お金をリセットした');
-}
 function infoXpNeed(level){ level=Math.max(1, Math.trunc(Number(level)||1)); return Math.floor(28 + Math.pow(level, 1.45) * 22); }
 function infoPlayerMaxHp(){ return 20 + (Math.max(1, infoPlayerProgress.level)-1) * 4; }
 function infoPlayerAttackDamage(){ return 4 + Math.floor((Math.max(1, infoPlayerProgress.level)-1) * 0.85); }
@@ -7811,6 +7822,100 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ app.on('update', tick); }catch(e){ setInterval(()=>tick(.4),400); }
   try{ setTimeout(()=>{ for(const [ik,root] of customObjectEntities){ ensureLevel(root,{force:true}); } setMsg('野生情報テクスチャLv制ON: プレイヤーLv基準でHP/攻撃/報酬を自動スケール','good'); },900); }catch(e){}
   try{ console.log(VERSION+' active'); }catch(e){}
+})();
+
+
+// ===== Pokemon blueprint grid/scale guard v12 =====
+// 図鑑ドット絵は 96x96 / 2.55幅(=0.0265625) を正とする。
+// 途中の旧処理・端末保存・64x64平面エディタ既定値・0.005最小scaleが混ざっても、
+// 一覧/呼出/フィールド表示の直前に 96x96 / 0.027 へ戻す。
+(function(){
+  const VERSION='poke-grid96-scale-guard-v12';
+  const TARGET_GRID=96;
+  const TARGET_SCALE=2.55/TARGET_GRID;
+  function pokeNo(v){
+    const raw=String((v&&(v.id||v.defId||v.type||v.infoType||v.name))||v||'');
+    let m=raw.match(/(?:info[-_])?poke[-_]?(\d{1,3})/i);
+    if(!m) m=raw.match(/No\.?(\d{1,3})/i);
+    if(!m) return 0;
+    const n=parseInt(m[1],10);
+    return (n>=1&&n<=151)?n:0;
+  }
+  function idFor(no){return 'info-poke_'+String(no).padStart(3,'0');}
+  function typeFor(no){return 'poke_'+String(no).padStart(3,'0');}
+  function normColor(c){try{return normalizeHexColor(c);}catch(e){return '#22c55e';}}
+  function resampleCells(cells, oldGrid, newGrid){
+    oldGrid=Math.max(1,Math.min(128,Math.trunc(Number(oldGrid)||newGrid)));
+    newGrid=Math.max(1,Math.min(128,Math.trunc(Number(newGrid)||TARGET_GRID)));
+    const out=new Map();
+    if(!Array.isArray(cells)) return [];
+    for(const c of cells){
+      const ox=Math.max(0,Math.min(oldGrid-1,Math.trunc(Number(c.x)||0)));
+      const oy=Math.max(0,Math.min(oldGrid-1,Math.trunc(Number(c.y)||0)));
+      const nx=Math.max(0,Math.min(newGrid-1,Math.floor((ox+.5)*newGrid/oldGrid)));
+      const ny=Math.max(0,Math.min(newGrid-1,Math.floor((oy+.5)*newGrid/oldGrid)));
+      out.set(nx+','+ny,{x:nx,y:ny,color:normColor(c.color)});
+    }
+    return Array.from(out.values()).slice(0,newGrid*newGrid);
+  }
+  function generatedFor(no){
+    const key=String(no).padStart(3,'0');
+    let defs=[];
+    if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) defs=window.POKEMON_INFO_TEXTURE_DEFS_30;
+    else if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS)) defs=window.POKEMON_INFO_TEXTURE_DEFS;
+    if(defs.length){
+      const d=defs.find(x=>String(x&&x.no||'').padStart(3,'0')===key || String(x&&x.id||'')===idFor(no) || String(x&&x.type||'')===typeFor(no));
+      if(d&&Array.isArray(d.cells)&&d.cells.length) return d;
+    }
+    const obj=window.POKEMON_INFO_TEXTURES_GEN1_30X30||window.POKEMON_INFO_TEXTURES||window.POKEMON_DOTDATA;
+    if(obj&&typeof obj==='object'){
+      const d=obj[key]||obj[no]||obj[idFor(no)]||obj[typeFor(no)];
+      if(d&&Array.isArray(d.cells)&&d.cells.length) return d;
+    }
+    return null;
+  }
+  function fixOne(no){
+    if(!window.customObjectDefs) return false;
+    const id=idFor(no), type=typeFor(no);
+    const cur=customObjectDefs.get(id)||customObjectDefs.get(type)||null;
+    const gen=generatedFor(no);
+    const src=gen||cur;
+    if(!src||!Array.isArray(src.cells)||!src.cells.length) return false;
+    const srcGrid=Math.max(1,Math.min(128,Math.trunc(Number(src.grid)||(cur&&cur.grid)||TARGET_GRID)));
+    const cells=(srcGrid===TARGET_GRID)?src.cells.map(c=>({x:Math.trunc(Number(c.x)||0),y:Math.trunc(Number(c.y)||0),color:normColor(c.color)})).filter(c=>c.x>=0&&c.x<TARGET_GRID&&c.y>=0&&c.y<TARGET_GRID):resampleCells(src.cells,srcGrid,TARGET_GRID);
+    if(!cells.length) return false;
+    const base=cur||{};
+    const name=(base.name&&String(base.name).trim()) || (src.name ? '情報テクスチャ:'+String(src.name).replace(/^情報テクスチャ:/,'') : ('情報テクスチャ:No.'+String(no).padStart(3,'0')));
+    const fixed=Object.assign({},base,src,{id,type,infoType:type,name,kind:'plane',grid:TARGET_GRID,scale:TARGET_SCALE,cells,infoTexture:true,infoRole:base.infoRole||src.infoRole||'pokemon',hp:base.hp||src.hp||12,infoPhysics:base.infoPhysics||src.infoPhysics||{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},pokemonGeneratedCells30:true,pokemonGrid96Fixed:true,pokemonDotVersion:VERSION,updatedAt:Date.now(),createdAt:base.createdAt||src.createdAt||1});
+    customObjectDefs.set(id,(typeof validateObjectDef==='function'?(validateObjectDef(fixed)||fixed):fixed));
+    if(window.INFO_TEXTURE_META_V3){
+      const meta=Object.assign({},window.INFO_TEXTURE_META_V3[id]||window.INFO_TEXTURE_META_V3[type]||{}, {id,type,infoType:type,name:name.replace(/^情報テクスチャ:/,''),grid:TARGET_GRID,scale:TARGET_SCALE,cells,pokemonGrid96Fixed:true});
+      window.INFO_TEXTURE_META_V3[id]=meta; window.INFO_TEXTURE_META_V3[type]=meta;
+    }
+    return true;
+  }
+  function fixAll(){
+    if(!window.customObjectDefs) return 0;
+    let n=0;
+    const nums=new Set();
+    for(const [id,def] of Array.from(customObjectDefs.entries())){const no=pokeNo(def)||pokeNo(id); if(no) nums.add(no);}
+    if(window.INFO_TEXTURE_PACK_V3) for(const m of window.INFO_TEXTURE_PACK_V3){const no=pokeNo(m); if(no) nums.add(no);}
+    for(const no of nums){ if(fixOne(no)) n++; }
+    try{ if(window.INFO_TEXTURE_MATERIAL_CACHE_V4) window.INFO_TEXTURE_MATERIAL_CACHE_V4.clear(); }catch(e){}
+    try{ if(typeof saveCustomObjectsLocal==='function') saveCustomObjectsLocal(); }catch(e){}
+    try{ if(typeof updateTexturePasteOptions==='function') updateTexturePasteOptions(); }catch(e){}
+    try{ if(typeof renderObjectManager==='function') renderObjectManager(); }catch(e){}
+    return n;
+  }
+  const oldRender=(typeof renderObjectManager==='function')?renderObjectManager:null;
+  if(oldRender && !oldRender.__pokeGrid96Guard){
+    const wrapped=function(){ try{fixAll();}catch(e){} return oldRender.apply(this,arguments); };
+    wrapped.__pokeGrid96Guard=true;
+    renderObjectManager=wrapped;
+  }
+  try{ const n=fixAll(); if(n) setMsg('ポケモン平面テクスチャ補正: 96x96 / 0.027 に統一 '+n+'件','good'); }catch(e){console.warn('poke grid96 guard init failed',e);}
+  try{ setTimeout(fixAll,300); setTimeout(fixAll,1200); setTimeout(fixAll,3000); }catch(e){}
+  window.fixPokemonGrid96ScaleGuardV12=fixAll;
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
