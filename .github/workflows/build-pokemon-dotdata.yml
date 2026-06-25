@@ -28,10 +28,10 @@ jobs:
             --grid 96 \
             --safe-pad 0.22 \
             --input assets/pokemon-gen1-icons \
-            --out generated/pokemon-info-textures.gen1.30x30.generated.js
+            --out generated/pokemon-info-textures.gen1.field3d96.v8.generated.js
 
       - name: commit generated dotdata
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 'Generate Pokemon dot textures and individual 3D field models'
-          file_pattern: generated/pokemon-info-textures.gen1.30x30.generated.js
+          commit_message: 'Generate Pokemon field3d96 v8 dot textures'
+          file_pattern: generated/pokemon-info-textures.gen1.field3d96.v8.generated.js
