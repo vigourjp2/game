@@ -22,7 +22,7 @@ jobs:
 
       - run: python -m pip install --upgrade pip pillow numpy
 
-      - name: Generate high-res pokemon dotdata into legacy filename
+      - name: Generate high-res pokemon dotdata and individual 3D field models
         run: |
           python tools/build-pokemon-info-textures.py \
             --grid 96 \
@@ -33,5 +33,5 @@ jobs:
       - name: commit generated dotdata
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: 'Generate high-res pokemon dot texture data with internal white preserved'
+          commit_message: 'Generate Pokemon dot textures and individual 3D field models'
           file_pattern: generated/pokemon-info-textures.gen1.30x30.generated.js
