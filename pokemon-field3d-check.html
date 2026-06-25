@@ -40,7 +40,7 @@
 <body>
 <header>
   <h1>ポケモン情報テクスチャ 3Dモデル確認HTML <span id="titleNo">---</span></h1>
-  <div class="sub">generated/pokemon-info-textures.gen1.30x30.generated.js の <code>field3d</code> を直接読み、151体の個別ナノブロック風3Dセルをグリグリ確認する。</div>
+  <div class="sub">generated/pokemon-info-textures.gen1.30x30.generated.js の <code>field3d</code> を直接読み、151体の個別3Dセルをグリグリ確認する。※field3d.grid対応。96x96x96モデルもドラッグ/ピンチで確認。</div>
 </header>
 <main>
   <section class="viewer">
@@ -115,6 +115,25 @@ function num(n){ return Math.max(1, Math.min(151, parseInt(n,10)||39)); }
 function deg(rad){ return Math.round(rad*180/Math.PI); }
 function rad(d){ return d*Math.PI/180; }
 function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+function normalizeHex(c){ c=String(c||'#22c55e'); return /^#[0-9a-f]{6}$/i.test(c)?c.toLowerCase():'#22c55e'; }
+function decodeField3dCells(f){
+  if(!f) return [];
+  const scale=Number(f.scale)||(2.55/96);
+  if(Array.isArray(f.cells) && f.cells.length) return f.cells.map(c=>({x:Math.trunc(Number(c.x)),y:Math.trunc(Number(c.y)),z:Math.trunc(Number(c.z)),color:normalizeHex(c.color),size:Number(c.size)||scale}));
+  if(f.encoding==='b64_xyzc16_v1' && typeof f.data==='string'){
+    const pal=Array.isArray(f.palette)?f.palette:[];
+    const bin=atob(f.data);
+    const out=[];
+    for(let i=0;i+4<bin.length;i+=5){
+      const ci=(bin.charCodeAt(i+3)<<8)|bin.charCodeAt(i+4);
+      out.push({x:bin.charCodeAt(i),y:bin.charCodeAt(i+1),z:bin.charCodeAt(i+2),color:normalizeHex(pal[ci]),size:scale});
+    }
+    f.cells=out;
+    return out;
+  }
+  return [];
+}
 function getAllDefs(){
   const a = window.POKEMON_INFO_TEXTURE_DEFS_30 || window.POKEMON_INFO_TEXTURE_DEFS || [];
   if(Array.isArray(a) && a.length) return a;
@@ -154,6 +173,7 @@ function loadNo(){
   $('select').value = String(n);
   currentPlane = findDef(n);
   currentDef = currentPlane ? (currentPlane.field3d || currentPlane) : null;
+  if(currentDef) currentDef.cells = decodeField3dCells(currentDef);
   $('titleNo').textContent = pad3(n);
   const imgPath = `assets/pokemon-gen1-icons/pokeicon-${pad3(n)}.jpg`;
   $('srcImg').src = imgPath + '?v=' + Date.now();
@@ -162,7 +182,7 @@ function loadNo(){
     $('status').textContent=`NG: No.${pad3(n)} の field3d が無い。生成JS内の field3d を確認。`;
   }else{
     $('status').className='ok mini';
-    $('status').textContent=`OK: No.${pad3(n)} / field3d cells=${currentDef.cells.length}`;
+    $('status').textContent=`OK: No.${pad3(n)} / field3d cells=${currentDef.cells.length} / encoding=${currentDef.encoding||'objects'}`;
   }
   panX = 0; panY = 0; fitView(); drawPlane(); updateInfo(); draw();
 }
@@ -248,23 +268,28 @@ function draw(){
   const center={x:(b.minX+b.maxX+1)/2,y:(b.minY+b.maxY+1)/2,z:(b.minZ+b.maxZ+1)/2};
   const cx=w/2, cy=h/2+20;
   const faces=[];
+  const unit=Number(currentDef.scale||currentDef.cellSize||1) || 1;
   const s=0.5*gap;
+  const occ=new Set(cells.map(c=>`${Math.trunc(+c.x)},${Math.trunc(+c.y)},${Math.trunc(+c.z)}`));
   const faceDefs=[
-    {name:'top', idx:[2,3,7,6], mul:1.16},
-    {name:'front', idx:[0,1,3,2], mul:1.00},
-    {name:'right', idx:[1,5,7,3], mul:.82},
-    {name:'left', idx:[4,0,2,6], mul:.74},
-    {name:'back', idx:[5,4,6,7], mul:.62},
-    {name:'bottom', idx:[4,5,1,0], mul:.55},
+    {name:'top', idx:[2,3,7,6], mul:1.16, n:[0,1,0]},
+    {name:'front', idx:[0,1,3,2], mul:1.00, n:[0,0,-1]},
+    {name:'right', idx:[1,5,7,3], mul:.82, n:[1,0,0]},
+    {name:'left', idx:[4,0,2,6], mul:.74, n:[-1,0,0]},
+    {name:'back', idx:[5,4,6,7], mul:.62, n:[0,0,1]},
+    {name:'bottom', idx:[4,5,1,0], mul:.55, n:[0,-1,0]},
   ];
   for(const c of cells){
-    const x=(+c.x-center.x), y=-(+c.y-center.y), z=(+c.z-center.z);
+    const gx=Math.trunc(+c.x), gy=Math.trunc(+c.y), gz=Math.trunc(+c.z);
+    const x=(gx-center.x), y=(gy-center.y), z=(gz-center.z); // field3dはゲームOBJ座標: y=0が下。grid=96にも対応。
     const v=[
       {x:x-s,y:y-s,z:z-s},{x:x+s,y:y-s,z:z-s},{x:x-s,y:y+s,z:z-s},{x:x+s,y:y+s,z:z-s},
       {x:x-s,y:y-s,z:z+s},{x:x+s,y:y-s,z:z+s},{x:x-s,y:y+s,z:z+s},{x:x+s,y:y+s,z:z+s},
     ];
     const pv=v.map(p=>project(p,cx,cy));
     for(const fd of faceDefs){
+      const nx=gx+fd.n[0], ny=gy+fd.n[1], nz=gz+fd.n[2];
+      if(occ.has(`${nx},${ny},${nz}`)) continue; // 内部面は描かない。96モデルでも重くしない。
       const pts=fd.idx.map(i=>pv[i]);
       const depth=pts.reduce((a,p)=>a+p.z,0)/4;
       faces.push({pts, depth, color:shade(c.color, fd.mul)});
@@ -274,7 +299,7 @@ function draw(){
   for(const f of faces) drawPoly(f.pts,f.color);
   drawAxes(cx,cy);
   $('hud').innerHTML = `<b>${currentDef.name||currentPlane?.name||''}</b><br>`+
-    `cells: ${cells.length} / archetype: ${currentDef.archetype||'-'}<br>`+
+    `grid: ${(currentDef.grid||'-')} / cells: ${cells.length} / archetype: ${currentDef.archetype||'-'}<br>`+
     `features: ${(currentDef.features||[]).join(', ')||'-'}<br>`+
     `yaw ${deg(yaw)}° / pitch ${deg(pitch)}° / zoom ${Math.round(zoom)}`;
 }
