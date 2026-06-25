@@ -7696,80 +7696,89 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ console.log(POKEMON_FIELD_SIZE_V16+' active: field world size='+POKE_FIELD_WORLD_SIZE+'m'); }catch(e){}
 })();
 
-// ===== Pokemon/info texture ground clipping fix v17 =====
-// V16でポケモン系InfoTextureを1.08m看板へ後段リサイズした結果、
-// 先に実行された地面スナップ位置と実表示サイズがズレて、下半分が地面に潜る端末があった。
-// ここでは「描画後の実メッシュ最下面」を地面より少し上に再スナップする。
+
+// ===== Info/Pokemon plane ground-bottom fix v17 =====
+// 画像の原点ズレでフィールド上の情報Mob下部が地面にめり込む問題を補正する。
 (function(){
-  const POKE_GROUND_CLIP_FIX_V17 = 'pokemon-ground-clip-fix-v17';
-  const HOVER = 0.075;
-  function pokeNoV17(v){
-    const raw=String((v&&(v.id||v.type||v.infoType||v.defId))||v||'');
-    const m=raw.match(/(?:info-poke_|poke[_-]?)(\d{1,3})/i);
-    const n=m?Math.trunc(Number(m[1])||0):0;
-    return n>=1&&n<=151?n:0;
+  const VERSION='info-pokemon-ground-bottom-fix-v17';
+  const BOTTOM_MARGIN = 0.075;
+  function isInfoPokemonPlaneV17(def){
+    if(!def) return false;
+    const id=String(def.id||def.type||def.infoType||'');
+    return !!(def.infoTexture || def.infoRole==='pokemon' || /(?:^|[-_])poke[-_]?\d{1,3}|info-poke_\d{1,3}/i.test(id) || def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30 || def.pokemonFallbackCells30);
   }
-  function isPokemonInfoDefV17(def){
-    return !!(def && (pokeNoV17(def) || def.infoRole==='pokemon' || def.pokemonGeneratedCells96 || def.pokemonGeneratedCells30 || def.pokemonFallbackCells30));
+  function groundTopYV17(x,z){
+    try{
+      if(typeof heightAt==='function'){
+        const h=heightAt(x,z,16);
+        if(Number.isFinite(h) && h>-900) return h+1;
+      }
+    }catch(e){}
+    try{
+      if(typeof terrainHeight==='function') return terrainHeight(x,z)+1;
+    }catch(e){}
+    return 0;
   }
-  function groundYV17(x,z){
-    let g=-999;
-    try{ if(typeof heightAt==='function') g=heightAt(x,z,16); }catch(e){}
-    if(!Number.isFinite(g)||g<=-900){ try{ if(typeof terrainHeight==='function') g=terrainHeight(x,z); }catch(e){ g=0; } }
-    return (Number.isFinite(g)?g:0)+1;
+  function rootBottomYV17(root){
+    try{
+      if(typeof ultraObjectBounds==='function'){
+        const b=ultraObjectBounds(root);
+        if(b && b.min && Number.isFinite(b.min.y)) return b.min.y;
+      }
+    }catch(e){}
+    try{
+      const p=root.getPosition();
+      let minY=Infinity;
+      for(const ch of Array.from(root.children||[])){
+        if(!ch || !ch.getPosition || !ch.getLocalScale) continue;
+        const cp=ch.getPosition(), sc=ch.getLocalScale();
+        minY=Math.min(minY, cp.y - Math.abs(sc.y)*0.5);
+      }
+      return Number.isFinite(minY)?minY:p.y;
+    }catch(e){ return 0; }
   }
-  function renderMinYV17(root){
-    if(!root||!root.children) return NaN;
-    let minY=Infinity, hit=false;
-    for(const ch of Array.from(root.children||[])){
-      if(!ch||!ch.getPosition||!ch.getLocalScale) continue;
-      if(ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)) continue;
-      const p=ch.getPosition(), sc=ch.getLocalScale();
-      const hy=Math.max(Math.abs(sc.y),.001)*.5;
-      minY=Math.min(minY,p.y-hy); hit=true;
-    }
-    return hit?minY:NaN;
-  }
-  function snapOneV17(root){
-    if(!root||!root.getPosition||!root.data) return false;
-    const def = (typeof customObjectDefs!=='undefined' && customObjectDefs) ? customObjectDefs.get(root.data.defId) : null;
-    if(!isPokemonInfoDefV17(def)) return false;
-    const p=root.getPosition();
-    const bottom=renderMinYV17(root);
-    const gy=groundYV17(p.x,p.z)+HOVER;
-    if(!Number.isFinite(bottom)||!Number.isFinite(gy)) return false;
-    const dy=gy-bottom;
-    // 大きく潜っている時は即補正。微小な上下動は揺れ防止で無視。
-    if(Math.abs(dy)>.012){ root.setPosition(p.x,p.y+dy,p.z); }
-    root.data=Object.assign({},root.data,{onGround:true,vy:0,pokemonGroundClipFixV17:true});
-    return true;
-  }
-  function snapAllV17(){
-    try{ if(typeof customObjectEntities==='undefined'||!customObjectEntities) return 0; let n=0; for(const [,root] of Array.from(customObjectEntities)){ if(snapOneV17(root)) n++; } return n; }catch(e){ return 0; }
+  function alignInfoPokemonBottomV17(root, def){
+    if(!root || !root.getPosition || !isInfoPokemonPlaneV17(def)) return root;
+    try{
+      const p=root.getPosition();
+      const ground=groundTopYV17(p.x,p.z);
+      const bottom=rootBottomYV17(root);
+      const need=ground + BOTTOM_MARGIN - bottom;
+      if(Number.isFinite(need) && need>0.001){
+        root.setPosition(p.x, p.y+need, p.z);
+        root.data=Object.assign({}, root.data||{}, {groundBottomFixedV17:true});
+      }
+    }catch(e){}
+    return root;
   }
   try{
     const oldPlace=placeCustomObject;
     placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-      const root=oldPlace.apply(this,arguments);
-      try{ snapOneV17(root); setTimeout(()=>snapOneV17(root),80); setTimeout(()=>snapOneV17(root),650); }catch(e){}
-      return root;
+      const clean=(typeof validateObjectDef==='function') ? validateObjectDef(def) : def;
+      const root=oldPlace.apply(this,[clean||def,x,y,z,yaw,instanceKey]);
+      return alignInfoPokemonBottomV17(root, clean||def);
     };
     window.placeCustomObject=placeCustomObject;
-  }catch(e){ console.warn(POKE_GROUND_CLIP_FIX_V17+' place hook failed',e); }
+  }catch(e){ console.warn(VERSION+' place hook failed', e); }
+  function fixExisting(){
+    try{
+      for(const [,root] of Array.from(customObjectEntities||[])){
+        const def=root && root.data && customObjectDefs && customObjectDefs.get(root.data.defId);
+        alignInfoPokemonBottomV17(root, def);
+      }
+    }catch(e){}
+  }
+  try{ fixExisting(); setTimeout(fixExisting,250); setTimeout(fixExisting,1200); }catch(e){}
   try{
-    const oldUpdate=updateCustomObjectRuntime;
     let acc=0;
-    updateCustomObjectRuntime=function(dt){
-      const r=oldUpdate.apply(this,arguments);
-      acc+=Number(dt)||0;
-      if(acc>.35){ acc=0; snapAllV17(); }
-      return r;
-    };
-  }catch(e){ console.warn(POKE_GROUND_CLIP_FIX_V17+' runtime hook skipped',e); }
-  window.snapPokemonInfoToGroundV17=snapAllV17;
-  setTimeout(()=>{ try{ snapAllV17(); }catch(e){} },300);
-  setTimeout(()=>{ try{ snapAllV17(); }catch(e){} },1500);
-  try{ console.log(POKE_GROUND_CLIP_FIX_V17+' active'); }catch(e){}
+    app.on('update', function(dt){
+      acc += Number(dt)||0;
+      if(acc<0.35) return;
+      acc=0;
+      fixExisting();
+    });
+  }catch(e){}
+  try{ console.log(VERSION+' active'); }catch(e){}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
