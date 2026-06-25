@@ -6890,8 +6890,12 @@ try{ ensureInfoHud(); updateInfoHud(); console.log(INFO_CAPTURE_RPG_VERSION+' ac
         if(ch && ch.data && (ch.data.affinityAura || ch.data.ignoreObjectBounds)){ keep.push(ch); continue; }
         try{ ch.destroy(); }catch{}
       }
-      const s=Number(def.scale)||.085, gridSize=Math.max(1,Math.min(128,Math.trunc(Number(def.grid)||30)));
-      const used=(def.cells||[]).slice(0, Math.min(4096, gridSize*gridSize));
+      const gridSize=Math.max(1,Math.min(128,Math.trunc(Number(def.grid)||30)));
+      let s=Number(def.scale)||0;
+      // 96セル生成データを旧30セル用scale(.085)で表示すると巨大化するため、
+      // 高解像度ポケモンは総サイズ約2.55に正規化する。
+      if(!s || (def.pokemonGeneratedCells30 && gridSize>=64 && s>.04)) s = 2.55 / gridSize;
+      const used=(def.cells||[]).slice(0, Math.min(16384, gridSize*gridSize));
       for(const cell of used){
         const mat=ensureCustomMat(normalizeHexColor(cell.color));
         const lx=(Number(cell.x)-(gridSize-1)/2)*s;
