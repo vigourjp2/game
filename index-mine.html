@@ -5693,7 +5693,7 @@ try{
     if(obj && typeof obj === 'object'){
       return Object.keys(obj).map(k=>{
         const d=obj[k]||{}; const no=String(d.no||k).replace(/\D/g,'').padStart(3,'0').slice(-3);
-        return Object.assign({id:'info-poke_'+no,type:'poke_'+no,no:Number(no),name:'No.'+no,grid:30,scale:.085}, d);
+        return Object.assign({id:'info-poke_'+no,type:'poke_'+no,no:Number(no),name:'No.'+no,grid:30,scale:.045}, d);
       });
     }
     return [];
@@ -5720,7 +5720,7 @@ try{
     return Object.assign({}, base||{}, {
       id, type, infoType:type,
       name:(base && base.name) || ('情報テクスチャ:' + (d.name || ('No.'+no))),
-      kind:'plane', grid:Math.max(1, Math.min(64, Math.trunc(Number(d.grid)||30))), scale:Number(d.scale)||.085,
+      kind:'plane', grid:Math.max(1, Math.min(64, Math.trunc(Number(d.grid)||30))), scale:Math.min(Number(d.scale)||.045,.045),
       cells:d.cells.map(c=>({x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), color:normalizeHexColor(c.color)})),
       infoTexture:true, infoRole:(base&&base.infoRole)||'pokemon', hp:(base&&base.hp)||12,
       infoBehavior:(base&&base.infoBehavior)||'図鑑ドット絵セル変換済み。野生出現・撃破登録・面貼り付け対象。',
@@ -7674,6 +7674,83 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     return oldRayBlock.apply(this,arguments);
   };
   window.rayBlock = rayBlock;
+  try{ console.log(VERSION+' active'); }catch(e){}
+})();
+
+
+// ===== Regression fix: Pokemon InfoTexture visual size / clipping v17 =====
+// 30x30化で見た目は良くなったが、1セル .085 のままだと 30*.085=2.55m になり、
+// スマホ画面では巨大・画面外にはみ出しに見える。ポケモン系だけ 1.35m 前後へ正規化する。
+(function(){
+  'use strict';
+  const VERSION='pokemon-info-visual-size-v17';
+  const POKE_CELL_SCALE=.045; // 30px * .045 = 1.35m。近距離でも全身が画面内に収まりやすい。
+  function isPokeId(id){ return /^info-poke_\d{3}$/i.test(String(id||'')); }
+  function clampPokeDef(def){
+    if(!def || !isPokeId(def.id)) return def;
+    if(def.kind==='plane'){
+      def.grid=Math.max(24,Math.min(64,Math.trunc(Number(def.grid)||30)));
+      def.scale=Math.min(Number(def.scale)||POKE_CELL_SCALE, POKE_CELL_SCALE);
+      def.visualSizeFixedV17=true;
+      def.updatedAt=Date.now();
+    }
+    return def;
+  }
+  function fixDefs(){
+    try{
+      if(!window.customObjectDefs) return;
+      for(const [id,def] of customObjectDefs){
+        if(isPokeId(id)) customObjectDefs.set(id, clampPokeDef(def));
+      }
+    }catch(e){}
+  }
+  function resizeExistingRoots(){
+    try{
+      if(!window.customObjectEntities || !window.customObjectDefs) return;
+      for(const [ik,root] of customObjectEntities){
+        if(!root||!root.data) continue;
+        const id=String(root.data.defId||'');
+        if(!isPokeId(id)) continue;
+        const def=clampPokeDef(customObjectDefs.get(id));
+        if(!def) continue;
+        const size=(Number(def.grid)||30)*(Number(def.scale)||POKE_CELL_SCALE);
+        for(const ch of root.children||[]){
+          if(ch && ch.data && ch.data.planeTexture && ch.setLocalScale && ch.setLocalPosition){
+            ch.setLocalScale(size, size, Math.max(.014,(Number(def.scale)||POKE_CELL_SCALE)*.20));
+            ch.setLocalPosition(0, size/2, 0);
+          }
+        }
+      }
+    }catch(e){}
+  }
+  const baseEnsure = (typeof ensureInfoTextureDefV3==='function') ? ensureInfoTextureDefV3 : null;
+  if(baseEnsure){
+    ensureInfoTextureDefV3=function(meta){
+      const def=baseEnsure.apply(this, arguments);
+      try{
+        if(def && isPokeId(def.id)){
+          const fixed=clampPokeDef(def);
+          if(window.customObjectDefs) customObjectDefs.set(fixed.id, fixed);
+          return fixed;
+        }
+      }catch(e){}
+      return def;
+    };
+    window.ensureInfoTextureDefV3=ensureInfoTextureDefV3;
+  }
+  const basePlace = (typeof placeCustomObject==='function') ? placeCustomObject : null;
+  if(basePlace){
+    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+      try{ def=clampPokeDef(def); }catch(e){}
+      const root=basePlace.apply(this, arguments);
+      try{ fixDefs(); resizeExistingRoots(); }catch(e){}
+      return root;
+    };
+    window.placeCustomObject=placeCustomObject;
+  }
+  try{ fixDefs(); resizeExistingRoots(); }catch(e){}
+  setTimeout(()=>{ try{ fixDefs(); resizeExistingRoots(); }catch(e){} }, 300);
+  setTimeout(()=>{ try{ fixDefs(); resizeExistingRoots(); }catch(e){} }, 1500);
   try{ console.log(VERSION+' active'); }catch(e){}
 })();
 
