@@ -1088,7 +1088,25 @@ function saveCustomObjectsLocal(){
  setObjHud();
 }
 function loadCustomObjectsLocal(){
- try{ const arr=JSON.parse(localStorage.getItem(OBJECT_STORAGE_KEY)||'[]'); if(Array.isArray(arr)) arr.forEach(d=>registerCustomObjectDef(d,'localLoad')); }catch{}
+ // 起動直後の激重対策: localStorage内の100件を registerCustomObjectDef で1件ずつ保存/描画更新しない。
+ // 自作OBJ/BPだけを一括でMapへ戻し、情報テクスチャ定義は後段のensure系で必要時に再生成する。
+ try{
+   const arr=JSON.parse(localStorage.getItem(OBJECT_STORAGE_KEY)||'[]');
+   if(Array.isArray(arr)){
+     const src=arr.slice(-80);
+     let loaded=0;
+     for(const raw of src){
+       try{
+         const id=String(raw&&raw.id||'');
+         if(!raw || raw.infoTexture) continue;
+         if(/^info(Texture|Shared|poke|mob|pokemon)/i.test(id)) continue;
+         const clean=validateObjectDef(normalizeInfoTextureDefIdsV8(raw));
+         if(clean){ customObjectDefs.set(clean.id, clean); loaded++; }
+       }catch(e){}
+     }
+     if(loaded && src.length!==arr.length){ try{ saveCustomObjectsLocal(); }catch(e){} }
+   }
+ }catch(e){ console.warn('fast local object load failed', e); }
  setObjHud();
 }
 
@@ -8210,6 +8228,143 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ console.log(VERSION+' active targetColumns='+TARGET_COLUMNS+' maxBoxes='+MAX_BOXES+' depth='+DEPTH_LAYERS+' targetWorld='+TARGET_WORLD); }catch{}
 })();
 
+
+
+// ===== Start Lag Guard v18: cold-start object spawn throttle =====
+// 症状: ゲーム開始時に野生OBJ/情報テクスチャが50〜100件級で一気に発生し、
+//       後段の強制削除で0件に見える。生成前に止めて、開始直後のFPSを守る。
+(function(){
+  const VERSION='start-lag-guard-v18';
+  const COLD_MS=7000;
+  const SPAWN_GAP_COLD=1800;
+  const SPAWN_GAP_NORMAL=420;
+  const WILD_MAX_COLD=1;
+  const WILD_MAX_NORMAL=3;
+  const WILD_RADIUS=30;
+  const FAR_REMOVE_RADIUS=52;
+  let gameStartAt=0;
+  let lastInfoSpawnAt=0;
+  let pruneAcc=0;
+  let chunkSpawnCursor=0;
+  const now=()=> (performance&&performance.now)?performance.now():Date.now();
+  function cold(){ return state && state.started && gameStartAt && now()-gameStartAt<COLD_MS; }
+  function keyOf(root, ik){ return String(ik || (root&&root.data&&root.data.instanceKey) || ''); }
+  function isWildInfo(def, root, ik){
+    try{
+      const k=keyOf(root,ik);
+      const d=(root&&root.data)||{};
+      if(/^info(Texture|Shared|poke|mob|pokemon)/i.test(k)) return true;
+      if(d.wildInfoTexture || d.worldSharedSpawn || d.ownerClientId==='world') return true;
+      if(def && def.infoTexture) return true;
+      const did=String(d.defId||'');
+      const stored=(customObjectDefs&&customObjectDefs.get)?customObjectDefs.get(did):null;
+      return !!(stored && stored.infoTexture && (d.spawnReason || /^info/i.test(k)));
+    }catch(e){ return false; }
+  }
+  function dist2Root(root,x,z){
+    try{ const p=root.getPosition(); const dx=p.x-x, dz=p.z-z; return dx*dx+dz*dz; }catch(e){ return Infinity; }
+  }
+  function wildNearCount(x,z,r){
+    const r2=r*r; let n=0;
+    try{
+      for(const [ik,root] of customObjectEntities){
+        if(!isWildInfo(null,root,ik)) continue;
+        if(dist2Root(root,x,z)<=r2) n++;
+      }
+    }catch(e){}
+    return n;
+  }
+  function pruneWild(){
+    if(!customObjectEntities || !player) return;
+    const max=cold()?WILD_MAX_COLD:WILD_MAX_NORMAL;
+    const near=[];
+    const far2=FAR_REMOVE_RADIUS*FAR_REMOVE_RADIUS;
+    try{
+      for(const [ik,root] of Array.from(customObjectEntities)){
+        if(!isWildInfo(null,root,ik)) continue;
+        const d2=dist2Root(root,player.x,player.z);
+        if(d2>far2){ try{root.destroy&&root.destroy();}catch(e){} customObjectEntities.delete(ik); continue; }
+        if(d2<=WILD_RADIUS*WILD_RADIUS) near.push([d2,ik,root]);
+      }
+      near.sort((a,b)=>a[0]-b[0]);
+      for(let i=max;i<near.length;i++){
+        const ik=near[i][1], root=near[i][2];
+        try{root.destroy&&root.destroy();}catch(e){}
+        customObjectEntities.delete(ik);
+      }
+    }catch(e){ console.warn('start lag prune failed',e); }
+  }
+  function canSpawnInfoAt(x,z){
+    if(!state || !state.started) return false;
+    pruneWild();
+    const t=now();
+    const gap=cold()?SPAWN_GAP_COLD:SPAWN_GAP_NORMAL;
+    const max=cold()?WILD_MAX_COLD:WILD_MAX_NORMAL;
+    if(t-lastInfoSpawnAt<gap) return false;
+    if(wildNearCount(player.x,player.z,WILD_RADIUS)>=max) return false;
+    if(wildNearCount(Number(x)||player.x,Number(z)||player.z,WILD_RADIUS)>=max) return false;
+    lastInfoSpawnAt=t;
+    return true;
+  }
+  try{
+    const oldCan=(typeof canSpawnWildInfoTextureAt==='function')?canSpawnWildInfoTextureAt:null;
+    canSpawnWildInfoTextureAt=function(x,z){
+      if(!canSpawnInfoAt(x,z)) return false;
+      return oldCan ? oldCan(x,z) : true;
+    };
+    window.canSpawnWildInfoTextureAt=canSpawnWildInfoTextureAt;
+  }catch(e){}
+  try{
+    const oldPlace=placeCustomObject;
+    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+      if(isWildInfo(def,null,instanceKey) && !canSpawnInfoAt(x,z)) return null;
+      const root=oldPlace.apply(this,arguments);
+      if(root && isWildInfo(def,root,instanceKey)){
+        root.data=Object.assign({},root.data||{},{wildInfoTexture:true,ownerClientId:(root.data&&root.data.ownerClientId)||'world'});
+        pruneWild();
+      }
+      return root;
+    };
+    window.placeCustomObject=placeCustomObject;
+  }catch(e){ console.warn('start lag place guard failed',e); }
+  try{
+    const oldSpawnChunk=spawnCustomObjectForChunk;
+    spawnCustomObjectForChunk=function(ch){
+      if(!state.started) return null;
+      // 開始直後はチャンクごとの自動湧きを間引く。近場保証スポーンだけ通す。
+      if(cold()){
+        chunkSpawnCursor++;
+        if((chunkSpawnCursor%6)!==0) return null;
+      }
+      return oldSpawnChunk.apply(this,arguments);
+    };
+  }catch(e){}
+  try{
+    const btn=$('startBtn');
+    const oldStart=btn&&btn.onclick;
+    if(btn&&oldStart){
+      btn.onclick=function(ev){
+        gameStartAt=now();
+        lastInfoSpawnAt=gameStartAt;
+        pruneWild();
+        try{ if(app&&app.graphicsDevice&&state.mobile){ app.graphicsDevice.maxPixelRatio=1; const pr=$('pr'); if(pr) pr.textContent='1.00'; } }catch(e){}
+        const r=oldStart.apply(this,arguments);
+        try{ setTimeout(pruneWild,350); setTimeout(pruneWild,1300); setTimeout(pruneWild,3200); }catch(e){}
+        return r;
+      };
+    }
+  }catch(e){ console.warn('start button guard failed',e); }
+  try{
+    const oldRuntime=updateCustomObjectRuntime;
+    updateCustomObjectRuntime=function(dt){
+      const r=oldRuntime.apply(this,arguments);
+      pruneAcc += Number(dt)||0;
+      if(pruneAcc>=(cold()?0.22:0.45)){ pruneAcc=0; pruneWild(); }
+      return r;
+    };
+  }catch(e){}
+  try{ console.log(VERSION+' active'); }catch(e){}
+})();
 
 setMsg('PlayCanvas Engine読込完了','good');
 })();
