@@ -7995,464 +7995,24 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 })();
 
 
-// ===== Pokemon field3d production LOD mesh swap v10 =====
-// 根本対処:
-// 1) 旧v9は151体ぶんの巨大3D定義を全登録して重くしていた。
-// 2) 旧validate/customObjectDefs.setのポケモン平面正規化(v13)が info-poke3d_### まで plane に戻していた。
-// 3) 既存のvoxel3d配置は1セル=1Entityで、96x96x96をそのまま出すとスマホで重すぎる。
-// v10は「必要なNoだけ遅延デコード」「grid=96維持」「表示セルをLOD圧縮」「1色1メッシュ化」で軽く3D表示する。
+// ===== Pokemon field3d COMPACT SLAB production swap v13 =====
+// Request fix:
+// v12 became compact and recognizable, but still looked too low-res and too flat.
+// v13 keeps the small solid slab idea, but doubles the visible silhouette resolution and doubles depth.
+// - mobile target columns: 120 -> 240
+// - mobile depth layers: 3 -> 6
+// - still ignores raw 96x96x96 Z scatter, so it will not become a sparse particle cloud again
+// - still fits the visible model to about 1.05 world units, so it will not become huge again
 (function(){
   'use strict';
-  const VERSION='pokemon-field3d-production-lod-mesh-v10-generated-grid96';
-  const SOURCE_FILE='generated/pokemon-info-textures.gen1.field3d96.v8.generated.js';
+  const VERSION='pokemon-field3d-compact-slab-v13-hires-thick-small-solid';
   const MOBILE = (Math.min(window.innerWidth||9999, window.innerHeight||9999) < 820) || /Android|iPhone|iPad/i.test(navigator.userAgent||'');
-  const TARGET_RENDER_CELLS = MOBILE ? 520 : 1100;
-  const MAX_RENDER_CELLS = MOBILE ? 760 : 1600;
-  const CACHE = new Map();
-
-  function normHex(c){ try{return normalizeHexColor(c);}catch(e){ c=String(c||'#22c55e').toLowerCase(); return /^#[0-9a-f]{6}$/.test(c)?c:'#22c55e'; } }
-  function noOf(v){
-    const raw=String((v&&(v.no||v.id||v.type||v.infoType||v.defId||v.planeId||v.name))||v||'');
-    const m=raw.match(/(?:info-poke3d_|poke3d_|info-poke_|poke[_-]?|No\.?\s*)(\d{1,3})/i)||raw.match(/\b(\d{3})\b/);
-    if(!m) return '';
-    const n=Math.max(1,Math.min(151,parseInt(m[1],10)||0));
-    return n?String(n).padStart(3,'0'):'';
-  }
-  function defs(){
-    if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) return window.POKEMON_INFO_TEXTURE_DEFS_30;
-    if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS)) return window.POKEMON_INFO_TEXTURE_DEFS;
-    return [];
-  }
-  function gen(no){
-    no=String(no||'').padStart(3,'0').slice(-3); if(!no) return null;
-    return defs().find(d=>{
-      const dn=String(d.no||noOf(d)).padStart(3,'0').slice(-3);
-      return dn===no || String(d.id||'')==='info-poke_'+no || String(d.type||'')==='poke_'+no || String(d.planeId||'')==='info-poke_'+no;
-    })||null;
-  }
-  function decodeCells(f){
-    if(!f) return [];
-    if(Array.isArray(f.cells) && f.cells.length){
-      return f.cells.map(c=>({x:Math.trunc(Number(c.x)),y:Math.trunc(Number(c.y)),z:Math.trunc(Number(c.z)),color:normHex(c.color)})).filter(c=>Number.isFinite(c.x)&&Number.isFinite(c.y)&&Number.isFinite(c.z));
-    }
-    if(f.encoding==='b64_xyzc16_v1' && typeof f.data==='string' && Array.isArray(f.palette)){
-      try{
-        const bin=atob(String(f.data)); const pal=f.palette; const out=[];
-        for(let i=0;i+4<bin.length;i+=5){
-          const ci=(bin.charCodeAt(i+3)<<8)|bin.charCodeAt(i+4);
-          out.push({x:bin.charCodeAt(i),y:bin.charCodeAt(i+1),z:bin.charCodeAt(i+2),color:normHex(pal[ci]||'#22c55e')});
-        }
-        return out;
-      }catch(e){ console.warn('pokemon v10 b64 decode failed', e); }
-    }
-    return [];
-  }
-  function lodCells(raw, grid, scale){
-    if(!raw || !raw.length) return [];
-    const target=TARGET_RENDER_CELLS;
-    const step=Math.max(1, Math.min(8, Math.ceil(Math.cbrt(raw.length/Math.max(1,target)))));
-    const buckets=new Map();
-    for(const c of raw){
-      const x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y)), z=Math.trunc(Number(c.z));
-      if(x<0||x>=grid||y<0||y>=grid||z<0||z>=grid) continue;
-      const bx=Math.floor(x/step), by=Math.floor(y/step), bz=Math.floor(z/step);
-      const k=bx+','+by+','+bz;
-      let b=buckets.get(k);
-      if(!b){ b={n:0,sx:0,sy:0,sz:0,colors:new Map()}; buckets.set(k,b); }
-      b.n++; b.sx+=x; b.sy+=y; b.sz+=z;
-      const col=normHex(c.color); b.colors.set(col,(b.colors.get(col)||0)+1);
-    }
-    let out=[];
-    for(const b of buckets.values()){
-      let col='#22c55e', best=-1;
-      for(const [c,n] of b.colors){ if(n>best){best=n; col=c;} }
-      out.push({x:Math.round(b.sx/b.n), y:Math.round(b.sy/b.n), z:Math.round(b.sz/b.n), color:col, size:scale*step});
-    }
-    if(out.length>MAX_RENDER_CELLS){
-      // 中心・前面に寄りすぎないよう決定論的に間引く。毎回同じ見た目にする。
-      const stride=out.length/MAX_RENDER_CELLS;
-      const keep=[]; for(let i=0;i<MAX_RENDER_CELLS;i++) keep.push(out[Math.floor(i*stride)]);
-      out=keep;
-    }
-    return out;
-  }
-  function fieldDef(noOrDef){
-    const no=noOf(noOrDef); if(!no) return null;
-    if(CACHE.has(no)) return CACHE.get(no);
-    const d=gen(no); if(!d || !d.field3d){ CACHE.set(no,null); return null; }
-    const f=d.field3d;
-    const grid=Math.max(2,Math.min(128,Math.trunc(Number(f.grid)||96)));
-    const scale=Math.max(.006,Math.min(.10,Number(f.scale)||2.55/grid));
-    const raw=decodeCells(f);
-    const cells=lodCells(raw, grid, scale);
-    if(!cells.length){ CACHE.set(no,null); return null; }
-    const def={
-      id:'info-poke3d_'+no, type:'poke3d_'+no, infoType:'poke_'+no, planeId:'info-poke_'+no, no:Number(no),
-      name:(d.name||('No.'+no)).replace(/^情報テクスチャ[:：]?/,'')+' 3D', kind:'voxel3d', grid, scale,
-      cells, fullCellCount:raw.length, renderCellCount:cells.length,
-      archetype:f.archetype||'generated-field3d96', field3dSource:SOURCE_FILE,
-      infoTexture:true, infoRole:'pokemon', hp:Number(f.hp)||Number(d.hp)||12,
-      infoPhysics:f.infoPhysics||d.infoPhysics||{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},
-      pokemonField3d:true, pokemonField3dVersion:VERSION, createdAt:1, updatedAt:Date.now()
-    };
-    CACHE.set(no,def); return def;
-  }
-  function wantsPokemon3d(def, instanceKey){
-    const id=String((def&&(def.id||def.defId))||'');
-    if(/^info-poke3d_\d{3}$/.test(id)) return true;
-    const no=noOf(def)||noOf(instanceKey); if(!no) return false;
-    if(/^info-poke_\d{3}$/.test(id)) return true;
-    if(/^poke_\d{3}$/.test(String(def&&(def.type||def.infoType)||''))) return true;
-    if(/^infoTexture(?::|V3:)/.test(String(instanceKey||''))) return !!gen(no);
-    if(/^infoShared/i.test(String(instanceKey||''))) return !!gen(no);
-    return !!(def&&def.infoTexture&&gen(no));
-  }
-
-  // v13の平面正規化が info-poke3d_### を潰すため、3DだけはMapへ直登録させる。
-  try{
-    const prevSet=customObjectDefs && customObjectDefs.set ? customObjectDefs.set.bind(customObjectDefs) : null;
-    if(prevSet && !customObjectDefs.__pokemonField3dV10Set){
-      customObjectDefs.set=function(key,value){
-        try{
-          const id=String((value&&(value.id||value.defId))||key||'');
-          if(/^info-poke3d_\d{3}$/.test(id)){
-            return Map.prototype.set.call(this, id, value);
-          }
-        }catch(e){}
-        return prevSet(key,value);
-      };
-      customObjectDefs.__pokemonField3dV10Set=true;
-    }
-  }catch(e){ console.warn('pokemon v10 set bypass failed', e); }
-
-  // validateObjectDefも3Dだけは平面化させない。
-  try{
-    const prevValidate=validateObjectDef;
-    validateObjectDef=function(def){
-      try{
-        const id=String(def&&(def.id||def.defId)||'');
-        if(def && /^info-poke3d_\d{3}$/.test(id)){
-          const grid=Math.max(2,Math.min(128,Math.trunc(Number(def.grid)||96)));
-          const scale=Math.max(.006,Math.min(.10,Number(def.scale)||2.55/grid));
-          const cells=(Array.isArray(def.cells)?def.cells:[]).map(c=>({
-            x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), z:Math.trunc(Number(c.z)), color:normHex(c.color), size:Math.max(.006,Math.min(.30,Number(c.size)||scale))
-          })).filter(c=>c.x>=0&&c.x<grid&&c.y>=0&&c.y<grid&&c.z>=0&&c.z<grid).slice(0,MAX_RENDER_CELLS);
-          if(!cells.length) return null;
-          const clean=Object.assign({},def,{id,kind:'voxel3d',grid,scale,cells,infoTexture:true,infoRole:'pokemon'});
-          return clean;
-        }
-      }catch(e){}
-      return prevValidate.apply(this,arguments);
-    };
-    window.validateObjectDef=validateObjectDef;
-  }catch(e){ console.warn('pokemon v10 validate bypass failed', e); }
-
-  // 情報テクスチャ生成そのものも、ポケモンだけは最初から3Dを返す。
-  try{
-    const prevEnsure=ensureInfoTextureDefV3;
-    ensureInfoTextureDefV3=function(meta){
-      try{
-        const no=noOf(meta);
-        if(no && gen(no)){
-          const f=fieldDef(no);
-          if(f){ try{ customObjectDefs.set(f.id,f); }catch{} return f; }
-        }
-      }catch(e){ console.warn('pokemon v10 ensure swap failed', e); }
-      return prevEnsure.apply(this,arguments);
-    };
-    window.ensureInfoTextureDefV3=ensureInfoTextureDefV3;
-  }catch(e){ console.warn('pokemon v10 ensure hook failed', e); }
-
-  // 1色1メッシュ化できる環境なら使う。失敗時だけ通常box配置に落とす。
-  function addMeshByColor(root, cells, grid, scale){
-    if(!window.pc || !pc.createMesh || !app || !app.graphicsDevice) return false;
-    const byColor=new Map();
-    const occ=new Set(cells.map(c=>c.x+','+c.y+','+c.z));
-    for(const c of cells){ const col=normHex(c.color); if(!byColor.has(col)) byColor.set(col,[]); byColor.get(col).push(c); }
-    const dirs=[ [1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1] ];
-    const faceCorners=[
-      [[.5,-.5,-.5],[.5,.5,-.5],[.5,.5,.5],[.5,-.5,.5]],
-      [[-.5,-.5,.5],[-.5,.5,.5],[-.5,.5,-.5],[-.5,-.5,-.5]],
-      [[-.5,.5,-.5],[-.5,.5,.5],[.5,.5,.5],[.5,.5,-.5]],
-      [[-.5,-.5,.5],[-.5,-.5,-.5],[.5,-.5,-.5],[.5,-.5,.5]],
-      [[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]],
-      [[.5,-.5,-.5],[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5]]
-    ];
-    let made=0;
-    for(const [col,list] of byColor){
-      const pos=[], nor=[], ind=[];
-      for(const c of list){
-        const cs=Number(c.size)||scale;
-        const cx=(c.x-(grid-1)/2)*cs;
-        const cy=(c.y+.5)*cs;
-        const cz=(c.z-(grid-1)/2)*cs;
-        for(let f=0; f<6; f++){
-          const d=dirs[f];
-          // LODセルは間引き後なので隣接判定は同格のみ。面を多めに残して立体感を出す。
-          if(occ.has((c.x+d[0])+','+(c.y+d[1])+','+(c.z+d[2])) && Math.random()<0) continue;
-          const base=pos.length/3;
-          for(const q of faceCorners[f]){ pos.push(cx+q[0]*cs, cy+q[1]*cs, cz+q[2]*cs); nor.push(d[0],d[1],d[2]); }
-          ind.push(base,base+1,base+2, base,base+2,base+3);
-        }
-      }
-      if(!pos.length) continue;
-      const mesh=pc.createMesh(app.graphicsDevice, pos, {normals:nor, indices:ind});
-      const mi=new pc.MeshInstance(mesh, ensureCustomMat(col));
-      const e=new pc.Entity('poke3d_mesh_'+col);
-      try{ e.addComponent('render', { meshInstances:[mi], castShadows:false, receiveShadows:false }); }
-      catch(err){ try{ e.addComponent('model'); e.model.meshInstances=[mi]; }catch(err2){ return false; } }
-      root.addChild(e); made++;
-    }
-    return made>0;
-  }
-  function placePokemon3d(def,x,y,z,yaw,instanceKey){
-    def=validateObjectDef(def); if(!def) return null;
-    instanceKey=instanceKey || ('poke3d-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
-    if(customObjectRemovedInstances && customObjectRemovedInstances.has(instanceKey)) return null;
-    if(customObjectEntities && customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
-    const root=new pc.Entity('custom_object_'+instanceKey);
-    let meshOk=false;
-    try{ meshOk=addMeshByColor(root, def.cells, def.grid, def.scale); }catch(e){ console.warn('pokemon v10 mesh failed, fallback boxes', e); }
-    if(!meshOk){
-      // 最終fallback。セル数はLOD済みなので旧96フルより軽い。
-      for(const c of def.cells.slice(0,MAX_RENDER_CELLS)){
-        const mat=ensureCustomMat(c.color); const cs=Number(c.size)||def.scale;
-        const lx=(c.x-(def.grid-1)/2)*cs, ly=(c.y+.5)*cs, lz=(c.z-(def.grid-1)/2)*cs;
-        addCustomBox(root, mat, lx, ly, lz, cs*1.01, cs*1.01, cs*1.01);
-      }
-    }
-    root.setPosition(x,y,z);
-    root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
-    root.data={customObject:true,defId:def.id,instanceKey,chunk:chunkIdForBlock(Math.round(x),Math.round(z)),pokemonField3d:true,infoTexture:true,infoRole:'pokemon',fullCellCount:def.fullCellCount,renderCellCount:def.cells.length};
-    app.root.addChild(root);
-    customObjectEntities.set(instanceKey, root);
-    return root;
-  }
-
-  try{
-    const prevPlace=placeCustomObject;
-    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-      try{
-        if(wantsPokemon3d(def, instanceKey)){
-          const no=noOf(def)||noOf(instanceKey);
-          const f=fieldDef(no);
-          if(f){ return placePokemon3d(f,x,y,z,yaw,String(instanceKey||'').replace(/info-poke_(\d{3})/,'info-poke3d_$1')||undefined); }
-        }
-      }catch(e){ console.warn('pokemon v10 place swap failed', e); }
-      return prevPlace.apply(this,arguments);
-    };
-    window.placeCustomObject=placeCustomObject;
-  }catch(e){ console.warn('pokemon v10 place hook failed', e); }
-
-  // 既に出た平面ポケモンを軽量3Dへ置換。ただし全数ではなく近場中心。
-  function convertExisting(){
-    if(!customObjectEntities || !player) return 0;
-    let n=0;
-    for(const [key,root] of Array.from(customObjectEntities.entries())){
-      try{
-        if(!root||!root.data) continue;
-        const defId=String(root.data.defId||'');
-        if(!/^info-poke_\d{3}$/.test(defId)) continue;
-        const p=root.getPosition();
-        if(Math.hypot(p.x-player.x,p.z-player.z)>48) continue;
-        const f=fieldDef(defId); if(!f) continue;
-        const yaw=(root.getEulerAngles?root.getEulerAngles().y:0)*Math.PI/180;
-        customObjectEntities.delete(key); try{root.destroy&&root.destroy();}catch{}
-        placePokemon3d(f,p.x,p.y,p.z,yaw,String(key).replace(defId,f.id)); n++;
-      }catch(e){ console.warn('pokemon v10 existing convert failed',e); }
-    }
-    return n;
-  }
-  try{ setTimeout(()=>{const c=convertExisting(); if(c) setMsg('ポケモンfield3d v10: 軽量3Dへ変換 '+c+'体','good');},500); setTimeout(convertExisting,1500); setInterval(convertExisting,4000); }catch{}
-  window.applyPokemonField3dProductionV10=function(no){ const f=fieldDef(no||1); if(f) customObjectDefs.set(f.id,f); return f; };
-  try{ console.log(VERSION+' active / targetCells='+TARGET_RENDER_CELLS+' max='+MAX_RENDER_CELLS); }catch{}
-})();
-
-
-
-// ===== Pokemon field3d LITE production swap v11 =====
-// 目的: 本番で「重いだけで平面のまま」になっていた原因を断つ。
-// - 23MB級の平面cells混在JSを読まない。v11のfield3d専用JSだけ使う。
-// - info-poke_### の平面OBJを置く直前に、必ず軽量3D OBJへ差し替える。
-// - 96x96x96の元ボリュームは維持しつつ、本番表示はLODで約260〜420セルに圧縮。
-(function(){
-  'use strict';
-  const VERSION='pokemon-field3d-lite-production-swap-v11';
-  const MOBILE = (Math.min(window.innerWidth||9999, window.innerHeight||9999) < 820) || /Android|iPhone|iPad/i.test(navigator.userAgent||'');
-  const TARGET = MOBILE ? 260 : 620;
-  const MAX = MOBILE ? 420 : 950;
-  const CACHE = new Map();
-  function norm(c){ try{return normalizeHexColor(c);}catch(e){c=String(c||'#22c55e').toLowerCase(); return /^#[0-9a-f]{6}$/.test(c)?c:'#22c55e';} }
-  function noOf(v){
-    const raw=String((v&&(v.no||v.id||v.type||v.infoType||v.defId||v.planeId||v.name||((Array.isArray(v.infoTextureIds)&&v.infoTextureIds[0])||'')))||v||'');
-    const m=raw.match(/(?:info-poke3d_|poke3d_|info-poke_|poke[_-]?|No\.?\s*)(\d{1,3})/i)||raw.match(/\b(\d{3})\b/);
-    if(!m) return '';
-    const n=Math.max(1,Math.min(151,parseInt(m[1],10)||0));
-    return n?String(n).padStart(3,'0'):'';
-  }
-  function rec(no){
-    no=String(no||'').padStart(3,'0').slice(-3);
-    const src=window.POKEMON_FIELD3D_LITE_V11;
-    return src && src.byNo ? src.byNo[no] : null;
-  }
-  function decode(r){
-    if(!r) return [];
-    if(r.__decoded) return r.__decoded;
-    const out=[];
-    try{
-      const pal=Array.isArray(r.palette)?r.palette:[];
-      const bin=atob(String(r.data||''));
-      for(let i=0;i+4<bin.length;i+=5){
-        const ci=(bin.charCodeAt(i+3)<<8)|bin.charCodeAt(i+4);
-        out.push({x:bin.charCodeAt(i), y:bin.charCodeAt(i+1), z:bin.charCodeAt(i+2), color:norm(pal[ci]||'#22c55e')});
-      }
-    }catch(e){ console.warn('pokemon v11 decode failed',e); }
-    r.__decoded=out; return out;
-  }
-  function lod(raw, grid, scale){
-    if(!raw || !raw.length) return [];
-    const step=Math.max(1,Math.min(10,Math.ceil(Math.cbrt(raw.length/Math.max(1,TARGET)))));
-    const buckets=new Map();
-    for(const c of raw){
-      const x=c.x|0,y=c.y|0,z=c.z|0;
-      if(x<0||x>=grid||y<0||y>=grid||z<0||z>=grid) continue;
-      const k=Math.floor(x/step)+','+Math.floor(y/step)+','+Math.floor(z/step);
-      let b=buckets.get(k);
-      if(!b){b={n:0,sx:0,sy:0,sz:0,colors:new Map()}; buckets.set(k,b);}
-      b.n++; b.sx+=x; b.sy+=y; b.sz+=z;
-      const col=norm(c.color); b.colors.set(col,(b.colors.get(col)||0)+1);
-    }
-    let cells=[];
-    for(const b of buckets.values()){
-      let col='#22c55e', best=-1;
-      for(const [c,n] of b.colors){ if(n>best){best=n; col=c;} }
-      cells.push({x:Math.round(b.sx/b.n), y:Math.round(b.sy/b.n), z:Math.round(b.sz/b.n), color:col, size:scale*step});
-    }
-    if(cells.length>MAX){
-      const stride=cells.length/MAX, keep=[];
-      for(let i=0;i<MAX;i++) keep.push(cells[Math.floor(i*stride)]);
-      cells=keep;
-    }
-    return cells;
-  }
-  function defFor(noOrThing){
-    const no=noOf(noOrThing); if(!no) return null;
-    if(CACHE.has(no)) return CACHE.get(no);
-    const r=rec(no); if(!r){ CACHE.set(no,null); return null; }
-    const grid=Math.max(16,Math.min(128,Math.trunc(Number(r.grid)||96)));
-    const scale=Math.max(.006,Math.min(.08,Number(r.scale)||2.55/grid));
-    const raw=decode(r);
-    const cells=lod(raw, grid, scale);
-    if(!cells.length){ CACHE.set(no,null); return null; }
-    const d={
-      id:'info-poke3d_'+no,
-      type:'poke3d_'+no,
-      infoType:'poke_'+no,
-      planeId:'info-poke_'+no,
-      no:Number(no),
-      name:String(r.name||('No.'+no)).replace(/^情報テクスチャ[:：]?/,'')+' 3D',
-      kind:'voxel3d', grid, scale, cells,
-      fullCellCount:raw.length, renderCellCount:cells.length,
-      archetype:r.archetype||'field3d-lite-v11',
-      pokemonField3d:true, pokemonField3dVersion:VERSION,
-      infoTexture:true, infoRole:'pokemon', hp:12,
-      infoTextureIds:['info-poke_'+no],
-      infoPhysics:{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},
-      createdAt:1, updatedAt:Date.now()
-    };
-    CACHE.set(no,d); return d;
-  }
-  function wants(def, instanceKey){
-    const no=noOf(def)||noOf(instanceKey);
-    if(!no || !rec(no)) return false;
-    const id=String((def&&(def.id||def.defId))||'');
-    if(/^info-poke3d_\d{3}$/.test(id)) return true;
-    if(/^info-poke_\d{3}$/.test(id)) return true;
-    if(/^poke_\d{3}$/.test(String(def&&(def.type||def.infoType)||''))) return true;
-    if(/^infoTexture(?::|V3:)/.test(String(instanceKey||''))) return true;
-    if(def && def.infoTexture && no) return true;
-    return false;
-  }
-  function place3d(d,x,y,z,yaw,instanceKey){
-    if(!d) return null;
-    instanceKey=instanceKey || ('poke3d-v11:'+d.id+':'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
-    if(customObjectRemovedInstances && customObjectRemovedInstances.has(instanceKey)) return null;
-    if(customObjectEntities && customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
-    const root=new pc.Entity('custom_object_'+instanceKey);
-    const grid=d.grid, scale=d.scale;
-    for(const c of d.cells){
-      const mat=ensureCustomMat(c.color);
-      const cs=Number(c.size)||scale;
-      const lx=(c.x-(grid-1)/2)*cs;
-      const ly=(c.y+.5)*cs;
-      const lz=(c.z-(grid-1)/2)*cs;
-      addCustomBox(root,mat,lx,ly,lz,cs*1.04,cs*1.04,cs*1.04);
-    }
-    root.setPosition(x,y,z);
-    root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
-    root.data={customObject:true,defId:d.id,sourceDefId:d.planeId,instanceKey,chunk:chunkIdForBlock(Math.round(x),Math.round(z)),pokemonField3d:true,infoTexture:true,infoRole:'pokemon',infoTextureIds:d.infoTextureIds.slice(),hp:12,maxHp:12,fullCellCount:d.fullCellCount,renderCellCount:d.renderCellCount};
-    app.root.addChild(root);
-    customObjectEntities.set(instanceKey,root);
-    try{ if(typeof ensureLevel==='function') ensureLevel(root,{force:true}); }catch{}
-    return root;
-  }
-  try{
-    const prevPlace=placeCustomObject;
-    placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-      try{
-        if(wants(def,instanceKey)){
-          const d=defFor(noOf(def)||noOf(instanceKey));
-          if(d){
-            const ik=String(instanceKey||'').replace(/info-poke_(\d{3})/,'info-poke3d_$1') || undefined;
-            return place3d(d,x,y,z,yaw,ik);
-          }
-        }
-      }catch(e){ console.warn('pokemon v11 place failed',e); }
-      return prevPlace.apply(this,arguments);
-    };
-    window.placeCustomObject=placeCustomObject;
-  }catch(e){ console.warn('pokemon v11 place hook install failed',e); }
-  function convertExisting(){
-    if(!customObjectEntities) return 0;
-    let n=0;
-    for(const [key,root] of Array.from(customObjectEntities.entries())){
-      try{
-        if(!root||!root.data||root.data.pokemonField3d) continue;
-        const no=noOf(root.data.defId)||noOf(root.data.sourceDefId)||noOf(root.data)||noOf(key);
-        if(!no || !rec(no)) continue;
-        const d=defFor(no); if(!d) continue;
-        const p=root.getPosition(); const yaw=(root.getEulerAngles?root.getEulerAngles().y:0)*Math.PI/180;
-        customObjectEntities.delete(key); try{root.destroy&&root.destroy();}catch{}
-        place3d(d,p.x,p.y,p.z,yaw,String(key).replace(/info-poke_(\d{3})/,'info-poke3d_$1'));
-        n++;
-      }catch(e){ console.warn('pokemon v11 convert failed',e); }
-    }
-    return n;
-  }
-  try{ setTimeout(()=>{const n=convertExisting(); if(n) setMsg('ポケモンfield3d v11: 軽量3D化 '+n+'体','good');},600); setTimeout(convertExisting,1600); setInterval(convertExisting,1500); }catch{}
-  window.applyPokemonField3dLiteV11=function(no){ const d=defFor(no||1); if(d){ try{customObjectDefs.set(d.id,d);}catch{} } return d; };
-  try{ console.log(VERSION+' active target='+TARGET+' max='+MAX+' src='+(window.POKEMON_FIELD3D_LITE_V11&&window.POKEMON_FIELD3D_LITE_V11.source)); }catch{}
-})();
-
-
-
-// ===== Pokemon field3d COMPACT SLAB production swap v12 =====
-// Root-cause fix:
-// v11 displayed the raw 96x96x96 volume as a sparse cloud, so it looked huge and meaningless.
-// v12 does not render the raw Z scatter. It compacts the generated 96-volume into a solid 2.5D nano-block slab:
-// - keep source colors and silhouette from the 96-grid data
-// - ignore the noisy raw Z scatter that caused floating blocks
-// - fit the visible model to about 1.05〜1.25 world units
-// - render only ~260〜520 boxes per Pokemon on mobile
-(function(){
-  'use strict';
-  const VERSION='pokemon-field3d-compact-slab-v12-fit-small-solid';
-  const MOBILE = (Math.min(window.innerWidth||9999, window.innerHeight||9999) < 820) || /Android|iPhone|iPad/i.test(navigator.userAgent||'');
-  const TARGET_COLUMNS = MOBILE ? 120 : 190;
-  const MAX_BOXES = MOBILE ? 520 : 820;
-  const TARGET_WORLD = MOBILE ? 1.05 : 1.25;
-  const DEPTH_LAYERS = MOBILE ? 3 : 4;
+  const TARGET_COLUMNS = MOBILE ? 240 : 380;     // v12 mobile was 120. This is the requested 2x silhouette resolution.
+  const MAX_BOXES = MOBILE ? 1600 : 2800;        // Enough for 240 columns * 6 depth while keeping FPS sane.
+  const TARGET_WORLD = MOBILE ? 1.05 : 1.25;     // Keep size fixed; only resolution/thickness increases.
+  const DEPTH_LAYERS = MOBILE ? 6 : 8;           // v12 mobile was 3. This is the requested 2x thickness.
   const CACHE=new Map();
+
   function norm(c){ try{return normalizeHexColor(c);}catch(e){c=String(c||'#22c55e').toLowerCase(); return /^#[0-9a-f]{6}$/.test(c)?c:'#22c55e';} }
   function shade(hex, mul){
     hex=norm(hex); const n=parseInt(hex.slice(1),16);
@@ -8475,7 +8035,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   }
   function decode(r){
     if(!r) return [];
-    if(r.__decodedV12) return r.__decodedV12;
+    if(r.__decodedV13) return r.__decodedV13;
     const out=[];
     try{
       const pal=Array.isArray(r.palette)?r.palette:[];
@@ -8484,16 +8044,16 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
         const ci=(bin.charCodeAt(i+3)<<8)|bin.charCodeAt(i+4);
         out.push({x:bin.charCodeAt(i), y:bin.charCodeAt(i+1), z:bin.charCodeAt(i+2), color:norm(pal[ci]||'#22c55e')});
       }
-    }catch(e){ console.warn('pokemon v12 decode failed',e); }
-    r.__decodedV12=out; return out;
+    }catch(e){ console.warn('pokemon v13 decode failed',e); }
+    r.__decodedV13=out; return out;
   }
   function compactSlabCells(raw, grid){
-    if(!raw || !raw.length) return {cells:[], columns:0, step:4, visualGrid:24};
+    if(!raw || !raw.length) return {cells:[], columns:0, step:3, visualGrid:32};
 
-    // Pick a 2D resolution that is dense enough but not huge. Raw Z is intentionally ignored.
-    let step=4;
+    // Higher-res than v12. Start with step 3 and only coarsen if a monster gets too dense.
+    let step=3;
     let map=null;
-    for(let attempt=0; attempt<5; attempt++){
+    for(let attempt=0; attempt<6; attempt++){
       map=new Map();
       for(const c of raw){
         const x=c.x|0, y=c.y|0;
@@ -8501,14 +8061,15 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
         const bx=Math.floor(x/step), by=Math.floor(y/step);
         const k=bx+','+by;
         let b=map.get(k);
-        if(!b){ b={x:bx,y:by,n:0,colors:new Map(), edge:0}; map.set(k,b); }
+        if(!b){ b={x:bx,y:by,n:0,colors:new Map()}; map.set(k,b); }
         b.n++;
         const col=norm(c.color);
         b.colors.set(col,(b.colors.get(col)||0)+1);
       }
-      if(map.size<=TARGET_COLUMNS || step>=8) break;
+      if(map.size<=TARGET_COLUMNS || step>=7) break;
       step++;
     }
+
     const cols=[];
     let minX=999,minY=999,maxX=-999,maxY=-999;
     for(const b of map.values()){
@@ -8518,19 +8079,34 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
       minX=Math.min(minX,b.x); minY=Math.min(minY,b.y); maxX=Math.max(maxX,b.x); maxY=Math.max(maxY,b.y);
       cols.push(b);
     }
-    if(!cols.length) return {cells:[], columns:0, step, visualGrid:24};
+    if(!cols.length) return {cells:[], columns:0, step, visualGrid:32};
 
-    // Use only a few depth layers to make it solid, not a sky-wide point cloud.
+    const has=new Set(cols.map(b=>b.x+','+b.y));
+    function neighborCount(b){
+      let n=0;
+      if(has.has((b.x+1)+','+b.y)) n++;
+      if(has.has((b.x-1)+','+b.y)) n++;
+      if(has.has(b.x+','+(b.y+1))) n++;
+      if(has.has(b.x+','+(b.y-1))) n++;
+      return n;
+    }
+    for(const b of cols) b.nei=neighborCount(b);
+
     const cells=[];
-    const z0=Math.floor(DEPTH_LAYERS/2);
+    const z0=(DEPTH_LAYERS-1)/2;
     for(const b of cols){
       for(let dz=0; dz<DEPTH_LAYERS; dz++){
-        const mul = dz===0 ? 1.10 : (dz===DEPTH_LAYERS-1 ? 0.72 : 0.92);
+        // Keep the front half full for resolution. Bevel the rear slightly to create real thickness without a boxy wall.
+        if(dz>=Math.ceil(DEPTH_LAYERS*0.65) && b.nei<=1) continue;
+        if(dz>=Math.ceil(DEPTH_LAYERS*0.82) && b.nei<=2) continue;
+        const t=DEPTH_LAYERS<=1?0:dz/(DEPTH_LAYERS-1);
+        const mul = 1.16 - t*0.46; // bright face, darker back = stronger立体感
         cells.push({x:b.x-minX, y:b.y-minY, z:dz-z0, color:shade(b.color,mul)});
       }
     }
-    // If still too many, deterministically thin columns, never raw scattered points.
+
     if(cells.length>MAX_BOXES){
+      // Keep deterministic density, but never return raw-scattered points.
       const every=Math.ceil(cells.length/MAX_BOXES);
       const kept=[];
       for(let i=0;i<cells.length;i++){ if(i%every===0) kept.push(cells[i]); }
@@ -8546,14 +8122,14 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     const raw=decode(r);
     const packed=compactSlabCells(raw, sourceGrid);
     if(!packed.cells.length){ CACHE.set(no,null); return null; }
-    const maxDim=Math.max(1,packed.visualGrid||24);
-    const scale=Math.max(.026, Math.min(.07, TARGET_WORLD / maxDim));
+    const maxDim=Math.max(1,packed.visualGrid||32);
+    const scale=Math.max(.018, Math.min(.052, TARGET_WORLD / maxDim));
     const d={
       id:'info-poke3d_'+no, type:'poke3d_'+no, infoType:'poke_'+no, planeId:'info-poke_'+no, no:Number(no),
       name:String(r.name||('No.'+no)).replace(/^情報テクスチャ[:：]?/,'')+' 3D',
       kind:'voxel3d', grid:packed.visualGrid, sourceGrid, scale, cells:packed.cells,
       fullCellCount:raw.length, renderCellCount:packed.cells.length, compactColumns:packed.columns, compactStep:packed.step,
-      archetype:'POKEMON_FIELD3D_COMPACT_SLAB_V12_SOLID_SMALL', pokemonField3d:true, pokemonField3dVersion:VERSION,
+      archetype:'POKEMON_FIELD3D_COMPACT_SLAB_V13_HIRES_THICK', pokemonField3d:true, pokemonField3dVersion:VERSION,
       infoTexture:true, infoRole:'pokemon', hp:12, infoTextureIds:['info-poke_'+no],
       infoPhysics:{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0}, createdAt:1, updatedAt:Date.now()
     };
@@ -8572,7 +8148,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   }
   function place3d(d,x,y,z,yaw,instanceKey){
     if(!d) return null;
-    instanceKey=instanceKey || ('poke3d-v12:'+d.id+':'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
+    instanceKey=instanceKey || ('poke3d-v13:'+d.id+':'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
     if(customObjectRemovedInstances && customObjectRemovedInstances.has(instanceKey)) return null;
     if(customObjectEntities && customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
     const root=new pc.Entity('custom_object_'+instanceKey);
@@ -8585,7 +8161,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
       const lx=(c.x-cx)*scale;
       const ly=(c.y-minY+.5)*scale;
       const lz=(c.z-cz)*scale;
-      addCustomBox(root,mat,lx,ly,lz,scale*1.03,scale*1.03,scale*1.03);
+      addCustomBox(root,mat,lx,ly,lz,scale*1.02,scale*1.02,scale*1.02);
     }
     root.setPosition(x,y,z);
     root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
@@ -8606,11 +8182,11 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
             return place3d(d,x,y,z,yaw,ik);
           }
         }
-      }catch(e){ console.warn('pokemon v12 place failed',e); }
+      }catch(e){ console.warn('pokemon v13 place failed',e); }
       return prevPlace.apply(this,arguments);
     };
     window.placeCustomObject=placeCustomObject;
-  }catch(e){ console.warn('pokemon v12 place hook failed',e); }
+  }catch(e){ console.warn('pokemon v13 place hook failed',e); }
   function convertExisting(){
     if(!customObjectEntities) return 0;
     let n=0;
@@ -8625,14 +8201,15 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
         customObjectEntities.delete(key); try{root.destroy&&root.destroy();}catch{}
         place3d(d,p.x,p.y,p.z,yaw,String(key).replace(/info-poke_(\d{3})/,'info-poke3d_$1'));
         n++;
-      }catch(e){ console.warn('pokemon v12 convert failed',e); }
+      }catch(e){ console.warn('pokemon v13 convert failed',e); }
     }
     return n;
   }
-  try{ setTimeout(()=>{const n=convertExisting(); if(n) setMsg('ポケモンfield3d v12: 小型ソリッド3D化 '+n+'体','good');},500); setTimeout(convertExisting,1300); setInterval(convertExisting,1200); }catch{}
-  window.applyPokemonField3dCompactV12=function(no){ const d=defFor(no||1); if(d){ try{customObjectDefs.set(d.id,d);}catch{} } return d; };
-  try{ console.log(VERSION+' active targetWorld='+TARGET_WORLD+' maxBoxes='+MAX_BOXES+' depth='+DEPTH_LAYERS); }catch{}
+  try{ setTimeout(()=>{const n=convertExisting(); if(n) setMsg('ポケモンfield3d v13: 解像度2倍＋厚み2倍 '+n+'体','good');},500); setTimeout(convertExisting,1300); setInterval(convertExisting,1500); }catch{}
+  window.applyPokemonField3dCompactV13=function(no){ const d=defFor(no||1); if(d){ try{customObjectDefs.set(d.id,d);}catch{} } return d; };
+  try{ console.log(VERSION+' active targetColumns='+TARGET_COLUMNS+' maxBoxes='+MAX_BOXES+' depth='+DEPTH_LAYERS+' targetWorld='+TARGET_WORLD); }catch{}
 })();
+
 
 setMsg('PlayCanvas Engine読込完了','good');
 })();
