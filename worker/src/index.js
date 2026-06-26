@@ -14,6 +14,8 @@ export class Room {
     this.worldEdits = [];
     this.worldStateLoaded = false;
     this.worldState = null;
+    this.englishGameLoaded = false;
+    this.englishGameState = null;
     this.instancesSaveTimer = null;
     this.linksSaveTimer = null;
     this.worldEditsSaveTimer = null;
@@ -115,6 +117,64 @@ export class Room {
       this.worldEditsSaveTimer = null;
       try { await this.saveWorldEdits(); } catch {}
     }, 450);
+  }
+
+
+  async loadEnglishGame() {
+    if (this.englishGameLoaded) return;
+    this.englishGameLoaded = true;
+    const saved = await this.state.storage.get('englishGameState');
+    this.englishGameState = (saved && typeof saved === 'object') ? saved : null;
+  }
+
+  async saveEnglishGame() {
+    if (!this.englishGameState) return;
+    await this.state.storage.put('englishGameState', this.englishGameState);
+  }
+
+  englishGameMessage(reason = 'server-load') {
+    return {
+      type: 'englishState',
+      state: this.englishGameState,
+      reason,
+      time: Date.now()
+    };
+  }
+
+  cleanEnglishState(raw) {
+    const st = raw && typeof raw === 'object' ? raw : null;
+    if (!st || !Array.isArray(st.board) || !Array.isArray(st.players)) return null;
+    const board = st.board.slice(0, 81).map(c => {
+      if (!c || typeof c !== 'object') return null;
+      return {
+        w: String(c.w || '').slice(0, 24),
+        owner: Math.max(0, Math.min(3, Number(c.owner) || 0)),
+        baseOwner: Math.max(0, Math.min(3, Number(c.baseOwner) || 0)),
+        at: Number(c.at) || Date.now()
+      };
+    });
+    const players = st.players.slice(0, 4).map((p, i) => ({
+      name: String(p && p.name || ('Player ' + (i + 1))).slice(0, 24),
+      score: Math.max(0, Number(p && p.score) || 0),
+      tiles: Math.max(0, Number(p && p.tiles) || 0),
+      color: String(p && p.color || ['#38bdf8','#f472b6','#a3e635','#facc15'][i] || '#fff').slice(0, 16),
+      hand: Array.isArray(p && p.hand) ? p.hand.slice(0, 7).map(w => String(w).slice(0, 24)) : []
+    }));
+    return {
+      version: Number(st.version) || 1,
+      gameId: String(st.gameId || ('eng-' + Date.now().toString(36))).slice(0, 80),
+      turn: Math.max(0, Number(st.turn) || 0),
+      turnNo: Math.max(1, Number(st.turnNo) || 1),
+      playerCount: Math.max(2, Math.min(4, Number(st.playerCount) || players.length || 2)),
+      wordsMade: Math.max(0, Number(st.wordsMade) || 0),
+      board,
+      players,
+      log: Array.isArray(st.log) ? st.log.slice(0, 50).map(x => ({
+        t: Number(x && x.t) || Date.now(),
+        text: String(x && x.text || '').slice(0, 160),
+        good: !!(x && x.good)
+      })) : []
+    };
   }
 
   cleanBlockEdit(msg) {
@@ -288,6 +348,7 @@ export class Room {
     await this.loadLinks();
     await this.loadWorldEdits();
     await this.loadWorldState();
+    await this.loadEnglishGame();
 
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('mine-server-git2 WebSocket server OK / worldState + shared info-texture spawn sync enabled', {
@@ -310,6 +371,7 @@ export class Room {
     server.send(JSON.stringify({ type: 'worldEdits', edits: this.worldEdits.slice(-5000), time: Date.now() }));
     server.send(JSON.stringify(this.worldStateMessage()));
     server.send(JSON.stringify({ type: 'players', players: Array.from(this.players.values()), time: Date.now() }));
+    if (this.englishGameState) server.send(JSON.stringify(this.englishGameMessage()));
 
     server.addEventListener('message', async (event) => {
       await this.onMessage(server, event.data);
@@ -349,6 +411,7 @@ export class Room {
       try { ws.send(JSON.stringify({ type: 'worldEdits', edits: this.worldEdits.slice(-5000), time: Date.now() })); } catch {}
       try { ws.send(JSON.stringify(this.worldStateMessage())); } catch {}
       try { ws.send(JSON.stringify({ type: 'players', players: Array.from(this.players.values()), time: Date.now() })); } catch {}
+      if (this.englishGameState) { try { ws.send(JSON.stringify(this.englishGameMessage('request-sync'))); } catch {} }
       return;
     }
 
@@ -491,6 +554,31 @@ export class Room {
       this.worldEdits = this.worldEdits.slice(-5000);
       this.scheduleSaveWorldEdits();
       this.broadcast({ ...edit, clientId, time: Date.now() }, ws);
+      return;
+    }
+
+
+    if (msg.type === 'englishHello' || msg.type === 'englishStateReq') {
+      if (this.englishGameState) {
+        try { ws.send(JSON.stringify(this.englishGameMessage('hello-sync'))); } catch {}
+      }
+      this.broadcast(base, ws);
+      return;
+    }
+
+    if (msg.type === 'englishNewGame' || msg.type === 'englishState' || msg.type === 'englishPlace') {
+      const clean = this.cleanEnglishState(msg.state || msg.gameState || null);
+      if (clean) {
+        const incomingTurn = Number(clean.turnNo) || 0;
+        const currentTurn = Number(this.englishGameState && this.englishGameState.turnNo) || 0;
+        if (msg.type === 'englishNewGame' || clean.gameId !== (this.englishGameState && this.englishGameState.gameId) || incomingTurn >= currentTurn) {
+          this.englishGameState = clean;
+          await this.saveEnglishGame();
+        }
+        this.broadcast({ type: msg.type, gameId: clean.gameId, state: clean, reason: String(msg.reason || ''), clientId, time: Date.now() }, ws);
+      } else {
+        this.broadcast(base, ws);
+      }
       return;
     }
 
