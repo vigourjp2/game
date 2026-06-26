@@ -157,7 +157,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v2';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v3';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || '').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -171,15 +171,15 @@ async function linkGrammarEvaluate(words){
   const cached=linkGrammarCache[key];
   if(cached!==undefined){
     if(cached && typeof cached==='object' && cached.ok){
-      return {kind:cached.kind||'LinkGrammar構文解析',pts:cached.pts||48+Math.min(24,w.length*5),text:cached.text||capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:'cache',ja:cached.ja||''};
+      return {kind:cached.kind||'LinkGrammar構文解析',pts:cached.pts||48+Math.min(24,w.length*5),text:cached.text||displayEnglish(w),source:'linkGrammar',parser:'cache',ja:cached.ja||''};
     }
-    if(cached===true) return {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:'cache'};
+    if(cached===true) return {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:displayEnglish(w),source:'linkGrammar',parser:'cache'};
     return null;
   }
   try{
     linkGrammarStatus='CHECK'; renderSafe();
     const base=linkGrammarApi.replace(/\/$/,'');
-    const text=capSentence(w).replace(/[.]$/,'');
+    const text=displayEnglish(w);
     // /check-and-translate がある新APIを優先。古いAPIなら /check にフォールバック。
     let res=await fetch(base+'/check-and-translate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text,words:w})});
     if(res.status===404) res=await fetch(base+'/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text,words:w})});
@@ -369,6 +369,35 @@ function useColor(count, ownerColor){
   return {bg,border,text:'#fff',rainbow:count>=7};
 }
 function lowerWords(words){return (words||[]).map(x=>String(x||'').trim()).filter(Boolean).map(x=>x.toLowerCase());}
+function isThirdPersonSingularSubject(w){
+  w=String(w||'').toLowerCase();
+  if(['he','she','it'].includes(w)) return true;
+  if(['i','you','we','they','me'].includes(w)) return false;
+  const ps=wordPos(w);
+  if(!ps.includes('noun')) return false;
+  if(['people'].includes(w)) return false;
+  if(w.endsWith('s') && !['tennis'].includes(w)) return false;
+  return true;
+}
+function present3sg(v){
+  v=String(v||'').toLowerCase();
+  const irregular={have:'has',do:'does'};
+  if(irregular[v]) return irregular[v];
+  if(/[^aeiou]y$/.test(v)) return v.slice(0,-1)+'ies';
+  if(/(s|x|z|ch|sh|o)$/.test(v)) return v+'es';
+  return v+'s';
+}
+function applySubjectVerbAgreement(words){
+  const w=lowerWords(words);
+  if(w.length>=2 && isThirdPersonSingularSubject(w[0]) && wordPos(w[1]).includes('verb')){
+    // 助動詞の後や be動詞は対象外。盤面カードは原形のまま、成立文だけ3単現sへ自動整形する。
+    const out=w.slice();
+    out[1]=present3sg(out[1]);
+    return out;
+  }
+  return w;
+}
+function displayEnglish(words){ return capSentence(applySubjectVerbAgreement(words)).replace(/[.]$/,''); }
 function isSubjWord(w){return ['i','you','he','she','we','they'].includes(w);}
 function beForSubject(w){
   w=String(w||'').toLowerCase();
@@ -407,7 +436,7 @@ function evalCorePattern(w){
   const n=w.length;
   const hp=(i,pos)=>wordPos(w[i]).includes(pos);
   const text=w.join(' ');
-  const cap=text.split(' ').map((x,i)=> x==='i'?'I': (x==='english'?'English':x)).join(' ');
+  const cap=displayEnglish(w);
   // short phrases
   if(n===2 && hp(0,'adv') && hp(1,'adj')) return {kind:'副詞+形容詞',pts:12,text:cap};
   if(n===2 && hp(0,'not') && hp(1,'adj')) return {kind:'否定フレーズ',pts:12,text:cap};
@@ -434,16 +463,16 @@ function evalCorePattern(w){
   }
 
   // general verb sentences: base verb is safe for I/you/we/they in this deck
-  if(n===3 && hp(0,'subj') && hp(1,'verb') && canUseBaseVerb(w[0]) && isVerbObjectOK(w[1],w[2])) {
+  if(n===3 && hp(0,'subj') && hp(1,'verb') && isVerbObjectOK(w[1],w[2])) {
     return {kind:'一般動詞の文',pts:34,text:cap};
   }
-  if(n===4 && hp(0,'subj') && w[1]==='go' && hp(2,'to') && hp(3,'noun') && canUseBaseVerb(w[0])) {
+  if(n===4 && hp(0,'subj') && w[1]==='go' && hp(2,'to') && hp(3,'noun')) {
     return {kind:'go to の文',pts:42,text:cap};
   }
-  if(n===4 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb') && canUseBaseVerb(w[0])) {
+  if(n===4 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb')) {
     return {kind:'want to 文',pts:52,text:cap};
   }
-  if(n===5 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb') && isVerbObjectOK(w[3],w[4]) && canUseBaseVerb(w[0])) {
+  if(n===5 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb') && isVerbObjectOK(w[3],w[4])) {
     return {kind:'want to+目的語の文',pts:62,text:cap};
   }
   if(n===3 && hp(0,'subj') && hp(1,'modal') && hp(2,'verb')) {
@@ -455,7 +484,7 @@ function evalCorePattern(w){
   if(n===3 && hp(0,'verb') && hp(1,'prep') && hp(2,'noun')) {
     return {kind:'動詞+前置詞フレーズ',pts:24,text:cap};
   }
-  if(n===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'prep') && hp(3,'noun') && canUseBaseVerb(w[0])) {
+  if(n===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'prep') && hp(3,'noun')) {
     return {kind:'一般動詞+前置詞の文',pts:46,text:cap};
   }
   if(n===4 && (hp(0,'subj')||hp(0,'noun')) && hp(1,'be') && beMatches(w[0],w[1]) && hp(2,'adj') && hp(3,'prep')) {
@@ -464,7 +493,7 @@ function evalCorePattern(w){
   if(n===5 && (hp(0,'subj')||hp(0,'noun')) && hp(1,'be') && beMatches(w[0],w[1]) && hp(2,'adj') && hp(3,'prep') && hp(4,'noun')) {
     return {kind:'be+形容詞+前置詞句の文',pts:58,text:cap};
   }
-  if(n===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'article') && hp(3,'noun') && canUseBaseVerb(w[0])) {
+  if(n===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'article') && hp(3,'noun')) {
     return {kind:'一般動詞+冠詞+名詞の文',pts:42,text:cap};
   }
   if(n===4 && hp(0,'verb') && hp(1,'prep') && hp(2,'article') && hp(3,'noun')) {
@@ -506,7 +535,7 @@ async function evaluateSequenceAsync(words){
   return null;
 }
 
-const TRANSLATION_CACHE_KEY='englishPittan.translationCache.v1';
+const TRANSLATION_CACHE_KEY='englishPittan.translationCache.v2';
 let translationCache={};
 try{translationCache=JSON.parse(localStorage.getItem(TRANSLATION_CACHE_KEY)||'{}')||{};}catch(e){translationCache={};}
 async function translateWithApi(text){
@@ -533,7 +562,7 @@ async function resolveJapanese(words,ev){
   const key=norm(words);
   if(EXACT_JA.has(key)) return EXACT_JA.get(key);
   if(PHRASE_MAP.has(key)) return PHRASE_MAP.get(key).ja;
-  const text=(ev?.text || capSentence(words).replace(/[.]$/,'')).trim();
+  const text=(ev?.text || displayEnglish(words)).trim();
   if(text && isLikelyCompleteSentenceWords(words)){
     const apiJa=await translateWithApi(text);
     if(apiJa) return apiJa;
