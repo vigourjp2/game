@@ -23,6 +23,16 @@
   .side{display:flex;flex-direction:column;gap:10px}.scorePanel{padding:10px}.scorePanel h2,.logPanel h2,.dictPanel h2{font-size:15px;margin:0 0 8px}.players{display:grid;gap:7px}.player{display:grid;grid-template-columns:18px 1fr auto;gap:7px;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:7px}.dot{width:14px;height:14px;border-radius:50%}.pname{font-size:12px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pscore{font-size:13px;font-weight:1000;color:#fde68a}.current{outline:2px solid rgba(250,204,21,.55)}
   .dictPanel{padding:10px}.rules{font-size:12px;line-height:1.45;color:#dbeafe}.rules b{color:#fde68a}.targetList{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.chip{font-size:11px;padding:4px 7px;border-radius:999px;background:rgba(59,130,246,.18);border:1px solid rgba(147,197,253,.25);color:#dbeafe}.logPanel{padding:10px;min-height:140px}.log{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;padding-right:3px}.logItem{font-size:12px;line-height:1.35;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:7px}.logItem b{color:#fde68a}.goodText{color:var(--good)}.badText{color:var(--bad)}
   #start{position:fixed;inset:0;z-index:50;background:linear-gradient(180deg,rgba(3,7,18,.92),rgba(15,23,42,.82));display:flex;align-items:center;justify-content:center;padding:18px}.startCard{width:min(560px,94vw);background:rgba(15,23,42,.92);border:1px solid rgba(255,255,255,.2);border-radius:24px;padding:20px;box-shadow:0 25px 80px rgba(0,0,0,.45);backdrop-filter:blur(12px)}.startCard h1{margin:0 0 7px;font-size:28px}.startCard p{font-size:14px;color:#dbeafe;line-height:1.55}.startCard ul{font-size:13px;color:#e5e7eb;line-height:1.55;padding-left:20px}.startCard .btn{font-size:17px;width:100%;margin-top:10px;padding:13px}
+
+  .fxBanner{position:fixed;left:50%;top:18%;transform:translateX(-50%) scale(.9);z-index:70;pointer-events:none;opacity:0;min-width:min(520px,92vw);text-align:center;padding:18px 16px;border-radius:24px;background:linear-gradient(135deg,rgba(22,163,74,.92),rgba(37,99,235,.9));border:2px solid rgba(255,255,255,.38);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 40px rgba(134,239,172,.35)}
+  .fxBanner.show{animation:bannerBoom 1.8s ease both}.fxBig{font-size:30px;font-weight:1000;letter-spacing:.02em;text-shadow:0 3px 12px rgba(0,0,0,.35)}.fxEn{font-size:21px;font-weight:1000;margin-top:4px}.fxJa{font-size:16px;color:#fef3c7;margin-top:2px}.fxPts{font-size:18px;color:#bbf7d0;font-weight:1000;margin-top:4px}
+  @keyframes bannerBoom{0%{opacity:0;transform:translateX(-50%) scale(.72) rotate(-2deg);filter:brightness(2)}12%{opacity:1;transform:translateX(-50%) scale(1.08) rotate(1deg)}25%{transform:translateX(-50%) scale(1) rotate(0)}78%{opacity:1}100%{opacity:0;transform:translateX(-50%) scale(.96) translateY(-18px)}}
+  .scorePop{position:fixed;z-index:80;pointer-events:none;font-weight:1000;font-size:26px;color:#fde68a;text-shadow:0 3px 12px rgba(0,0,0,.7);animation:scoreFly 1.2s ease-out both}.scorePop small{display:block;font-size:13px;color:#bbf7d0}.spark{position:fixed;z-index:79;width:8px;height:8px;border-radius:50%;pointer-events:none;background:#fde68a;box-shadow:0 0 14px #fde68a;animation:sparkFly .8s ease-out both}
+  @keyframes scoreFly{0%{opacity:0;transform:translate(-50%,0) scale(.7)}15%{opacity:1;transform:translate(-50%,-10px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-78px) scale(.9)}}
+  @keyframes sparkFly{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.2)}}
+  .cell.hit{animation:hitGlow 1s ease both}.cell.badShake{animation:badShake .22s linear 2}@keyframes hitGlow{0%{box-shadow:0 0 0 rgba(134,239,172,0);filter:brightness(1)}18%{box-shadow:0 0 28px rgba(134,239,172,.95);filter:brightness(1.9)}100%{box-shadow:inset 0 0 16px rgba(255,255,255,.03);filter:brightness(1)}}@keyframes badShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+  .voiceNote{font-size:11px;color:#dbeafe;line-height:1.35;grid-column:1/-1;background:rgba(59,130,246,.12);border:1px solid rgba(147,197,253,.16);border-radius:12px;padding:8px}.soloBadge{background:rgba(134,239,172,.16);border-color:rgba(134,239,172,.3);color:#bbf7d0}
+
   @media(max-width:920px){#app{padding:8px}.top{grid-template-columns:1fr}.main{grid-template-columns:1fr}.side{grid-template-columns:1fr}.controls{grid-template-columns:1fr 1fr}.board{gap:4px;padding:5px}.cell{border-radius:10px}.hand{grid-template-columns:repeat(5,1fr);gap:5px}.tile{min-height:48px;font-size:12px;border-radius:12px}.statusGrid{grid-template-columns:repeat(4,1fr)}}
   @media(max-width:520px){.hero h1{font-size:19px}.status b{font-size:14px}.controls{grid-template-columns:1fr}.board{grid-template-columns:repeat(7,1fr);border-radius:14px}.word{font-size:clamp(8px,3.1vw,13px)}.hand{grid-template-columns:repeat(5,1fr)}.tile{font-size:11px;min-height:45px;padding:3px}.tile small{display:none}.msg{text-align:left}.boardTop{align-items:flex-start;flex-direction:column}.startCard h1{font-size:23px}}
 </style>
@@ -30,24 +40,27 @@
 <body>
 <div id="start">
   <div class="startCard">
-    <span class="badge">ONLINE</span><span class="badge">ENGLISH</span><span class="badge">陣取り</span>
+    <span class="badge soloBadge">SOLO</span><span class="badge">ONLINE</span><span class="badge">VOICE</span><span class="badge">陣取り</span>
     <h1>English Word Pittan Online</h1>
-    <p>英単語タイルを置いて、英文・フレーズ・文法パターンを作る対戦パズル。`index-mine.html` と同じ考えで、WebSocket が使える環境なら同じ部屋の複数人に同期します。</p>
+    <p>英単語タイルを置いて、英文・フレーズ・文法パターンを作るパズル。1人練習も、オンライン複数人対戦も対応。成立した英文は英語で読み上げて、続けて日本語訳も読み上げます。</p>
     <ul>
       <li>左→右、上→下だけ判定</li>
       <li>成立した単語列のマスを自分色にする</li>
       <li>相手のマスを使って文を作ると奪える</li>
+      <li>1人練習モードあり</li>
+      <li>成立時に演出・得点ポップ・英語読み上げ・日本語訳読み上げ</li>
       <li>オフラインでも同じ端末で交互対戦OK</li>
     </ul>
     <button class="btn good" id="startBtn">はじめる</button>
   </div>
 </div>
+<div id="fxBanner" class="fxBanner"><div class="fxBig">GOOD!</div><div class="fxEn" id="fxEn"></div><div class="fxJa" id="fxJa"></div><div class="fxPts" id="fxPts"></div></div>
 <div id="app">
   <div class="top">
     <section class="panel hero">
       <span class="badge">英語版もじぴったん風</span><span class="badge">2〜4人</span>
       <h1>English Word Pittan Online</h1>
-      <p>単語を1マスに置く。英文・熟語・文法型が成立したら陣地化。横長棒の落ち物問題を捨てて、盤面配置パズルにした版。</p>
+      <p>単語を1マスに置く。英文・熟語・文法型が成立したら演出＋読み上げ＋陣地化。1人練習からオンライン対戦まで対応。</p>
       <div class="statusGrid">
         <div class="status"><b id="turnNo">1</b><span>TURN</span></div>
         <div class="status"><b id="wordsMade">0</b><span>WORDS</span></div>
@@ -57,14 +70,14 @@
     </section>
     <section class="panel controls">
       <input id="nameInput" maxlength="18" placeholder="名前 例: player" />
-      <select id="playerCount"><option value="2">2人対戦</option><option value="3">3人対戦</option><option value="4">4人対戦</option></select>
+      <select id="playerCount"><option value="1" selected>1人練習</option><option value="2">2人対戦</option><option value="3">3人対戦</option><option value="4">4人対戦</option></select>
       <button class="btn blue" id="connectBtn">ONLINE接続</button>
       <button class="btn good" id="newGameBtn">新規ゲーム</button>
       <button class="btn warn" id="passBtn">パス</button>
       <button class="btn pink" id="drawBtn">手札入替</button>
       <button class="btn bad full" id="resetBtn">盤面リセット送信</button>
       <div class="mpLine">通信: <b id="mp" class="bad">LOCAL</b> / 受信 <span id="rx">0</span> / 自分ID <span id="myId">-</span></div>
-      <div class="mini">同じ Worker URL の `/room/english` を使う。専用サーバ改修なしでも、未知メッセージのブロードキャストで同期する設計。</div>
+      <div class="voiceNote">🔊 成立した英文は <b>英語</b> → <b>日本語訳</b> の順に読み上げ。スマホは最初に「はじめる」を押した後から音声が出やすい。</div><div class="mini">同じ Worker URL の `/room/english` を使う。1人練習は接続なしで遊べる。</div>
     </section>
   </div>
 
@@ -115,6 +128,20 @@ const EXACT = new Map([
   ['i want to play',{kind:'不定詞の文',pts:55}],['i want to read',{kind:'不定詞の文',pts:55}],['you want to study',{kind:'不定詞の文',pts:55}],['i can swim',{kind:'助動詞の文',pts:45}],['you must study',{kind:'助動詞の文',pts:45}],
   ['play soccer',{kind:'フレーズ',pts:16}],['study english',{kind:'フレーズ',pts:16}],['read books',{kind:'フレーズ',pts:16}],['go to school',{kind:'フレーズ',pts:22}],['very happy',{kind:'フレーズ',pts:14}],['very kind',{kind:'フレーズ',pts:14}],['in the morning',{kind:'フレーズ',pts:20}],['not happy',{kind:'否定フレーズ',pts:12}],['not busy',{kind:'否定フレーズ',pts:12}]
 ]);
+
+const JA = {
+  'i':'私は','you':'あなたは','he':'彼は','she':'彼女は','we':'私たちは','they':'彼らは','am':'です','are':'です','is':'です','not':'〜ではありません',
+  'happy':'幸せ','sad':'悲しい','kind':'親切','tall':'背が高い','busy':'忙しい','hungry':'お腹がすいている',
+  'like':'好きです','play':'する','study':'勉強する','read':'読む','go':'行く','want':'したい','can':'できます','must':'しなければなりません',
+  'playing':'しています','studying':'勉強しています','reading':'読んでいます','going':'行っています','to':'へ','school':'学校','soccer':'サッカー','tennis':'テニス','english':'英語','apples':'りんご','music':'音楽','books':'本','very':'とても','now':'今','today':'今日','everyday':'毎日','in':'〜に','the':'その','morning':'朝'
+};
+const EXACT_JA = new Map([
+  ['i am happy','私は幸せです'],['i am sad','私は悲しいです'],['you are kind','あなたは親切です'],['he is tall','彼は背が高いです'],['she is busy','彼女は忙しいです'],['we are hungry','私たちはお腹がすいています'],
+  ['i like apples','私はりんごが好きです'],['i like music','私は音楽が好きです'],['you play soccer','あなたはサッカーをします'],['we study english','私たちは英語を勉強します'],['i read books','私は本を読みます'],
+  ['i am playing soccer','私はサッカーをしています'],['she is reading books','彼女は本を読んでいます'],['we are studying english','私たちは英語を勉強しています'],['i am going to school','私は学校へ行っています'],
+  ['i want to play','私は遊びたいです'],['i want to read','私は読みたいです'],['you want to study','あなたは勉強したいです'],['i can swim','私は泳げます'],['you must study','あなたは勉強しなければなりません'],
+  ['play soccer','サッカーをする'],['study english','英語を勉強する'],['read books','本を読む'],['go to school','学校へ行く'],['very happy','とても幸せ'],['very kind','とても親切'],['in the morning','朝に'],['not happy','幸せではない'],['not busy','忙しくない']
+]);
 const targets = Array.from(EXACT.keys()).slice(0,24);
 let state = freshState(2);
 function freshState(playerCount=2){
@@ -159,6 +186,70 @@ function evaluateSequence(words){
   if(n===3 && hp(0,'prep') && hp(1,'article') && hp(2,'noun')) return {kind:'前置詞句',pts:18,text:words.join(' ')};
   return null;
 }
+
+function translateSequence(words,ev){
+  const key=norm(words);
+  if(EXACT_JA.has(key)) return EXACT_JA.get(key);
+  const w=words.map(x=>String(x).toLowerCase());
+  const hp=(i,pos)=>wordPos(w[i]).includes(pos);
+  const ja=x=>JA[String(x).toLowerCase()]||x;
+  if(words.length===2 && hp(0,'adv') && hp(1,'adj')) return `${ja(w[0])}${ja(w[1])}`;
+  if(words.length===2 && hp(0,'verb') && hp(1,'noun')) return `${ja(w[1])}を${ja(w[0])}`;
+  if(words.length===3 && hp(0,'subj') && hp(1,'be') && hp(2,'adj')) return `${ja(w[0])}${ja(w[2])}です`;
+  if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj')) return `${ja(w[0])}${ja(w[3])}ではありません`;
+  if(words.length===3 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun')) return `${ja(w[0])}${ja(w[2])}を${ja(w[1])}`;
+  if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun')) return `${ja(w[0])}${ja(w[3])}を${ja(w[2])}`;
+  if(words.length===4 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb')) return `${ja(w[0])}${ja(w[3])}したいです`;
+  if(words.length===3 && hp(0,'subj') && hp(1,'modal') && hp(2,'verb')) return `${ja(w[0])}${ja(w[2])}${w[1]==='can'?'ことができます':'しなければなりません'}`;
+  if(words.length===3 && hp(0,'prep') && hp(1,'article') && hp(2,'noun')) return `${ja(w[2])}に`;
+  return words.map(ja).join(' / ');
+}
+function unlockSpeech(){
+  if(!('speechSynthesis' in window)) return;
+  try{const u=new SpeechSynthesisUtterance('');u.volume=0;window.speechSynthesis.speak(u);setTimeout(()=>window.speechSynthesis.cancel(),30);}catch(e){}
+}
+function pickVoice(lang){
+  if(!('speechSynthesis' in window)) return null;
+  const voices=window.speechSynthesis.getVoices()||[];
+  return voices.find(v=>v.lang===lang) || voices.find(v=>String(v.lang||'').toLowerCase().startsWith(lang.slice(0,2).toLowerCase())) || null;
+}
+function speakResult(m){
+  if(!m||!('speechSynthesis' in window)) return;
+  const enText=m.text;
+  const jaText=m.ja||translateSequence(enText.split(' '),m);
+  try{
+    window.speechSynthesis.cancel();
+    const en=new SpeechSynthesisUtterance(enText);
+    en.lang='en-US';en.rate=.82;en.pitch=1;en.volume=1;
+    const ev=pickVoice('en-US'); if(ev) en.voice=ev;
+    const ja=new SpeechSynthesisUtterance(jaText);
+    ja.lang='ja-JP';ja.rate=.95;ja.pitch=1;ja.volume=1;
+    const jv=pickVoice('ja-JP'); if(jv) ja.voice=jv;
+    en.onend=()=>setTimeout(()=>window.speechSynthesis.speak(ja),180);
+    window.speechSynthesis.speak(en);
+  }catch(e){}
+}
+function playChime(ok=true){
+  try{
+    const C=window.AudioContext||window.webkitAudioContext;if(!C)return;
+    const ctx=new C();
+    const now=ctx.currentTime;
+    const notes=ok?[523,659,784,1046]:[160,120];
+    notes.forEach((f,i)=>{const o=ctx.createOscillator();const g=ctx.createGain();o.type=ok?'triangle':'sawtooth';o.frequency.value=f;g.gain.setValueAtTime(0.0001,now+i*.08);g.gain.exponentialRampToValueAtTime(ok?.16:.08,now+i*.08+.02);g.gain.exponentialRampToValueAtTime(0.0001,now+i*.08+.16);o.connect(g);g.connect(ctx.destination);o.start(now+i*.08);o.stop(now+i*.08+.18);});
+    setTimeout(()=>ctx.close(),700);
+  }catch(e){}
+}
+function showFx(made,gained,cellIndex){
+  const top=made[0]; if(!top)return;
+  const fx=$('fxBanner');$('fxEn').textContent=top.text;$('fxJa').textContent=top.ja||'';$('fxPts').textContent='+'+gained+' POINTS';
+  fx.classList.remove('show');void fx.offsetWidth;fx.classList.add('show');
+  const cell=document.querySelectorAll('.cell')[cellIndex];
+  let x=innerWidth/2,y=innerHeight/2;
+  if(cell){const r=cell.getBoundingClientRect();x=r.left+r.width/2;y=r.top+r.height/2;}
+  const pop=document.createElement('div');pop.className='scorePop';pop.style.left=x+'px';pop.style.top=y+'px';pop.innerHTML=`+${gained}<small>${esc(top.kind)}</small>`;document.body.appendChild(pop);setTimeout(()=>pop.remove(),1300);
+  for(let i=0;i<22;i++){const sp=document.createElement('i');sp.className='spark';sp.style.left=x+'px';sp.style.top=y+'px';const a=Math.random()*Math.PI*2,d=30+Math.random()*90;sp.style.setProperty('--dx',Math.cos(a)*d+'px');sp.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(sp);setTimeout(()=>sp.remove(),900);}
+}
+
 function scanFromCell(placeIndex){
   const {x,y}=xy(placeIndex);
   const found=[];
@@ -172,7 +263,7 @@ function scanFromCell(placeIndex){
     for(let a=0;a<line.length;a++) for(let b=a+1;b<line.length;b++){
       const slice=line.slice(a,b+1); if(!slice.some(s=>s.i===placeIndex)) continue;
       const ev=evaluateSequence(slice.map(s=>s.w));
-      if(ev) found.push({...ev,cells:slice.map(s=>s.i),dir:dir.name});
+      if(ev){ev.ja=translateSequence(slice.map(s=>s.w),ev); found.push({...ev,cells:slice.map(s=>s.i),dir:dir.name});}
     }
   }
   found.sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
@@ -195,12 +286,16 @@ function placeTile(cellIndex){
       gained += m.pts;
       state.wordsMade++;
       m.cells.forEach(i=>{state.board[i].owner=state.turn%state.playerCount; if(!recentCells.includes(i)) recentCells.push(i);});
-      addLog(`${p.name}: ${m.text}（${m.kind}） +${m.pts}`,true);
+      addLog(`${p.name}: ${m.text} / ${m.ja}（${m.kind}） +${m.pts}`,true);
     }
-    setMsg(`${made[0].text} 成立！ +${gained}`,'good');
+    setMsg(`${made[0].text} 成立！ ${made[0].ja} +${gained}`,'good');
+    playChime(true);
+    showFx(made,gained,cellIndex);
+    speakResult(made[0]);
   }else{
     addLog(`${p.name}: ${word} を配置。成立なし +1`,false);
     setMsg('成立なし。つなげ方を狙え！','bad');
+    playChime(false);
   }
   p.score+=gained;
   recalcTiles();
@@ -219,11 +314,11 @@ function applyState(s,why='同期'){
 }
 function passTurn(){const p=currentPlayer();addLog(`${p.name}: パス`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'pass'});render();}
 function swapHand(){const p=currentPlayer();p.hand=drawHand(99);p.score=Math.max(0,p.score-5);addLog(`${p.name}: 手札入替 -5`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'swap'});render();}
-function newGame(broadcastIt=true){const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg('新規ゲーム開始','good');}
+function newGame(broadcastIt=true){const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg(state.playerCount===1?'1人練習開始。英文を作ると英語→日本語で読み上げる':'新規ゲーム開始','good');}
 function render(){
   $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
   const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
-  const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent ':'');d.type='button';if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const color=state.players[c.owner]?.color||'#fff';d.innerHTML=`<span class="owner" style="background:${color}"></span><span class="word">${esc(c.w)}</span><span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${hexAlpha(color,.28)}, rgba(255,255,255,.06))`;d.style.borderColor=hexAlpha(color,.65);} d.onclick=()=>placeTile(i);b.appendChild(d);});
+  const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const color=state.players[c.owner]?.color||'#fff';d.innerHTML=`<span class="owner" style="background:${color}"></span><span class="word">${esc(c.w)}</span><span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${hexAlpha(color,.28)}, rgba(255,255,255,.06))`;d.style.borderColor=hexAlpha(color,.65);} d.onclick=()=>placeTile(i);b.appendChild(d);});
   const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const t=document.createElement('button');t.type='button';t.className='tile '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(wordPos(w).join('/')||'?')}</small>`;t.onclick=()=>{selectedHandIndex=i;render();};h.appendChild(t);});
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
@@ -258,8 +353,8 @@ function handleNet(raw){eachPayload(raw,(msg)=>{
     if(msg.state.gameId!==state.gameId || incomingTurn>=state.turnNo){applyState(msg.state,'オンライン同期');}
   }
 });}
-$('startBtn').onclick=()=>{$('start').style.display='none';render();};
-$('connectBtn').onclick=connect;
+$('startBtn').onclick=()=>{unlockSpeech();$('start').style.display='none';render();};
+$('connectBtn').onclick=()=>{unlockSpeech();connect();};
 $('newGameBtn').onclick=()=>newGame(true);
 $('resetBtn').onclick=()=>{if(confirm('盤面をリセットしてオンラインにも送信する？'))newGame(true);};
 $('passBtn').onclick=passTurn;
