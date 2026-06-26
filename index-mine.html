@@ -8366,6 +8366,228 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{ console.log(VERSION+' active'); }catch(e){}
 })();
 
+
+// ===== Zonai Gear flat info-texture pack / Ultra Hand activation =====
+(function(){
+  const ZONAI_VERSION='zonai-flat-ultra-v1';
+  const ZONAI_PREFIX='info-zonai_';
+  const ZONAI_GRANTED_KEY='mineZonaiGearGranted.v1';
+  let zonaiGranted=new Set();
+  try{ zonaiGranted=new Set(JSON.parse(localStorage.getItem(ZONAI_GRANTED_KEY)||'[]').map(String)); }catch(e){ zonaiGranted=new Set(); }
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
+  const norm=s=>String(s||'').toLowerCase().replace(/^info[-_]zonai[-_]/,'').replace(/[^a-z0-9_]/g,'_').replace(/^_+|_+$/g,'');
+  function zid(type){ return ZONAI_PREFIX+norm(type); }
+  const ZONAI_GEAR=[
+    {type:'fan',name:'扇風機',kind:'device',effect:'風で推進力を作る',duration:1800,act:'thrust',power:10,palette:{body:'#38bdf8',dark:'#0f172a',accent:'#e0f2fe'},glyph:'fan'},
+    {type:'wing',name:'翼',kind:'device',effect:'風を受けて揚力を発生させる',duration:75,act:'wing',power:1,palette:{body:'#d6d3d1',dark:'#57534e',accent:'#fde68a'},glyph:'wing'},
+    {type:'cart',name:'台車',kind:'device',effect:'ローラーつき台車',duration:1800,act:'cart',power:5,palette:{body:'#94a3b8',dark:'#334155',accent:'#facc15'},glyph:'cart'},
+    {type:'balloon',name:'熱気球',kind:'device',effect:'熱を受けると浮かび上がる',duration:120,act:'lift',power:7,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},glyph:'balloon'},
+    {type:'rocket',name:'ロケット',kind:'device',effect:'短時間だけ強力に推進する',duration:3,act:'rocket',power:28,palette:{body:'#ef4444',dark:'#111827',accent:'#fef3c7'},glyph:'rocket'},
+    {type:'time_bomb',name:'タイマーバクダン',kind:'device',effect:'4秒後に爆発する',duration:4,act:'bomb',power:1,palette:{body:'#1f2937',dark:'#020617',accent:'#f97316'},glyph:'bomb'},
+    {type:'portable_pot',name:'携帯鍋',kind:'device',effect:'1回だけ料理・回復する',duration:1,act:'pot',power:1,palette:{body:'#a16207',dark:'#451a03',accent:'#fde68a'},glyph:'pot'},
+    {type:'flame_emitter',name:'火龍の頭',kind:'device',effect:'前方に炎を放つ',duration:1800,act:'flame',power:1,palette:{body:'#dc2626',dark:'#7f1d1d',accent:'#facc15'},glyph:'head'},
+    {type:'frost_emitter',name:'氷龍の頭',kind:'device',effect:'前方に冷気を放つ',duration:1800,act:'frost',power:1,palette:{body:'#67e8f9',dark:'#155e75',accent:'#f8fafc'},glyph:'head'},
+    {type:'shock_emitter',name:'雷龍の頭',kind:'device',effect:'前方に電撃を放つ',duration:1800,act:'shock',power:1,palette:{body:'#facc15',dark:'#713f12',accent:'#fefce8'},glyph:'head'},
+    {type:'beam_emitter',name:'光線の頭',kind:'device',effect:'一直線に光線を放つ',duration:1800,act:'beam',power:1,palette:{body:'#a78bfa',dark:'#4c1d95',accent:'#f5f3ff'},glyph:'head'},
+    {type:'hydrant',name:'放水柱',kind:'device',effect:'水を噴き出す',duration:1800,act:'water',power:1,palette:{body:'#0ea5e9',dark:'#075985',accent:'#dbeafe'},glyph:'hydrant'},
+    {type:'steering_stick',name:'操縦桿',kind:'device',effect:'乗り物の姿勢を制御する',duration:1800,act:'steer',power:1,palette:{body:'#16a34a',dark:'#14532d',accent:'#bbf7d0'},glyph:'stick'},
+    {type:'big_wheel',name:'大きなタイヤ',kind:'device',effect:'力強く回転する大型タイヤ',duration:1800,act:'wheel_big',power:8,palette:{body:'#111827',dark:'#020617',accent:'#f8fafc'},glyph:'wheel'},
+    {type:'small_wheel',name:'小さなタイヤ',kind:'device',effect:'自走する小型タイヤ',duration:1800,act:'wheel_small',power:6,palette:{body:'#374151',dark:'#020617',accent:'#e5e7eb'},glyph:'wheel'},
+    {type:'sled',name:'ソリ',kind:'device',effect:'砂や雪の上を滑る',duration:0,act:'sled',power:5,palette:{body:'#c084fc',dark:'#581c87',accent:'#faf5ff'},glyph:'sled'},
+    {type:'spring',name:'バネ',kind:'device',effect:'物を跳ね飛ばす',duration:1800,act:'spring',power:15,palette:{body:'#22c55e',dark:'#14532d',accent:'#dcfce7'},glyph:'spring'},
+    {type:'cannon',name:'大砲',kind:'device',effect:'一定間隔で砲弾を撃つ',duration:1800,act:'cannon',power:1,palette:{body:'#475569',dark:'#0f172a',accent:'#f97316'},glyph:'cannon'},
+    {type:'stabilizer',name:'おきあがりこぼし',kind:'device',effect:'姿勢を直立に安定させる',duration:1800,act:'stabilize',power:1,palette:{body:'#f43f5e',dark:'#881337',accent:'#ffe4e6'},glyph:'stabilizer'},
+    {type:'hover_stone',name:'浮遊石',kind:'device',effect:'空中に留まる',duration:1800,act:'hover',power:1,palette:{body:'#14b8a6',dark:'#134e4a',accent:'#ccfbf1'},glyph:'stone'},
+    {type:'light',name:'ライト',kind:'device',effect:'周囲を照らす',duration:1800,act:'light',power:1,palette:{body:'#fef08a',dark:'#713f12',accent:'#ffffff'},glyph:'light'},
+    {type:'stake',name:'杭',kind:'device',effect:'場所に固定する',duration:1800,act:'stake',power:1,palette:{body:'#78350f',dark:'#451a03',accent:'#fcd34d'},glyph:'stake'},
+    {type:'mirror',name:'鏡',kind:'device',effect:'太陽光を反射する',duration:1800,act:'mirror',power:1,palette:{body:'#e2e8f0',dark:'#475569',accent:'#bae6fd'},glyph:'mirror'},
+    {type:'homing_cart',name:'追跡台車',kind:'device',effect:'近い敵へ向かう',duration:1800,act:'homing',power:4,palette:{body:'#f59e0b',dark:'#78350f',accent:'#fef3c7'},glyph:'cart'},
+    {type:'construct_head',name:'ゴーレムの頭',kind:'device',effect:'敵を自動追尾する頭部',duration:1800,act:'construct_head',power:1,palette:{body:'#84cc16',dark:'#365314',accent:'#ecfccb'},glyph:'head'},
+    {type:'battery',name:'電池',kind:'part',effect:'動力を補助する',duration:0,act:'battery',power:1,palette:{body:'#22d3ee',dark:'#164e63',accent:'#f0fdfa'},glyph:'battery'},
+    {type:'big_battery',name:'大容量電池',kind:'part',effect:'動力を大きく補助する',duration:0,act:'battery_big',power:1,palette:{body:'#06b6d4',dark:'#083344',accent:'#cffafe'},glyph:'battery'},
+    {type:'grating',name:'金網',kind:'part',effect:'軽い足場素材',duration:0,act:'part',power:1,palette:{body:'#94a3b8',dark:'#334155',accent:'#e2e8f0'},glyph:'grid'},
+    {type:'wood_board',name:'木の板',kind:'part',effect:'組み合わせ用の板',duration:0,act:'part',power:1,palette:{body:'#b45309',dark:'#451a03',accent:'#fbbf24'},glyph:'board'},
+    {type:'lattice',name:'格子',kind:'part',effect:'組み合わせ用の格子',duration:0,act:'part',power:1,palette:{body:'#a3a3a3',dark:'#404040',accent:'#fafafa'},glyph:'grid'},
+    {type:'fence',name:'柵',kind:'part',effect:'組み合わせ用の柵',duration:0,act:'part',power:1,palette:{body:'#92400e',dark:'#451a03',accent:'#fde68a'},glyph:'fence'},
+    {type:'stone_slab',name:'石板',kind:'part',effect:'重い板素材',duration:0,act:'part_heavy',power:1,palette:{body:'#78716c',dark:'#292524',accent:'#e7e5e4'},glyph:'board'},
+    {type:'iron_pole',name:'鉄の棒',kind:'part',effect:'接続用の棒素材',duration:0,act:'part',power:1,palette:{body:'#94a3b8',dark:'#0f172a',accent:'#f8fafc'},glyph:'pole'},
+    {type:'minecart',name:'トロッコ',kind:'part',effect:'レールや坂で転がる乗り物',duration:0,act:'cart',power:4,palette:{body:'#475569',dark:'#020617',accent:'#e2e8f0'},glyph:'cart'},
+    {type:'propeller',name:'プロペラ',kind:'part',effect:'モーターと合わせて風を作る',duration:0,act:'thrust',power:7,palette:{body:'#cbd5e1',dark:'#334155',accent:'#f8fafc'},glyph:'fan'},
+    {type:'floating_water',name:'浮遊水',kind:'part',effect:'空中に残る水塊',duration:0,act:'water',power:1,palette:{body:'#38bdf8',dark:'#075985',accent:'#e0f2fe'},glyph:'hydrant'},
+    {type:'motor',name:'モーター',kind:'part',effect:'回転動力を作る',duration:0,act:'motor',power:1,palette:{body:'#64748b',dark:'#0f172a',accent:'#facc15'},glyph:'wheel'},
+    {type:'u_block',name:'U字ブロック',kind:'part',effect:'組み合わせや支えに使う',duration:0,act:'part_heavy',power:1,palette:{body:'#a8a29e',dark:'#44403c',accent:'#f5f5f4'},glyph:'u'},
+    {type:'lift',name:'リフト',kind:'part',effect:'上下移動の足場',duration:0,act:'lift',power:4,palette:{body:'#60a5fa',dark:'#1e3a8a',accent:'#dbeafe'},glyph:'lift'}
+  ];
+  window.ZONAI_GEAR_META=ZONAI_GEAR;
+  function gearMeta(idOrType){
+    const t=norm(idOrType); const id=String(idOrType||'');
+    return ZONAI_GEAR.find(g=>norm(g.type)===t || zid(g.type)===id) || null;
+  }
+  function zonaiCells(meta){
+    const g=16,c=[],p=Object.assign({body:'#94a3b8',dark:'#111827',accent:'#facc15',light:'#f8fafc'},meta.palette||{});
+    const put=(x,y,col)=>{ if(x>=0&&x<g&&y>=0&&y<g)c.push({x,y,color:col}); };
+    const rect=(x1,y1,x2,y2,col)=>{ for(let y=y1;y<=y2;y++)for(let x=x1;x<=x2;x++)put(x,y,col); };
+    const circ=(cx,cy,rx,ry,col)=>{ for(let y=0;y<g;y++)for(let x=0;x<g;x++){ const dx=(x-cx)/rx,dy=(y-cy)/ry; if(dx*dx+dy*dy<=1)put(x,y,col); } };
+    switch(meta.glyph){
+      case 'fan': circ(8,8,6,6,p.dark); for(let a=0;a<4;a++){ const dx=[0,4,0,-4][a],dy=[-4,0,4,0][a]; circ(8+dx,8+dy,2.2,3.8,p.body);} circ(8,8,1.6,1.6,p.accent); break;
+      case 'wing': for(let y=5;y<=10;y++)for(let x=1;x<=14;x++)if(Math.abs(x-8)+Math.abs(y-8)<9)put(x,y,p.body); rect(7,3,8,12,p.dark); rect(3,9,13,10,p.accent); break;
+      case 'rocket': rect(6,3,9,11,p.body); rect(7,1,8,2,p.accent); rect(5,10,5,13,p.dark); rect(10,10,10,13,p.dark); rect(6,12,9,14,'#fb923c'); break;
+      case 'bomb': circ(8,9,5,5,p.body); rect(7,3,9,5,p.dark); rect(10,2,12,3,p.accent); break;
+      case 'balloon': circ(8,5,5,4,p.body); rect(6,10,10,11,p.dark); rect(5,12,11,14,p.accent); break;
+      case 'pot': circ(8,9,5,4,p.body); rect(5,5,11,6,p.dark); rect(4,8,4,10,p.accent); rect(12,8,12,10,p.accent); break;
+      case 'head': rect(4,5,11,11,p.body); rect(2,7,4,9,p.dark); rect(11,7,14,9,p.accent); put(6,7,p.dark); put(9,7,p.dark); break;
+      case 'hydrant': rect(6,3,10,12,p.body); rect(4,5,12,7,p.dark); rect(3,12,13,14,p.accent); break;
+      case 'stick': rect(7,3,8,10,p.dark); circ(8,3,2,2,p.accent); rect(4,10,12,13,p.body); break;
+      case 'wheel': circ(8,8,6,6,p.dark); circ(8,8,3,3,p.body); circ(8,8,1.2,1.2,p.accent); for(let i=3;i<=13;i+=5){put(i,8,p.accent);put(8,i,p.accent);} break;
+      case 'sled': rect(3,7,12,10,p.body); rect(2,11,13,12,p.dark); put(2,10,p.accent); put(13,10,p.accent); break;
+      case 'spring': for(let y=3;y<=13;y++){ put(6+(y%2)*4,y,p.body); put(7+(y%2)*2,y,p.body); } rect(4,13,12,14,p.dark); break;
+      case 'cannon': rect(4,7,13,10,p.dark); rect(2,9,5,12,p.body); rect(12,6,14,8,p.accent); break;
+      case 'stabilizer': circ(8,8,5,6,p.body); rect(6,12,10,14,p.dark); put(8,4,p.accent); break;
+      case 'stone': rect(4,5,11,11,p.body); rect(5,4,10,4,p.accent); rect(5,12,10,12,p.dark); break;
+      case 'light': circ(8,8,4,4,p.accent); for(let i=1;i<15;i+=3){put(i,8,p.body);put(8,i,p.body);} break;
+      case 'stake': rect(7,2,9,12,p.body); rect(6,12,10,14,p.dark); put(8,1,p.accent); break;
+      case 'mirror': rect(4,4,11,11,p.body); rect(5,5,10,10,p.accent); rect(7,12,8,14,p.dark); break;
+      case 'battery': rect(5,4,10,12,p.body); rect(6,2,9,3,p.accent); rect(6,7,9,8,p.dark); break;
+      case 'grid': for(let i=3;i<=13;i+=3){rect(i,3,i,13,p.body);rect(3,i,13,i,p.body);} break;
+      case 'board': rect(3,5,13,11,p.body); rect(3,8,13,8,p.dark); break;
+      case 'fence': for(let x=3;x<=13;x+=3)rect(x,4,x+1,13,p.body); rect(2,7,14,8,p.dark); break;
+      case 'pole': rect(7,2,8,14,p.body); rect(5,4,10,5,p.dark); rect(5,11,10,12,p.dark); break;
+      case 'u': rect(4,4,6,13,p.body); rect(10,4,12,13,p.body); rect(4,11,12,13,p.body); break;
+      case 'lift': rect(3,8,13,11,p.body); rect(6,4,10,7,p.accent); rect(5,12,11,13,p.dark); break;
+      default: circ(8,8,5,5,p.body); rect(5,7,11,9,p.dark); break;
+    }
+    for(let x=0;x<16;x++){put(x,0,'#0f172a');put(x,15,'#0f172a');} for(let y=0;y<16;y++){put(0,y,'#0f172a');put(15,y,'#0f172a');}
+    return c;
+  }
+  function zonaiIconSvg(meta){
+    const label=encodeURIComponent(String(meta.name||'?').slice(0,4));
+    const bg=(meta.palette&&meta.palette.dark)||'#0f172a', fg=(meta.palette&&meta.palette.body)||'#94a3b8', ac=(meta.palette&&meta.palette.accent)||'#facc15';
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192"><rect width="192" height="192" rx="28" fill="${bg}"/><circle cx="96" cy="84" r="50" fill="${fg}" opacity=".95"/><circle cx="96" cy="84" r="20" fill="${ac}"/><text x="96" y="162" font-family="sans-serif" font-size="26" font-weight="900" text-anchor="middle" fill="white">${label}</text></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  }
+  function ensureZonaiDef(meta){
+    const id=zid(meta.type);
+    const def={id,name:'ゾナウギア:'+meta.name,kind:'plane',grid:16,scale:.095,cells:zonaiCells(meta),infoTexture:true,infoType:'zonai_'+norm(meta.type),infoRole:'zonai_gear',infoBehavior:meta.effect,infoPhysics:{massKg:meta.kind==='part'?12:8,gravityScale:1,terminalVelocity:24,bounce:.04},hp:999,zonaiGear:true,zonaiType:meta.type,zonaiAct:meta.act,zonaiDuration:meta.duration,zonaiPower:meta.power,iconUrl:zonaiIconSvg(meta),createdAt:1,updatedAt:Date.now()};
+    customObjectDefs.set(id, validateObjectDef(def)||def);
+    const stored=customObjectDefs.get(id); Object.assign(stored,{zonaiGear:true,zonaiType:meta.type,zonaiAct:meta.act,zonaiDuration:meta.duration,zonaiPower:meta.power,iconUrl:def.iconUrl,infoText:meta.effect,infoBehavior:meta.effect,zonaiKind:meta.kind});
+    try{ startInfoImageLoadV4&&startInfoImageLoadV4(stored); }catch(e){}
+    return stored;
+  }
+  function ensureAllZonai(){ ZONAI_GEAR.forEach(ensureZonaiDef); setObjHud(); return ZONAI_GEAR.length; }
+  function isZonaiDef(def){ return !!(def && (def.zonaiGear || /^info-zonai_/i.test(String(def.id||'')) || /^zonai_/i.test(String(def.infoType||'')))); }
+  function isZonaiRoot(root){ const def=root&&customObjectDefs.get(String(root.data&&root.data.defId||'')); return isZonaiDef(def); }
+  function zonaiUnlocked(def){ return isZonaiDef(def) && zonaiGranted.has(String(def.id)); }
+  function grantZonai(def, reason){
+    if(!isZonaiDef(def)) return false;
+    const id=String(def.id); const first=!zonaiGranted.has(id); zonaiGranted.add(id); try{localStorage.setItem(ZONAI_GRANTED_KEY,JSON.stringify(Array.from(zonaiGranted)));}catch(e){}
+    try{ if(typeof infoTextureGranted!=='undefined' && infoTextureGranted&&infoTextureGranted.add){ infoTextureGranted.add(id); localStorage.setItem(INFO_TEXTURE_GRANTED_KEY,JSON.stringify(Array.from(infoTextureGranted))); } }catch(e){}
+    if(first){ setMsg('ゾナウギア登録: '+blueprintDisplayName(def)+' / 呼出・3D貼付OK','good'); try{renderObjectManager();updateTexturePasteOptions();}catch(e){} }
+    return first;
+  }
+  const __zonaiValidate=validateObjectDef;
+  validateObjectDef=function(def){
+    const clean=__zonaiValidate.apply(this,arguments); if(!clean||!def) return clean;
+    if(def.zonaiGear || /^info-zonai_/i.test(String(def.id||''))){
+      clean.zonaiGear=true; clean.zonaiType=String(def.zonaiType||def.type||'').slice(0,40); clean.zonaiAct=String(def.zonaiAct||'part').slice(0,40); clean.zonaiDuration=Number(def.zonaiDuration)||0; clean.zonaiPower=Number(def.zonaiPower)||1; clean.zonaiKind=String(def.zonaiKind||'device').slice(0,20); clean.iconUrl=def.iconUrl||clean.iconUrl; clean.infoText=String(def.infoText||def.infoBehavior||'').slice(0,160);
+    }
+    return clean;
+  };
+  const __zonaiIsUnlocked=isInfoTextureDefUnlocked;
+  isInfoTextureDefUnlocked=function(def){ if(isZonaiDef(def)) return zonaiUnlocked(def); return __zonaiIsUnlocked.apply(this,arguments); };
+  const __zonaiShow=shouldShowObjectDefInManager;
+  shouldShowObjectDefInManager=function(def){ if(isZonaiDef(def)) return zonaiUnlocked(def); return __zonaiShow.apply(this,arguments); };
+  const __zonaiRender=renderObjectManager;
+  renderObjectManager=function(){
+    const changed=[];
+    for(const def of customObjectDefs.values()) if(isZonaiDef(def)&&zonaiUnlocked(def)&&def.infoTexture){ def.__restoreInfoTexture=true; def.infoTexture=false; changed.push(def); }
+    try{return __zonaiRender.apply(this,arguments);} finally { changed.forEach(d=>{d.infoTexture=true; delete d.__restoreInfoTexture;}); }
+  };
+  const __zonaiPaste=updateTexturePasteOptions;
+  updateTexturePasteOptions=function(){
+    try{ __zonaiPaste.apply(this,arguments); }catch(e){}
+    const sel=$('objPasteTextureSelect'); if(!sel) return;
+    const existing=new Set(Array.from(sel.options).map(o=>o.value));
+    for(const def of customObjectDefs.values()){
+      if(!isZonaiDef(def)||!zonaiUnlocked(def)||existing.has(def.id)) continue;
+      const opt=document.createElement('option'); opt.value=def.id; opt.textContent=(def.name||def.id)+' / ゾナウギア'; sel.appendChild(opt);
+    }
+  };
+  const __zonaiPlaceFront=placeObjectInFront;
+  placeObjectInFront=function(def,broadcastInstance=true){
+    const clean=validateObjectDef(def); if(isZonaiDef(clean)&&zonaiUnlocked(clean)){
+      const dir=forwardVec(); const x=Math.round(player.x+dir.x*4), z=Math.round(player.z+dir.z*4), y=terrainHeight(x,z)+1.05, yaw=player.yaw;
+      const ik='zonaiCall:'+clean.id+':'+Date.now()+':'+Math.floor(Math.random()*9999);
+      const root=placeCustomObject(clean,x,y,z,yaw,ik);
+      if(root&&broadcastInstance) sendMultiplayer({type:'objectInstancePlace',objectId:clean.id,defId:clean.id,instanceKey:ik,x,y,z,yaw,object:clean,spawnReason:'zonaiCall'});
+      setMsg('ゾナウギア呼出: '+blueprintDisplayName(clean),'good'); return root;
+    }
+    return __zonaiPlaceFront.apply(this,arguments);
+  };
+  function addBurst(pos,color,scale){
+    try{ const e=new pc.Entity('zonai_fx'); e.addComponent('render',{type:'sphere',castShadows:false,receiveShadows:false}); const m=new pc.StandardMaterial(); m.diffuse=color; m.emissive=color; m.opacity=.55; m.blendType=pc.BLEND_NORMAL; m.update(); e.render.material=m; e.setPosition(pos.x,pos.y,pos.z); e.setLocalScale(scale,scale,scale); app.root.addChild(e); setTimeout(()=>{try{e.destroy();}catch{}},260); }catch(err){}
+  }
+  function activateZonaiHeld(root,def){
+    if(!root||!def) return; grantZonai(def,'grab');
+    const now=performance.now();
+    root.data=Object.assign({},root.data||{});
+    if(!root.data.zonaiActiveAt){ root.data.zonaiActiveAt=now; root.data.zonaiLastPulse=0; root.data.zonaiOneShot=false; setMsg('ゾナウギア起動: '+blueprintDisplayName(def)+' / '+(def.infoText||def.infoBehavior||''),'good'); }
+  }
+  function nearestHostileTo(pos,range){
+    let best=null,bd=range||8;
+    for(const [,r] of customObjectEntities){ if(!r||r===ultraHeld?.root||!r.getPosition) continue; const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(r):null; if(!meta||meta.role!=='hostile') continue; const d=r.getPosition().distance(pos); if(d<bd){bd=d; best=r;} }
+    return best;
+  }
+  function damageHostileLine(root,kind){
+    const p=ultraObjectBounds(root).center, d=forwardVec(); let hit=0;
+    for(const [,r] of customObjectEntities){ if(!r||r===root||!r.getPosition) continue; const meta=(typeof rootInfoMetaV3==='function')?rootInfoMetaV3(r):null; if(!meta||meta.role!=='hostile') continue; const q=r.getPosition().clone().sub(p); const along=q.x*d.x+q.y*d.y+q.z*d.z; const side=Math.hypot(q.x-d.x*along,q.z-d.z*along); if(along>0&&along<7&&side<1.4){ try{damageObjectRoot(r,kind==='beam'?4:2.2);}catch(e){} hit++; } }
+    if(hit) setMsg('ゾナウギア攻撃: '+kind+' hit '+hit,'good');
+  }
+  function updateZonaiRuntime(dt){
+    if(!ultraHeld||ultraHeld.mode!=='field'||!ultraHeld.root) return;
+    const root=ultraHeld.root, def=customObjectDefs.get(String(root.data&&root.data.defId||'')); if(!isZonaiDef(def)) return;
+    activateZonaiHeld(root,def);
+    const now=performance.now(), age=(now-(root.data.zonaiActiveAt||now))/1000, dur=Number(def.zonaiDuration)||0;
+    if(dur>0 && age>dur){ if(def.zonaiAct==='bomb'){ const p=ultraObjectBounds(root).center; addBurst(p,new pc.Color(1,.34,.05),1.8); try{removeCustomObjectInstance(root.data.instanceKey,true);}catch(e){} player.vy=Math.max(player.vy,7); setMsg('タイマーバクダン爆発！','bad'); ultraHeld=null; } else { setMsg('ゾナウギア駆動限界: '+blueprintDisplayName(def),'info'); } return; }
+    const dir=forwardVec(); const p=ultraObjectBounds(root).center; const act=String(def.zonaiAct||'part'); const pow=Number(def.zonaiPower)||1;
+    const nudge=(speed,up)=>{ const nx=player.x+dir.x*speed*dt, nz=player.z+dir.z*speed*dt; if(!collision(nx,player.y,player.z)) player.x=nx; if(!collision(player.x,player.y,nz)) player.z=nz; if(up) player.vy=Math.max(player.vy,up); };
+    if(act==='rocket'){ nudge(pow,8.5+Math.max(0,dir.y)*4); addBurst(p,new pc.Color(1,.45,.08),.45); }
+    else if(act==='thrust'){ nudge(pow*.55, dir.y>.05 ? Math.max(player.vy, dir.y*pow*.35) : 0); }
+    else if(act==='wing'){ if(player.vy<0) player.vy*=Math.max(0,1-2.8*dt); nudge(2.0,0); }
+    else if(act==='lift'||act==='hover'){ player.vy=Math.max(player.vy,act==='hover'?.25:3.2); }
+    else if(act==='spring'&&!root.data.zonaiOneShot){ player.vy=Math.max(player.vy,pow); root.data.zonaiOneShot=true; addBurst(p,new pc.Color(.3,1,.45),.75); setMsg('バネ発動: ジャンプ！','good'); }
+    else if(act==='cart'||act==='wheel_big'||act==='wheel_small'||act==='sled'||act==='motor'||act==='lift'){ nudge(pow*.75,0); }
+    else if(act==='steer'){ player.speed=clamp((player.speed||5)+.01,5,7.2); }
+    else if(act==='stabilize'){ root.setEulerAngles(0,(root.data.yaw||player.yaw)*180/Math.PI,0); player.vy=Math.max(player.vy,-1.2); }
+    else if(act==='stake'){ ultraHeld.distance=Math.max(1.2,ultraHeld.distance-.02); }
+    else if(act==='light'){ if(now-(root.data.zonaiLastPulse||0)>900){ root.data.zonaiLastPulse=now; addBurst(p,new pc.Color(1,1,.55),1.2); } }
+    else if(act==='flame'||act==='frost'||act==='shock'||act==='beam'||act==='water'){ if(now-(root.data.zonaiLastPulse||0)>450){ root.data.zonaiLastPulse=now; damageHostileLine(root,act); addBurst(p, act==='flame'?new pc.Color(1,.2,.02):act==='frost'?new pc.Color(.45,1,1):act==='shock'?new pc.Color(1,1,.05):act==='water'?new pc.Color(.2,.65,1):new pc.Color(.8,.65,1), .55); } }
+    else if(act==='cannon'){ if(now-(root.data.zonaiLastPulse||0)>1150){ root.data.zonaiLastPulse=now; damageHostileLine(root,'beam'); addBurst(p,new pc.Color(1,.5,.05),.95); setMsg('大砲発射！','good'); } }
+    else if(act==='homing'||act==='construct_head'){ const t=nearestHostileTo(p,8); if(t){ const tp=t.getPosition(); const dx=tp.x-p.x,dz=tp.z-p.z,l=Math.hypot(dx,dz)||1; root.setPosition(root.getPosition().x+dx/l*dt*pow,root.getPosition().y,root.getPosition().z+dz/l*dt*pow); } }
+    else if(act==='pot'&&!root.data.zonaiOneShot){ root.data.zonaiOneShot=true; if(typeof playerHp!=='undefined'){ playerHp=Math.min(20,playerHp+6); try{updateInfoHud();}catch(e){} } addBurst(p,new pc.Color(1,.85,.3),.75); setMsg('携帯鍋: 回復＋料理ごっこ完了','good'); }
+  }
+  const __zonaiStartUltra=startUltraField;
+  startUltraField=function(){ const ok=__zonaiStartUltra.apply(this,arguments); if(ok&&ultraHeld&&ultraHeld.root){ const def=customObjectDefs.get(String(ultraHeld.defId||'')); if(isZonaiDef(def)) activateZonaiHeld(ultraHeld.root,def); } return ok; };
+  const __zonaiUpdateUltra=updateUltraHand;
+  updateUltraHand=function(dt){ const r=__zonaiUpdateUltra.apply(this,arguments); try{updateZonaiRuntime(dt||0);}catch(e){console.warn('zonai runtime failed',e);} return r; };
+  const __zonaiPlace=placeCustomObject;
+  placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+    const root=__zonaiPlace.apply(this,arguments);
+    if(root && isZonaiDef(def)){ root.data=Object.assign({},root.data||{},{zonaiGear:true,wildZonai:/^zonaiWild:/.test(String(instanceKey||''))}); }
+    return root;
+  };
+  const __zonaiSpawn=spawnCustomObjectForChunk;
+  spawnCustomObjectForChunk=function(ch){
+    const r=__zonaiSpawn.apply(this,arguments); try{ensureAllZonai();}catch(e){}
+    if(!ch||!ch.done) return r;
+    const slot=Math.floor(hash2(ch.cx*1201+41,ch.cz*1213-17)*ZONAI_GEAR.length)%ZONAI_GEAR.length;
+    const meta=ZONAI_GEAR[slot]; const sk='zonaiWild:'+ch.key+':'+meta.type; if(customSpawned.has(sk)) return r; customSpawned.add(sk);
+    const chance=meta.kind==='device'?.055:.035; if(hash2(ch.cx*1223+slot,ch.cz*1231-slot)>chance) return r;
+    const def=ensureZonaiDef(meta); const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*1237+slot,ch.cz*1249)*CHUNK_SIZE); const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*1259,ch.cz*1277+slot)*CHUNK_SIZE); const y=terrainHeight(x,z)+1.03; const yaw=Math.floor(hash2(ch.cx*1283,ch.cz*1289)*4)*(Math.PI/2);
+    placeCustomObject(def,x,y,z,yaw,sk); return r;
+  };
+  try{ ensureAllZonai(); setMsg('ゾナウギア追加: '+ZONAI_GEAR.length+'種 / 平面情報テクスチャ / ULTRAで登録・起動','good'); }catch(e){ console.warn('zonai init failed',e); }
+})();
+
 setMsg('PlayCanvas Engine読込完了','good');
 })();
 
