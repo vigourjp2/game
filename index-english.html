@@ -727,15 +727,25 @@ async function scanFromCell(placeIndex){
   }
   for(const c of uniq){
     const words=c.path.map(s=>s.w);
-    // 完全文はローカル品詞テンプレで先に通さない。API（Link Grammar + LanguageTool + 翻訳）を裁定者にする。
-    // これで I like you の目的格漏れ、3単現、run-on などをゲームHTML側の終わらない個別修正から外す。
+    const likelySentence=isLikelyCompleteSentenceWords(words);
     let ev=null;
-    if(isLikelyCompleteSentenceWords(words)) ev=await evaluateSequenceAsync(words);
-    if(!ev) ev=evaluateSequence(words); // 熟語・短いフレーズだけローカル辞書で救う
-    if(ev){
-      ev.ja=await resolveJapanese(words,ev);
-      found.push({...ev,cells:c.path.map(s=>s.i),dir:c.label});
+
+    if(likelySentence){
+      // 3語以上で主語/名詞から始まる候補は「文」とみなし、成立判定は必ずAPIに一任する。
+      // APIがNG/未接続なら、ローカルの品詞テンプレには絶対にフォールバックしない。
+      // これで I am new books / I like you などをHTML側の個別品詞修正で裁かず、
+      // LanguageTool + Link Grammar + 翻訳API の結果だけを採用する。
+      ev=await evaluateSequenceAsync(words);
+      if(!ev) continue;
+    }else{
+      // 主語から始まらない短い熟語・連語だけ、ローカルのPhraseBankで救う。
+      // 例: go to school / listen to music / very happy
+      ev=evaluateSequence(words);
+      if(!ev) continue;
     }
+
+    ev.ja=await resolveJapanese(words,ev);
+    found.push({...ev,cells:c.path.map(s=>s.i),dir:c.label});
   }
   found.sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
   const seen=new Set();
