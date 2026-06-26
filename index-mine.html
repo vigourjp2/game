@@ -8364,7 +8364,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 
 // ===== Zonai Gear flat info-texture pack / Ultra Hand activation =====
 (function(){
-  const ZONAI_VERSION='zonai-flat-ultra-v1';
+  const ZONAI_VERSION='zonai-flat-ultra-v2-no-pot-textfix';
   const ZONAI_PREFIX='info-zonai_';
   const ZONAI_GRANTED_KEY='mineZonaiGearGranted.v1';
   let zonaiGranted=new Set();
@@ -8379,7 +8379,6 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     {type:'balloon',name:'熱気球',kind:'device',effect:'熱を受けると浮かび上がる',duration:120,act:'lift',power:7,palette:{body:'#f97316',dark:'#7c2d12',accent:'#fed7aa'},glyph:'balloon'},
     {type:'rocket',name:'ロケット',kind:'device',effect:'短時間だけ強力に推進する',duration:3,act:'rocket',power:28,palette:{body:'#ef4444',dark:'#111827',accent:'#fef3c7'},glyph:'rocket'},
     {type:'time_bomb',name:'タイマーバクダン',kind:'device',effect:'4秒後に爆発する',duration:4,act:'bomb',power:1,palette:{body:'#1f2937',dark:'#020617',accent:'#f97316'},glyph:'bomb'},
-    {type:'portable_pot',name:'携帯鍋',kind:'device',effect:'1回だけ料理・回復する',duration:1,act:'pot',power:1,palette:{body:'#a16207',dark:'#451a03',accent:'#fde68a'},glyph:'pot'},
     {type:'flame_emitter',name:'火龍の頭',kind:'device',effect:'前方に炎を放つ',duration:1800,act:'flame',power:1,palette:{body:'#dc2626',dark:'#7f1d1d',accent:'#facc15'},glyph:'head'},
     {type:'frost_emitter',name:'氷龍の頭',kind:'device',effect:'前方に冷気を放つ',duration:1800,act:'frost',power:1,palette:{body:'#67e8f9',dark:'#155e75',accent:'#f8fafc'},glyph:'head'},
     {type:'shock_emitter',name:'雷龍の頭',kind:'device',effect:'前方に電撃を放つ',duration:1800,act:'shock',power:1,palette:{body:'#facc15',dark:'#713f12',accent:'#fefce8'},glyph:'head'},
@@ -8455,7 +8454,10 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     return c;
   }
   function zonaiIconSvg(meta){
-    const label=encodeURIComponent(String(meta.name||'?').slice(0,4));
+    // SVG全体を encodeURIComponent するので、内部テキストはURIエンコードしない。
+    // ここで encodeURIComponent(meta.name) すると、%E6%89%87... がそのまま画面に出る。
+    const esc=s=>String(s||'?').slice(0,4).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[ch]||ch));
+    const label=esc(meta.name);
     const bg=(meta.palette&&meta.palette.dark)||'#0f172a', fg=(meta.palette&&meta.palette.body)||'#94a3b8', ac=(meta.palette&&meta.palette.accent)||'#facc15';
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192"><rect width="192" height="192" rx="28" fill="${bg}"/><circle cx="96" cy="84" r="50" fill="${fg}" opacity=".95"/><circle cx="96" cy="84" r="20" fill="${ac}"/><text x="96" y="162" font-family="sans-serif" font-size="26" font-weight="900" text-anchor="middle" fill="white">${label}</text></svg>`;
     return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
@@ -8469,7 +8471,16 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     return stored;
   }
   function ensureAllZonai(){ ZONAI_GEAR.forEach(ensureZonaiDef); setObjHud(); return ZONAI_GEAR.length; }
+  const ZONAI_SUPPRESSED=new Set(['portable_pot','info-zonai_portable_pot']);
+  function isSuppressedZonaiId(v){ const n=norm(v); return ZONAI_SUPPRESSED.has(String(v||'')) || ZONAI_SUPPRESSED.has(n) || ZONAI_SUPPRESSED.has(zid(n)); }
   function isZonaiDef(def){ return !!(def && (def.zonaiGear || /^info-zonai_/i.test(String(def.id||'')) || /^zonai_/i.test(String(def.infoType||'')))); }
+  function cleanupSuppressedZonai(){
+    for(const id of ['info-zonai_portable_pot','portable_pot']){
+      try{ customObjectDefs.delete(id); }catch(e){}
+      try{ removeCustomObjectInstancesByDef(id); }catch(e){}
+    }
+    try{ zonaiGranted.delete('info-zonai_portable_pot'); zonaiGranted.delete('portable_pot'); localStorage.setItem(ZONAI_GRANTED_KEY,JSON.stringify(Array.from(zonaiGranted))); }catch(e){}
+  }
   function isZonaiRoot(root){ const def=root&&customObjectDefs.get(String(root.data&&root.data.defId||'')); return isZonaiDef(def); }
   function zonaiUnlocked(def){ return isZonaiDef(def) && zonaiGranted.has(String(def.id)); }
   function grantZonai(def, reason){
@@ -8488,9 +8499,9 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     return clean;
   };
   const __zonaiIsUnlocked=isInfoTextureDefUnlocked;
-  isInfoTextureDefUnlocked=function(def){ if(isZonaiDef(def)) return zonaiUnlocked(def); return __zonaiIsUnlocked.apply(this,arguments); };
+  isInfoTextureDefUnlocked=function(def){ if(def&&isSuppressedZonaiId(def.id||def.zonaiType)) return false; if(isZonaiDef(def)) return zonaiUnlocked(def); return __zonaiIsUnlocked.apply(this,arguments); };
   const __zonaiShow=shouldShowObjectDefInManager;
-  shouldShowObjectDefInManager=function(def){ if(isZonaiDef(def)) return zonaiUnlocked(def); return __zonaiShow.apply(this,arguments); };
+  shouldShowObjectDefInManager=function(def){ if(def&&isSuppressedZonaiId(def.id||def.zonaiType)) return false; if(isZonaiDef(def)) return zonaiUnlocked(def); return __zonaiShow.apply(this,arguments); };
   const __zonaiRender=renderObjectManager;
   renderObjectManager=function(){
     const changed=[];
@@ -8558,7 +8569,6 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     else if(act==='flame'||act==='frost'||act==='shock'||act==='beam'||act==='water'){ if(now-(root.data.zonaiLastPulse||0)>450){ root.data.zonaiLastPulse=now; damageHostileLine(root,act); addBurst(p, act==='flame'?new pc.Color(1,.2,.02):act==='frost'?new pc.Color(.45,1,1):act==='shock'?new pc.Color(1,1,.05):act==='water'?new pc.Color(.2,.65,1):new pc.Color(.8,.65,1), .55); } }
     else if(act==='cannon'){ if(now-(root.data.zonaiLastPulse||0)>1150){ root.data.zonaiLastPulse=now; damageHostileLine(root,'beam'); addBurst(p,new pc.Color(1,.5,.05),.95); setMsg('大砲発射！','good'); } }
     else if(act==='homing'||act==='construct_head'){ const t=nearestHostileTo(p,8); if(t){ const tp=t.getPosition(); const dx=tp.x-p.x,dz=tp.z-p.z,l=Math.hypot(dx,dz)||1; root.setPosition(root.getPosition().x+dx/l*dt*pow,root.getPosition().y,root.getPosition().z+dz/l*dt*pow); } }
-    else if(act==='pot'&&!root.data.zonaiOneShot){ root.data.zonaiOneShot=true; if(typeof playerHp!=='undefined'){ playerHp=Math.min(20,playerHp+6); try{updateInfoHud();}catch(e){} } addBurst(p,new pc.Color(1,.85,.3),.75); setMsg('携帯鍋: 回復＋料理ごっこ完了','good'); }
   }
   const __zonaiStartUltra=startUltraField;
   startUltraField=function(){ const ok=__zonaiStartUltra.apply(this,arguments); if(ok&&ultraHeld&&ultraHeld.root){ const def=customObjectDefs.get(String(ultraHeld.defId||'')); if(isZonaiDef(def)) activateZonaiHeld(ultraHeld.root,def); } return ok; };
@@ -8566,6 +8576,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   updateUltraHand=function(dt){ const r=__zonaiUpdateUltra.apply(this,arguments); try{updateZonaiRuntime(dt||0);}catch(e){console.warn('zonai runtime failed',e);} return r; };
   const __zonaiPlace=placeCustomObject;
   placeCustomObject=function(def,x,y,z,yaw,instanceKey){
+    if(def && isSuppressedZonaiId(def.id||def.zonaiType||def.type)){ return null; }
     const root=__zonaiPlace.apply(this,arguments);
     if(root && isZonaiDef(def)){ root.data=Object.assign({},root.data||{},{zonaiGear:true,wildZonai:/^zonaiWild:/.test(String(instanceKey||''))}); }
     return root;
@@ -8633,7 +8644,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     if(__zonaiEnsureTimer>4){ __zonaiEnsureTimer=0; spawnGuaranteedZonaiNearPlayer('runtime'); }
     return r;
   };
-  try{ ensureAllZonai(); spawnCustomObjectsInLoadedChunks(); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot'),800); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot2'),2400); setMsg('ゾナウギア追加: '+ZONAI_GEAR.length+'種 / 近場にも自動出現 / ULTRAで登録・起動','good'); }catch(e){ console.warn('zonai init failed',e); }
+  try{ cleanupSuppressedZonai(); ensureAllZonai(); spawnCustomObjectsInLoadedChunks(); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot'),800); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot2'),2400); setMsg('ゾナウギア追加: '+ZONAI_GEAR.length+'種 / 近場にも自動出現 / ULTRAで登録・起動','good'); }catch(e){ console.warn('zonai init failed',e); }
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
