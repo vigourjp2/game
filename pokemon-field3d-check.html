@@ -40,7 +40,7 @@
 <body>
 <header>
   <h1>ポケモン情報テクスチャ 3Dモデル確認HTML <span id="titleNo">---</span></h1>
-  <div class="sub">generated/pokemon-info-textures.gen1.30x30.generated.js の <code>field3d</code> を直接読み、151体の個別3Dセルをグリグリ確認する。※field3d.grid対応。96x96x96モデルもドラッグ/ピンチで確認。</div>
+  <div class="sub">generated/pokemon-info-textures.gen1.field3d96.v8.generated.js?v=field3d96v8 の <code>field3d</code> を直接読み、151体の個別3Dセルをグリグリ確認する。※field3d.grid対応。96x96x96モデルもドラッグ/ピンチで確認。</div>
 </header>
 <main>
   <section class="viewer">
@@ -93,7 +93,7 @@
     </div>
   </aside>
 </main>
-<script src="generated/pokemon-info-textures.gen1.30x30.generated.js"></script>
+<script src="generated/pokemon-info-textures.gen1.field3d96.v8.generated.js?v=field3d96v8"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -156,7 +156,7 @@ function init(){
   }
   if(!defs.length){
     $('status').className='bad mini';
-    $('status').textContent='NG: generated JSが読めてない。generated/pokemon-info-textures.gen1.30x30.generated.js の配置を確認。';
+    $('status').textContent='NG: generated JSが読めてない。generated/pokemon-info-textures.gen1.field3d96.v8.generated.js?v=field3d96v8 の配置を確認。';
     drawEmpty();
     return;
   }
@@ -182,7 +182,10 @@ function loadNo(){
     $('status').textContent=`NG: No.${pad3(n)} の field3d が無い。生成JS内の field3d を確認。`;
   }else{
     $('status').className='ok mini';
-    $('status').textContent=`OK: No.${pad3(n)} / field3d cells=${currentDef.cells.length} / encoding=${currentDef.encoding||'objects'}`;
+    const stale = (String(currentDef.archetype||'').toLowerCase()==='quad' || (currentDef.features||[]).includes('bulb'));
+    $('status').textContent = stale
+      ? `NG: 旧field3dを読んでる / grid=${currentDef.grid||16} cells=${currentDef.cells.length} archetype=${currentDef.archetype||''}`
+      : `OK: No.${pad3(n)} / grid=${currentDef.grid||96} / cells=${currentDef.cells.length} / encoding=${currentDef.encoding||'objects'} / archetype=${currentDef.archetype||''}`;
   }
   panX = 0; panY = 0; fitView(); drawPlane(); updateInfo(); draw();
 }
