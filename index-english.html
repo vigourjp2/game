@@ -44,7 +44,7 @@
     <h1>English Word Pittan Online</h1>
     <p>英単語タイルを置いて、英文・フレーズ・文法パターンを作るパズル。1人練習も、オンライン複数人対戦も対応。成立した英文は英語で読み上げて、続けて日本語訳も読み上げます。</p>
     <ul>
-      <li>左→右、上→下だけ判定</li>
+      <li>左→右・上→下を守る。横/縦一直線＋右/下の隣接ルート判定</li>
       <li>成立した単語列のマスを自分色にする</li>
       <li>相手のマスを使って文を作ると奪える</li>
       <li>1人練習モードあり</li>
@@ -60,7 +60,7 @@
     <section class="panel hero">
       <span class="badge">英語版もじぴったん風</span><span class="badge">2〜4人</span>
       <h1>English Word Pittan Online</h1>
-      <p>単語を1マスに置く。英文・熟語・文法型が成立したら演出＋読み上げ＋陣地化。1人練習からオンライン対戦まで対応。</p>
+      <p>単語を1マスに置く。横/縦一直線に加えて、右・下に隣接する英文ルートも判定。成立したら演出＋読み上げ＋陣地化。1人練習からオンライン対戦まで対応。</p>
       <div class="statusGrid">
         <div class="status"><b id="turnNo">1</b><span>TURN</span></div>
         <div class="status"><b id="wordsMade">0</b><span>WORDS</span></div>
@@ -267,20 +267,44 @@ function showFx(made,gained,cellIndex){
 }
 
 function scanFromCell(placeIndex){
-  const {x,y}=xy(placeIndex);
   const found=[];
-  for(const dir of [{dx:1,dy:0,name:'横'},{dx:0,dy:1,name:'縦'}]){
-    let sx=x,sy=y;
-    while(sx-dir.dx>=0 && sy-dir.dy>=0 && sx-dir.dx<N && sy-dir.dy<N && state.board[idx(sx-dir.dx,sy-dir.dy)]){sx-=dir.dx;sy-=dir.dy;}
-    const line=[];
-    let cx=sx,cy=sy;
-    while(cx>=0&&cy>=0&&cx<N&&cy<N){const c=state.board[idx(cx,cy)]; if(!c) break; line.push({i:idx(cx,cy),w:c.w}); cx+=dir.dx;cy+=dir.dy;}
-    // 置いたセルを含む全サブシーケンスを評価。長いもの優先。
-    for(let a=0;a<line.length;a++) for(let b=a+1;b<line.length;b++){
-      const slice=line.slice(a,b+1); if(!slice.some(s=>s.i===placeIndex)) continue;
-      const ev=evaluateSequence(slice.map(s=>s.w));
-      if(ev){ev.ja=translateSequence(slice.map(s=>s.w),ev); found.push({...ev,cells:slice.map(s=>s.i),dir:dir.name});}
+  const maxLen=5;
+  const maxTurns=1;
+  const starts=[];
+  // 右・下だけでたどる英文ルート。左戻り・上戻りは禁止。
+  // 置いた単語を必ず含むので、今回の1手で成立した文だけを拾う。
+  for(let y=0;y<N;y++){
+    for(let x=0;x<N;x++){
+      const c=state.board[idx(x,y)];
+      if(c) starts.push({x,y,i:idx(x,y),w:c.w});
     }
+  }
+  function pushEval(path,label){
+    if(path.length<2 || !path.some(s=>s.i===placeIndex)) return;
+    const words=path.map(s=>s.w);
+    const ev=evaluateSequence(words);
+    if(ev){
+      ev.ja=translateSequence(words,ev);
+      found.push({...ev,cells:path.map(s=>s.i),dir:label});
+    }
+  }
+  function dfs(x,y,path,lastMove,turns){
+    pushEval(path, turns===0 ? (lastMove==='D'?'縦':'横') : '隣接ルート');
+    if(path.length>=maxLen) return;
+    for(const mv of [{dx:1,dy:0,k:'R'},{dx:0,dy:1,k:'D'}]){
+      const nx=x+mv.dx, ny=y+mv.dy;
+      if(nx<0||ny<0||nx>=N||ny>=N) continue;
+      const ni=idx(nx,ny);
+      const cell=state.board[ni];
+      if(!cell) continue;
+      if(path.some(s=>s.i===ni)) continue;
+      const nt = lastMove && lastMove!==mv.k ? turns+1 : turns;
+      if(nt>maxTurns) continue;
+      dfs(nx,ny,path.concat({i:ni,w:cell.w}),mv.k,nt);
+    }
+  }
+  for(const st of starts){
+    dfs(st.x,st.y,[{i:st.i,w:st.w}],null,0);
   }
   found.sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
   const seen=new Set();
