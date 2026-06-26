@@ -6485,11 +6485,12 @@ try{
     try{
       const key = hardKey(root, ik);
       const data = (root && root.data) || {};
+      const did = String(data.defId || '');
+      const def = (customObjectDefs && customObjectDefs.get) ? customObjectDefs.get(did) : null;
+      if(data.zonaiGear || data.wildZonai || /^zonai/i.test(key) || (def && def.zonaiGear)) return false;
       if(data.wildInfoTexture || data.worldSharedSpawn || data.ownerClientId === 'world') return true;
       if(/^infoTexture(?::|V3:)/.test(key)) return true;
       if(/^infoShared/i.test(key)) return true;
-      const did = String(data.defId || '');
-      const def = (customObjectDefs && customObjectDefs.get) ? customObjectDefs.get(did) : null;
       return !!(def && def.infoTexture && (/^info/i.test(key) || data.spawnReason));
     }catch(e){ return false; }
   }
@@ -6556,7 +6557,8 @@ try{
       // All wild auto-spawn callers already call canSpawnWildInfoTextureAt() BEFORE this.
       // Re-checking here caused double-gate rejection; post hardEnforce caused heavy create-then-delete.
       const root = oldPlaceCustomObject.apply(this, arguments);
-      if(root && isInfo){
+      const isZonai = !!(def && (def.zonaiGear || /^info-zonai_/i.test(String(def.id||'')) || /^zonai_/i.test(String(def.infoType||''))));
+      if(root && isInfo && !isZonai){
         root.data = Object.assign({}, root.data || {}, { wildInfoTexture:true, ownerClientId:(root.data&&root.data.ownerClientId)||'world' });
       }
       return root;
@@ -6572,7 +6574,7 @@ try{
   }catch(e){ console.warn('wild hard cap runtime hook failed', e); }
 
   // No HUD-time or interval hard-prune. Spawns are denied before creation instead.
-  try{ setTimeout(hardEnforce, 250); setTimeout(hardEnforce, 1000); console.log(INFO_WILD_HARD_CAP_VERSION + ' active'); }catch(e){}
+  try{ console.log(INFO_WILD_HARD_CAP_VERSION + ' active precheck-only'); }catch(e){}
 })();
 
 
@@ -8246,11 +8248,12 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     try{
       const k=keyOf(root,ik);
       const d=(root&&root.data)||{};
+      const did=String(d.defId||'');
+      const stored=(customObjectDefs&&customObjectDefs.get)?customObjectDefs.get(did):null;
+      if(d.zonaiGear || d.wildZonai || /^zonai/i.test(k) || (def&&def.zonaiGear) || (stored&&stored.zonaiGear)) return false;
       if(/^info(Texture|Shared|poke|mob|pokemon)/i.test(k)) return true;
       if(d.wildInfoTexture || d.worldSharedSpawn || d.ownerClientId==='world') return true;
       if(def && def.infoTexture) return true;
-      const did=String(d.defId||'');
-      const stored=(customObjectDefs&&customObjectDefs.get)?customObjectDefs.get(did):null;
       return !!(stored && stored.infoTexture && (d.spawnReason || /^info/i.test(k)));
     }catch(e){ return false; }
   }
@@ -8364,7 +8367,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 
 // ===== Zonai Gear flat info-texture pack / Ultra Hand activation =====
 (function(){
-  const ZONAI_VERSION='zonai-flat-ultra-v2-no-pot-textfix';
+  const ZONAI_VERSION='zonai-flat-ultra-v3-balance-no-steer';
   const ZONAI_PREFIX='info-zonai_';
   const ZONAI_GRANTED_KEY='mineZonaiGearGranted.v1';
   let zonaiGranted=new Set();
@@ -8384,7 +8387,6 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     {type:'shock_emitter',name:'雷龍の頭',kind:'device',effect:'前方に電撃を放つ',duration:1800,act:'shock',power:1,palette:{body:'#facc15',dark:'#713f12',accent:'#fefce8'},glyph:'head'},
     {type:'beam_emitter',name:'光線の頭',kind:'device',effect:'一直線に光線を放つ',duration:1800,act:'beam',power:1,palette:{body:'#a78bfa',dark:'#4c1d95',accent:'#f5f3ff'},glyph:'head'},
     {type:'hydrant',name:'放水柱',kind:'device',effect:'水を噴き出す',duration:1800,act:'water',power:1,palette:{body:'#0ea5e9',dark:'#075985',accent:'#dbeafe'},glyph:'hydrant'},
-    {type:'steering_stick',name:'操縦桿',kind:'device',effect:'乗り物の姿勢を制御する',duration:1800,act:'steer',power:1,palette:{body:'#16a34a',dark:'#14532d',accent:'#bbf7d0'},glyph:'stick'},
     {type:'big_wheel',name:'大きなタイヤ',kind:'device',effect:'力強く回転する大型タイヤ',duration:1800,act:'wheel_big',power:8,palette:{body:'#111827',dark:'#020617',accent:'#f8fafc'},glyph:'wheel'},
     {type:'small_wheel',name:'小さなタイヤ',kind:'device',effect:'自走する小型タイヤ',duration:1800,act:'wheel_small',power:6,palette:{body:'#374151',dark:'#020617',accent:'#e5e7eb'},glyph:'wheel'},
     {type:'sled',name:'ソリ',kind:'device',effect:'砂や雪の上を滑る',duration:0,act:'sled',power:5,palette:{body:'#c084fc',dark:'#581c87',accent:'#faf5ff'},glyph:'sled'},
@@ -8471,15 +8473,15 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     return stored;
   }
   function ensureAllZonai(){ ZONAI_GEAR.forEach(ensureZonaiDef); setObjHud(); return ZONAI_GEAR.length; }
-  const ZONAI_SUPPRESSED=new Set(['portable_pot','info-zonai_portable_pot']);
+  const ZONAI_SUPPRESSED=new Set(['portable_pot','info-zonai_portable_pot','steering_stick','info-zonai_steering_stick']);
   function isSuppressedZonaiId(v){ const n=norm(v); return ZONAI_SUPPRESSED.has(String(v||'')) || ZONAI_SUPPRESSED.has(n) || ZONAI_SUPPRESSED.has(zid(n)); }
   function isZonaiDef(def){ return !!(def && (def.zonaiGear || /^info-zonai_/i.test(String(def.id||'')) || /^zonai_/i.test(String(def.infoType||'')))); }
   function cleanupSuppressedZonai(){
-    for(const id of ['info-zonai_portable_pot','portable_pot']){
+    for(const id of ['info-zonai_portable_pot','portable_pot','info-zonai_steering_stick','steering_stick']){
       try{ customObjectDefs.delete(id); }catch(e){}
       try{ removeCustomObjectInstancesByDef(id); }catch(e){}
     }
-    try{ zonaiGranted.delete('info-zonai_portable_pot'); zonaiGranted.delete('portable_pot'); localStorage.setItem(ZONAI_GRANTED_KEY,JSON.stringify(Array.from(zonaiGranted))); }catch(e){}
+    try{ zonaiGranted.delete('info-zonai_portable_pot'); zonaiGranted.delete('portable_pot'); zonaiGranted.delete('info-zonai_steering_stick'); zonaiGranted.delete('steering_stick'); localStorage.setItem(ZONAI_GRANTED_KEY,JSON.stringify(Array.from(zonaiGranted))); }catch(e){}
   }
   function isZonaiRoot(root){ const def=root&&customObjectDefs.get(String(root.data&&root.data.defId||'')); return isZonaiDef(def); }
   function zonaiUnlocked(def){ return isZonaiDef(def) && zonaiGranted.has(String(def.id)); }
@@ -8607,10 +8609,10 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     try{
       ensureAllZonai();
       const px=Math.round(player.x), pz=Math.round(player.z);
-      if(countWildZonaiNear(px,pz,70)>=5) return 0;
+      if(countWildZonaiNear(px,pz,70)>=2) return 0;
       let made=0;
       const picks=['rocket','fan','spring','cart','wing','cannon','flame_emitter','hover_stone'];
-      for(let i=0;i<picks.length && made<5;i++){
+      for(let i=0;i<picks.length && made<2;i++){
         const meta=gearMeta(picks[i])||ZONAI_GEAR[i];
         const ang=(player.yaw||0)+(i-2)*0.58;
         const dist=7+i*2.2;
@@ -8632,7 +8634,7 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     const slot=Math.floor(hash2(ch.cx*1201+41,ch.cz*1213-17)*ZONAI_GEAR.length)%ZONAI_GEAR.length;
     const meta=ZONAI_GEAR[slot]; const sk='zonaiWild:'+ch.key+':'+meta.type; if(customSpawned.has(sk)) return r; customSpawned.add(sk);
     // 低すぎると「何も出ない」ので、野生ゾナウギアはチャンク単位でそこそこ見える確率にする。
-    const chance=meta.kind==='device'?.42:.24; if(hash2(ch.cx*1223+slot,ch.cz*1231-slot)>chance) return r;
+    const chance=meta.kind==='device'?.08:.035; if(hash2(ch.cx*1223+slot,ch.cz*1231-slot)>chance) return r;
     const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*1237+slot,ch.cz*1249)*CHUNK_SIZE); const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*1259,ch.cz*1277+slot)*CHUNK_SIZE);
     placeWildZonai(meta,x,z,sk,false); return r;
   };
@@ -8641,10 +8643,10 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   updateUltraHand=function(dt){
     const r=__zonaiRuntimeEnsure.apply(this,arguments);
     __zonaiEnsureTimer+=(Number(dt)||0);
-    if(__zonaiEnsureTimer>4){ __zonaiEnsureTimer=0; spawnGuaranteedZonaiNearPlayer('runtime'); }
+    if(__zonaiEnsureTimer>30){ __zonaiEnsureTimer=0; if(countWildZonaiNear(player.x,player.z,70)<=0) spawnGuaranteedZonaiNearPlayer('runtime'); }
     return r;
   };
-  try{ cleanupSuppressedZonai(); ensureAllZonai(); spawnCustomObjectsInLoadedChunks(); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot'),800); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot2'),2400); setMsg('ゾナウギア追加: '+ZONAI_GEAR.length+'種 / 近場にも自動出現 / ULTRAで登録・起動','good'); }catch(e){ console.warn('zonai init failed',e); }
+  try{ cleanupSuppressedZonai(); ensureAllZonai(); spawnCustomObjectsInLoadedChunks(); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot'),1600); setMsg('ゾナウギア追加: '+ZONAI_GEAR.length+'種 / 生物スポーンとは別枠 / ULTRAで登録・起動','good'); }catch(e){ console.warn('zonai init failed',e); }
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
