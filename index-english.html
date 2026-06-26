@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
-<!-- fix: combo route scoring and per-route use counts 2026-06-26-2035 -->
+<!-- fix: English-as-adjective and multi-sentence combo 2026-06-26-2045 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -119,12 +119,12 @@ const WORDS = [
   {w:'happy',pos:['adj'],lv:1},{w:'sad',pos:['adj'],lv:1},{w:'kind',pos:['adj'],lv:1},{w:'tall',pos:['adj'],lv:1},{w:'busy',pos:['adj'],lv:1},{w:'hungry',pos:['adj'],lv:1},
   {w:'like',pos:['verb'],lv:1},{w:'play',pos:['verb'],lv:1},{w:'study',pos:['verb'],lv:1},{w:'read',pos:['verb'],lv:1},{w:'go',pos:['verb'],lv:1},{w:'want',pos:['verbWant'],lv:2},{w:'can',pos:['modal'],lv:2},{w:'must',pos:['modal'],lv:2},
   {w:'playing',pos:['ving'],lv:2},{w:'studying',pos:['ving'],lv:2},{w:'reading',pos:['ving'],lv:2},{w:'going',pos:['ving'],lv:2},
-  {w:'to',pos:['to'],lv:1},{w:'school',pos:['noun'],lv:1},{w:'soccer',pos:['noun'],lv:1},{w:'tennis',pos:['noun'],lv:1},{w:'English',pos:['noun'],lv:1},{w:'apples',pos:['noun'],lv:1},{w:'music',pos:['noun'],lv:1},{w:'books',pos:['noun'],lv:1},
+  {w:'to',pos:['to'],lv:1},{w:'school',pos:['noun'],lv:1},{w:'soccer',pos:['noun'],lv:1},{w:'tennis',pos:['noun'],lv:1},{w:'English',pos:['noun','adj'],lv:1},{w:'apples',pos:['noun'],lv:1},{w:'music',pos:['noun'],lv:1},{w:'books',pos:['noun'],lv:1},
   {w:'very',pos:['adv'],lv:1},{w:'now',pos:['advTime'],lv:1},{w:'today',pos:['advTime'],lv:1},{w:'everyday',pos:['advTime'],lv:2},{w:'in',pos:['prep'],lv:2},{w:'the',pos:['article'],lv:1},{w:'morning',pos:['noun'],lv:2}
 ];
 const POS = Object.fromEntries(WORDS.map(x=>[x.w.toLowerCase(),x.pos]));
 const EXACT = new Map([
-  ['i am happy',{kind:'完全な文',pts:30}],['i am sad',{kind:'完全な文',pts:30}],['you are kind',{kind:'完全な文',pts:30}],['he is tall',{kind:'完全な文',pts:30}],['she is busy',{kind:'完全な文',pts:30}],['we are hungry',{kind:'完全な文',pts:30}],
+  ['i am happy',{kind:'完全な文',pts:30}],['i am sad',{kind:'完全な文',pts:30}],['you are kind',{kind:'完全な文',pts:30}],['he is tall',{kind:'完全な文',pts:30}],['she is busy',{kind:'完全な文',pts:30}],['we are hungry',{kind:'完全な文',pts:30}],['i am english',{kind:'be動詞の文',pts:32}],['you are english',{kind:'be動詞の文',pts:32}],
   ['i like apples',{kind:'完全な文',pts:35}],['i like music',{kind:'完全な文',pts:35}],['you play soccer',{kind:'完全な文',pts:35}],['we study english',{kind:'完全な文',pts:35}],['i read books',{kind:'完全な文',pts:35}],
   ['i am playing soccer',{kind:'進行形の文',pts:50}],['she is reading books',{kind:'進行形の文',pts:50}],['we are studying english',{kind:'進行形の文',pts:50}],['i am going to school',{kind:'進行形の文',pts:55}],
   ['i want to play',{kind:'不定詞の文',pts:55}],['i want to read',{kind:'不定詞の文',pts:55}],['you want to study',{kind:'不定詞の文',pts:55}],['i can swim',{kind:'助動詞の文',pts:45}],['you must study',{kind:'助動詞の文',pts:45}],
@@ -138,7 +138,7 @@ const JA = {
   'playing':'しています','studying':'勉強しています','reading':'読んでいます','going':'行っています','to':'へ','school':'学校','soccer':'サッカー','tennis':'テニス','english':'英語','apples':'りんご','music':'音楽','books':'本','very':'とても','now':'今','today':'今日','everyday':'毎日','in':'〜に','the':'その','morning':'朝'
 };
 const EXACT_JA = new Map([
-  ['i am happy','私は幸せです'],['i am sad','私は悲しいです'],['you are kind','あなたは親切です'],['he is tall','彼は背が高いです'],['she is busy','彼女は忙しいです'],['we are hungry','私たちはお腹がすいています'],
+  ['i am happy','私は幸せです'],['i am sad','私は悲しいです'],['you are kind','あなたは親切です'],['he is tall','彼は背が高いです'],['she is busy','彼女は忙しいです'],['we are hungry','私たちはお腹がすいています'],['i am english','私はイングランド人です'],['you are english','あなたはイングランド人です'],
   ['i like apples','私はりんごが好きです'],['i like music','私は音楽が好きです'],['you play soccer','あなたはサッカーをします'],['we study english','私たちは英語を勉強します'],['i read books','私は本を読みます'],
   ['i am playing soccer','私はサッカーをしています'],['she is reading books','彼女は本を読んでいます'],['we are studying english','私たちは英語を勉強しています'],['i am going to school','私は学校へ行っています'],
   ['i want to play','私は遊びたいです'],['i want to read','私は読みたいです'],['you want to study','あなたは勉強したいです'],['i can swim','私は泳げます'],['you must study','あなたは勉強しなければなりません'],
@@ -317,9 +317,9 @@ function showFx(made,gained,cellIndex,comboInfo=null){
   const fx=$('fxBanner');
   fx.classList.toggle('combo', comboN>1);
   fx.querySelector('.fxBig').textContent = comboN>1 ? `COMBO ×${comboN}!` : 'GOOD!';
-  $('fxEn').textContent=comboN>1 ? `${top.text}  ${comboN} ROUTES!` : top.text;
-  $('fxJa').textContent=top.ja||'';
-  $('fxPts').textContent=(comboN>1?`経路コンボ +${comboInfo.bonus||0} / `:'')+'+'+gained+' POINTS';
+  $('fxEn').textContent=comboN>1 ? (comboInfo?.mode==='multi' ? `${comboN} SENTENCE COMBO!` : `${top.text}  ${comboN} ROUTES!`) : top.text;
+  $('fxJa').textContent=comboN>1 && comboInfo?.mode==='multi' ? comboInfo.text : (top.ja||'');
+  $('fxPts').textContent=(comboN>1?`${comboInfo?.mode==='multi'?'文コンボ':'経路コンボ'} +${comboInfo.bonus||0} / `:'')+'+'+gained+' POINTS';
   fx.classList.remove('show');void fx.offsetWidth;fx.classList.add('show');
   const cell=document.querySelectorAll('.cell')[cellIndex];
   let x=innerWidth/2,y=innerHeight/2;
@@ -399,9 +399,17 @@ function summarizeScoring(scoring){
     g.pts += m.pts;
     g.routes.push(m);
   }
-  const comboGroups=[...groups.values()].filter(g=>g.count>1).sort((a,b)=>b.count-a.count || b.pts-a.pts);
-  const comboInfo=comboGroups[0] ? {count:comboGroups[0].count, text:comboGroups[0].text, ja:comboGroups[0].ja, bonus:(comboGroups[0].count-1)*18} : null;
-  return {groups:[...groups.values()], comboInfo};
+  const list=[...groups.values()];
+  const routeCombo=list.filter(g=>g.count>1).sort((a,b)=>b.count-a.count || b.pts-a.pts)[0] || null;
+  let comboInfo=null;
+  if(routeCombo){
+    comboInfo={count:routeCombo.count, text:routeCombo.text, ja:routeCombo.ja, bonus:(routeCombo.count-1)*18, mode:'route'};
+  }else if(list.length>1){
+    // 別々の英文が同時成立した場合もコンボ扱いにする。
+    // 例：I am English と I like English が同時成立。
+    comboInfo={count:list.length, text:list.map(g=>g.text).join(' / '), ja:'複数英文成立', bonus:(list.length-1)*18, mode:'multi'};
+  }
+  return {groups:list, comboInfo};
 }
 function placeTile(cellIndex){
   if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
@@ -443,7 +451,8 @@ function placeTile(cellIndex){
       }
     });
     if(comboInfo){
-      setMsg(`${comboInfo.text} COMBO×${comboInfo.count}！ ${comboInfo.ja} +${gained}`,'good');
+      const label = comboInfo.mode==='multi' ? `${comboInfo.count}文コンボ` : `COMBO×${comboInfo.count}`;
+      setMsg(`${label}！ ${comboInfo.text} +${gained}`,'good');
     }else{
       setMsg(`${scoring[0].text} 成立！ ${scoring[0].ja} +${gained}`,'good');
     }
