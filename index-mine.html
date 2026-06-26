@@ -7995,166 +7995,277 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
 })();
 
 
-// ===== Pokemon field3d 96x96x96 production swap v9 =====
-// 原因対処:
-// 旧 v4 は generated field3d を 16x16 前提で slice/filter していたため、
-// 96x96x96 で生成しても本番フィールドでは grid16/cells127 相当の旧3Dや平面のままになっていた。
-// v9 は HTML 側で3Dを生成しない。generated の field3d(grid=96)だけを正とし、
-// フィールド配置時に info-poke_### を info-poke3d_### へ強制差し替えする。
+// ===== Pokemon field3d production LOD mesh swap v10 =====
+// 根本対処:
+// 1) 旧v9は151体ぶんの巨大3D定義を全登録して重くしていた。
+// 2) 旧validate/customObjectDefs.setのポケモン平面正規化(v13)が info-poke3d_### まで plane に戻していた。
+// 3) 既存のvoxel3d配置は1セル=1Entityで、96x96x96をそのまま出すとスマホで重すぎる。
+// v10は「必要なNoだけ遅延デコード」「grid=96維持」「表示セルをLOD圧縮」「1色1メッシュ化」で軽く3D表示する。
 (function(){
   'use strict';
-  const VERSION='pokemon-field3d-production-swap-v9-use-generated-grid96-only';
-  const MAX_POKE_FIELD3D_CELLS = 30000;
+  const VERSION='pokemon-field3d-production-lod-mesh-v10-generated-grid96';
+  const SOURCE_FILE='generated/pokemon-info-textures.gen1.field3d96.v8.generated.js';
+  const MOBILE = (Math.min(window.innerWidth||9999, window.innerHeight||9999) < 820) || /Android|iPhone|iPad/i.test(navigator.userAgent||'');
+  const TARGET_RENDER_CELLS = MOBILE ? 520 : 1100;
+  const MAX_RENDER_CELLS = MOBILE ? 760 : 1600;
+  const CACHE = new Map();
 
-  function pokeNo(v){
+  function normHex(c){ try{return normalizeHexColor(c);}catch(e){ c=String(c||'#22c55e').toLowerCase(); return /^#[0-9a-f]{6}$/.test(c)?c:'#22c55e'; } }
+  function noOf(v){
     const raw=String((v&&(v.no||v.id||v.type||v.infoType||v.defId||v.planeId||v.name))||v||'');
     const m=raw.match(/(?:info-poke3d_|poke3d_|info-poke_|poke[_-]?|No\.?\s*)(\d{1,3})/i)||raw.match(/\b(\d{3})\b/);
     if(!m) return '';
     const n=Math.max(1,Math.min(151,parseInt(m[1],10)||0));
     return n?String(n).padStart(3,'0'):'';
   }
-  function genDefs(){
-    // v8生成JSも既存30名もここへ入る。中身の field3d を優先する。
+  function defs(){
     if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS_30)) return window.POKEMON_INFO_TEXTURE_DEFS_30;
     if(Array.isArray(window.POKEMON_INFO_TEXTURE_DEFS)) return window.POKEMON_INFO_TEXTURE_DEFS;
     return [];
   }
-  function genFor(v){
-    const no=pokeNo(v); if(!no) return null;
-    return genDefs().find(d=>{
-      const dn=String(d.no||pokeNo(d)).padStart(3,'0').slice(-3);
+  function gen(no){
+    no=String(no||'').padStart(3,'0').slice(-3); if(!no) return null;
+    return defs().find(d=>{
+      const dn=String(d.no||noOf(d)).padStart(3,'0').slice(-3);
       return dn===no || String(d.id||'')==='info-poke_'+no || String(d.type||'')==='poke_'+no || String(d.planeId||'')==='info-poke_'+no;
     })||null;
   }
-  function cleanHex(c){ try{return normalizeHexColor(c);}catch(e){return '#22c55e';} }
-  function decodeB64XYZC16(src){
-    if(!src || src.encoding!=='b64_xyzc16_v1' || !src.data || !Array.isArray(src.palette)) return null;
-    try{
-      const bin=atob(String(src.data));
-      const out=[];
-      for(let i=0;i+4<bin.length && out.length<MAX_POKE_FIELD3D_CELLS;i+=5){
-        const x=bin.charCodeAt(i), y=bin.charCodeAt(i+1), z=bin.charCodeAt(i+2);
-        const ci=bin.charCodeAt(i+3) | (bin.charCodeAt(i+4)<<8);
-        out.push({x,y,z,color:cleanHex(src.palette[ci] || '#22c55e')});
-      }
-      return out;
-    }catch(e){ console.warn('pokemon field3d b64 decode failed', e); return null; }
-  }
-  function sourceCells(src){
-    if(!src) return [];
-    const dec=decodeB64XYZC16(src);
-    if(dec && dec.length) return dec;
-    if(Array.isArray(src.cells)) return src.cells;
+  function decodeCells(f){
+    if(!f) return [];
+    if(Array.isArray(f.cells) && f.cells.length){
+      return f.cells.map(c=>({x:Math.trunc(Number(c.x)),y:Math.trunc(Number(c.y)),z:Math.trunc(Number(c.z)),color:normHex(c.color)})).filter(c=>Number.isFinite(c.x)&&Number.isFinite(c.y)&&Number.isFinite(c.z));
+    }
+    if(f.encoding==='b64_xyzc16_v1' && typeof f.data==='string' && Array.isArray(f.palette)){
+      try{
+        const bin=atob(String(f.data)); const pal=f.palette; const out=[];
+        for(let i=0;i+4<bin.length;i+=5){
+          const ci=(bin.charCodeAt(i+3)<<8)|bin.charCodeAt(i+4);
+          out.push({x:bin.charCodeAt(i),y:bin.charCodeAt(i+1),z:bin.charCodeAt(i+2),color:normHex(pal[ci]||'#22c55e')});
+        }
+        return out;
+      }catch(e){ console.warn('pokemon v10 b64 decode failed', e); }
+    }
     return [];
   }
-  function fieldDefFor(v){
-    const gen=genFor(v);
-    if(!gen || !gen.field3d) return null;
-    const src=gen.field3d;
-    const rawCells=sourceCells(src);
-    if(!rawCells.length) return null;
-    const no=String(gen.no||pokeNo(gen)||pokeNo(v)).padStart(3,'0').slice(-3);
-    const grid=Math.max(2, Math.min(128, Math.trunc(Number(src.grid)||96)));
-    const scale=Math.max(.006, Math.min(.10, Number(src.scale)||0.0265625));
-    const cells=[];
-    for(const c of rawCells.slice(0, MAX_POKE_FIELD3D_CELLS)){
+  function lodCells(raw, grid, scale){
+    if(!raw || !raw.length) return [];
+    const target=TARGET_RENDER_CELLS;
+    const step=Math.max(1, Math.min(8, Math.ceil(Math.cbrt(raw.length/Math.max(1,target)))));
+    const buckets=new Map();
+    for(const c of raw){
       const x=Math.trunc(Number(c.x)), y=Math.trunc(Number(c.y)), z=Math.trunc(Number(c.z));
       if(x<0||x>=grid||y<0||y>=grid||z<0||z>=grid) continue;
-      cells.push({x,y,z,color:cleanHex(c.color),size:scale});
+      const bx=Math.floor(x/step), by=Math.floor(y/step), bz=Math.floor(z/step);
+      const k=bx+','+by+','+bz;
+      let b=buckets.get(k);
+      if(!b){ b={n:0,sx:0,sy:0,sz:0,colors:new Map()}; buckets.set(k,b); }
+      b.n++; b.sx+=x; b.sy+=y; b.sz+=z;
+      const col=normHex(c.color); b.colors.set(col,(b.colors.get(col)||0)+1);
     }
-    if(!cells.length) return null;
-    return {
-      id:'info-poke3d_'+no,
-      type:'poke3d_'+no,
-      planeId:'info-poke_'+no,
-      no:Number(no),
-      name:(src.name||gen.name||('No.'+no+' 3D')).replace(/^情報テクスチャ[:：]?/,'').replace(/ 3D$/,'')+' 3D',
-      kind:'voxel3d',
-      grid,
-      scale,
-      cells,
-      field3dGrid:grid,
-      archetype: src.archetype || gen.archetype || 'generated-field3d-grid96',
-      field3dSource:'generated/pokemon-info-textures.gen1.field3d96.v8.generated.js',
-      infoTexture:true,
-      infoRole:'pokemon',
-      infoType:'poke_'+no,
-      hp:Number(src.hp)||Number(gen.hp)||12,
-      infoPhysics:src.infoPhysics||gen.infoPhysics||{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},
-      pokemonField3d:true,
-      pokemonField3dVersion:VERSION,
-      createdAt:1,
-      updatedAt:Date.now()
+    let out=[];
+    for(const b of buckets.values()){
+      let col='#22c55e', best=-1;
+      for(const [c,n] of b.colors){ if(n>best){best=n; col=c;} }
+      out.push({x:Math.round(b.sx/b.n), y:Math.round(b.sy/b.n), z:Math.round(b.sz/b.n), color:col, size:scale*step});
+    }
+    if(out.length>MAX_RENDER_CELLS){
+      // 中心・前面に寄りすぎないよう決定論的に間引く。毎回同じ見た目にする。
+      const stride=out.length/MAX_RENDER_CELLS;
+      const keep=[]; for(let i=0;i<MAX_RENDER_CELLS;i++) keep.push(out[Math.floor(i*stride)]);
+      out=keep;
+    }
+    return out;
+  }
+  function fieldDef(noOrDef){
+    const no=noOf(noOrDef); if(!no) return null;
+    if(CACHE.has(no)) return CACHE.get(no);
+    const d=gen(no); if(!d || !d.field3d){ CACHE.set(no,null); return null; }
+    const f=d.field3d;
+    const grid=Math.max(2,Math.min(128,Math.trunc(Number(f.grid)||96)));
+    const scale=Math.max(.006,Math.min(.10,Number(f.scale)||2.55/grid));
+    const raw=decodeCells(f);
+    const cells=lodCells(raw, grid, scale);
+    if(!cells.length){ CACHE.set(no,null); return null; }
+    const def={
+      id:'info-poke3d_'+no, type:'poke3d_'+no, infoType:'poke_'+no, planeId:'info-poke_'+no, no:Number(no),
+      name:(d.name||('No.'+no)).replace(/^情報テクスチャ[:：]?/,'')+' 3D', kind:'voxel3d', grid, scale,
+      cells, fullCellCount:raw.length, renderCellCount:cells.length,
+      archetype:f.archetype||'generated-field3d96', field3dSource:SOURCE_FILE,
+      infoTexture:true, infoRole:'pokemon', hp:Number(f.hp)||Number(d.hp)||12,
+      infoPhysics:f.infoPhysics||d.infoPhysics||{massKg:1,gravityScale:1,terminalVelocity:18,bounce:0},
+      pokemonField3d:true, pokemonField3dVersion:VERSION, createdAt:1, updatedAt:Date.now()
     };
+    CACHE.set(no,def); return def;
   }
-  function applyField3dDefs(){
-    if(!window.customObjectDefs) return 0;
-    let n=0;
-    for(const d of genDefs()){
-      const f=fieldDefFor(d); if(!f) continue;
-      customObjectDefs.set(f.id, f);
-      n++;
-    }
-    return n;
-  }
-  function shouldUseField3d(def, instanceKey){
-    if(!def) return false;
-    const id=String(def.id||def.defId||'');
-    if(/^info-poke3d_\d{3}$/.test(id)) return false;
-    const no=pokeNo(def) || pokeNo(instanceKey); if(!no) return false;
-    // フィールドに存在するポケモン情報テクスチャは必ず3D。
-    // 旧版は infoTexture 条件が弱く、平面 info-poke_### がそのまま出ていた。
+  function wantsPokemon3d(def, instanceKey){
+    const id=String((def&&(def.id||def.defId))||'');
+    if(/^info-poke3d_\d{3}$/.test(id)) return true;
+    const no=noOf(def)||noOf(instanceKey); if(!no) return false;
     if(/^info-poke_\d{3}$/.test(id)) return true;
-    if(/^poke_\d{3}$/.test(String(def.type||def.infoType||''))) return true;
-    if(/^infoTexture(?::|V3:)/.test(String(instanceKey||''))) return true;
-    if(/^infoShared/i.test(String(instanceKey||''))) return true;
-    return !!def.infoTexture && !!genFor(def);
+    if(/^poke_\d{3}$/.test(String(def&&(def.type||def.infoType)||''))) return true;
+    if(/^infoTexture(?::|V3:)/.test(String(instanceKey||''))) return !!gen(no);
+    if(/^infoShared/i.test(String(instanceKey||''))) return !!gen(no);
+    return !!(def&&def.infoTexture&&gen(no));
   }
-  function convertExistingPokemonPlanes(){
-    if(!window.customObjectEntities || !window.customObjectEntities.forEach) return 0;
-    let n=0;
-    for(const [key,root] of Array.from(customObjectEntities.entries())){
-      try{
-        if(!root || !root.data) continue;
-        const defId=String(root.data.defId||'');
-        if(!/^info-poke_\d{3}$/.test(defId)) continue;
-        const f=fieldDefFor(defId); if(!f) continue;
-        const pos=root.getPosition ? root.getPosition().clone() : null;
-        const yaw=(root.getEulerAngles?root.getEulerAngles().y:0) * Math.PI/180;
-        customObjectEntities.delete(key);
-        try{root.destroy&&root.destroy();}catch{}
-        if(pos){ placeCustomObject(f,pos.x,pos.y,pos.z,yaw,String(key).replace(defId,f.id)); n++; }
-      }catch(e){ console.warn('pokemon existing plane convert failed', e); }
+
+  // v13の平面正規化が info-poke3d_### を潰すため、3DだけはMapへ直登録させる。
+  try{
+    const prevSet=customObjectDefs && customObjectDefs.set ? customObjectDefs.set.bind(customObjectDefs) : null;
+    if(prevSet && !customObjectDefs.__pokemonField3dV10Set){
+      customObjectDefs.set=function(key,value){
+        try{
+          const id=String((value&&(value.id||value.defId))||key||'');
+          if(/^info-poke3d_\d{3}$/.test(id)){
+            return Map.prototype.set.call(this, id, value);
+          }
+        }catch(e){}
+        return prevSet(key,value);
+      };
+      customObjectDefs.__pokemonField3dV10Set=true;
     }
-    return n;
+  }catch(e){ console.warn('pokemon v10 set bypass failed', e); }
+
+  // validateObjectDefも3Dだけは平面化させない。
+  try{
+    const prevValidate=validateObjectDef;
+    validateObjectDef=function(def){
+      try{
+        const id=String(def&&(def.id||def.defId)||'');
+        if(def && /^info-poke3d_\d{3}$/.test(id)){
+          const grid=Math.max(2,Math.min(128,Math.trunc(Number(def.grid)||96)));
+          const scale=Math.max(.006,Math.min(.10,Number(def.scale)||2.55/grid));
+          const cells=(Array.isArray(def.cells)?def.cells:[]).map(c=>({
+            x:Math.trunc(Number(c.x)), y:Math.trunc(Number(c.y)), z:Math.trunc(Number(c.z)), color:normHex(c.color), size:Math.max(.006,Math.min(.30,Number(c.size)||scale))
+          })).filter(c=>c.x>=0&&c.x<grid&&c.y>=0&&c.y<grid&&c.z>=0&&c.z<grid).slice(0,MAX_RENDER_CELLS);
+          if(!cells.length) return null;
+          const clean=Object.assign({},def,{id,kind:'voxel3d',grid,scale,cells,infoTexture:true,infoRole:'pokemon'});
+          return clean;
+        }
+      }catch(e){}
+      return prevValidate.apply(this,arguments);
+    };
+    window.validateObjectDef=validateObjectDef;
+  }catch(e){ console.warn('pokemon v10 validate bypass failed', e); }
+
+  // 情報テクスチャ生成そのものも、ポケモンだけは最初から3Dを返す。
+  try{
+    const prevEnsure=ensureInfoTextureDefV3;
+    ensureInfoTextureDefV3=function(meta){
+      try{
+        const no=noOf(meta);
+        if(no && gen(no)){
+          const f=fieldDef(no);
+          if(f){ try{ customObjectDefs.set(f.id,f); }catch{} return f; }
+        }
+      }catch(e){ console.warn('pokemon v10 ensure swap failed', e); }
+      return prevEnsure.apply(this,arguments);
+    };
+    window.ensureInfoTextureDefV3=ensureInfoTextureDefV3;
+  }catch(e){ console.warn('pokemon v10 ensure hook failed', e); }
+
+  // 1色1メッシュ化できる環境なら使う。失敗時だけ通常box配置に落とす。
+  function addMeshByColor(root, cells, grid, scale){
+    if(!window.pc || !pc.createMesh || !app || !app.graphicsDevice) return false;
+    const byColor=new Map();
+    const occ=new Set(cells.map(c=>c.x+','+c.y+','+c.z));
+    for(const c of cells){ const col=normHex(c.color); if(!byColor.has(col)) byColor.set(col,[]); byColor.get(col).push(c); }
+    const dirs=[ [1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1] ];
+    const faceCorners=[
+      [[.5,-.5,-.5],[.5,.5,-.5],[.5,.5,.5],[.5,-.5,.5]],
+      [[-.5,-.5,.5],[-.5,.5,.5],[-.5,.5,-.5],[-.5,-.5,-.5]],
+      [[-.5,.5,-.5],[-.5,.5,.5],[.5,.5,.5],[.5,.5,-.5]],
+      [[-.5,-.5,.5],[-.5,-.5,-.5],[.5,-.5,-.5],[.5,-.5,.5]],
+      [[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]],
+      [[.5,-.5,-.5],[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5]]
+    ];
+    let made=0;
+    for(const [col,list] of byColor){
+      const pos=[], nor=[], ind=[];
+      for(const c of list){
+        const cs=Number(c.size)||scale;
+        const cx=(c.x-(grid-1)/2)*cs;
+        const cy=(c.y+.5)*cs;
+        const cz=(c.z-(grid-1)/2)*cs;
+        for(let f=0; f<6; f++){
+          const d=dirs[f];
+          // LODセルは間引き後なので隣接判定は同格のみ。面を多めに残して立体感を出す。
+          if(occ.has((c.x+d[0])+','+(c.y+d[1])+','+(c.z+d[2])) && Math.random()<0) continue;
+          const base=pos.length/3;
+          for(const q of faceCorners[f]){ pos.push(cx+q[0]*cs, cy+q[1]*cs, cz+q[2]*cs); nor.push(d[0],d[1],d[2]); }
+          ind.push(base,base+1,base+2, base,base+2,base+3);
+        }
+      }
+      if(!pos.length) continue;
+      const mesh=pc.createMesh(app.graphicsDevice, pos, {normals:nor, indices:ind});
+      const mi=new pc.MeshInstance(mesh, ensureCustomMat(col));
+      const e=new pc.Entity('poke3d_mesh_'+col);
+      try{ e.addComponent('render', { meshInstances:[mi], castShadows:false, receiveShadows:false }); }
+      catch(err){ try{ e.addComponent('model'); e.model.meshInstances=[mi]; }catch(err2){ return false; } }
+      root.addChild(e); made++;
+    }
+    return made>0;
   }
+  function placePokemon3d(def,x,y,z,yaw,instanceKey){
+    def=validateObjectDef(def); if(!def) return null;
+    instanceKey=instanceKey || ('poke3d-'+def.id+'-'+Math.round(x)+','+Math.round(y)+','+Math.round(z));
+    if(customObjectRemovedInstances && customObjectRemovedInstances.has(instanceKey)) return null;
+    if(customObjectEntities && customObjectEntities.has(instanceKey)) return customObjectEntities.get(instanceKey);
+    const root=new pc.Entity('custom_object_'+instanceKey);
+    let meshOk=false;
+    try{ meshOk=addMeshByColor(root, def.cells, def.grid, def.scale); }catch(e){ console.warn('pokemon v10 mesh failed, fallback boxes', e); }
+    if(!meshOk){
+      // 最終fallback。セル数はLOD済みなので旧96フルより軽い。
+      for(const c of def.cells.slice(0,MAX_RENDER_CELLS)){
+        const mat=ensureCustomMat(c.color); const cs=Number(c.size)||def.scale;
+        const lx=(c.x-(def.grid-1)/2)*cs, ly=(c.y+.5)*cs, lz=(c.z-(def.grid-1)/2)*cs;
+        addCustomBox(root, mat, lx, ly, lz, cs*1.01, cs*1.01, cs*1.01);
+      }
+    }
+    root.setPosition(x,y,z);
+    root.setEulerAngles(0,(yaw||0)*180/Math.PI,0);
+    root.data={customObject:true,defId:def.id,instanceKey,chunk:chunkIdForBlock(Math.round(x),Math.round(z)),pokemonField3d:true,infoTexture:true,infoRole:'pokemon',fullCellCount:def.fullCellCount,renderCellCount:def.cells.length};
+    app.root.addChild(root);
+    customObjectEntities.set(instanceKey, root);
+    return root;
+  }
+
   try{
     const prevPlace=placeCustomObject;
     placeCustomObject=function(def,x,y,z,yaw,instanceKey){
       try{
-        if(shouldUseField3d(def, instanceKey)){
-          const f=fieldDefFor(def || instanceKey);
-          if(f){
-            if(window.customObjectDefs) customObjectDefs.set(f.id, f);
-            def=f;
-          }
+        if(wantsPokemon3d(def, instanceKey)){
+          const no=noOf(def)||noOf(instanceKey);
+          const f=fieldDef(no);
+          if(f){ return placePokemon3d(f,x,y,z,yaw,String(instanceKey||'').replace(/info-poke_(\d{3})/,'info-poke3d_$1')||undefined); }
         }
-      }catch(e){ console.warn('pokemon field3d v9 swap failed', e); }
-      return prevPlace.apply(this, [def,x,y,z,yaw,instanceKey]);
+      }catch(e){ console.warn('pokemon v10 place swap failed', e); }
+      return prevPlace.apply(this,arguments);
     };
     window.placeCustomObject=placeCustomObject;
-  }catch(e){ console.warn('pokemon field3d v9 place hook failed', e); }
+  }catch(e){ console.warn('pokemon v10 place hook failed', e); }
 
-  try{
-    const run=()=>{
-      const n=applyField3dDefs();
-      const c=convertExistingPokemonPlanes();
-      if(n||c) try{ setMsg('ポケモンfield3d v9: generated grid96 3D '+n+'体 / 既存変換 '+c+'体','good'); }catch{}
-    };
-    setTimeout(run,400); setTimeout(run,1200); setTimeout(run,3000); setInterval(convertExistingPokemonPlanes,5000);
-  }catch(e){}
-  window.applyPokemonField3dGeneratedGrid96V9=applyField3dDefs;
-  try{ console.log(VERSION+' active'); }catch{}
+  // 既に出た平面ポケモンを軽量3Dへ置換。ただし全数ではなく近場中心。
+  function convertExisting(){
+    if(!customObjectEntities || !player) return 0;
+    let n=0;
+    for(const [key,root] of Array.from(customObjectEntities.entries())){
+      try{
+        if(!root||!root.data) continue;
+        const defId=String(root.data.defId||'');
+        if(!/^info-poke_\d{3}$/.test(defId)) continue;
+        const p=root.getPosition();
+        if(Math.hypot(p.x-player.x,p.z-player.z)>48) continue;
+        const f=fieldDef(defId); if(!f) continue;
+        const yaw=(root.getEulerAngles?root.getEulerAngles().y:0)*Math.PI/180;
+        customObjectEntities.delete(key); try{root.destroy&&root.destroy();}catch{}
+        placePokemon3d(f,p.x,p.y,p.z,yaw,String(key).replace(defId,f.id)); n++;
+      }catch(e){ console.warn('pokemon v10 existing convert failed',e); }
+    }
+    return n;
+  }
+  try{ setTimeout(()=>{const c=convertExisting(); if(c) setMsg('ポケモンfield3d v10: 軽量3Dへ変換 '+c+'体','good');},500); setTimeout(convertExisting,1500); setInterval(convertExisting,4000); }catch{}
+  window.applyPokemonField3dProductionV10=function(no){ const f=fieldDef(no||1); if(f) customObjectDefs.set(f.id,f); return f; };
+  try{ console.log(VERSION+' active / targetCells='+TARGET_RENDER_CELLS+' max='+MAX_RENDER_CELLS); }catch{}
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
