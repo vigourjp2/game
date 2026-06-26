@@ -6532,9 +6532,11 @@ try{
     }catch(e){ console.warn('wild hard cap enforce failed', e); }
   }
   function hardCanSpawn(x, z){
-    hardEnforce();
+    // PRE-SPAWN ONLY: do not create/destroy objects here.
+    // Heavy post-prune/hardEnforce was causing extra work and could make spawns vanish.
     x = Number(x); z = Number(z);
     if(!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    if(!player || !customObjectEntities) return false;
     if(hardCountNear(player.x, player.z, HARD_RADIUS) >= HARD_MAX) return false;
     if(hardCountNear(x, z, HARD_RADIUS) >= HARD_MAX) return false;
     return true;
@@ -6550,11 +6552,12 @@ try{
     placeCustomObject = function(def, x, y, z, yaw, instanceKey){
       const ik = String(instanceKey || '');
       const isInfo = /^infoTexture(?::|V3:)/.test(ik) || /^infoShared/i.test(ik) || !!(def && def.infoTexture);
-      if(isInfo && !hardCanSpawn(x, z)) return null;
+      // Final placement must never run spawn gating again.
+      // All wild auto-spawn callers already call canSpawnWildInfoTextureAt() BEFORE this.
+      // Re-checking here caused double-gate rejection; post hardEnforce caused heavy create-then-delete.
       const root = oldPlaceCustomObject.apply(this, arguments);
       if(root && isInfo){
         root.data = Object.assign({}, root.data || {}, { wildInfoTexture:true, ownerClientId:(root.data&&root.data.ownerClientId)||'world' });
-        hardEnforce();
       }
       return root;
     };
@@ -6563,22 +6566,12 @@ try{
   try{
     const oldUpdateCustomObjectRuntime = updateCustomObjectRuntime;
     updateCustomObjectRuntime = function(dt){
-      const r = oldUpdateCustomObjectRuntime.apply(this, arguments);
-      hardAcc += Number(dt) || 0;
-      if(hardAcc >= 0.15){ hardAcc = 0; hardEnforce(); }
-      return r;
+      // No runtime hard-prune. Spawns are controlled before creation.
+      return oldUpdateCustomObjectRuntime.apply(this, arguments);
     };
   }catch(e){ console.warn('wild hard cap runtime hook failed', e); }
 
-  try{
-    const oldInfoSharedHudV15 = infoSharedHud;
-    infoSharedHud = function(){
-      hardEnforce();
-      return oldInfoSharedHudV15.apply(this, arguments);
-    };
-  }catch(e){}
-
-  try{ setInterval(hardEnforce, 500); }catch(e){}
+  // No HUD-time or interval hard-prune. Spawns are denied before creation instead.
   try{ setTimeout(hardEnforce, 250); setTimeout(hardEnforce, 1000); console.log(INFO_WILD_HARD_CAP_VERSION + ' active'); }catch(e){}
 })();
 
@@ -8295,33 +8288,39 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     }catch(e){ console.warn('start lag prune failed',e); }
   }
   function canSpawnInfoAt(x,z){
-    if(!state || !state.started) return false;
-    pruneWild();
+    // PRE-SPAWN ONLY: pure check. Do not update timestamp until every upstream check passes.
+    if(!state || !state.started || !player || !customObjectEntities) return false;
     const t=now();
     const gap=cold()?SPAWN_GAP_COLD:SPAWN_GAP_NORMAL;
     const max=cold()?WILD_MAX_COLD:WILD_MAX_NORMAL;
     if(t-lastInfoSpawnAt<gap) return false;
     if(wildNearCount(player.x,player.z,WILD_RADIUS)>=max) return false;
     if(wildNearCount(Number(x)||player.x,Number(z)||player.z,WILD_RADIUS)>=max) return false;
-    lastInfoSpawnAt=t;
     return true;
   }
+  function commitInfoSpawn(){ lastInfoSpawnAt=now(); }
   try{
     const oldCan=(typeof canSpawnWildInfoTextureAt==='function')?canSpawnWildInfoTextureAt:null;
     canSpawnWildInfoTextureAt=function(x,z){
       if(!canSpawnInfoAt(x,z)) return false;
-      return oldCan ? oldCan(x,z) : true;
+      if(oldCan && !oldCan(x,z)) return false;
+      commitInfoSpawn();
+      return true;
     };
     window.canSpawnWildInfoTextureAt=canSpawnWildInfoTextureAt;
   }catch(e){}
   try{
     const oldPlace=placeCustomObject;
     placeCustomObject=function(def,x,y,z,yaw,instanceKey){
-      if(isWildInfo(def,null,instanceKey) && !canSpawnInfoAt(x,z)) return null;
+      // IMPORTANT:
+      // Do NOT call canSpawnInfoAt() here.
+      // canSpawnWildInfoTextureAt() already performs the spawn throttle before this
+      // final placement function is called. Calling it again updates lastInfoSpawnAt
+      // and then immediately rejects the actual placement, so all wild info textures
+      // (animals, mobs, Pokemon-like creatures, and Zonai gear) disappear.
       const root=oldPlace.apply(this,arguments);
       if(root && isWildInfo(def,root,instanceKey)){
         root.data=Object.assign({},root.data||{},{wildInfoTexture:true,ownerClientId:(root.data&&root.data.ownerClientId)||'world'});
-        pruneWild();
       }
       return root;
     };
@@ -8346,10 +8345,8 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
       btn.onclick=function(ev){
         gameStartAt=now();
         lastInfoSpawnAt=gameStartAt;
-        pruneWild();
         try{ if(app&&app.graphicsDevice&&state.mobile){ app.graphicsDevice.maxPixelRatio=1; const pr=$('pr'); if(pr) pr.textContent='1.00'; } }catch(e){}
         const r=oldStart.apply(this,arguments);
-        try{ setTimeout(pruneWild,350); setTimeout(pruneWild,1300); setTimeout(pruneWild,3200); }catch(e){}
         return r;
       };
     }
@@ -8357,10 +8354,8 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
   try{
     const oldRuntime=updateCustomObjectRuntime;
     updateCustomObjectRuntime=function(dt){
-      const r=oldRuntime.apply(this,arguments);
-      pruneAcc += Number(dt)||0;
-      if(pruneAcc>=(cold()?0.22:0.45)){ pruneAcc=0; pruneWild(); }
-      return r;
+      // No runtime prune. Wild counts are limited before spawn.
+      return oldRuntime.apply(this,arguments);
     };
   }catch(e){}
   try{ console.log(VERSION+' active'); }catch(e){}
@@ -8575,17 +8570,70 @@ body.capV4ShakeScreen{animation:capV4ScreenShake .22s linear 0s 3;}
     if(root && isZonaiDef(def)){ root.data=Object.assign({},root.data||{},{zonaiGear:true,wildZonai:/^zonaiWild:/.test(String(instanceKey||''))}); }
     return root;
   };
+  function countWildZonaiNear(x,z,radius){
+    let n=0, rr=(radius||80)*(radius||80);
+    try{
+      for(const [,root] of customObjectEntities){
+        if(!root||!root.data||!root.getPosition) continue;
+        if(!root.data.zonaiGear && !root.data.wildZonai) continue;
+        const p=root.getPosition(), dx=p.x-x, dz=p.z-z;
+        if(dx*dx+dz*dz<=rr) n++;
+      }
+    }catch(e){}
+    return n;
+  }
+  function placeWildZonai(meta,x,z,key,forced){
+    try{
+      const def=ensureZonaiDef(meta);
+      const y=terrainHeight(x,z)+1.03;
+      const yaw=Math.floor(hash2(x*13+7,z*17-3)*4)*(Math.PI/2);
+      const root=placeCustomObject(def,x,y,z,yaw,key);
+      if(root){ root.data=Object.assign({},root.data||{},{zonaiGear:true,wildZonai:true,worldSpawn:true,spawnReason:forced?'nearPlayerGuaranteed':'chunk'}); }
+      return root;
+    }catch(e){ console.warn('zonai place failed',e); return null; }
+  }
+  function spawnGuaranteedZonaiNearPlayer(reason){
+    try{
+      ensureAllZonai();
+      const px=Math.round(player.x), pz=Math.round(player.z);
+      if(countWildZonaiNear(px,pz,70)>=5) return 0;
+      let made=0;
+      const picks=['rocket','fan','spring','cart','wing','cannon','flame_emitter','hover_stone'];
+      for(let i=0;i<picks.length && made<5;i++){
+        const meta=gearMeta(picks[i])||ZONAI_GEAR[i];
+        const ang=(player.yaw||0)+(i-2)*0.58;
+        const dist=7+i*2.2;
+        const x=Math.round(px+Math.sin(ang)*dist);
+        const z=Math.round(pz+Math.cos(ang)*dist);
+        const key='zonaiNear:'+reason+':'+meta.type+':'+Math.floor(px/16)+','+Math.floor(pz/16);
+        if(customSpawned.has(key)) continue; customSpawned.add(key);
+        if(placeWildZonai(meta,x,z,key,true)) made++;
+      }
+      if(made) setMsg('ゾナウギア出現: 近くに '+made+' 個落とした。ULTRAで掴め','good');
+      return made;
+    }catch(e){ console.warn('zonai guaranteed spawn failed',e); return 0; }
+  }
+  window.spawnZonaiGearNow=function(){ return spawnGuaranteedZonaiNearPlayer('manual:'+Date.now()); };
   const __zonaiSpawn=spawnCustomObjectForChunk;
   spawnCustomObjectForChunk=function(ch){
     const r=__zonaiSpawn.apply(this,arguments); try{ensureAllZonai();}catch(e){}
     if(!ch||!ch.done) return r;
     const slot=Math.floor(hash2(ch.cx*1201+41,ch.cz*1213-17)*ZONAI_GEAR.length)%ZONAI_GEAR.length;
     const meta=ZONAI_GEAR[slot]; const sk='zonaiWild:'+ch.key+':'+meta.type; if(customSpawned.has(sk)) return r; customSpawned.add(sk);
-    const chance=meta.kind==='device'?.055:.035; if(hash2(ch.cx*1223+slot,ch.cz*1231-slot)>chance) return r;
-    const def=ensureZonaiDef(meta); const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*1237+slot,ch.cz*1249)*CHUNK_SIZE); const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*1259,ch.cz*1277+slot)*CHUNK_SIZE); const y=terrainHeight(x,z)+1.03; const yaw=Math.floor(hash2(ch.cx*1283,ch.cz*1289)*4)*(Math.PI/2);
-    placeCustomObject(def,x,y,z,yaw,sk); return r;
+    // 低すぎると「何も出ない」ので、野生ゾナウギアはチャンク単位でそこそこ見える確率にする。
+    const chance=meta.kind==='device'?.42:.24; if(hash2(ch.cx*1223+slot,ch.cz*1231-slot)>chance) return r;
+    const x=ch.cx*CHUNK_SIZE+Math.floor(hash2(ch.cx*1237+slot,ch.cz*1249)*CHUNK_SIZE); const z=ch.cz*CHUNK_SIZE+Math.floor(hash2(ch.cx*1259,ch.cz*1277+slot)*CHUNK_SIZE);
+    placeWildZonai(meta,x,z,sk,false); return r;
   };
-  try{ ensureAllZonai(); setMsg('ゾナウギア追加: '+ZONAI_GEAR.length+'種 / 平面情報テクスチャ / ULTRAで登録・起動','good'); }catch(e){ console.warn('zonai init failed',e); }
+  let __zonaiEnsureTimer=0;
+  const __zonaiRuntimeEnsure=updateUltraHand;
+  updateUltraHand=function(dt){
+    const r=__zonaiRuntimeEnsure.apply(this,arguments);
+    __zonaiEnsureTimer+=(Number(dt)||0);
+    if(__zonaiEnsureTimer>4){ __zonaiEnsureTimer=0; spawnGuaranteedZonaiNearPlayer('runtime'); }
+    return r;
+  };
+  try{ ensureAllZonai(); spawnCustomObjectsInLoadedChunks(); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot'),800); setTimeout(()=>spawnGuaranteedZonaiNearPlayer('boot2'),2400); setMsg('ゾナウギア追加: '+ZONAI_GEAR.length+'種 / 近場にも自動出現 / ULTRAで登録・起動','good'); }catch(e){ console.warn('zonai init failed',e); }
 })();
 
 setMsg('PlayCanvas Engine読込完了','good');
