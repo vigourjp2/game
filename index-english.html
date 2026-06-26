@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
+<!-- fix: useCount dedupe 2026-06-26-2009 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -324,6 +325,22 @@ function scanFromCell(placeIndex){
   const seen=new Set();
   return found.filter(f=>{const k=f.cells.join(',')+f.text; if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,4);
 }
+function selectScoringMatches(matches){
+  // 同じターンで「I like apples」と「like apples」のような部分一致を二重加算しない。
+  // 長い英文を優先し、その完全な部分集合になっている短いフレーズは演出・使用回数・得点から外す。
+  const sorted=[...matches].sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
+  const picked=[];
+  function isSubset(a,b){
+    const bs=new Set(b.cells);
+    return a.cells.every(i=>bs.has(i));
+  }
+  for(const m of sorted){
+    if(picked.some(big=>isSubset(m,big))) continue;
+    picked.push(m);
+  }
+  // 表示は自然な順に戻す。
+  return picked.sort((a,b)=>(a.cells[0]-b.cells[0])||(b.cells.length-a.cells.length));
+}
 function placeTile(cellIndex){
   if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
   if(state.board[cellIndex]){setMsg('そこは埋まってる','bad');return;}
@@ -336,16 +353,29 @@ function placeTile(cellIndex){
   recentCells=[cellIndex];
   let gained=1;
   if(made.length){
-    for(const m of made){
+    const scoring=selectScoringMatches(made);
+    const usedCellsThisTurn=new Set();
+    for(const m of scoring){
       gained += m.pts;
       state.wordsMade++;
-      m.cells.forEach(i=>{const cell=state.board[i]; if(cell){cell.owner=state.turn%state.playerCount; cell.useCount=useCountOf(cell)+1; cell.unusedPenaltyApplied=false;} if(!recentCells.includes(i)) recentCells.push(i);});
+      m.cells.forEach(i=>{
+        usedCellsThisTurn.add(i);
+        if(!recentCells.includes(i)) recentCells.push(i);
+      });
       addLog(`${p.name}: ${m.text} / ${m.ja}（${m.kind}） +${m.pts}`,true);
     }
-    setMsg(`${made[0].text} 成立！ ${made[0].ja} +${gained}`,'good');
+    usedCellsThisTurn.forEach(i=>{
+      const cell=state.board[i];
+      if(cell){
+        cell.owner=state.turn%state.playerCount;
+        cell.useCount=useCountOf(cell)+1;
+        cell.unusedPenaltyApplied=false;
+      }
+    });
+    setMsg(`${scoring[0].text} 成立！ ${scoring[0].ja} +${gained}`,'good');
     playChime(true);
-    showFx(made,gained,cellIndex);
-    speakResult(made[0]);
+    showFx(scoring,gained,cellIndex);
+    speakResult(scoring[0]);
   }else{
     gained = -UNUSED_PENALTY;
     const cell=state.board[cellIndex];
