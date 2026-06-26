@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
-<!-- fix: English-as-adjective and multi-sentence combo 2026-06-26-2045 -->
+<!-- fix: detailed combo route show and sequential speech 2026-06-26-2055 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -26,7 +26,8 @@
   #start{position:fixed;inset:0;z-index:50;background:linear-gradient(180deg,rgba(3,7,18,.92),rgba(15,23,42,.82));display:flex;align-items:center;justify-content:center;padding:18px}.startCard{width:min(560px,94vw);background:rgba(15,23,42,.92);border:1px solid rgba(255,255,255,.2);border-radius:24px;padding:20px;box-shadow:0 25px 80px rgba(0,0,0,.45);backdrop-filter:blur(12px)}.startCard h1{margin:0 0 7px;font-size:28px}.startCard p{font-size:14px;color:#dbeafe;line-height:1.55}.startCard ul{font-size:13px;color:#e5e7eb;line-height:1.55;padding-left:20px}.startCard .btn{font-size:17px;width:100%;margin-top:10px;padding:13px}
 
   .fxBanner{position:fixed;left:50%;top:18%;transform:translateX(-50%) scale(.9);z-index:70;pointer-events:none;opacity:0;min-width:min(520px,92vw);text-align:center;padding:18px 16px;border-radius:24px;background:linear-gradient(135deg,rgba(22,163,74,.92),rgba(37,99,235,.9));border:2px solid rgba(255,255,255,.38);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 40px rgba(134,239,172,.35)}
-  .fxBanner.show{animation:bannerBoom 1.8s ease both}.fxBanner.combo{background:linear-gradient(135deg,rgba(245,158,11,.94),rgba(219,39,119,.92),rgba(37,99,235,.9));box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 50px rgba(250,204,21,.52)}.fxBig{font-size:30px;font-weight:1000;letter-spacing:.02em;text-shadow:0 3px 12px rgba(0,0,0,.35)}.fxEn{font-size:21px;font-weight:1000;margin-top:4px}.fxJa{font-size:16px;color:#fef3c7;margin-top:2px}.fxPts{font-size:18px;color:#bbf7d0;font-weight:1000;margin-top:4px}
+  .fxBanner.show{animation:bannerBoom 2.4s ease both}.fxBanner.combo{background:linear-gradient(135deg,rgba(245,158,11,.94),rgba(219,39,119,.92),rgba(37,99,235,.9));box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 50px rgba(250,204,21,.52)}.fxBig{font-size:30px;font-weight:1000;letter-spacing:.02em;text-shadow:0 3px 12px rgba(0,0,0,.35)}.fxEn{font-size:21px;font-weight:1000;margin-top:4px}.fxJa{font-size:16px;color:#fef3c7;margin-top:2px}.fxPts{font-size:18px;color:#bbf7d0;font-weight:1000;margin-top:4px}
+  .comboPanel{position:fixed;left:50%;top:33%;transform:translateX(-50%);z-index:69;width:min(620px,94vw);max-height:48vh;overflow:auto;background:rgba(15,23,42,.96);border:2px solid rgba(250,204,21,.55);border-radius:20px;padding:12px;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 35px rgba(250,204,21,.25);display:none;pointer-events:auto}.comboPanel.show{display:block;animation:comboHold .25s ease both}.comboPanel h3{margin:0 0 8px;font-size:17px;color:#fde68a}.comboItem{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);border-radius:13px;padding:8px;margin-top:7px}.comboItem.active{outline:2px solid rgba(56,189,248,.75);background:rgba(56,189,248,.13)}.comboItem b{color:#fff;font-size:15px}.comboJa{color:#fef3c7;font-size:12px;margin-top:2px}.comboRoute{font-size:11px;color:#bfdbfe;margin-top:4px;line-height:1.35}.comboCards{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.routeChip{font-size:10px;font-weight:900;border-radius:999px;background:rgba(56,189,248,.18);border:1px solid rgba(125,211,252,.35);padding:3px 6px;color:#dbeafe}.cell.routeHit{outline:3px solid rgba(250,204,21,.95);box-shadow:0 0 18px rgba(250,204,21,.75), inset 0 0 14px rgba(250,204,21,.2);transform:scale(1.04)}.routeStep{position:absolute;right:4px;top:4px;min-width:16px;height:16px;border-radius:999px;background:#facc15;color:#111827;font-size:10px;font-weight:1000;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.35)}@keyframes comboHold{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @keyframes bannerBoom{0%{opacity:0;transform:translateX(-50%) scale(.72) rotate(-2deg);filter:brightness(2)}12%{opacity:1;transform:translateX(-50%) scale(1.08) rotate(1deg)}25%{transform:translateX(-50%) scale(1) rotate(0)}78%{opacity:1}100%{opacity:0;transform:translateX(-50%) scale(.96) translateY(-18px)}}
   .scorePop{position:fixed;z-index:80;pointer-events:none;font-weight:1000;font-size:26px;color:#fde68a;text-shadow:0 3px 12px rgba(0,0,0,.7);animation:scoreFly 1.2s ease-out both}.scorePop small{display:block;font-size:13px;color:#bbf7d0}.spark{position:fixed;z-index:79;width:8px;height:8px;border-radius:50%;pointer-events:none;background:#fde68a;box-shadow:0 0 14px #fde68a;animation:sparkFly .8s ease-out both}
   @keyframes scoreFly{0%{opacity:0;transform:translate(-50%,0) scale(.7)}15%{opacity:1;transform:translate(-50%,-10px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-78px) scale(.9)}}
@@ -57,6 +58,7 @@
   </div>
 </div>
 <div id="fxBanner" class="fxBanner"><div class="fxBig">GOOD!</div><div class="fxEn" id="fxEn"></div><div class="fxJa" id="fxJa"></div><div class="fxPts" id="fxPts"></div></div>
+<div id="comboPanel" class="comboPanel"><h3 id="comboTitle">成立詳細</h3><div id="comboList"></div></div>
 <div id="app">
   <div class="top">
     <section class="panel hero">
@@ -285,21 +287,42 @@ function pickVoice(lang){
   const voices=window.speechSynthesis.getVoices()||[];
   return voices.find(v=>v.lang===lang) || voices.find(v=>String(v.lang||'').toLowerCase().startsWith(lang.slice(0,2).toLowerCase())) || null;
 }
-function speakResult(m){
-  if(!m||!('speechSynthesis' in window)) return;
-  const enText=m.text;
-  const jaText=m.ja||translateSequence(enText.split(' '),m);
+function speakOne(enText,jaText,onEnd){
+  if(!('speechSynthesis' in window)){ if(onEnd) onEnd(); return; }
   try{
-    window.speechSynthesis.cancel();
     const en=new SpeechSynthesisUtterance(enText);
     en.lang='en-US';en.rate=.82;en.pitch=1;en.volume=1;
     const ev=pickVoice('en-US'); if(ev) en.voice=ev;
     const ja=new SpeechSynthesisUtterance(jaText);
     ja.lang='ja-JP';ja.rate=.95;ja.pitch=1;ja.volume=1;
     const jv=pickVoice('ja-JP'); if(jv) ja.voice=jv;
+    ja.onend=()=>{ if(onEnd) onEnd(); };
     en.onend=()=>setTimeout(()=>window.speechSynthesis.speak(ja),180);
     window.speechSynthesis.speak(en);
-  }catch(e){}
+  }catch(e){ if(onEnd) onEnd(); }
+}
+function speakResult(m){
+  if(!m) return;
+  const enText=m.text;
+  const jaText=m.ja||translateSequence(enText.split(' '),m);
+  try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+  speakOne(enText,jaText);
+}
+function speakResultsSequential(matches){
+  if(!matches||!matches.length) return;
+  const unique=[]; const seen=new Set();
+  for(const m of matches){const k=norm(m.text.split(' ')); if(seen.has(k)) continue; seen.add(k); unique.push(m);}
+  if(!unique.length) return;
+  try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+  let i=0;
+  const next=()=>{
+    const m=unique[i++];
+    if(!m) return;
+    highlightRoute(m, i-1, 1850);
+    const prefix=unique.length>1 ? `Combo ${i}. ` : '';
+    speakOne(prefix + m.text, m.ja||translateSequence(m.text.split(' '),m), ()=>setTimeout(next,260));
+  };
+  next();
 }
 function playChime(ok=true){
   try{
@@ -400,16 +423,42 @@ function summarizeScoring(scoring){
     g.routes.push(m);
   }
   const list=[...groups.values()];
-  const routeCombo=list.filter(g=>g.count>1).sort((a,b)=>b.count-a.count || b.pts-a.pts)[0] || null;
   let comboInfo=null;
-  if(routeCombo){
-    comboInfo={count:routeCombo.count, text:routeCombo.text, ja:routeCombo.ja, bonus:(routeCombo.count-1)*18, mode:'route'};
-  }else if(list.length>1){
-    // 別々の英文が同時成立した場合もコンボ扱いにする。
-    // 例：I am English と I like English が同時成立。
-    comboInfo={count:list.length, text:list.map(g=>g.text).join(' / '), ja:'複数英文成立', bonus:(list.length-1)*18, mode:'multi'};
+  const totalRoutes=scoring.length;
+  if(totalRoutes>1){
+    const sentenceCount=list.length;
+    const routeBonus=(totalRoutes-1)*18;
+    comboInfo={count:totalRoutes, sentenceCount, routeCount:totalRoutes, text:list.map(g=>g.text+(g.count>1?` ×${g.count}`:'')).join(' / '), ja:'成立詳細を表示中', bonus:routeBonus, mode:sentenceCount>1?'multi':'route', groups:list, matches:scoring};
   }
   return {groups:list, comboInfo};
+}
+function coord(i){const p=xy(i);return String.fromCharCode(65+p.x)+(p.y+1);}
+function routeText(m){return (m.cells||[]).map((i,n)=>`${n+1}.${coord(i)} ${state.board[i]?.w||''}`).join(' → ');}
+let routeFocusCells=[];
+let routeFocusTimer=null;
+function highlightRoute(m,seq=0,duration=1600){
+  routeFocusCells=(m?.cells||[]).slice();
+  render();
+  clearTimeout(routeFocusTimer);
+  routeFocusTimer=setTimeout(()=>{routeFocusCells=[];render();},duration);
+  const items=document.querySelectorAll('.comboItem');
+  items.forEach((el,i)=>el.classList.toggle('active',i===seq));
+}
+function showComboDetails(scoring,comboInfo){
+  const panel=$('comboPanel'), listEl=$('comboList'), title=$('comboTitle');
+  if(!panel||!listEl) return;
+  if(!comboInfo || scoring.length<=1){panel.classList.remove('show');return;}
+  title.textContent=`COMBO ×${comboInfo.count}：${comboInfo.sentenceCount||comboInfo.count}文 / ${comboInfo.routeCount||comboInfo.count}経路`;
+  listEl.innerHTML=scoring.map((m,i)=>{
+    const ja=m.ja||translateSequence(m.text.split(' '),m);
+    const chips=(m.cells||[]).map((c,n)=>`<span class="routeChip">${n+1} ${coord(c)} ${esc(state.board[c]?.w||'')}</span>`).join('');
+    return `<div class="comboItem" data-route="${i}"><b>${i+1}. ${esc(m.text)}</b><div class="comboJa">${esc(ja)} / ${esc(m.kind||'')}</div><div class="comboRoute">${esc(m.dir||'経路')}：${esc(routeText(m))}</div><div class="comboCards">${chips}</div></div>`;
+  }).join('');
+  panel.classList.add('show');
+  panel.querySelectorAll('.comboItem').forEach((el,i)=>{el.onclick=()=>highlightRoute(scoring[i],i,2600);});
+  clearTimeout(panel._hideTimer);
+  panel._hideTimer=setTimeout(()=>panel.classList.remove('show'),14000);
+  highlightRoute(scoring[0],0,2200);
 }
 function placeTile(cellIndex){
   if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
@@ -421,7 +470,7 @@ function placeTile(cellIndex){
   p.hand[selectedHandIndex]=drawOneForSlot(selectedHandIndex);
   // 種類別固定スロットなのでソートしない。各枠を維持する。
   const made=scanFromCell(cellIndex);
-  recentCells=[cellIndex];
+  recentCells=[cellIndex]; routeFocusCells=[];
   let gained=1;
   if(made.length){
     const scoring=selectScoringMatches(made);
@@ -441,6 +490,7 @@ function placeTile(cellIndex){
     for(const g of groups){
       const suffix=g.count>1?` COMBO×${g.count}（${g.count}経路）`:'';
       addLog(`${p.name}: ${g.text}${suffix} / ${g.ja}（${g.kind}） +${g.pts}${g.count>1?` +コンボ${(g.count-1)*18}`:''}`,true);
+      g.routes.forEach((r,ri)=>addLog(`　経路${ri+1}: ${r.dir||'経路'} ${routeText(r)}`,true));
     }
     useDelta.forEach((delta,i)=>{
       const cell=state.board[i];
@@ -458,7 +508,8 @@ function placeTile(cellIndex){
     }
     playChime(true);
     showFx(scoring,gained,cellIndex,comboInfo);
-    speakResult(scoring[0]);
+    showComboDetails(scoring,comboInfo);
+    speakResultsSequential(scoring);
   }else{
     gained = -UNUSED_PENALTY;
     const cell=state.board[cellIndex];
@@ -466,6 +517,7 @@ function placeTile(cellIndex){
     addLog(`${p.name}: ${word} を配置。でも英文に未使用 -${UNUSED_PENALTY}`,false);
     setMsg(`成立なし。未使用カード減点 -${UNUSED_PENALTY}。つなげ方を狙え！`,'bad');
     playChime(false);
+    const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
   }
   p.score+=gained;
   recalcTiles();
@@ -488,7 +540,7 @@ function newGame(broadcastIt=true){const pc=Number($('playerCount').value)||2;st
 function render(){
   $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
   const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
-  const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const ownerColor=state.players[c.owner]?.color||'#fff';const cnt=useCountOf(c);const uc=useColor(cnt, ownerColor);if(uc.rainbow)d.classList.add('rainbow');if(cnt<=0)d.classList.add('unused');const usedLabel=cnt>0?`×${cnt}`:'未';d.innerHTML=`<span class="owner" style="background:${ownerColor}"></span><span class="word">${esc(c.w)}</span><span class="useCount">${usedLabel}</span>${cnt<=0?'<span class="unusedMark">未使用</span>':''}<span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${uc.bg}, ${hexAlpha(ownerColor,.13)}, rgba(255,255,255,.05))`;d.style.borderColor=uc.border;d.style.color=uc.text;} d.onclick=()=>placeTile(i);b.appendChild(d);});
+  const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';const routeNo=routeFocusCells.indexOf(i);if(routeNo>=0)d.classList.add('routeHit');if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const ownerColor=state.players[c.owner]?.color||'#fff';const cnt=useCountOf(c);const uc=useColor(cnt, ownerColor);if(uc.rainbow)d.classList.add('rainbow');if(cnt<=0)d.classList.add('unused');const usedLabel=cnt>0?`×${cnt}`:'未';d.innerHTML=`<span class="owner" style="background:${ownerColor}"></span>${routeNo>=0?`<span class="routeStep">${routeNo+1}</span>`:''}<span class="word">${esc(c.w)}</span><span class="useCount">${usedLabel}</span>${cnt<=0?'<span class="unusedMark">未使用</span>':''}<span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${uc.bg}, ${hexAlpha(ownerColor,.13)}, rgba(255,255,255,.05))`;d.style.borderColor=uc.border;d.style.color=uc.text;} d.onclick=()=>placeTile(i);b.appendChild(d);});
   const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const info=slotInfo(i,w);const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(info.label)}</small>`;t.onclick=()=>{selectedHandIndex=i;render();};h.appendChild(t);});
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
