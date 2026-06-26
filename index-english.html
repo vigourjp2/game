@@ -43,7 +43,7 @@
 <body>
 <div id="start">
   <div class="startCard">
-    <span class="badge soloBadge">SOLO</span><span class="badge">ONLINE</span><span class="badge">VOICE</span><span class="badge">陣取り</span>
+    <span class="badge soloBadge">SOLO</span><span class="badge">ONLINE</span><span class="badge">VOICE</span><span class="badge">Link Grammar対応</span>
     <h1>English Word Pittan Online</h1>
     <p>英単語タイルを置いて、英文・フレーズ・文法パターンを作るパズル。1人練習も、オンライン複数人対戦も対応。成立した英文は英語で読み上げて、続けて日本語訳も読み上げます。</p>
     <ul>
@@ -98,7 +98,7 @@
     </section>
     <aside class="side">
       <section class="panel scorePanel"><h2>スコア / 陣地</h2><div class="players" id="players"></div></section>
-      <section class="panel dictPanel"><h2>成立ルール</h2><div class="rules">全ルート照合 + フレーズバンク + 品詞テンプレ + Harper補助。<br><b>文</b>: You go to school / Music is fun<br><b>句</b>: listen to music / be good at<br><b>型</b>: 主語+動詞+目的語、be+形容詞+前置詞</div><div class="targetList" id="targetList"></div></section>
+      <section class="panel dictPanel"><h2>成立ルール</h2><div class="rules">全ルート照合 + Link Grammar Parser API + フレーズバンク + 品詞テンプレ。<br><b>文</b>: You go to school / Music is fun<br><b>句</b>: listen to music / be good at<br><b>型</b>: 主語+動詞+目的語、be+形容詞+前置詞</div><div class="targetList" id="targetList"></div></section>
       <section class="panel logPanel"><h2>ログ</h2><div class="log" id="log"></div></section>
     </aside>
   </main>
@@ -154,6 +154,40 @@ const PHRASE_BANK = [
   ['music is fun','音楽は楽しい','完全な文',34,'JHS1'],['soccer is fun','サッカーは楽しい','完全な文',34,'JHS1'],['English is interesting','英語は面白い','完全な文',36,'JHS2'],['apples are good','りんごは良い/おいしい','完全な文',34,'JHS1'],['books are interesting','本は面白い','完全な文',36,'JHS2']
 ];
 const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toLowerCase(),{text,ja,kind,pts,level,source:'phraseBank',exact:true}]));
+
+// Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
+// 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v1';
+const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
+let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || '').trim();
+let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
+let linkGrammarCache={};
+try{linkGrammarCache=JSON.parse(localStorage.getItem(LINK_GRAMMAR_CACHE_KEY)||'{}')||{};}catch(e){linkGrammarCache={};}
+async function linkGrammarEvaluate(words){
+  const w=lowerWords(words);
+  const key=norm(w);
+  if(!linkGrammarApi) return null;
+  if(!isLikelyCompleteSentenceWords(w) || hasOrphanTail(w)) return null;
+  if(linkGrammarCache[key]!==undefined){
+    return linkGrammarCache[key] ? {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:'cache'} : null;
+  }
+  try{
+    linkGrammarStatus='CHECK'; renderSafe();
+    const res=await fetch(linkGrammarApi.replace(/\/$/,'')+'/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:capSentence(w),words:w})});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const pass=!!(data && data.ok && data.fullParse !== false && Number(data.nullCount||0)===0);
+    linkGrammarCache[key]=pass; try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    linkGrammarStatus='ON'; renderSafe();
+    return pass ? {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:data} : null;
+  }catch(e){console.warn('Link Grammar API failed',e); linkGrammarStatus='ERR'; renderSafe(); return null;}
+}
+function setLinkGrammarApi(url){
+  linkGrammarApi=String(url||'').trim();
+  if(linkGrammarApi) localStorage.setItem(LINK_GRAMMAR_API_KEY,linkGrammarApi); else localStorage.removeItem(LINK_GRAMMAR_API_KEY);
+  linkGrammarStatus=linkGrammarApi?'READY':'OFF'; renderSafe();
+}
+window.setLinkGrammarApi=setLinkGrammarApi;
 const HARPER_CACHE_KEY='englishPittan.harperCache.v1';
 let harperLinter=null, harperStatus='OFF', harperLoading=false;
 let harperCache={};
@@ -180,9 +214,33 @@ function isLikelyCompleteSentenceWords(words){
   const w=lowerWords(words); if(w.length<3) return false;
   return isSubjWord(w[0]) || isNounLike(w[0]);
 }
+function hasPosWord(word,pos){ return wordPos(String(word||'').toLowerCase()).includes(pos); }
+function hasOrphanTail(words){
+  const w=lowerWords(words); if(w.length<3) return true;
+  const last=w[w.length-1];
+  // 文末が主語・代名詞・前置詞・冠詞・助動詞などで終わる候補は、Harperが見逃してもゲーム上は不成立。
+  if(hasPosWord(last,'subj')||hasPosWord(last,'pron')||hasPosWord(last,'pronObj')||hasPosWord(last,'article')||hasPosWord(last,'prep')||hasPosWord(last,'to')||hasPosWord(last,'be')||hasPosWord(last,'modal')||hasPosWord(last,'not')||hasPosWord(last,'conj')) return true;
+  // I like apples they のような「主語が文末に余る」候補を禁止。
+  for(let i=2;i<w.length;i++){
+    if(isSubjWord(w[i]) && !['and','because'].includes(w[i-1])) return true;
+  }
+  // 前置詞やtoの直後で文が切れている/不自然に主語が来る候補を禁止。
+  for(let i=0;i<w.length-1;i++){
+    if((hasPosWord(w[i],'prep')||hasPosWord(w[i],'to')) && (hasPosWord(w[i+1],'subj')||hasPosWord(w[i+1],'be')||hasPosWord(w[i+1],'modal'))) return true;
+  }
+  return false;
+}
+function isHarperCandidateWords(words){
+  const w=lowerWords(words);
+  if(!isLikelyCompleteSentenceWords(w)) return false;
+  if(hasOrphanTail(w)) return false;
+  // Harperは「候補文の最終確認」に限定。最低限、主語/名詞 + be/一般動詞/助動詞 があるものだけ投げる。
+  const hasFinite = (w.length>=3 && (hasPosWord(w[1],'be') || hasPosWord(w[1],'verb') || hasPosWord(w[1],'verbWant') || hasPosWord(w[1],'modal')));
+  return hasFinite;
+}
 async function harperEvaluate(words){
   const key=norm(words);
-  if(!isLikelyCompleteSentenceWords(words)) return null;
+  if(!isHarperCandidateWords(words)) return null;
   if(harperCache[key]!==undefined) return harperCache[key] ? {kind:'Harper確認文',pts:32+Math.min(20, words.length*4),text:capSentence(words).replace(/[.]$/,''),source:'harper'} : null;
   const ok=await initHarper();
   if(!ok || !harperLinter) return null;
@@ -426,6 +484,9 @@ function evaluateSequence(words){
 async function evaluateSequenceAsync(words){
   const ev=grammarEvaluate(words);
   if(ev) return ev;
+  const lg=await linkGrammarEvaluate(words);
+  if(lg) return lg;
+  // Harperは成立判定の主役にしない。Link Grammar API未設定時の最後の補助だけ。
   return await harperEvaluate(words);
 }
 
@@ -756,7 +817,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">Harper:${esc(harperStatus)}</span><span class="chip">PhraseBank:${PHRASE_BANK.length}</span><span class="chip">全ルート最大8語/2曲がり</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">LinkGrammar:${esc(linkGrammarStatus)}</span><span class="chip">Harper:${esc(harperStatus)}</span><span class="chip">PhraseBank:${PHRASE_BANK.length}</span><span class="chip">全ルート最大8語/2曲がり</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
 }
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
