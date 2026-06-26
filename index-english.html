@@ -27,7 +27,7 @@
 
   .fxBanner{position:fixed;left:50%;top:18%;transform:translateX(-50%) scale(.9);z-index:70;pointer-events:none;opacity:0;min-width:min(520px,92vw);text-align:center;padding:18px 16px;border-radius:24px;background:linear-gradient(135deg,rgba(22,163,74,.92),rgba(37,99,235,.9));border:2px solid rgba(255,255,255,.38);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 40px rgba(134,239,172,.35)}
   .fxBanner.show{animation:bannerBoom 2.4s ease both}.fxBanner.combo{background:linear-gradient(135deg,rgba(245,158,11,.94),rgba(219,39,119,.92),rgba(37,99,235,.9));box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 50px rgba(250,204,21,.52)}.fxBig{font-size:30px;font-weight:1000;letter-spacing:.02em;text-shadow:0 3px 12px rgba(0,0,0,.35)}.fxEn{font-size:21px;font-weight:1000;margin-top:4px}.fxJa{font-size:16px;color:#fef3c7;margin-top:2px}.fxPts{font-size:18px;color:#bbf7d0;font-weight:1000;margin-top:4px}
-  .comboPanel{position:fixed;left:50%;top:33%;transform:translateX(-50%);z-index:69;width:min(620px,94vw);max-height:48vh;overflow:auto;background:rgba(15,23,42,.96);border:2px solid rgba(250,204,21,.55);border-radius:20px;padding:12px;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 35px rgba(250,204,21,.25);display:none;pointer-events:auto}.comboPanel.show{display:block;animation:comboHold .25s ease both}.comboPanel h3{margin:0 0 8px;font-size:17px;color:#fde68a}.comboItem{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);border-radius:13px;padding:8px;margin-top:7px}.comboItem.active{outline:2px solid rgba(56,189,248,.75);background:rgba(56,189,248,.13)}.comboItem b{color:#fff;font-size:15px}.comboJa{color:#fef3c7;font-size:12px;margin-top:2px}.comboRoute{font-size:11px;color:#bfdbfe;margin-top:4px;line-height:1.35}.comboCards{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.routeChip{font-size:10px;font-weight:900;border-radius:999px;background:rgba(56,189,248,.18);border:1px solid rgba(125,211,252,.35);padding:3px 6px;color:#dbeafe}.cell.routeHit{outline:3px solid rgba(250,204,21,.95);box-shadow:0 0 18px rgba(250,204,21,.75), inset 0 0 14px rgba(250,204,21,.2);transform:scale(1.04)}.routeStep{position:absolute;right:4px;top:4px;min-width:16px;height:16px;border-radius:999px;background:#facc15;color:#111827;font-size:10px;font-weight:1000;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.35)}@keyframes comboHold{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  .comboPanel{position:fixed;left:50%;top:33%;transform:translateX(-50%);z-index:69;width:min(620px,94vw);max-height:48vh;overflow:auto;background:rgba(15,23,42,.96);border:2px solid rgba(250,204,21,.55);border-radius:20px;padding:12px;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 35px rgba(250,204,21,.25);display:none;pointer-events:auto}.comboPanel.show{display:block;animation:comboHold .25s ease both}.comboPanel h3{margin:0 34px 8px 0;font-size:17px;color:#fde68a}.comboClose{position:sticky;top:0;float:right;z-index:2;width:30px;height:30px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(15,23,42,.92);color:#fff;font-size:20px;font-weight:1000;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.35)}.comboItem{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);border-radius:13px;padding:8px;margin-top:7px}.comboItem.active{outline:2px solid rgba(56,189,248,.75);background:rgba(56,189,248,.13)}.comboItem b{color:#fff;font-size:15px}.comboJa{color:#fef3c7;font-size:12px;margin-top:2px}.comboRoute{font-size:11px;color:#bfdbfe;margin-top:4px;line-height:1.35}.comboCards{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.routeChip{font-size:10px;font-weight:900;border-radius:999px;background:rgba(56,189,248,.18);border:1px solid rgba(125,211,252,.35);padding:3px 6px;color:#dbeafe}.cell.routeHit{outline:3px solid rgba(250,204,21,.95);box-shadow:0 0 18px rgba(250,204,21,.75), inset 0 0 14px rgba(250,204,21,.2);transform:scale(1.04)}.routeStep{position:absolute;right:4px;top:4px;min-width:16px;height:16px;border-radius:999px;background:#facc15;color:#111827;font-size:10px;font-weight:1000;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.35)}@keyframes comboHold{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
   @keyframes bannerBoom{0%{opacity:0;transform:translateX(-50%) scale(.72) rotate(-2deg);filter:brightness(2)}12%{opacity:1;transform:translateX(-50%) scale(1.08) rotate(1deg)}25%{transform:translateX(-50%) scale(1) rotate(0)}78%{opacity:1}100%{opacity:0;transform:translateX(-50%) scale(.96) translateY(-18px)}}
   .scorePop{position:fixed;z-index:80;pointer-events:none;font-weight:1000;font-size:26px;color:#fde68a;text-shadow:0 3px 12px rgba(0,0,0,.7);animation:scoreFly 1.2s ease-out both}.scorePop small{display:block;font-size:13px;color:#bbf7d0}.spark{position:fixed;z-index:79;width:8px;height:8px;border-radius:50%;pointer-events:none;background:#fde68a;box-shadow:0 0 14px #fde68a;animation:sparkFly .8s ease-out both}
   @keyframes scoreFly{0%{opacity:0;transform:translate(-50%,0) scale(.7)}15%{opacity:1;transform:translate(-50%,-10px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-78px) scale(.9)}}
@@ -58,7 +58,7 @@
   </div>
 </div>
 <div id="fxBanner" class="fxBanner"><div class="fxBig">GOOD!</div><div class="fxEn" id="fxEn"></div><div class="fxJa" id="fxJa"></div><div class="fxPts" id="fxPts"></div></div>
-<div id="comboPanel" class="comboPanel"><h3 id="comboTitle">成立詳細</h3><div id="comboList"></div></div>
+<div id="comboPanel" class="comboPanel"><button id="comboClose" class="comboClose" type="button">×</button><h3 id="comboTitle">成立詳細</h3><div id="comboList"></div></div>
 <div id="app">
   <div class="top">
     <section class="panel hero">
@@ -822,10 +822,21 @@ function showComboDetails(scoring,comboInfo){
     return `<div class="comboItem" data-route="${i}"><b>${i+1}. ${esc(m.text)}</b><div class="comboJa">${esc(ja)} / ${esc(m.kind||'')}</div><div class="comboRoute">${esc(m.dir||'経路')}：${esc(routeText(m))}</div><div class="comboCards">${chips}</div></div>`;
   }).join('');
   panel.classList.add('show');
-  panel.querySelectorAll('.comboItem').forEach((el,i)=>{el.onclick=()=>highlightRoute(scoring[i],i,2600);});
+  // コンボ詳細は読了前に消さない。次コンボ・閉じる・盤面リセットまで保持する。
   clearTimeout(panel._hideTimer);
-  panel._hideTimer=setTimeout(()=>panel.classList.remove('show'),14000);
-  highlightRoute(scoring[0],0,2200);
+  panel._hideTimer=null;
+  panel.querySelectorAll('.comboItem').forEach((el,i)=>{el.onclick=()=>highlightRoute(scoring[i],i,5200);});
+  const closeBtn=$('comboClose');
+  if(closeBtn && !closeBtn._wired){
+    closeBtn._wired=true;
+    closeBtn.onclick=()=>{
+      clearTimeout(panel._hideTimer);
+      panel.classList.remove('show');
+      routeFocusCells=[];
+      render();
+    };
+  }
+  highlightRoute(scoring[0],0,5200);
 }
 async function placeTile(cellIndex){
   if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
