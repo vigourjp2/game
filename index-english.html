@@ -157,7 +157,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v1';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v2';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || '').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -168,18 +168,34 @@ async function linkGrammarEvaluate(words){
   const key=norm(w);
   if(!linkGrammarApi) return null;
   if(!isLikelyCompleteSentenceWords(w) || hasOrphanTail(w)) return null;
-  if(linkGrammarCache[key]!==undefined){
-    return linkGrammarCache[key] ? {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:'cache'} : null;
+  const cached=linkGrammarCache[key];
+  if(cached!==undefined){
+    if(cached && typeof cached==='object' && cached.ok){
+      return {kind:cached.kind||'LinkGrammar構文解析',pts:cached.pts||48+Math.min(24,w.length*5),text:cached.text||capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:'cache',ja:cached.ja||''};
+    }
+    if(cached===true) return {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:'cache'};
+    return null;
   }
   try{
     linkGrammarStatus='CHECK'; renderSafe();
-    const res=await fetch(linkGrammarApi.replace(/\/$/,'')+'/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:capSentence(w),words:w})});
+    const base=linkGrammarApi.replace(/\/$/,'');
+    const text=capSentence(w).replace(/[.]$/,'');
+    // /check-and-translate がある新APIを優先。古いAPIなら /check にフォールバック。
+    let res=await fetch(base+'/check-and-translate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text,words:w})});
+    if(res.status===404) res=await fetch(base+'/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text,words:w})});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     const pass=!!(data && data.ok && data.fullParse !== false && Number(data.nullCount||0)===0);
-    linkGrammarCache[key]=pass; try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    const ja=(data && (data.ja || data.translation?.ja || data.translation?.translatedText)) || '';
+    if(pass){
+      const ev={ok:true,kind:data.kind||'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:(data.text||text).replace(/[.]$/,''),ja};
+      linkGrammarCache[key]=ev;
+    }else{
+      linkGrammarCache[key]=false;
+    }
+    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     linkGrammarStatus='ON'; renderSafe();
-    return pass ? {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:capSentence(w).replace(/[.]$/,''),source:'linkGrammar',parser:data} : null;
+    return pass ? {kind:(data.kind||'LinkGrammar構文解析'),pts:48+Math.min(24,w.length*5),text:(data.text||text).replace(/[.]$/,''),source:'linkGrammar',parser:data,ja} : null;
   }catch(e){console.warn('Link Grammar API failed',e); linkGrammarStatus='ERR'; renderSafe(); return null;}
 }
 function setLinkGrammarApi(url){
@@ -486,10 +502,44 @@ async function evaluateSequenceAsync(words){
   if(ev) return ev;
   const lg=await linkGrammarEvaluate(words);
   if(lg) return lg;
-  // Harperは成立判定の主役にしない。Link Grammar API未設定時の最後の補助だけ。
-  return await harperEvaluate(words);
+  // Harperは成立判定から外す。校正ツールを正解判定に使うと I like big のような事故が起きるため。
+  return null;
 }
 
+const TRANSLATION_CACHE_KEY='englishPittan.translationCache.v1';
+let translationCache={};
+try{translationCache=JSON.parse(localStorage.getItem(TRANSLATION_CACHE_KEY)||'{}')||{};}catch(e){translationCache={};}
+async function translateWithApi(text){
+  if(!linkGrammarApi) return '';
+  const key=String(text||'').trim().toLowerCase();
+  if(!key) return '';
+  if(translationCache[key]) return translationCache[key];
+  try{
+    const base=linkGrammarApi.replace(/\/$/,'');
+    const res=await fetch(base+'/translate?text='+encodeURIComponent(text));
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const ja=(data && (data.ja || data.translatedText || data.translation?.ja || data.translation?.translatedText)) || '';
+    if(ja){
+      translationCache[key]=ja;
+      try{localStorage.setItem(TRANSLATION_CACHE_KEY,JSON.stringify(translationCache));}catch(e){}
+      return ja;
+    }
+  }catch(e){console.warn('translate API failed',e);}
+  return '';
+}
+async function resolveJapanese(words,ev){
+  if(ev && ev.ja) return ev.ja;
+  const key=norm(words);
+  if(EXACT_JA.has(key)) return EXACT_JA.get(key);
+  if(PHRASE_MAP.has(key)) return PHRASE_MAP.get(key).ja;
+  const text=(ev?.text || capSentence(words).replace(/[.]$/,'')).trim();
+  if(text && isLikelyCompleteSentenceWords(words)){
+    const apiJa=await translateWithApi(text);
+    if(apiJa) return apiJa;
+  }
+  return translateSequence(words,ev);
+}
 function translateSequence(words,ev){
   const key=norm(words);
   if(EXACT_JA.has(key)) return EXACT_JA.get(key);
@@ -633,7 +683,7 @@ async function scanFromCell(placeIndex){
   }
   for(const st of starts){ dfs(st.x,st.y,[{i:st.i,w:st.w}],null,0); }
 
-  // まず内部・フレーズバンクを同期評価。未知の完全英文だけHarperへ回す。
+  // まず内部・フレーズバンクを同期評価。未知の完全英文だけLink Grammar APIへ回す。Harper判定は使わない。
   const seenCand=new Set();
   const uniq=[];
   for(const c of candidates){
@@ -647,7 +697,7 @@ async function scanFromCell(placeIndex){
     let ev=evaluateSequence(words);
     if(!ev && isLikelyCompleteSentenceWords(words)) ev=await evaluateSequenceAsync(words);
     if(ev){
-      ev.ja=translateSequence(words,ev);
+      ev.ja=await resolveJapanese(words,ev);
       found.push({...ev,cells:c.path.map(s=>s.i),dir:c.label});
     }
   }
@@ -817,7 +867,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">LinkGrammar:${esc(linkGrammarStatus)}</span><span class="chip">Harper:${esc(harperStatus)}</span><span class="chip">PhraseBank:${PHRASE_BANK.length}</span><span class="chip">全ルート最大8語/2曲がり</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">LinkGrammar:${esc(linkGrammarStatus)}</span><span class="chip">Harper:判定OFF</span><span class="chip">PhraseBank:${PHRASE_BANK.length}</span><span class="chip">全ルート最大8語/2曲がり</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
 }
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
