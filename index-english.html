@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
-<!-- fix: category guaranteed hand slots 2026-06-26-2025 -->
+<!-- fix: combo route scoring and per-route use counts 2026-06-26-2035 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -26,7 +26,7 @@
   #start{position:fixed;inset:0;z-index:50;background:linear-gradient(180deg,rgba(3,7,18,.92),rgba(15,23,42,.82));display:flex;align-items:center;justify-content:center;padding:18px}.startCard{width:min(560px,94vw);background:rgba(15,23,42,.92);border:1px solid rgba(255,255,255,.2);border-radius:24px;padding:20px;box-shadow:0 25px 80px rgba(0,0,0,.45);backdrop-filter:blur(12px)}.startCard h1{margin:0 0 7px;font-size:28px}.startCard p{font-size:14px;color:#dbeafe;line-height:1.55}.startCard ul{font-size:13px;color:#e5e7eb;line-height:1.55;padding-left:20px}.startCard .btn{font-size:17px;width:100%;margin-top:10px;padding:13px}
 
   .fxBanner{position:fixed;left:50%;top:18%;transform:translateX(-50%) scale(.9);z-index:70;pointer-events:none;opacity:0;min-width:min(520px,92vw);text-align:center;padding:18px 16px;border-radius:24px;background:linear-gradient(135deg,rgba(22,163,74,.92),rgba(37,99,235,.9));border:2px solid rgba(255,255,255,.38);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 40px rgba(134,239,172,.35)}
-  .fxBanner.show{animation:bannerBoom 1.8s ease both}.fxBig{font-size:30px;font-weight:1000;letter-spacing:.02em;text-shadow:0 3px 12px rgba(0,0,0,.35)}.fxEn{font-size:21px;font-weight:1000;margin-top:4px}.fxJa{font-size:16px;color:#fef3c7;margin-top:2px}.fxPts{font-size:18px;color:#bbf7d0;font-weight:1000;margin-top:4px}
+  .fxBanner.show{animation:bannerBoom 1.8s ease both}.fxBanner.combo{background:linear-gradient(135deg,rgba(245,158,11,.94),rgba(219,39,119,.92),rgba(37,99,235,.9));box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 50px rgba(250,204,21,.52)}.fxBig{font-size:30px;font-weight:1000;letter-spacing:.02em;text-shadow:0 3px 12px rgba(0,0,0,.35)}.fxEn{font-size:21px;font-weight:1000;margin-top:4px}.fxJa{font-size:16px;color:#fef3c7;margin-top:2px}.fxPts{font-size:18px;color:#bbf7d0;font-weight:1000;margin-top:4px}
   @keyframes bannerBoom{0%{opacity:0;transform:translateX(-50%) scale(.72) rotate(-2deg);filter:brightness(2)}12%{opacity:1;transform:translateX(-50%) scale(1.08) rotate(1deg)}25%{transform:translateX(-50%) scale(1) rotate(0)}78%{opacity:1}100%{opacity:0;transform:translateX(-50%) scale(.96) translateY(-18px)}}
   .scorePop{position:fixed;z-index:80;pointer-events:none;font-weight:1000;font-size:26px;color:#fde68a;text-shadow:0 3px 12px rgba(0,0,0,.7);animation:scoreFly 1.2s ease-out both}.scorePop small{display:block;font-size:13px;color:#bbf7d0}.spark{position:fixed;z-index:79;width:8px;height:8px;border-radius:50%;pointer-events:none;background:#fde68a;box-shadow:0 0 14px #fde68a;animation:sparkFly .8s ease-out both}
   @keyframes scoreFly{0%{opacity:0;transform:translate(-50%,0) scale(.7)}15%{opacity:1;transform:translate(-50%,-10px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-78px) scale(.9)}}
@@ -311,15 +311,22 @@ function playChime(ok=true){
     setTimeout(()=>ctx.close(),700);
   }catch(e){}
 }
-function showFx(made,gained,cellIndex){
+function showFx(made,gained,cellIndex,comboInfo=null){
   const top=made[0]; if(!top)return;
-  const fx=$('fxBanner');$('fxEn').textContent=top.text;$('fxJa').textContent=top.ja||'';$('fxPts').textContent='+'+gained+' POINTS';
+  const comboN=comboInfo?.count||1;
+  const fx=$('fxBanner');
+  fx.classList.toggle('combo', comboN>1);
+  fx.querySelector('.fxBig').textContent = comboN>1 ? `COMBO ×${comboN}!` : 'GOOD!';
+  $('fxEn').textContent=comboN>1 ? `${top.text}  ${comboN} ROUTES!` : top.text;
+  $('fxJa').textContent=top.ja||'';
+  $('fxPts').textContent=(comboN>1?`経路コンボ +${comboInfo.bonus||0} / `:'')+'+'+gained+' POINTS';
   fx.classList.remove('show');void fx.offsetWidth;fx.classList.add('show');
   const cell=document.querySelectorAll('.cell')[cellIndex];
   let x=innerWidth/2,y=innerHeight/2;
   if(cell){const r=cell.getBoundingClientRect();x=r.left+r.width/2;y=r.top+r.height/2;}
-  const pop=document.createElement('div');pop.className='scorePop';pop.style.left=x+'px';pop.style.top=y+'px';pop.innerHTML=`+${gained}<small>${esc(top.kind)}</small>`;document.body.appendChild(pop);setTimeout(()=>pop.remove(),1300);
-  for(let i=0;i<22;i++){const sp=document.createElement('i');sp.className='spark';sp.style.left=x+'px';sp.style.top=y+'px';const a=Math.random()*Math.PI*2,d=30+Math.random()*90;sp.style.setProperty('--dx',Math.cos(a)*d+'px');sp.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(sp);setTimeout(()=>sp.remove(),900);}
+  const pop=document.createElement('div');pop.className='scorePop';pop.style.left=x+'px';pop.style.top=y+'px';pop.innerHTML=`+${gained}<small>${comboN>1?'COMBO ×'+comboN:esc(top.kind)}</small>`;document.body.appendChild(pop);setTimeout(()=>pop.remove(),1300);
+  const sparkCount=comboN>1?38:22;
+  for(let i=0;i<sparkCount;i++){const sp=document.createElement('i');sp.className='spark';sp.style.left=x+'px';sp.style.top=y+'px';const a=Math.random()*Math.PI*2,d=30+Math.random()*(comboN>1?130:90);sp.style.setProperty('--dx',Math.cos(a)*d+'px');sp.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(sp);setTimeout(()=>sp.remove(),900);}
 }
 
 function scanFromCell(placeIndex){
@@ -364,7 +371,7 @@ function scanFromCell(placeIndex){
   }
   found.sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
   const seen=new Set();
-  return found.filter(f=>{const k=f.cells.join(',')+f.text; if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,4);
+  return found.filter(f=>{const k=f.cells.join(',')+f.text; if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,12);
 }
 function selectScoringMatches(matches){
   // 同じターンで「I like apples」と「like apples」のような部分一致を二重加算しない。
@@ -382,6 +389,20 @@ function selectScoringMatches(matches){
   // 表示は自然な順に戻す。
   return picked.sort((a,b)=>(a.cells[0]-b.cells[0])||(b.cells.length-a.cells.length));
 }
+function summarizeScoring(scoring){
+  const groups=new Map();
+  for(const m of scoring){
+    const key=norm(m.text.split(' '));
+    if(!groups.has(key)) groups.set(key,{text:m.text,ja:m.ja,kind:m.kind,count:0,pts:0,routes:[]});
+    const g=groups.get(key);
+    g.count++;
+    g.pts += m.pts;
+    g.routes.push(m);
+  }
+  const comboGroups=[...groups.values()].filter(g=>g.count>1).sort((a,b)=>b.count-a.count || b.pts-a.pts);
+  const comboInfo=comboGroups[0] ? {count:comboGroups[0].count, text:comboGroups[0].text, ja:comboGroups[0].ja, bonus:(comboGroups[0].count-1)*18} : null;
+  return {groups:[...groups.values()], comboInfo};
+}
 function placeTile(cellIndex){
   if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
   if(state.board[cellIndex]){setMsg('そこは埋まってる','bad');return;}
@@ -396,27 +417,38 @@ function placeTile(cellIndex){
   let gained=1;
   if(made.length){
     const scoring=selectScoringMatches(made);
-    const usedCellsThisTurn=new Set();
+    const {groups,comboInfo}=summarizeScoring(scoring);
+    const useDelta=new Map();
     for(const m of scoring){
       gained += m.pts;
       state.wordsMade++;
       m.cells.forEach(i=>{
-        usedCellsThisTurn.add(i);
+        useDelta.set(i,(useDelta.get(i)||0)+1);
         if(!recentCells.includes(i)) recentCells.push(i);
       });
-      addLog(`${p.name}: ${m.text} / ${m.ja}（${m.kind}） +${m.pts}`,true);
     }
-    usedCellsThisTurn.forEach(i=>{
+    if(comboInfo){
+      gained += comboInfo.bonus;
+    }
+    for(const g of groups){
+      const suffix=g.count>1?` COMBO×${g.count}（${g.count}経路）`:'';
+      addLog(`${p.name}: ${g.text}${suffix} / ${g.ja}（${g.kind}） +${g.pts}${g.count>1?` +コンボ${(g.count-1)*18}`:''}`,true);
+    }
+    useDelta.forEach((delta,i)=>{
       const cell=state.board[i];
       if(cell){
         cell.owner=state.turn%state.playerCount;
-        cell.useCount=useCountOf(cell)+1;
+        cell.useCount=useCountOf(cell)+delta;
         cell.unusedPenaltyApplied=false;
       }
     });
-    setMsg(`${scoring[0].text} 成立！ ${scoring[0].ja} +${gained}`,'good');
+    if(comboInfo){
+      setMsg(`${comboInfo.text} COMBO×${comboInfo.count}！ ${comboInfo.ja} +${gained}`,'good');
+    }else{
+      setMsg(`${scoring[0].text} 成立！ ${scoring[0].ja} +${gained}`,'good');
+    }
     playChime(true);
-    showFx(scoring,gained,cellIndex);
+    showFx(scoring,gained,cellIndex,comboInfo);
     speakResult(scoring[0]);
   }else{
     gained = -UNUSED_PENALTY;
