@@ -684,11 +684,9 @@ function showFx(made,gained,cellIndex,comboInfo=null){
 async function scanFromCell(placeIndex){
   const found=[];
   const candidates=[];
-  const maxLen=8;
-  const maxTurns=2;
   const starts=[];
-  // 置いた単語を含む全候補ルートを列挙する。
-  // 横・縦・右下へ曲がるルートを総当たりし、内部ルール→フレーズバンク→Harperの順で照合。
+  // 今回置いた単語を含む候補ルートだけ列挙する。
+  // 右・下の単調進行だけ維持。語数上限・曲がり回数制限は廃止。
   for(let y=0;y<N;y++){
     for(let x=0;x<N;x++){
       const c=state.board[idx(x,y)];
@@ -701,7 +699,6 @@ async function scanFromCell(placeIndex){
   }
   function dfs(x,y,path,lastMove,turns){
     pushPath(path, turns===0 ? (lastMove==='D'?'縦':'横') : `隣接ルート${turns}曲がり`);
-    if(path.length>=maxLen) return;
     for(const mv of [{dx:1,dy:0,k:'R'},{dx:0,dy:1,k:'D'}]){
       const nx=x+mv.dx, ny=y+mv.dy;
       if(nx<0||ny<0||nx>=N||ny>=N) continue;
@@ -710,7 +707,7 @@ async function scanFromCell(placeIndex){
       if(!cell) continue;
       if(path.some(s=>s.i===ni)) continue;
       const nt = lastMove && lastMove!==mv.k ? turns+1 : turns;
-      if(nt>maxTurns) continue;
+      // 曲がり回数でも語数でも落とさない。右/下の単調進行と盤面端で自然終了する。
       dfs(nx,ny,path.concat({i:ni,w:cell.w}),mv.k,nt);
     }
   }
@@ -924,7 +921,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">LinkGrammar:${esc(linkGrammarStatus)}</span><span class="chip">Harper:判定OFF</span><span class="chip">PhraseBank:${PHRASE_BANK.length}</span><span class="chip">全ルート最大8語/2曲がり</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">LinkGrammar:${esc(linkGrammarStatus)}</span><span class="chip">Harper:判定OFF</span><span class="chip">PhraseBank:${PHRASE_BANK.length}</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
 }
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
