@@ -127,7 +127,7 @@ const WORDS = [
 const POS = Object.fromEntries(WORDS.map(x=>[x.w.toLowerCase(),x.pos]));
 const EXACT = new Map([
   ['i am happy',{kind:'完全な文',pts:30}],['i am sad',{kind:'完全な文',pts:30}],['you are kind',{kind:'完全な文',pts:30}],['he is tall',{kind:'完全な文',pts:30}],['she is busy',{kind:'完全な文',pts:30}],['we are hungry',{kind:'完全な文',pts:30}],['i am english',{kind:'be動詞の文',pts:32}],['you are english',{kind:'be動詞の文',pts:32}],
-  ['i like apples',{kind:'完全な文',pts:35}],['i like music',{kind:'完全な文',pts:35}],['you play soccer',{kind:'完全な文',pts:35}],['we study english',{kind:'完全な文',pts:35}],['i read books',{kind:'完全な文',pts:35}],
+  ['i like apples',{kind:'完全な文',pts:35}],['i like music',{kind:'完全な文',pts:35}],['you play soccer',{kind:'完全な文',pts:35}],['we study english',{kind:'完全な文',pts:35}],['i read books',{kind:'完全な文',pts:35}],['i go to school',{kind:'一般動詞+toの文',pts:42}],['you go to school',{kind:'一般動詞+toの文',pts:42}],['we go to school',{kind:'一般動詞+toの文',pts:42}],['they go to school',{kind:'一般動詞+toの文',pts:42}],
   ['i am playing soccer',{kind:'進行形の文',pts:50}],['she is reading books',{kind:'進行形の文',pts:50}],['we are studying english',{kind:'進行形の文',pts:50}],['i am going to school',{kind:'進行形の文',pts:55}],
   ['i want to play',{kind:'不定詞の文',pts:55}],['i want to read',{kind:'不定詞の文',pts:55}],['you want to study',{kind:'不定詞の文',pts:55}],['i can swim',{kind:'助動詞の文',pts:45}],['you must study',{kind:'助動詞の文',pts:45}],
   ['play soccer',{kind:'フレーズ',pts:16}],['study english',{kind:'フレーズ',pts:16}],['read books',{kind:'フレーズ',pts:16}],['go to school',{kind:'フレーズ',pts:22}],['very happy',{kind:'フレーズ',pts:14}],['very kind',{kind:'フレーズ',pts:14}],['in the morning',{kind:'フレーズ',pts:20}],['not happy',{kind:'否定フレーズ',pts:12}],['not busy',{kind:'否定フレーズ',pts:12}]
@@ -141,7 +141,7 @@ const JA = {
 };
 const EXACT_JA = new Map([
   ['i am happy','私は幸せです'],['i am sad','私は悲しいです'],['you are kind','あなたは親切です'],['he is tall','彼は背が高いです'],['she is busy','彼女は忙しいです'],['we are hungry','私たちはお腹がすいています'],['i am english','私はイングランド人です'],['you are english','あなたはイングランド人です'],
-  ['i like apples','私はりんごが好きです'],['i like music','私は音楽が好きです'],['you play soccer','あなたはサッカーをします'],['we study english','私たちは英語を勉強します'],['i read books','私は本を読みます'],
+  ['i like apples','私はりんごが好きです'],['i like music','私は音楽が好きです'],['you play soccer','あなたはサッカーをします'],['we study english','私たちは英語を勉強します'],['i read books','私は本を読みます'],['i go to school','私は学校へ行きます'],['you go to school','あなたは学校へ行きます'],['we go to school','私たちは学校へ行きます'],['they go to school','彼らは学校へ行きます'],
   ['i am playing soccer','私はサッカーをしています'],['she is reading books','彼女は本を読んでいます'],['we are studying english','私たちは英語を勉強しています'],['i am going to school','私は学校へ行っています'],
   ['i want to play','私は遊びたいです'],['i want to read','私は読みたいです'],['you want to study','あなたは勉強したいです'],['i can swim','私は泳げます'],['you must study','あなたは勉強しなければなりません'],
   ['play soccer','サッカーをする'],['study english','英語を勉強する'],['read books','本を読む'],['go to school','学校へ行く'],['very happy','とても幸せ'],['very kind','とても親切'],['in the morning','朝に'],['not happy','幸せではない'],['not busy','忙しくない']
@@ -224,7 +224,7 @@ function useColor(count, ownerColor){
 function evaluateSequence(words){
   if(!words || words.length<2) return null;
   const key=norm(words);
-  if(EXACT.has(key)) return {...EXACT.get(key),text:words.join(' ')};
+  if(EXACT.has(key)) return {...EXACT.get(key),text:words.join(' '),exact:true};
   const n=words.length;
   const w=words.map(x=>String(x).toLowerCase());
   const p=i=>wordPos(w[i]);
@@ -239,6 +239,8 @@ function evaluateSequence(words){
   if(n===5 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj') && hp(4,'advTime')) return {kind:'be動詞の否定+時の文',pts:52,text:words.join(' ')};
   if(n===3 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun')) return {kind:'一般動詞の文',pts:32,text:words.join(' ')};
   if(n===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun') && hp(3,'advTime')) return {kind:'一般動詞+時の文',pts:42,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && w[1]==='go' && hp(2,'to') && hp(3,'noun')) return {kind:'go to の文',pts:42,text:words.join(' ')};
+  if(n===5 && hp(0,'subj') && w[1]==='go' && hp(2,'to') && hp(3,'noun') && hp(4,'advTime')) return {kind:'go to+時の文',pts:52,text:words.join(' ')};
   if(n===3 && hp(0,'subj') && hp(1,'be') && hp(2,'ving')) return {kind:'進行形の文',pts:40,text:words.join(' ')};
   if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'advTime')) return {kind:'進行形+時の文',pts:50,text:words.join(' ')};
   if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun')) return {kind:'進行形の文',pts:48,text:words.join(' ')};
@@ -267,6 +269,8 @@ function translateSequence(words,ev){
   if(words.length===5 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj') && hp(4,'advTime')) return `${ja(w[0])}${ja(w[4])}${ja(w[3])}ではありません`;
   if(words.length===3 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun')) return `${ja(w[0])}${ja(w[2])}を${ja(w[1])}`;
   if(words.length===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun') && hp(3,'advTime')) return `${ja(w[0])}${ja(w[3])}${ja(w[2])}を${ja(w[1])}`;
+  if(words.length===4 && hp(0,'subj') && w[1]==='go' && hp(2,'to') && hp(3,'noun')) return `${ja(w[0])}${ja(w[3])}へ行きます`;
+  if(words.length===5 && hp(0,'subj') && w[1]==='go' && hp(2,'to') && hp(3,'noun') && hp(4,'advTime')) return `${ja(w[0])}${ja(w[4])}${ja(w[3])}へ行きます`;
   if(words.length===3 && hp(0,'subj') && hp(1,'be') && hp(2,'ving')) return `${ja(w[0])}${ja(w[2])}`;
   if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'advTime')) return `${ja(w[0])}${ja(w[3])}${ja(w[2])}`;
   if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun')) return `${ja(w[0])}${ja(w[3])}を${ja(w[2])}`;
@@ -397,20 +401,32 @@ function scanFromCell(placeIndex){
   return found.filter(f=>{const k=f.cells.join(',')+f.text; if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,12);
 }
 function selectScoringMatches(matches){
-  // 同じターンで「I like apples」と「like apples」のような部分一致を二重加算しない。
-  // 長い英文を優先し、その完全な部分集合になっている短いフレーズは演出・使用回数・得点から外す。
+  // 長い英文を優先。ただし「go to school」のような登録済みの3語以上フレーズは、
+  // 長い文の一部でも学習上意味があるのでコンボとして残す。
+  // 一方で「like apples」のような自動生成2語フレーズは、I like apples と二重加算しない。
   const sorted=[...matches].sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
   const picked=[];
   function isSubset(a,b){
     const bs=new Set(b.cells);
     return a.cells.every(i=>bs.has(i));
   }
+  function keepSubsetCombo(m){
+    return !!m.exact && m.cells.length>=3 && /フレーズ|前置詞句|否定/.test(m.kind||'');
+  }
   for(const m of sorted){
-    if(picked.some(big=>isSubset(m,big))) continue;
+    const subsetOfPicked=picked.some(big=>isSubset(m,big));
+    if(subsetOfPicked && !keepSubsetCombo(m)) continue;
     picked.push(m);
   }
-  // 表示は自然な順に戻す。
-  return picked.sort((a,b)=>(a.cells[0]-b.cells[0])||(b.cells.length-a.cells.length));
+  // 同じセル列・同じ英文は重複させない。
+  const seen=new Set();
+  const out=[];
+  for(const m of picked){
+    const k=(m.cells||[]).join(',')+'|'+norm(m.text.split(' '));
+    if(seen.has(k)) continue;
+    seen.add(k); out.push(m);
+  }
+  return out.sort((a,b)=>(a.cells[0]-b.cells[0])||(b.cells.length-a.cells.length));
 }
 function summarizeScoring(scoring){
   const groups=new Map();
