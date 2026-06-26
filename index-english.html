@@ -178,11 +178,19 @@ function evaluateSequence(words){
   if(n===2 && hp(0,'adv') && hp(1,'adj')) return {kind:'副詞+形容詞',pts:12,text:words.join(' ')};
   if(n===2 && hp(0,'verb') && hp(1,'noun')) return {kind:'動詞+名詞フレーズ',pts:12,text:words.join(' ')};
   if(n===3 && hp(0,'subj') && hp(1,'be') && hp(2,'adj')) return {kind:'be動詞の文',pts:28,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'adj') && hp(3,'advTime')) return {kind:'be動詞+時の文',pts:38,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'adv') && hp(3,'adj')) return {kind:'be動詞+副詞の文',pts:36,text:words.join(' ')};
+  if(n===5 && hp(0,'subj') && hp(1,'be') && hp(2,'adv') && hp(3,'adj') && hp(4,'advTime')) return {kind:'be動詞+副詞+時の文',pts:48,text:words.join(' ')};
   if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj')) return {kind:'be動詞の否定文',pts:42,text:words.join(' ')};
+  if(n===5 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj') && hp(4,'advTime')) return {kind:'be動詞の否定+時の文',pts:52,text:words.join(' ')};
   if(n===3 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun')) return {kind:'一般動詞の文',pts:32,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun') && hp(3,'advTime')) return {kind:'一般動詞+時の文',pts:42,text:words.join(' ')};
   if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun')) return {kind:'進行形の文',pts:48,text:words.join(' ')};
+  if(n===5 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun') && hp(4,'advTime')) return {kind:'進行形+時の文',pts:58,text:words.join(' ')};
   if(n===4 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb')) return {kind:'want to 文',pts:52,text:words.join(' ')};
+  if(n===5 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb') && hp(4,'advTime')) return {kind:'want to+時の文',pts:62,text:words.join(' ')};
   if(n===3 && hp(0,'subj') && hp(1,'modal') && hp(2,'verb')) return {kind:'助動詞の文',pts:42,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && hp(1,'modal') && hp(2,'verb') && hp(3,'advTime')) return {kind:'助動詞+時の文',pts:52,text:words.join(' ')};
   if(n===3 && hp(0,'prep') && hp(1,'article') && hp(2,'noun')) return {kind:'前置詞句',pts:18,text:words.join(' ')};
   return null;
 }
@@ -196,11 +204,19 @@ function translateSequence(words,ev){
   if(words.length===2 && hp(0,'adv') && hp(1,'adj')) return `${ja(w[0])}${ja(w[1])}`;
   if(words.length===2 && hp(0,'verb') && hp(1,'noun')) return `${ja(w[1])}を${ja(w[0])}`;
   if(words.length===3 && hp(0,'subj') && hp(1,'be') && hp(2,'adj')) return `${ja(w[0])}${ja(w[2])}です`;
+  if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'adj') && hp(3,'advTime')) return `${ja(w[0])}${ja(w[3])}${ja(w[2])}です`;
+  if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'adv') && hp(3,'adj')) return `${ja(w[0])}${ja(w[2])}${ja(w[3])}です`;
+  if(words.length===5 && hp(0,'subj') && hp(1,'be') && hp(2,'adv') && hp(3,'adj') && hp(4,'advTime')) return `${ja(w[0])}${ja(w[4])}${ja(w[2])}${ja(w[3])}です`;
   if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj')) return `${ja(w[0])}${ja(w[3])}ではありません`;
+  if(words.length===5 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj') && hp(4,'advTime')) return `${ja(w[0])}${ja(w[4])}${ja(w[3])}ではありません`;
   if(words.length===3 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun')) return `${ja(w[0])}${ja(w[2])}を${ja(w[1])}`;
+  if(words.length===4 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun') && hp(3,'advTime')) return `${ja(w[0])}${ja(w[3])}${ja(w[2])}を${ja(w[1])}`;
   if(words.length===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun')) return `${ja(w[0])}${ja(w[3])}を${ja(w[2])}`;
+  if(words.length===5 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun') && hp(4,'advTime')) return `${ja(w[0])}${ja(w[4])}${ja(w[3])}を${ja(w[2])}`;
   if(words.length===4 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb')) return `${ja(w[0])}${ja(w[3])}したいです`;
+  if(words.length===5 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb') && hp(4,'advTime')) return `${ja(w[0])}${ja(w[4])}${ja(w[3])}したいです`;
   if(words.length===3 && hp(0,'subj') && hp(1,'modal') && hp(2,'verb')) return `${ja(w[0])}${ja(w[2])}${w[1]==='can'?'ことができます':'しなければなりません'}`;
+  if(words.length===4 && hp(0,'subj') && hp(1,'modal') && hp(2,'verb') && hp(3,'advTime')) return `${ja(w[0])}${ja(w[3])}${ja(w[2])}${w[1]==='can'?'ことができます':'しなければなりません'}`;
   if(words.length===3 && hp(0,'prep') && hp(1,'article') && hp(2,'noun')) return `${ja(w[2])}に`;
   return words.map(ja).join(' / ');
 }
