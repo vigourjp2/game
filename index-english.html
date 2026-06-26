@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>English Word Pittan Online</title>
+<style>
+  :root{
+    --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
+    --p1:#38bdf8;--p2:#f472b6;--p3:#a3e635;--p4:#facc15;--empty:rgba(255,255,255,.08);
+    --good:#86efac;--bad:#fca5a5;--info:#bfdbfe;--gold:#fde68a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;width:100%;min-height:100%;background:radial-gradient(circle at 20% 0%,#1e3a8a 0,#07101d 42%,#030712 100%);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#fff;touch-action:manipulation;user-select:none;-webkit-user-select:none;overflow-x:hidden}
+  body:before{content:"";position:fixed;inset:0;pointer-events:none;background:linear-gradient(135deg,rgba(56,189,248,.16),transparent 35%,rgba(244,114,182,.14));mix-blend-mode:screen}
+  #app{width:min(1180px,100%);margin:0 auto;padding:10px 10px calc(14px + env(safe-area-inset-bottom));position:relative;z-index:1}
+  .top{display:grid;grid-template-columns:1.05fr .95fr;gap:10px;align-items:stretch}.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.28);backdrop-filter:blur(10px)}
+  .hero{padding:13px 14px}.hero h1{font-size:22px;margin:0 0 4px;letter-spacing:.02em}.hero p{margin:3px 0;font-size:12px;color:#dbeafe;line-height:1.4}.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:900;padding:4px 8px;border-radius:999px;background:rgba(250,204,21,.16);border:1px solid rgba(250,204,21,.34);color:#fde68a;margin-right:4px}.statusGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:9px}.status{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);border-radius:12px;padding:7px;text-align:center}.status b{display:block;font-size:16px;color:#fff}.status span{font-size:10px;color:#cbd5e1}
+  .controls{padding:11px;display:grid;grid-template-columns:1fr 1fr;gap:7px;align-content:start}.controls input,.controls select{width:100%;border:1px solid rgba(255,255,255,.18);background:rgba(2,6,23,.6);color:#fff;border-radius:12px;padding:10px;font-size:13px;outline:none}.controls input::placeholder{color:#94a3b8}.btn{border:0;border-radius:12px;padding:10px 11px;font-weight:900;color:#fff;background:#334155;box-shadow:0 8px 18px rgba(0,0,0,.18);touch-action:manipulation}.btn:active{transform:scale(.98)}.btn.good{background:#16a34a}.btn.blue{background:#2563eb}.btn.pink{background:#db2777}.btn.warn{background:#ca8a04}.btn.bad{background:#dc2626}.btn.full{grid-column:1/-1}.mini{font-size:11px;color:#bfdbfe;line-height:1.35;grid-column:1/-1}.mpLine{font-size:12px;color:#dbeafe;grid-column:1/-1}.mpLine b.good{color:var(--good)}.mpLine b.bad{color:var(--bad)}.mpLine b.info{color:var(--info)}
+  .main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:10px;margin-top:10px}.boardPanel{padding:10px}.boardTop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.turn{font-size:13px;color:#e5e7eb}.turn b{color:#fde68a}.msg{font-size:12px;color:#bfdbfe;min-height:18px;text-align:right}.boardWrap{width:100%;display:flex;justify-content:center}.board{display:grid;grid-template-columns:repeat(7,minmax(38px,72px));gap:5px;width:min(100%,550px);aspect-ratio:1/1;background:rgba(2,6,23,.44);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:7px}.cell{position:relative;border:1px solid rgba(255,255,255,.13);background:var(--empty);border-radius:12px;display:flex;align-items:center;justify-content:center;text-align:center;padding:3px;min-width:0;overflow:hidden;box-shadow:inset 0 0 16px rgba(255,255,255,.03)}.cell.empty{border-style:dashed}.cell.selectable{outline:2px solid rgba(250,204,21,.7);background:rgba(250,204,21,.12)}.cell.recent{animation:pulse .8s ease-out 1}.word{font-weight:1000;font-size:clamp(10px,2vw,17px);line-height:1.02;word-break:break-word;text-shadow:0 1px 5px rgba(0,0,0,.45)}.owner{position:absolute;left:4px;top:4px;width:10px;height:10px;border-radius:50%;box-shadow:0 0 8px rgba(255,255,255,.35)}.pts{position:absolute;right:4px;bottom:3px;font-size:9px;color:rgba(255,255,255,.72)}
+  @keyframes pulse{0%{transform:scale(.88);filter:brightness(1.8)}100%{transform:scale(1);filter:brightness(1)}}
+  .handPanel{margin-top:10px;padding:10px}.handTitle{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#e5e7eb;margin-bottom:7px}.hand{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.tile{min-height:54px;border:2px solid rgba(255,255,255,.15);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.06));color:#fff;font-weight:1000;font-size:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:5px;box-shadow:0 10px 22px rgba(0,0,0,.18)}.tile small{font-size:9px;color:#cbd5e1;font-weight:800}.tile.on{border-color:#facc15;box-shadow:0 0 20px rgba(250,204,21,.35);background:rgba(250,204,21,.18)}.tile.used{opacity:.35;filter:grayscale(1)}
+  .side{display:flex;flex-direction:column;gap:10px}.scorePanel{padding:10px}.scorePanel h2,.logPanel h2,.dictPanel h2{font-size:15px;margin:0 0 8px}.players{display:grid;gap:7px}.player{display:grid;grid-template-columns:18px 1fr auto;gap:7px;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:7px}.dot{width:14px;height:14px;border-radius:50%}.pname{font-size:12px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pscore{font-size:13px;font-weight:1000;color:#fde68a}.current{outline:2px solid rgba(250,204,21,.55)}
+  .dictPanel{padding:10px}.rules{font-size:12px;line-height:1.45;color:#dbeafe}.rules b{color:#fde68a}.targetList{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.chip{font-size:11px;padding:4px 7px;border-radius:999px;background:rgba(59,130,246,.18);border:1px solid rgba(147,197,253,.25);color:#dbeafe}.logPanel{padding:10px;min-height:140px}.log{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;padding-right:3px}.logItem{font-size:12px;line-height:1.35;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:7px}.logItem b{color:#fde68a}.goodText{color:var(--good)}.badText{color:var(--bad)}
+  #start{position:fixed;inset:0;z-index:50;background:linear-gradient(180deg,rgba(3,7,18,.92),rgba(15,23,42,.82));display:flex;align-items:center;justify-content:center;padding:18px}.startCard{width:min(560px,94vw);background:rgba(15,23,42,.92);border:1px solid rgba(255,255,255,.2);border-radius:24px;padding:20px;box-shadow:0 25px 80px rgba(0,0,0,.45);backdrop-filter:blur(12px)}.startCard h1{margin:0 0 7px;font-size:28px}.startCard p{font-size:14px;color:#dbeafe;line-height:1.55}.startCard ul{font-size:13px;color:#e5e7eb;line-height:1.55;padding-left:20px}.startCard .btn{font-size:17px;width:100%;margin-top:10px;padding:13px}
+  @media(max-width:920px){#app{padding:8px}.top{grid-template-columns:1fr}.main{grid-template-columns:1fr}.side{grid-template-columns:1fr}.controls{grid-template-columns:1fr 1fr}.board{gap:4px;padding:5px}.cell{border-radius:10px}.hand{grid-template-columns:repeat(5,1fr);gap:5px}.tile{min-height:48px;font-size:12px;border-radius:12px}.statusGrid{grid-template-columns:repeat(4,1fr)}}
+  @media(max-width:520px){.hero h1{font-size:19px}.status b{font-size:14px}.controls{grid-template-columns:1fr}.board{grid-template-columns:repeat(7,1fr);border-radius:14px}.word{font-size:clamp(8px,3.1vw,13px)}.hand{grid-template-columns:repeat(5,1fr)}.tile{font-size:11px;min-height:45px;padding:3px}.tile small{display:none}.msg{text-align:left}.boardTop{align-items:flex-start;flex-direction:column}.startCard h1{font-size:23px}}
+</style>
+</head>
+<body>
+<div id="start">
+  <div class="startCard">
+    <span class="badge">ONLINE</span><span class="badge">ENGLISH</span><span class="badge">陣取り</span>
+    <h1>English Word Pittan Online</h1>
+    <p>英単語タイルを置いて、英文・フレーズ・文法パターンを作る対戦パズル。`index-mine.html` と同じ考えで、WebSocket が使える環境なら同じ部屋の複数人に同期します。</p>
+    <ul>
+      <li>左→右、上→下だけ判定</li>
+      <li>成立した単語列のマスを自分色にする</li>
+      <li>相手のマスを使って文を作ると奪える</li>
+      <li>オフラインでも同じ端末で交互対戦OK</li>
+    </ul>
+    <button class="btn good" id="startBtn">はじめる</button>
+  </div>
+</div>
+<div id="app">
+  <div class="top">
+    <section class="panel hero">
+      <span class="badge">英語版もじぴったん風</span><span class="badge">2〜4人</span>
+      <h1>English Word Pittan Online</h1>
+      <p>単語を1マスに置く。英文・熟語・文法型が成立したら陣地化。横長棒の落ち物問題を捨てて、盤面配置パズルにした版。</p>
+      <div class="statusGrid">
+        <div class="status"><b id="turnNo">1</b><span>TURN</span></div>
+        <div class="status"><b id="wordsMade">0</b><span>WORDS</span></div>
+        <div class="status"><b id="filledNo">0</b><span>FILLED</span></div>
+        <div class="status"><b id="roomNo">main</b><span>ROOM</span></div>
+      </div>
+    </section>
+    <section class="panel controls">
+      <input id="nameInput" maxlength="18" placeholder="名前 例: player" />
+      <select id="playerCount"><option value="2">2人対戦</option><option value="3">3人対戦</option><option value="4">4人対戦</option></select>
+      <button class="btn blue" id="connectBtn">ONLINE接続</button>
+      <button class="btn good" id="newGameBtn">新規ゲーム</button>
+      <button class="btn warn" id="passBtn">パス</button>
+      <button class="btn pink" id="drawBtn">手札入替</button>
+      <button class="btn bad full" id="resetBtn">盤面リセット送信</button>
+      <div class="mpLine">通信: <b id="mp" class="bad">LOCAL</b> / 受信 <span id="rx">0</span> / 自分ID <span id="myId">-</span></div>
+      <div class="mini">同じ Worker URL の `/room/english` を使う。専用サーバ改修なしでも、未知メッセージのブロードキャストで同期する設計。</div>
+    </section>
+  </div>
+
+  <main class="main">
+    <section>
+      <div class="panel boardPanel">
+        <div class="boardTop"><div class="turn">現在: <b id="turnPlayer">Player 1</b></div><div class="msg" id="msg">単語タイルを選んで空きマスに置く</div></div>
+        <div class="boardWrap"><div class="board" id="board"></div></div>
+      </div>
+      <div class="panel handPanel">
+        <div class="handTitle"><span>手札</span><span id="selectedInfo">未選択</span></div>
+        <div class="hand" id="hand"></div>
+      </div>
+    </section>
+    <aside class="side">
+      <section class="panel scorePanel"><h2>スコア / 陣地</h2><div class="players" id="players"></div></section>
+      <section class="panel dictPanel"><h2>成立ルール</h2><div class="rules">完全一致辞書 + 品詞テンプレで判定。<br><b>文</b>: I am happy / I like apples<br><b>句</b>: play soccer / very happy<br><b>型</b>: 主語 + be + 形容詞、want to + 動詞</div><div class="targetList" id="targetList"></div></section>
+      <section class="panel logPanel"><h2>ログ</h2><div class="log" id="log"></div></section>
+    </aside>
+  </main>
+</div>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
+const N = 7;
+const COLORS = ['#38bdf8','#f472b6','#a3e635','#facc15'];
+const clientId = (crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0,8) : ('c'+Math.floor(Math.random()*999999));
+let socket=null,retryTimer=null,heartbeat=null,rx=0;
+let selectedHandIndex=-1;
+let recentCells=[];
+let suppressBroadcast=false;
+const WORDS = [
+  {w:'I',pos:['subj','pron'],lv:1},{w:'you',pos:['subj','pron'],lv:1},{w:'he',pos:['subj','pron'],lv:1},{w:'she',pos:['subj','pron'],lv:1},{w:'we',pos:['subj','pron'],lv:1},{w:'they',pos:['subj','pron'],lv:1},
+  {w:'am',pos:['be'],lv:1},{w:'are',pos:['be'],lv:1},{w:'is',pos:['be'],lv:1},{w:'not',pos:['not'],lv:2},
+  {w:'happy',pos:['adj'],lv:1},{w:'sad',pos:['adj'],lv:1},{w:'kind',pos:['adj'],lv:1},{w:'tall',pos:['adj'],lv:1},{w:'busy',pos:['adj'],lv:1},{w:'hungry',pos:['adj'],lv:1},
+  {w:'like',pos:['verb'],lv:1},{w:'play',pos:['verb'],lv:1},{w:'study',pos:['verb'],lv:1},{w:'read',pos:['verb'],lv:1},{w:'go',pos:['verb'],lv:1},{w:'want',pos:['verbWant'],lv:2},{w:'can',pos:['modal'],lv:2},{w:'must',pos:['modal'],lv:2},
+  {w:'playing',pos:['ving'],lv:2},{w:'studying',pos:['ving'],lv:2},{w:'reading',pos:['ving'],lv:2},{w:'going',pos:['ving'],lv:2},
+  {w:'to',pos:['to'],lv:1},{w:'school',pos:['noun'],lv:1},{w:'soccer',pos:['noun'],lv:1},{w:'tennis',pos:['noun'],lv:1},{w:'English',pos:['noun'],lv:1},{w:'apples',pos:['noun'],lv:1},{w:'music',pos:['noun'],lv:1},{w:'books',pos:['noun'],lv:1},
+  {w:'very',pos:['adv'],lv:1},{w:'now',pos:['advTime'],lv:1},{w:'today',pos:['advTime'],lv:1},{w:'everyday',pos:['advTime'],lv:2},{w:'in',pos:['prep'],lv:2},{w:'the',pos:['article'],lv:1},{w:'morning',pos:['noun'],lv:2}
+];
+const POS = Object.fromEntries(WORDS.map(x=>[x.w.toLowerCase(),x.pos]));
+const EXACT = new Map([
+  ['i am happy',{kind:'完全な文',pts:30}],['i am sad',{kind:'完全な文',pts:30}],['you are kind',{kind:'完全な文',pts:30}],['he is tall',{kind:'完全な文',pts:30}],['she is busy',{kind:'完全な文',pts:30}],['we are hungry',{kind:'完全な文',pts:30}],
+  ['i like apples',{kind:'完全な文',pts:35}],['i like music',{kind:'完全な文',pts:35}],['you play soccer',{kind:'完全な文',pts:35}],['we study english',{kind:'完全な文',pts:35}],['i read books',{kind:'完全な文',pts:35}],
+  ['i am playing soccer',{kind:'進行形の文',pts:50}],['she is reading books',{kind:'進行形の文',pts:50}],['we are studying english',{kind:'進行形の文',pts:50}],['i am going to school',{kind:'進行形の文',pts:55}],
+  ['i want to play',{kind:'不定詞の文',pts:55}],['i want to read',{kind:'不定詞の文',pts:55}],['you want to study',{kind:'不定詞の文',pts:55}],['i can swim',{kind:'助動詞の文',pts:45}],['you must study',{kind:'助動詞の文',pts:45}],
+  ['play soccer',{kind:'フレーズ',pts:16}],['study english',{kind:'フレーズ',pts:16}],['read books',{kind:'フレーズ',pts:16}],['go to school',{kind:'フレーズ',pts:22}],['very happy',{kind:'フレーズ',pts:14}],['very kind',{kind:'フレーズ',pts:14}],['in the morning',{kind:'フレーズ',pts:20}],['not happy',{kind:'否定フレーズ',pts:12}],['not busy',{kind:'否定フレーズ',pts:12}]
+]);
+const targets = Array.from(EXACT.keys()).slice(0,24);
+let state = freshState(2);
+function freshState(playerCount=2){
+  return {version:1,gameId:'eng-'+Date.now().toString(36),turn:0,turnNo:1,playerCount,wordsMade:0,board:Array.from({length:N*N},()=>null),players:Array.from({length:playerCount},(_,i)=>({name:'Player '+(i+1),score:0,tiles:0,color:COLORS[i],hand:drawHand(i)})),log:[{t:Date.now(),text:'新規ゲーム開始',good:true}]};
+}
+function drawHand(seed=0){
+  const bag = WORDS.slice();
+  const hand=[];
+  for(let i=0;i<5;i++) hand.push(bag[Math.floor(Math.random()*bag.length)].w);
+  // 最初に最低限の文が出やすい補正
+  if(seed===0) return ['I','am','happy','like','apples'];
+  if(seed===1) return ['you','are','kind','play','soccer'];
+  if(seed===2) return ['we','study','English','very','now'];
+  if(seed===3) return ['she','is','busy','read','books'];
+  return hand;
+}
+function safeName(){return ($('nameInput').value||localStorage.englishName||('P-'+clientId)).trim().slice(0,18)}
+function setMsg(text,cls='info'){const el=$('msg');el.textContent=text;el.className='msg '+cls;}
+function addLog(text,good=true){state.log.unshift({t:Date.now(),text,good});state.log=state.log.slice(0,40);}
+function idx(x,y){return y*N+x}
+function xy(i){return {x:i%N,y:Math.floor(i/N)}}
+function currentPlayer(){return state.players[state.turn%state.playerCount]}
+function wordPos(w){return POS[String(w||'').toLowerCase()]||[]}
+function hasPos(w,p){return wordPos(w).includes(p)}
+function norm(arr){return arr.map(w=>String(w).trim()).join(' ').toLowerCase().replace(/\s+/g,' ')}
+function evaluateSequence(words){
+  if(!words || words.length<2) return null;
+  const key=norm(words);
+  if(EXACT.has(key)) return {...EXACT.get(key),text:words.join(' ')};
+  const n=words.length;
+  const w=words.map(x=>String(x).toLowerCase());
+  const p=i=>wordPos(w[i]);
+  const hp=(i,pos)=>p(i).includes(pos);
+  if(n===2 && hp(0,'adv') && hp(1,'adj')) return {kind:'副詞+形容詞',pts:12,text:words.join(' ')};
+  if(n===2 && hp(0,'verb') && hp(1,'noun')) return {kind:'動詞+名詞フレーズ',pts:12,text:words.join(' ')};
+  if(n===3 && hp(0,'subj') && hp(1,'be') && hp(2,'adj')) return {kind:'be動詞の文',pts:28,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'not') && hp(3,'adj')) return {kind:'be動詞の否定文',pts:42,text:words.join(' ')};
+  if(n===3 && hp(0,'subj') && hp(1,'verb') && hp(2,'noun')) return {kind:'一般動詞の文',pts:32,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && hp(1,'be') && hp(2,'ving') && hp(3,'noun')) return {kind:'進行形の文',pts:48,text:words.join(' ')};
+  if(n===4 && hp(0,'subj') && hp(1,'verbWant') && hp(2,'to') && hp(3,'verb')) return {kind:'want to 文',pts:52,text:words.join(' ')};
+  if(n===3 && hp(0,'subj') && hp(1,'modal') && hp(2,'verb')) return {kind:'助動詞の文',pts:42,text:words.join(' ')};
+  if(n===3 && hp(0,'prep') && hp(1,'article') && hp(2,'noun')) return {kind:'前置詞句',pts:18,text:words.join(' ')};
+  return null;
+}
+function scanFromCell(placeIndex){
+  const {x,y}=xy(placeIndex);
+  const found=[];
+  for(const dir of [{dx:1,dy:0,name:'横'},{dx:0,dy:1,name:'縦'}]){
+    let sx=x,sy=y;
+    while(sx-dir.dx>=0 && sy-dir.dy>=0 && sx-dir.dx<N && sy-dir.dy<N && state.board[idx(sx-dir.dx,sy-dir.dy)]){sx-=dir.dx;sy-=dir.dy;}
+    const line=[];
+    let cx=sx,cy=sy;
+    while(cx>=0&&cy>=0&&cx<N&&cy<N){const c=state.board[idx(cx,cy)]; if(!c) break; line.push({i:idx(cx,cy),w:c.w}); cx+=dir.dx;cy+=dir.dy;}
+    // 置いたセルを含む全サブシーケンスを評価。長いもの優先。
+    for(let a=0;a<line.length;a++) for(let b=a+1;b<line.length;b++){
+      const slice=line.slice(a,b+1); if(!slice.some(s=>s.i===placeIndex)) continue;
+      const ev=evaluateSequence(slice.map(s=>s.w));
+      if(ev) found.push({...ev,cells:slice.map(s=>s.i),dir:dir.name});
+    }
+  }
+  found.sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
+  const seen=new Set();
+  return found.filter(f=>{const k=f.cells.join(',')+f.text; if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,4);
+}
+function placeTile(cellIndex){
+  if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
+  if(state.board[cellIndex]){setMsg('そこは埋まってる','bad');return;}
+  const p=currentPlayer();
+  const word=p.hand[selectedHandIndex];
+  if(!word){setMsg('その手札は空','bad');return;}
+  state.board[cellIndex]={w:word,owner:state.turn%state.playerCount,baseOwner:state.turn%state.playerCount,at:Date.now()};
+  p.hand[selectedHandIndex]=drawOne();
+  const made=scanFromCell(cellIndex);
+  recentCells=[cellIndex];
+  let gained=1;
+  if(made.length){
+    for(const m of made){
+      gained += m.pts;
+      state.wordsMade++;
+      m.cells.forEach(i=>{state.board[i].owner=state.turn%state.playerCount; if(!recentCells.includes(i)) recentCells.push(i);});
+      addLog(`${p.name}: ${m.text}（${m.kind}） +${m.pts}`,true);
+    }
+    setMsg(`${made[0].text} 成立！ +${gained}`,'good');
+  }else{
+    addLog(`${p.name}: ${word} を配置。成立なし +1`,false);
+    setMsg('成立なし。つなげ方を狙え！','bad');
+  }
+  p.score+=gained;
+  recalcTiles();
+  nextTurn();
+  selectedHandIndex=-1;
+  broadcast({type:'englishPlace',gameId:state.gameId,state:lightState(),cellIndex,by:clientId});
+  render();
+}
+function drawOne(){return WORDS[Math.floor(Math.random()*WORDS.length)].w}
+function nextTurn(){state.turn=(state.turn+1)%state.playerCount;state.turnNo++;}
+function recalcTiles(){state.players.forEach(p=>p.tiles=0);state.board.forEach(c=>{if(c&&state.players[c.owner])state.players[c.owner].tiles++;});}
+function lightState(){return JSON.parse(JSON.stringify(state));}
+function applyState(s,why='同期'){
+  if(!s||!Array.isArray(s.board)||!Array.isArray(s.players))return;
+  state=s;selectedHandIndex=-1;recentCells=[];recalcTiles();setMsg(why,'good');render();
+}
+function passTurn(){const p=currentPlayer();addLog(`${p.name}: パス`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'pass'});render();}
+function swapHand(){const p=currentPlayer();p.hand=drawHand(99);p.score=Math.max(0,p.score-5);addLog(`${p.name}: 手札入替 -5`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'swap'});render();}
+function newGame(broadcastIt=true){const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg('新規ゲーム開始','good');}
+function render(){
+  $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
+  const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
+  const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent ':'');d.type='button';if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const color=state.players[c.owner]?.color||'#fff';d.innerHTML=`<span class="owner" style="background:${color}"></span><span class="word">${esc(c.w)}</span><span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${hexAlpha(color,.28)}, rgba(255,255,255,.06))`;d.style.borderColor=hexAlpha(color,.65);} d.onclick=()=>placeTile(i);b.appendChild(d);});
+  const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const t=document.createElement('button');t.type='button';t.className='tile '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(wordPos(w).join('/')||'?')}</small>`;t.onclick=()=>{selectedHandIndex=i;render();};h.appendChild(t);});
+  $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
+  const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
+  const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
+  $('targetList').innerHTML=targets.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+}
+function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
+function setMp(text,cls){$('mp').textContent=text;$('mp').className=cls;}
+function broadcast(obj){
+  if(suppressBroadcast) return false;
+  if(!socket||socket.readyState!==WebSocket.OPEN) return false;
+  try{obj.clientId=clientId;obj.name=safeName();obj.time=Date.now();socket.send(JSON.stringify(obj));return true;}catch(e){return false;}
+}
+function connect(){
+  if(socket&&(socket.readyState===WebSocket.OPEN||socket.readyState===WebSocket.CONNECTING))return;
+  clearTimeout(retryTimer);clearInterval(heartbeat);setMp('CONNECTING','info');
+  socket=new WebSocket(WS_URL);
+  socket.addEventListener('open',()=>{setMp('ONLINE','good');setMsg('オンライン接続成功。同じURLの人と同期','good');broadcast({type:'join',x:0,y:0,z:0,yaw:0,pitch:0});broadcast({type:'englishHello',wantState:true,gameId:state.gameId});heartbeat=setInterval(()=>broadcast({type:'ping'}),10000);});
+  socket.addEventListener('message',ev=>{rx++;$('rx').textContent=rx;handleNet(ev.data);});
+  socket.addEventListener('close',()=>{clearInterval(heartbeat);setMp('RETRY','bad');retryTimer=setTimeout(connect,3000);});
+  socket.addEventListener('error',()=>setMp('ERROR','bad'));
+}
+function parse(raw){try{return JSON.parse(raw)}catch{return null}}
+function eachPayload(msg,cb,depth=0){if(!msg||depth>3)return;if(typeof msg==='string'){eachPayload(parse(msg),cb,depth+1);return;}if(Array.isArray(msg)){msg.forEach(x=>eachPayload(x,cb,depth+1));return;}cb(msg);['payload','data','message','state'].forEach(k=>{if(msg[k]&&msg[k]!==msg)eachPayload(msg[k],cb,depth+1);});}
+function handleNet(raw){eachPayload(raw,(msg)=>{
+  if(!msg||msg.clientId===clientId)return;
+  if(msg.type==='englishHello'&&msg.wantState){broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'hello-sync'});return;}
+  if(msg.type==='englishNewGame'&&msg.state){applyState(msg.state,'相手が新規ゲーム開始');return;}
+  if((msg.type==='englishState'||msg.type==='englishPlace')&&msg.state){
+    const incomingTurn=Number(msg.state.turnNo)||0;
+    if(msg.state.gameId!==state.gameId || incomingTurn>=state.turnNo){applyState(msg.state,'オンライン同期');}
+  }
+});}
+$('startBtn').onclick=()=>{$('start').style.display='none';render();};
+$('connectBtn').onclick=connect;
+$('newGameBtn').onclick=()=>newGame(true);
+$('resetBtn').onclick=()=>{if(confirm('盤面をリセットしてオンラインにも送信する？'))newGame(true);};
+$('passBtn').onclick=passTurn;
+$('drawBtn').onclick=swapHand;
+$('nameInput').value=localStorage.englishName||('P-'+clientId);
+$('nameInput').addEventListener('change',()=>{localStorage.englishName=safeName();state.players[0].name=safeName();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'rename'});render();});
+$('playerCount').addEventListener('change',()=>newGame(false));
+newGame(false);render();
+})();
+</script>
+</body>
+</html>
