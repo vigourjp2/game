@@ -98,7 +98,7 @@
     </section>
     <aside class="side">
       <section class="panel scorePanel"><h2>スコア / 陣地</h2><div class="players" id="players"></div></section>
-      <section class="panel dictPanel"><h2>成立ルール</h2><div class="rules">全ルート照合 + Link Grammar Parser API + フレーズバンク + 品詞テンプレ。<br><b>文</b>: You go to school / Music is fun<br><b>句</b>: listen to music / be good at<br><b>型</b>: 主語+動詞+目的語、be+形容詞+前置詞</div><div class="targetList" id="targetList"></div></section>
+      <section class="panel dictPanel"><h2>成立ルール</h2><div class="rules">全ルート照合。<b>文の成立判定はAPI裁定</b>（Link Grammar + LanguageTool + 翻訳API）。<br><b>文</b>: You go to school / I like you / She likes apples<br><b>句</b>: listen to music / be good at<br><b>方針</b>: ローカル品詞テンプレは手札・短句補助のみ</div><div class="targetList" id="targetList"></div></section>
       <section class="panel logPanel"><h2>ログ</h2><div class="log" id="log"></div></section>
     </aside>
   </main>
@@ -117,7 +117,7 @@ let recentCells=[];
 let suppressBroadcast=false;
 const WORDS = [
   // 主語・代名詞
-  {w:'I',pos:['subj','pron'],lv:1},{w:'you',pos:['subj','pron'],lv:1},{w:'he',pos:['subj','pron'],lv:1},{w:'she',pos:['subj','pron'],lv:1},{w:'we',pos:['subj','pron'],lv:1},{w:'they',pos:['subj','pron'],lv:1},{w:'it',pos:['subj','pron'],lv:1},{w:'me',pos:['noun','pronObj'],lv:1},
+  {w:'I',pos:['subj','pron'],lv:1},{w:'you',pos:['subj','pron','pronObj'],lv:1},{w:'he',pos:['subj','pron'],lv:1},{w:'she',pos:['subj','pron'],lv:1},{w:'we',pos:['subj','pron'],lv:1},{w:'they',pos:['subj','pron'],lv:1},{w:'it',pos:['subj','pron','pronObj'],lv:1},{w:'me',pos:['noun','pronObj'],lv:1},
   // be / 助動詞 / 否定
   {w:'am',pos:['be'],lv:1},{w:'are',pos:['be'],lv:1},{w:'is',pos:['be'],lv:1},{w:'was',pos:['bePast'],lv:2},{w:'were',pos:['bePast'],lv:2},{w:'not',pos:['not'],lv:1},
   {w:'can',pos:['modal'],lv:2},{w:'must',pos:['modal'],lv:2},{w:'will',pos:['modal'],lv:2},{w:'should',pos:['modal'],lv:3},
@@ -410,11 +410,16 @@ function beForSubject(w){
 function beMatches(subj,be){return beForSubject(subj)===String(be||'').toLowerCase();}
 function canUseBaseVerb(subj){return !['he','she','it'].includes(String(subj||'').toLowerCase());}
 function isNounLike(w){return wordPos(w).includes('noun');}
+function isObjectLike(w){
+  const ps=wordPos(w);
+  // 目的語として使える語。you/it/me は目的格にもなれる。he/she/we/they/I はここでは通さない。
+  return ps.includes('noun') || ps.includes('pronObj') || ps.includes('ving');
+}
 function isAdjLike(w){return wordPos(w).includes('adj');}
 function isTimeWord(w){return wordPos(w).includes('advTime');}
 function isVerbObjectOK(v,o){
   v=String(v||'').toLowerCase(); o=String(o||'').toLowerCase();
-  const anyNoun=isNounLike(o);
+  const anyNoun=isObjectLike(o);
   if(v==='like'||v==='enjoy') return anyNoun;
   if(v==='play') return ['soccer','tennis','baseball','games','music'].includes(o);
   if(v==='study'||v==='learn') return ['english','japanese','music','books','game','games'].includes(o);
@@ -527,11 +532,10 @@ function evaluateSequence(words){
   return grammarEvaluate(words);
 }
 async function evaluateSequenceAsync(words){
-  const ev=grammarEvaluate(words);
-  if(ev) return ev;
+  // 完全文の正解判定はAPI優先。ローカル grammarEvaluate はフォールバックにしない。
+  // ローカル品詞表は手札カテゴリ・短句ヒント用であって、英文成立の裁定者ではない。
   const lg=await linkGrammarEvaluate(words);
   if(lg) return lg;
-  // Harperは成立判定から外す。校正ツールを正解判定に使うと I like big のような事故が起きるため。
   return null;
 }
 
@@ -723,8 +727,11 @@ async function scanFromCell(placeIndex){
   }
   for(const c of uniq){
     const words=c.path.map(s=>s.w);
-    let ev=evaluateSequence(words);
-    if(!ev && isLikelyCompleteSentenceWords(words)) ev=await evaluateSequenceAsync(words);
+    // 完全文はローカル品詞テンプレで先に通さない。API（Link Grammar + LanguageTool + 翻訳）を裁定者にする。
+    // これで I like you の目的格漏れ、3単現、run-on などをゲームHTML側の終わらない個別修正から外す。
+    let ev=null;
+    if(isLikelyCompleteSentenceWords(words)) ev=await evaluateSequenceAsync(words);
+    if(!ev) ev=evaluateSequence(words); // 熟語・短いフレーズだけローカル辞書で救う
     if(ev){
       ev.ja=await resolveJapanese(words,ev);
       found.push({...ev,cells:c.path.map(s=>s.i),dir:c.label});
