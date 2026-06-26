@@ -2,7 +2,7 @@
   "name": "Physics Bomber Roguelike Online",
   "short_name": "Physics Bomber",
   "description": "Physics Bomber Roguelike Online game",
-  "start_url": "./index.html",
+  "start_url": "./pbomber.html",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
