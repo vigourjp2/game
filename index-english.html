@@ -243,7 +243,15 @@ async function evaluateCandidatesByApi(routeCandidates){
     if(w.length<2) continue;
     const cached=linkGrammarCache[key];
     if(cached!==undefined){
-      if(cached && typeof cached==='object' && cached.ok) out.push({...cached,cells:c.path.map(s=>s.i),dir:c.label,source:'api'});
+      if(cached && typeof cached==='object' && cached.ok){
+        out.push({...cached,cells:c.path.map(s=>s.i),dir:c.label,source:'api'});
+      }else if(cached && typeof cached==='object' && cached.__reject){
+        lastScanRejects.push({
+          ...cached,
+          cells:c.path.map(s=>s.i),
+          dir:c.label
+        });
+      }
       continue;
     }
     if(!byKey.has(key)){
@@ -265,7 +273,7 @@ async function evaluateCandidatesByApi(routeCandidates){
       try{
         finalResult=await singleApiCheckItem(base,item);
       }catch(e){
-        finalResult={reason:String(e.message||e), type:'api_error'};
+        finalResult={reason:'API一時未応答', type:'api_error'};
       }
 
       const ev=evFromApiResult(finalResult,item.words);
@@ -273,18 +281,23 @@ async function evaluateCandidatesByApi(routeCandidates){
         linkGrammarCache[item.key]=ev;
         for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label,source:'api'});
       }else{
+        const rejectBase={
+          __reject:true,
+          text:item.text,
+          words:item.words,
+          reason:finalResult?.reasonExplain?.explanationJa || finalResult?.reasonExplain?.explanationEn || finalResult?.reason || '',
+          reasonSource:finalResult?.reasonExplain?.method || finalResult?.reasonSource || '',
+          reasonExplain:finalResult?.reasonExplain || null,
+          type:finalResult?.type||'',
+          sentenceType:finalResult?.sentenceType||'',
+          fullParse:!!finalResult?.fullParse
+        };
+        linkGrammarCache[item.key]=rejectBase;
         for(const route of item.routes){
           lastScanRejects.push({
-            text:item.text,
-            words:item.words,
+            ...rejectBase,
             cells:route.path.map(s=>s.i),
-            dir:route.label,
-            reason:finalResult?.reasonExplain?.explanationJa || finalResult?.reasonExplain?.explanationEn || finalResult?.reason || '',
-            reasonSource:finalResult?.reasonSource || finalResult?.reasonExplain?.method || '',
-            reasonExplain:finalResult?.reasonExplain || null,
-            type:finalResult?.type||'',
-            sentenceType:finalResult?.sentenceType||'',
-            fullParse:!!finalResult?.fullParse
+            dir:route.label
           });
         }
       }
@@ -938,15 +951,17 @@ function apiRejectReason(raw){
   if(v==='link grammar parse failed') return '英文として解析できません';
   return v;
 }
-function userFacingRejectReason(r){
-  const ex=r?.reasonExplain||{};
-  const v=String(ex.explanationJa || ex.explanationEn || r?.reason || r?.type || r?.sentenceType || '').trim();
-  return apiRejectReason(v);
-}
-function compactRejectList(items, limit=4){
-  const shown=items.slice(0,limit);
-  const tail=items.length>limit?` / 他${items.length-limit}件`:'';
-  return shown.map(it=>`「${it.text}」${it.reason?`：${it.reason}`:''}`).join(' / ')+tail;
+function rejectReasonText(r){
+  const ex=r?.reasonExplain||null;
+  const explained=String(ex?.explanationJa||ex?.explanationEn||'').trim();
+  if(explained) return explained;
+  const raw=String(r?.reason||r?.type||r?.sentenceType||'').trim();
+  if(!raw) return '';
+  // 外部説明モデルに失敗した場合、内部エラー文や短い生ラベルを学習者向け理由として出さない。
+  // 個別英文の判定ではなく、API/モデル診断の表示整形。
+  if(/service failed|fetch failed|provider|timeout|api error|failed/i.test(raw)) return '理由説明を取得できませんでした';
+  if(/missing verb|missing predicate|lacks a verb|parse failed|fragment|invalid/i.test(raw)) return '外部説明モデルの詳しい理由を取得できませんでした';
+  return apiRejectReason(raw);
 }
 
 function bestRejectCandidates(placeIndex){
@@ -955,8 +970,8 @@ function bestRejectCandidates(placeIndex){
 }
 function routeRejectText(r){
   const text=String(r?.text||'').trim();
-  const reason=userFacingRejectReason(r);
-  if(text && reason) return `候補「${text}」 / API判定NG: ${reason}`;
+  const reason=rejectReasonText(r);
+  if(text && reason) return `候補「${text}」：${reason}`;
   if(text) return `候補「${text}」 / API判定NG`;
   if(reason) return `API判定NG: ${reason}`;
   return '';
@@ -965,17 +980,17 @@ function buildFailInfo(placeIndex, word){
   const rejects=bestRejectCandidates(placeIndex);
   const items=rejects.map(r=>{
     const text=String(r?.text||'候補なし').trim();
-    const reason=userFacingRejectReason(r);
+    const reason=rejectReasonText(r);
     return {text,reason};
   });
   // 1件だけ代表表示にすると、例: I am eating だけ見えて I like eating が隠れる。
   // 置いたカードを含むAPI判定NG候補は、上部メッセージ欄に複数件まとめて出す。
   const short = items.length
-    ? `API判定NG候補：` + compactRejectList(items,4)
+    ? `API判定NG候補：` + items.map(it=>`「${it.text}」${it.reason?`：${it.reason}`:''}`).join(' / ')
     : `今回置いた「${word}」を含む候補をAPIに渡せていない/またはAPIから判定理由が返っていない`;
   const lines=[];
   if(items.length){
-    lines.push(...items.map(it=>`候補: <b>${esc(it.text)}</b>${it.reason?` / 理由: ${esc(it.reason)}`:''}`));
+    lines.push(...items.map(it=>`候補: <b>${esc(it.text)}</b>${it.reason?`：${esc(it.reason)}`:''}`));
   }else{
     lines.push('API判定の詳細なし。候補がAPIに渡っていない、API未応答、または古いHTML/キャッシュの可能性。');
   }
@@ -1050,14 +1065,14 @@ async function placeTile(cellIndex){
     speakResultsSequential(scoring);
     const partialFailInfo=buildFailInfo(cellIndex, word);
     if((partialFailInfo.rejects||[]).length){
-      partialFailInfo.short=`別候補NG：${compactRejectList((partialFailInfo.rejects||[]).map(r=>({text:String(r?.text||'候補なし').trim(),reason:userFacingRejectReason(r)})),4)}`;
-      addLog(`${p.name}: 別候補NG：${partialFailInfo.short}`,false);
+      partialFailInfo.short=`成立した経路あり。ただし別候補は不成立：${partialFailInfo.short}`;
+      addLog(`${p.name}: 不成立候補あり：${partialFailInfo.short}`,false);
       (partialFailInfo.rejects||[]).slice(0,3).forEach(r=>{
-        const meta=userFacingRejectReason(r);
-        addLog(`別候補: ${r.text||'候補なし'}${meta?` / 理由: ${meta}`:''}`,false);
+        const meta=rejectReasonText(r);
+        addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
       });
       showFailDetails(partialFailInfo, cellIndex, {partial:true});
-      setMsg(`${state.statusText} / ${partialFailInfo.short}`,'good',{judge:true});
+      setMsg(`${state.statusText} / 別候補NG：${partialFailInfo.short}`,'good',{judge:true});
     }
   }else{
     gained = -UNUSED_PENALTY;
@@ -1066,8 +1081,8 @@ async function placeTile(cellIndex){
     const failInfo=buildFailInfo(cellIndex, word);
     addLog(`${p.name}: ${word} を配置。不成立：${failInfo.short} -${UNUSED_PENALTY}`,false);
     (failInfo.rejects||[]).slice(0,3).forEach(r=>{
-      const meta=userFacingRejectReason(r);
-      addLog(`理由: ${r.text||'候補なし'}${meta?` / ${meta}`:''}`,false);
+      const meta=rejectReasonText(r);
+      addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
     });
     setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
     playChime(false);
