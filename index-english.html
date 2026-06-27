@@ -221,6 +221,16 @@ async function linkGrammarEvaluate(words){
     return ev;
   }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe(); return null;}
 }
+async function singleApiCheckItem(base, item){
+  const res=await fetch(base+'/check-and-translate',{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({text:item.text,words:item.words})
+  });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data=await res.json();
+  return data;
+}
 async function evaluateCandidatesByApi(routeCandidates){
   const out=[];
   if(!linkGrammarApi) return out;
@@ -246,56 +256,78 @@ async function evaluateCandidatesByApi(routeCandidates){
   try{
     linkGrammarStatus='CHECK'; renderSafe();
     const base=linkGrammarApi.replace(/\/$/,'');
+    const byId=new Map(pending.map(x=>[x.id,x]));
+    const okItems=[];
+    const ngItems=[];
     const body={candidates:pending.map(x=>({id:x.id,text:x.text,words:x.words})),limit:180};
-    let res=await fetch(base+'/check-and-translate-batch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-    if(res.status===404){
-      // 古いAPIは単発しかない。判定内容は同じくAPIだけに限定する。
-      const fallback=[];
-      for(const item of pending){
-        const ev=await linkGrammarEvaluate(item.words);
-        if(ev) fallback.push({item,ev});
+    let usedBatch=false;
+    try{
+      const res=await fetch(base+'/check-and-translate-batch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+      if(res.status!==404){
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        usedBatch=true;
+        const data=await res.json();
+        const results=Array.isArray(data?.results)?data.results:[];
+        const seenResultIds=new Set();
+        for(const r of results){
+          const item=byId.get(String(r.id));
+          if(!item) continue;
+          seenResultIds.add(item.id);
+          const ev=evFromApiResult(r,item.words);
+          if(ev){
+            linkGrammarCache[item.key]=ev;
+            okItems.push({item,ev});
+          }else{
+            ngItems.push({item,result:r,needsSingleConfirm:true});
+          }
+        }
+        for(const item of pending){
+          if(!seenResultIds.has(item.id)) ngItems.push({item,result:{reason:'APIから判定結果が返らなかった',type:'no_result'},needsSingleConfirm:true});
+        }
       }
-      for(const {item,ev} of fallback){
-        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
-      }
-      return out;
+    }catch(e){
+      console.warn('English batch API failed; fallback to single checks', e);
     }
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    const results=Array.isArray(data?.results)?data.results:[];
-    const seenResultIds=new Set();
-    for(const r of results){
-      const item=pending.find(x=>x.id===String(r.id));
-      if(!item) continue;
-      seenResultIds.add(item.id);
-      const ev=evFromApiResult(r,item.words);
-      if(ev) linkGrammarCache[item.key]=ev;
+
+    if(!usedBatch){
+      for(const item of pending) ngItems.push({item,result:{reason:'batch unavailable',type:'fallback'},needsSingleConfirm:true});
+    }
+
+    // バッチ結果のNGは、そのまま不成立にしない。
+    // 直API(/check-and-translate)の最終 ok/gameOk を必ず優先する。
+    // parses/stdout 等の途中ログだけで「不成立候補」に出すと、I am reading のようなOK文を誤表示するため。
+    for(const x of ngItems){
+      let finalResult=x.result||{};
+      if(x.needsSingleConfirm){
+        try{ finalResult=await singleApiCheckItem(base,x.item); }
+        catch(e){ finalResult={...(x.result||{}), reason:String(e.message||e), type:'api_error'}; }
+      }
+      const ev=evFromApiResult(finalResult,x.item.words);
       if(ev){
-        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
+        linkGrammarCache[x.item.key]=ev;
+        okItems.push({item:x.item,ev});
       }else{
-        for(const route of item.routes){
+        for(const route of x.item.routes){
           lastScanRejects.push({
-            text:item.text,
-            words:item.words,
+            text:x.item.text,
+            words:x.item.words,
             cells:route.path.map(s=>s.i),
             dir:route.label,
-            reason:r.reason||'',
-            type:r.type||'',
-            sentenceType:r.sentenceType||'',
-            fullParse:!!r.fullParse
+            reason:finalResult.reason||'',
+            type:finalResult.type||'',
+            sentenceType:finalResult.sentenceType||'',
+            fullParse:!!finalResult.fullParse
           });
         }
       }
     }
-    for(const item of pending){
-      if(seenResultIds.has(item.id)) continue;
-      for(const route of item.routes){
-        lastScanRejects.push({text:item.text,words:item.words,cells:route.path.map(s=>s.i),dir:route.label,reason:'APIから判定結果が返らなかった',type:'no_result',sentenceType:'',fullParse:false});
-      }
+
+    for(const {item,ev} of okItems){
+      for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
     }
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     linkGrammarStatus='ON'; renderSafe();
-  }catch(e){console.warn('English batch API failed',e); linkGrammarStatus='ERR'; renderSafe();}
+  }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe();}
   return out;
 }
 function setLinkGrammarApi(url){
@@ -935,7 +967,10 @@ function showComboDetails(scoring,comboInfo){
 }
 
 function apiRejectReason(raw){
-  return String(raw||'').trim();
+  const v=String(raw||'').trim();
+  if(!v) return '';
+  if(v==='link grammar parse failed') return '英文として解析できません';
+  return v;
 }
 
 function bestRejectCandidates(placeIndex){
@@ -945,22 +980,29 @@ function bestRejectCandidates(placeIndex){
 function routeRejectText(r){
   const text=String(r?.text||'').trim();
   const reason=apiRejectReason(r?.reason||r?.type||r?.sentenceType||'');
-  if(text && reason) return `候補「${text}」 / API reject: ${reason}`;
-  if(text) return `候補「${text}」 / API reject`;
-  if(reason) return `API reject: ${reason}`;
+  if(text && reason) return `候補「${text}」 / API判定NG: ${reason}`;
+  if(text) return `候補「${text}」 / API判定NG`;
+  if(reason) return `API判定NG: ${reason}`;
   return '';
 }
 function buildFailInfo(placeIndex, word){
   const rejects=bestRejectCandidates(placeIndex);
-  const routeHint=rejects[0];
-  const rejectText=routeRejectText(routeHint);
-  const short=rejectText || `今回置いた「${word}」を含む候補をAPIに渡せていない/またはAPIからreject理由が返っていない`;
+  const items=rejects.map(r=>{
+    const text=String(r?.text||'候補なし').trim();
+    const reason=apiRejectReason(r?.reason||r?.type||r?.sentenceType||'');
+    return {text,reason};
+  });
+  // 1件だけ代表表示にすると、例: I am eating だけ見えて I like eating が隠れる。
+  // 置いたカードを含むAPI判定NG候補は、上部メッセージ欄に複数件まとめて出す。
+  const short = items.length
+    ? `API判定NG候補：` + items.map(it=>`「${it.text}」${it.reason?`（${it.reason}）`:''}`).join(' / ')
+    : `今回置いた「${word}」を含む候補をAPIに渡せていない/またはAPIから判定理由が返っていない`;
   const lines=[];
-  if(routeHint?.text) lines.push(`候補: <b>${esc(routeHint.text)}</b>`);
-  const apiReason=apiRejectReason(routeHint?.reason||routeHint?.type||routeHint?.sentenceType||'');
-  if(apiReason) lines.push(`API: ${esc(apiReason)}`);
-  if(rejects.length>1) lines.push(`他の不成立候補: ${rejects.length-1}件`);
-  if(!rejects.length) lines.push('API reject詳細なし。候補がAPIに渡っていない、API未応答、または古いHTML/キャッシュの可能性。');
+  if(items.length){
+    lines.push(...items.map(it=>`候補: <b>${esc(it.text)}</b>${it.reason?` / API: ${esc(it.reason)}`:''}`));
+  }else{
+    lines.push('API判定の詳細なし。候補がAPIに渡っていない、API未応答、または古いHTML/キャッシュの可能性。');
+  }
   return {short, detail:lines.join('<br>'), example:'', rejects};
 }
 function showFailDetails(info, cellIndex, opts={}){
@@ -1036,7 +1078,7 @@ async function placeTile(cellIndex){
       addLog(`${p.name}: 不成立候補あり：${partialFailInfo.short}`,false);
       (partialFailInfo.rejects||[]).slice(0,3).forEach(r=>{
         const meta=apiRejectReason(r.reason||r.type||r.sentenceType||'');
-        addLog(`理由: ${r.text||'候補なし'}${meta?` / API reject: ${meta}`:''}`,false);
+        addLog(`理由: ${r.text||'候補なし'}${meta?` / API判定NG: ${meta}`:''}`,false);
       });
       showFailDetails(partialFailInfo, cellIndex, {partial:true});
       setMsg(`${state.statusText} / 別候補の不成立理由：${partialFailInfo.short}`,'good',{judge:true});
@@ -1049,7 +1091,7 @@ async function placeTile(cellIndex){
     addLog(`${p.name}: ${word} を配置。不成立：${failInfo.short} -${UNUSED_PENALTY}`,false);
     (failInfo.rejects||[]).slice(0,3).forEach(r=>{
       const meta=apiRejectReason(r.reason||r.type||r.sentenceType||'');
-      addLog(`理由: ${r.text||'候補なし'}${meta?` / API reject: ${meta}`:''}`,false);
+      addLog(`理由: ${r.text||'候補なし'}${meta?` / API判定NG: ${meta}`:''}`,false);
     });
     setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
     playChime(false);
