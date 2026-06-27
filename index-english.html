@@ -253,83 +253,47 @@ async function evaluateCandidatesByApi(routeCandidates){
     byKey.get(key).routes.push(c);
   }
   if(!pending.length) return out;
+
   try{
     linkGrammarStatus='CHECK'; renderSafe();
     const base=linkGrammarApi.replace(/\/$/,'');
-    const byId=new Map(pending.map(x=>[x.id,x]));
-    const okItems=[];
-    const ngItems=[];
-    const body={candidates:pending.map(x=>({id:x.id,text:x.text,words:x.words})),limit:180};
-    let usedBatch=false;
-    try{
-      const res=await fetch(base+'/check-and-translate-batch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-      if(res.status!==404){
-        if(!res.ok) throw new Error('HTTP '+res.status);
-        usedBatch=true;
-        const data=await res.json();
-        const results=Array.isArray(data?.results)?data.results:[];
-        const seenResultIds=new Set();
-        for(const r of results){
-          const item=byId.get(String(r.id));
-          if(!item) continue;
-          seenResultIds.add(item.id);
-          const ev=evFromApiResult(r,item.words);
-          if(ev){
-            linkGrammarCache[item.key]=ev;
-            okItems.push({item,ev});
-          }else{
-            ngItems.push({item,result:r,needsSingleConfirm:true});
-          }
-        }
-        for(const item of pending){
-          if(!seenResultIds.has(item.id)) ngItems.push({item,result:{reason:'APIから判定結果が返らなかった',type:'no_result'},needsSingleConfirm:true});
-        }
-      }
-    }catch(e){
-      console.warn('English batch API failed; fallback to single checks', e);
-    }
 
-    if(!usedBatch){
-      for(const item of pending) ngItems.push({item,result:{reason:'batch unavailable',type:'fallback'},needsSingleConfirm:true});
-    }
-
-    // バッチ結果のNGは、そのまま不成立にしない。
-    // 直API(/check-and-translate)の最終 ok/gameOk を必ず優先する。
-    // parses/stdout 等の途中ログだけで「不成立候補」に出すと、I am reading のようなOK文を誤表示するため。
-    for(const x of ngItems){
-      let finalResult=x.result||{};
-      if(x.needsSingleConfirm){
-        try{ finalResult=await singleApiCheckItem(base,x.item); }
-        catch(e){ finalResult={...(x.result||{}), reason:String(e.message||e), type:'api_error'}; }
+    // 判定の正本は /check-and-translate の最終レスポンスだけ。
+    // /check-and-translate-batch や parses/stdout の途中ログは成立/不成立表示に使わない。
+    for(const item of pending){
+      let finalResult=null;
+      try{
+        finalResult=await singleApiCheckItem(base,item);
+      }catch(e){
+        finalResult={reason:String(e.message||e), type:'api_error'};
       }
-      const ev=evFromApiResult(finalResult,x.item.words);
+
+      const ev=evFromApiResult(finalResult,item.words);
       if(ev){
-        linkGrammarCache[x.item.key]=ev;
-        okItems.push({item:x.item,ev});
+        linkGrammarCache[item.key]=ev;
+        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label,source:'api'});
       }else{
-        for(const route of x.item.routes){
+        for(const route of item.routes){
           lastScanRejects.push({
-            text:x.item.text,
-            words:x.item.words,
+            text:item.text,
+            words:item.words,
             cells:route.path.map(s=>s.i),
             dir:route.label,
-            reason:finalResult.reason||'',
-            type:finalResult.type||'',
-            sentenceType:finalResult.sentenceType||'',
-            fullParse:!!finalResult.fullParse
+            reason:finalResult?.reason||'',
+            type:finalResult?.type||'',
+            sentenceType:finalResult?.sentenceType||'',
+            fullParse:!!finalResult?.fullParse
           });
         }
       }
     }
 
-    for(const {item,ev} of okItems){
-      for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
-    }
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     linkGrammarStatus='ON'; renderSafe();
   }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe();}
   return out;
 }
+
 function setLinkGrammarApi(url){
   linkGrammarApi=String(url||'').trim();
   if(linkGrammarApi) localStorage.setItem(LINK_GRAMMAR_API_KEY,linkGrammarApi); else localStorage.removeItem(LINK_GRAMMAR_API_KEY);
