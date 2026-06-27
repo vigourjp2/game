@@ -138,7 +138,7 @@ const WORDS = [
 const POS = Object.fromEntries(WORDS.map(x=>[x.w.toLowerCase(),x.pos]));
 
 // 自作フレーズバンク: 市販教材の丸写しではなく、中学・高校基礎で頻出の表現をオリジナル辞書化。
-// Harperは完全英文の校正補助、フレーズ・熟語・連語はこのバンクで即判定する。
+// WORDS/POS は手札のカテゴリ表示・配牌用。英文成立の採点はAPIへ一任する。
 const PHRASE_BANK = [
   ['go to school','学校へ行く','通学フレーズ',22,'JHS1'],['go home','家に帰る','生活フレーズ',18,'JHS1'],['come home','家に帰ってくる','生活フレーズ',18,'JHS1'],['go to bed','寝る','生活フレーズ',22,'JHS1'],['get up','起きる','生活フレーズ',18,'JHS1'],
   ['have breakfast','朝食を食べる','生活フレーズ',18,'JHS1'],['have lunch','昼食を食べる','生活フレーズ',18,'JHS1'],['have dinner','夕食を食べる','生活フレーズ',18,'JHS1'],['eat breakfast','朝食を食べる','生活フレーズ',18,'JHS1'],['drink water','水を飲む','生活フレーズ',16,'JHS1'],
@@ -158,12 +158,28 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v4.strictLG';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v5.apiOnlyBatch';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
 let linkGrammarCache={};
 try{linkGrammarCache=JSON.parse(localStorage.getItem(LINK_GRAMMAR_CACHE_KEY)||'{}')||{};}catch(e){linkGrammarCache={};}
+function evFromApiResult(data, words){
+  const w=lowerWords(words);
+  if(!data || !data.gameOk) return null;
+  const text=(data.text||displayEnglish(w)).replace(/[.!?]$/,'');
+  const ja=(data.ja || data.translation?.ja || data.translation?.translatedText || '');
+  return {
+    ok:true,
+    kind:data.sentenceType || data.kind || 'API完全英文判定',
+    pts:48+Math.min(28,w.length*6),
+    text,
+    ja,
+    source:'api',
+    parser:data,
+    type:data.type || 'complete_sentence'
+  };
+}
 async function linkGrammarEvaluate(words){
   const w=lowerWords(words);
   const key=norm(w);
@@ -171,33 +187,79 @@ async function linkGrammarEvaluate(words){
   if(w.length<2) return null;
   const cached=linkGrammarCache[key];
   if(cached!==undefined){
-    if(cached && typeof cached==='object' && cached.ok){
-      return {kind:cached.kind||'LinkGrammar構文解析',pts:cached.pts||48+Math.min(24,w.length*5),text:cached.text||displayEnglish(w),source:'linkGrammar',parser:'cache',ja:cached.ja||''};
-    }
-    if(cached===true) return {kind:'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:displayEnglish(w),source:'linkGrammar',parser:'cache'};
+    if(cached && typeof cached==='object' && cached.ok) return {...cached, source:'api', parser:'cache'};
     return null;
   }
   try{
     linkGrammarStatus='CHECK'; renderSafe();
     const base=linkGrammarApi.replace(/\/$/,'');
     const text=displayEnglish(w);
-    // /check-and-translate がある新APIを優先。古いAPIなら /check にフォールバック。
     let res=await fetch(base+'/check-and-translate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text,words:w})});
     if(res.status===404) res=await fetch(base+'/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text,words:w})});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
-    const pass=!!(data && data.ok && data.fullParse !== false && Number(data.nullCount||0)===0);
-    const ja=(data && (data.ja || data.translation?.ja || data.translation?.translatedText)) || '';
-    if(pass){
-      const ev={ok:true,kind:data.kind||'LinkGrammar構文解析',pts:48+Math.min(24,w.length*5),text:(data.text||text).replace(/[.]$/,''),ja};
-      linkGrammarCache[key]=ev;
-    }else{
-      linkGrammarCache[key]=false;
+    const ev=evFromApiResult(data,w);
+    linkGrammarCache[key]=ev||false;
+    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    linkGrammarStatus='ON'; renderSafe();
+    return ev;
+  }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe(); return null;}
+}
+async function evaluateCandidatesByApi(routeCandidates){
+  const out=[];
+  if(!linkGrammarApi) return out;
+  const pending=[];
+  const byKey=new Map();
+  for(const c of routeCandidates){
+    const words=c.path.map(s=>s.w);
+    const w=lowerWords(words);
+    const key=norm(w);
+    if(w.length<2) continue;
+    const cached=linkGrammarCache[key];
+    if(cached!==undefined){
+      if(cached && typeof cached==='object' && cached.ok) out.push({...cached,cells:c.path.map(s=>s.i),dir:c.label,source:'api'});
+      continue;
+    }
+    if(!byKey.has(key)){
+      const item={id:String(pending.length), key, words:w, text:displayEnglish(w), routes:[]};
+      byKey.set(key,item); pending.push(item);
+    }
+    byKey.get(key).routes.push(c);
+  }
+  if(!pending.length) return out;
+  try{
+    linkGrammarStatus='CHECK'; renderSafe();
+    const base=linkGrammarApi.replace(/\/$/,'');
+    const body={candidates:pending.map(x=>({id:x.id,text:x.text,words:x.words})),limit:180};
+    let res=await fetch(base+'/check-and-translate-batch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    if(res.status===404){
+      // 古いAPIは単発しかない。判定内容は同じくAPIだけに限定する。
+      const fallback=[];
+      for(const item of pending){
+        const ev=await linkGrammarEvaluate(item.words);
+        if(ev) fallback.push({item,ev});
+      }
+      for(const {item,ev} of fallback){
+        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
+      }
+      return out;
+    }
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    const results=Array.isArray(data?.results)?data.results:[];
+    for(const r of results){
+      const item=pending.find(x=>x.id===String(r.id));
+      if(!item) continue;
+      const ev=evFromApiResult(r,item.words);
+      linkGrammarCache[item.key]=ev||false;
+      if(ev){
+        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
+      }
     }
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     linkGrammarStatus='ON'; renderSafe();
-    return pass ? {kind:(data.kind||'LinkGrammar構文解析'),pts:48+Math.min(24,w.length*5),text:(data.text||text).replace(/[.]$/,''),source:'linkGrammar',parser:data,ja} : null;
-  }catch(e){console.warn('Link Grammar API failed',e); linkGrammarStatus='ERR'; renderSafe(); return null;}
+  }catch(e){console.warn('English batch API failed',e); linkGrammarStatus='ERR'; renderSafe();}
+  return out;
 }
 function setLinkGrammarApi(url){
   linkGrammarApi=String(url||'').trim();
@@ -564,15 +626,11 @@ async function translateWithApi(text){
 }
 async function resolveJapanese(words,ev){
   if(ev && ev.ja) return ev.ja;
+  if(ev && ev.source==='api') return '';
   const key=norm(words);
   if(EXACT_JA.has(key)) return EXACT_JA.get(key);
   if(PHRASE_MAP.has(key)) return PHRASE_MAP.get(key).ja;
-  const text=(ev?.text || displayEnglish(words)).trim();
-  if(text && isLikelyCompleteSentenceWords(words)){
-    const apiJa=await translateWithApi(text);
-    if(apiJa) return apiJa;
-  }
-  return translateSequence(words,ev);
+  return '';
 }
 function translateSequence(words,ev){
   const key=norm(words);
@@ -634,7 +692,7 @@ function speakOne(enText,jaText,onEnd){
 function speakResult(m){
   if(!m) return;
   const enText=m.text;
-  const jaText=m.ja||translateSequence(enText.split(' '),m);
+  const jaText=m.ja||'';
   try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
   speakOne(enText,jaText);
 }
@@ -650,7 +708,7 @@ function speakResultsSequential(matches){
     if(!m) return;
     highlightRoute(m, i-1, 1850);
     const prefix=unique.length>1 ? `Combo ${i}. ` : '';
-    speakOne(prefix + m.text, m.ja||translateSequence(m.text.split(' '),m), ()=>setTimeout(next,260));
+    speakOne(prefix + m.text, m.ja||'', ()=>setTimeout(next,260));
   };
   next();
 }
@@ -714,7 +772,8 @@ async function scanFromCell(placeIndex){
   }
   for(const st of starts){ dfs(st.x,st.y,[{i:st.i,w:st.w}],null,0); }
 
-  // まず内部・フレーズバンクを同期評価。未知の完全英文だけLink Grammar APIへ回す。Harper判定は使わない。
+  // 盤面から作った候補は、文っぽさをHTML側で決めず、全部APIへまとめて投げる。
+  // JS側の品詞テンプレ/単語別翻訳/「主語があるから文っぽい」判定では採点しない。
   const seenCand=new Set();
   const uniq=[];
   for(const c of candidates){
@@ -723,36 +782,17 @@ async function scanFromCell(placeIndex){
     if(seenCand.has(k)) continue;
     seenCand.add(k); uniq.push(c);
   }
-  for(const c of uniq){
-    const words=c.path.map(s=>s.w);
-    const likelySentence=isLikelyCompleteSentenceWords(words);
-    let ev=null;
-
-    if(likelySentence){
-      // 3語以上で主語/名詞から始まる候補は「文」とみなし、成立判定は必ずAPIに一任する。
-      // APIがNG/未接続なら、ローカルの品詞テンプレには絶対にフォールバックしない。
-      // これで I am new books / I like you などをHTML側の個別品詞修正で裁かず、
-      // LanguageTool + Link Grammar + 翻訳API の結果だけを採用する。
-      ev=await evaluateSequenceAsync(words);
-      if(!ev) continue;
-    }else{
-      // 主語から始まらない短い熟語・連語だけ、ローカルのPhraseBankで救う。
-      // 例: go to school / listen to music / very happy
-      ev=evaluateSequence(words);
-      if(!ev) continue;
-    }
-
-    ev.ja=await resolveJapanese(words,ev);
-    found.push({...ev,cells:c.path.map(s=>s.i),dir:c.label});
+  const apiMatches=await evaluateCandidatesByApi(uniq);
+  for(const ev of apiMatches){
+    ev.ja=await resolveJapanese(ev.text.split(' '),ev);
+    found.push(ev);
   }
   found.sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
   const seen=new Set();
   return found.filter(f=>{const k=f.cells.join(',')+'|'+norm(f.text.split(' ')); if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,24);
 }
 function selectScoringMatches(matches){
-  // 長い英文を優先。ただし「go to school」のような登録済みの3語以上フレーズは、
-  // 長い文の一部でも学習上意味があるのでコンボとして残す。
-  // 一方で「like apples」のような自動生成2語フレーズは、I like apples と二重加算しない。
+  // APIが gameOk:true を返した完全英文だけ採点。包含関係は長い英文を優先して整理する。
   const sorted=[...matches].sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
   const picked=[];
   function isSubset(a,b){
@@ -815,7 +855,7 @@ function showComboDetails(scoring,comboInfo){
   if(!comboInfo || scoring.length<=1){panel.classList.remove('show');return;}
   title.textContent=`COMBO ×${comboInfo.count}：${comboInfo.sentenceCount||comboInfo.count}文 / ${comboInfo.routeCount||comboInfo.count}経路`;
   listEl.innerHTML=scoring.map((m,i)=>{
-    const ja=m.ja||translateSequence(m.text.split(' '),m);
+    const ja=m.ja||'';
     const chips=(m.cells||[]).map((c,n)=>`<span class="routeChip">${n+1} ${coord(c)} ${esc(state.board[c]?.w||'')}</span>`).join('');
     return `<div class="comboItem" data-route="${i}"><b>${i+1}. ${esc(m.text)}</b><div class="comboJa">${esc(ja)} / ${esc(m.kind||'')}</div><div class="comboRoute">${esc(m.dir||'経路')}：${esc(routeText(m))}</div><div class="comboCards">${chips}</div></div>`;
   }).join('');
@@ -922,7 +962,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">Harper:判定OFF</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:API一任</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
 }
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
@@ -952,8 +992,8 @@ function handleNet(raw){eachPayload(raw,(msg)=>{
     if(msg.state.gameId!==state.gameId || incomingTurn>=state.turnNo){applyState(msg.state,'オンライン同期');}
   }
 });}
-$('startBtn').onclick=()=>{unlockSpeech();$('start').style.display='none';initHarper();render();};
-$('connectBtn').onclick=()=>{unlockSpeech();initHarper();connect();};
+$('startBtn').onclick=()=>{unlockSpeech();$('start').style.display='none';render();};
+$('connectBtn').onclick=()=>{unlockSpeech();connect();};
 $('newGameBtn').onclick=()=>newGame(true);
 $('resetBtn').onclick=()=>{if(confirm('盤面をリセットしてオンラインにも送信する？'))newGame(true);};
 $('passBtn').onclick=passTurn;
