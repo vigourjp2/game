@@ -112,6 +112,7 @@
 <script>
 (() => {
 'use strict';
+const APP_VERSION='reason-inline-20260627-005';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
@@ -120,6 +121,8 @@ const clientId = (crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0,8) 
 let socket=null,retryTimer=null,heartbeat=null,rx=0;
 let selectedHandIndex=-1;
 let recentCells=[];
+let lastJudgeMsg='';
+let lastJudgeClass='info';
 let suppressBroadcast=false;
 const WORDS = [
   // 主語・代名詞
@@ -454,7 +457,7 @@ function slotInfo(i,w){
 const targets = Array.from(EXACT.keys()).slice(0,24);
 let state = freshState(2);
 function freshState(playerCount=2){
-  return {version:1,gameId:'eng-'+Date.now().toString(36),turn:0,turnNo:1,playerCount,wordsMade:0,board:Array.from({length:N*N},()=>null),players:Array.from({length:playerCount},(_,i)=>({name:'Player '+(i+1),score:0,tiles:0,color:COLORS[i],hand:drawHand(i)})),log:[{t:Date.now(),text:'新規ゲーム開始',good:true}],statusText:'単語タイルを選んで空きマスに置く',statusClass:'info'};
+  return {version:1,gameId:'eng-'+Date.now().toString(36),turn:0,turnNo:1,playerCount,wordsMade:0,board:Array.from({length:N*N},()=>null),players:Array.from({length:playerCount},(_,i)=>({name:'Player '+(i+1),score:0,tiles:0,color:COLORS[i],hand:drawHand(i)})),log:[{t:Date.now(),text:'新規ゲーム開始',good:true}],statusText:'単語タイルを選んで空きマスに置く',statusClass:'info',lastJudgeMsg:'',lastJudgeClass:'info'};
 }
 function drawHand(seed=0){
   // 詰み対策：種類ごとの固定スロットで、常に「主語 / be・助 / 動詞 / 形容詞・ing / 名詞 / 追加」を1枚ずつ持つ。
@@ -465,7 +468,7 @@ function drawHand(seed=0){
   return HAND_SLOTS.map((_,i)=>drawOneForSlot(i));
 }
 function safeName(){return ($('nameInput').value||localStorage.englishName||('P-'+clientId)).trim().slice(0,18)}
-function setMsg(text,cls='info'){const el=$('msg');if(el){el.textContent=text;el.className='msg '+cls;} if(state){state.statusText=String(text||'');state.statusClass=cls||'info';}}
+function setMsg(text,cls='info',opts={}){const val=String(text||'');const klass=cls||'info';const el=$('msg');if(el){el.textContent=val;el.className='msg '+klass;} if(state){state.statusText=val;state.statusClass=klass;if(opts.judge){state.lastJudgeMsg=val;state.lastJudgeClass=klass;}} if(opts.judge){lastJudgeMsg=val;lastJudgeClass=klass;}}
 function addLog(text,good=true){state.log.unshift({t:Date.now(),text,good});state.log=state.log.slice(0,40);}
 function idx(x,y){return y*N+x}
 function xy(i){return {x:i%N,y:Math.floor(i/N)}}
@@ -952,7 +955,7 @@ function buildFailInfo(placeIndex, word){
   const rejects=bestRejectCandidates(placeIndex);
   const routeHint=rejects[0];
   const rejectText=routeRejectText(routeHint);
-  const short=rejectText || `今回置いた「${word}」を含む候補のAPI reject詳細なし`;
+  const short=rejectText || `今回置いた「${word}」を含む候補をAPIに渡せていない/またはAPIからreject理由が返っていない`;
   const lines=[];
   if(routeHint?.text) lines.push(`候補: <b>${esc(routeHint.text)}</b>`);
   const apiReason=apiRejectReason(routeHint?.reason||routeHint?.type||routeHint?.sentenceType||'');
@@ -1053,7 +1056,7 @@ async function placeTile(cellIndex){
         addLog(`理由: ${r.text||'候補なし'}${meta?` / API reject: ${meta}`:''}`,false);
       });
       showFailDetails(partialFailInfo, cellIndex, {partial:true});
-      setMsg(`${state.statusText} / 別候補の不成立理由：${partialFailInfo.short}`,'good');
+      setMsg(`${state.statusText} / 別候補の不成立理由：${partialFailInfo.short}`,'good',{judge:true});
     }
   }else{
     gained = -UNUSED_PENALTY;
@@ -1065,7 +1068,7 @@ async function placeTile(cellIndex){
       const meta=apiRejectReason(r.reason||r.type||r.sentenceType||'');
       addLog(`理由: ${r.text||'候補なし'}${meta?` / API reject: ${meta}`:''}`,false);
     });
-    setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad');
+    setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
     playChime(false);
     showFailDetails(failInfo, cellIndex);
     const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
@@ -1076,6 +1079,7 @@ async function placeTile(cellIndex){
   selectedHandIndex=-1;
   broadcast({type:'englishPlace',gameId:state.gameId,state:lightState(),cellIndex,by:clientId});
   render();
+  if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
 }
 function drawOne(){return WORDS[Math.floor(Math.random()*WORDS.length)].w}
 function nextTurn(){state.turn=(state.turn+1)%state.playerCount;state.turnNo++;}
@@ -1096,8 +1100,14 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:API一任</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
-  if(state.statusText){const m=$('msg'); if(m){m.textContent=state.statusText; m.className='msg '+(state.statusClass||'info');}}
+  $('targetList').innerHTML=`<span class="chip">HTML:${esc(APP_VERSION)}</span><span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:API一任</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  {const m=$('msg'); if(m){
+    let t=state.statusText||''; let c=state.statusClass||'info';
+    const generic=/成立なし|つなげ方/.test(t);
+    if((!t||generic) && state.lastJudgeMsg){t=state.lastJudgeMsg;c=state.lastJudgeClass||'bad';}
+    if(!t) t='単語タイルを選んで空きマスに置く';
+    m.textContent=t; m.className='msg '+c;
+  }}
 }
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
