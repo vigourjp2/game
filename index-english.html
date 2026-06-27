@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v5 guaranteed reason fallback 2026-06-27-0935 -->
+<!-- latest: v10 reason job queue success-only cache 2026-06-27 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -217,6 +217,7 @@ async function linkGrammarEvaluate(words){
     const ev=evFromApiResult(data,w);
     if(ev) linkGrammarCache[key]=ev;
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    scheduleReasonPolling(600);
     linkGrammarStatus='ON'; renderSafe();
     return ev;
   }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe(); return null;}
@@ -287,6 +288,8 @@ async function evaluateCandidatesByApi(routeCandidates){
           words:item.words,
           reason:finalResult?.reasonExplain?.explanationJa || finalResult?.reasonExplain?.explanationEn || finalResult?.reason || '',
           reasonSource:finalResult?.reasonExplain?.method || finalResult?.reasonSource || '',
+          reasonStatus:finalResult?.reasonStatus || '',
+          reasonJobId:finalResult?.reasonJobId || '',
           reasonExplain:finalResult?.reasonExplain || null,
           type:finalResult?.type||'',
           sentenceType:finalResult?.sentenceType||'',
@@ -304,6 +307,7 @@ async function evaluateCandidatesByApi(routeCandidates){
     }
 
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    scheduleReasonPolling(600);
     linkGrammarStatus='ON'; renderSafe();
   }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe();}
   return out;
@@ -945,6 +949,82 @@ function showComboDetails(scoring,comboInfo){
   highlightRoute(scoring[0],0,5200);
 }
 
+
+const REASON_POLL_MAX_PARALLEL=2;
+let reasonPollTimer=null;
+let lastReasonDisplayContext=null;
+function candidateKeyFromText(text){return norm(String(text||'').split(/\s+/).filter(Boolean));}
+function isReasonPending(r){
+  if(!r||!r.__reject) return false;
+  if(rejectReasonText(r)) return false;
+  return !!(r.reasonJobId || r.text);
+}
+function updateReasonForText(text, reasonExplain, status='success'){
+  const key=candidateKeyFromText(text);
+  if(!key||!reasonExplain) return false;
+  let changed=false;
+  function apply(r){
+    if(!r) return;
+    r.reasonExplain=reasonExplain;
+    r.reason=reasonExplain.explanationJa || reasonExplain.explanationEn || r.reason || '';
+    r.reasonSource=reasonExplain.method || 'hf-chat-reason-only';
+    r.reasonStatus=status;
+    changed=true;
+  }
+  const cached=linkGrammarCache[key];
+  if(cached&&cached.__reject) apply(cached);
+  for(const r of lastScanRejects||[]){
+    if(candidateKeyFromText(r.text)===key) apply(r);
+  }
+  return changed;
+}
+function scheduleReasonPolling(delay=1000){
+  clearTimeout(reasonPollTimer);
+  reasonPollTimer=setTimeout(()=>{reasonPollTimer=null;pollPendingReasons().catch(e=>console.warn('reason poll failed',e));},Math.max(0,delay));
+}
+async function pollPendingReasons(){
+  if(!linkGrammarApi) return;
+  const rejects=[];
+  for(const v of Object.values(linkGrammarCache||{})) if(isReasonPending(v)) rejects.push(v);
+  for(const r of lastScanRejects||[]) if(isReasonPending(r)) rejects.push(r);
+  const uniq=[]; const seen=new Set();
+  for(const r of rejects){
+    const key=(r.reasonJobId||'')+'|'+candidateKeyFromText(r.text);
+    if(seen.has(key)) continue;
+    seen.add(key); uniq.push(r);
+  }
+  if(!uniq.length) return;
+  const base=linkGrammarApi.replace(/\/$/,'');
+  let changed=false;
+  for(const r of uniq.slice(0, REASON_POLL_MAX_PARALLEL)){
+    try{
+      const qs=r.reasonJobId ? ('id='+encodeURIComponent(r.reasonJobId)) : ('text='+encodeURIComponent(r.text||''));
+      const res=await fetch(base+'/reason-result?'+qs);
+      if(!res.ok) continue;
+      const data=await res.json();
+      if(data?.status==='missing' && r.text){
+        await fetch(base+'/reason-job?text='+encodeURIComponent(r.text));
+      }
+      if(data?.status==='success' && data.reasonExplain){
+        changed = updateReasonForText(data.text || r.text, data.reasonExplain, 'success') || changed;
+      }
+    }catch(e){ console.warn('reason-result poll failed', e); }
+  }
+  if(changed){
+    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    if(lastReasonDisplayContext){
+      const info=buildFailInfo(lastReasonDisplayContext.placeIndex,lastReasonDisplayContext.word);
+      const prefix=lastReasonDisplayContext.partial?'別候補NG：':'不成立理由：';
+      setMsg(prefix+info.short, lastReasonDisplayContext.cls||'bad', {judge:true});
+    }
+    renderSafe();
+  }
+  const still=[];
+  for(const v of Object.values(linkGrammarCache||{})) if(isReasonPending(v)) still.push(v);
+  for(const r of lastScanRejects||[]) if(isReasonPending(r)) still.push(r);
+  if(still.length) scheduleReasonPolling(1800);
+}
+
 function apiRejectReason(raw){
   const v=String(raw||'').trim();
   if(!v) return '';
@@ -977,11 +1057,12 @@ function routeRejectText(r){
   return '';
 }
 function buildFailInfo(placeIndex, word){
+  lastReasonDisplayContext={placeIndex,word,partial:false,cls:'bad'};
   const rejects=bestRejectCandidates(placeIndex);
   const items=rejects.map(r=>{
     const text=String(r?.text||'候補なし').trim();
     let reason=rejectReasonText(r);
-    if(!reason) reason='完全な英文として理由を確認中です。もう一度置くと詳しい理由が表示されます。';
+    if(!reason) reason='理由解析中…';
     return {text,reason};
   });
   // 1件だけ代表表示にすると、例: I am eating だけ見えて I like eating が隠れる。
@@ -1066,6 +1147,7 @@ async function placeTile(cellIndex){
     speakResultsSequential(scoring);
     const partialFailInfo=buildFailInfo(cellIndex, word);
     if((partialFailInfo.rejects||[]).length){
+      lastReasonDisplayContext={placeIndex:cellIndex,word,partial:true,cls:'good'};
       partialFailInfo.short=`成立した経路あり。ただし別候補は不成立：${partialFailInfo.short}`;
       addLog(`${p.name}: 不成立候補あり：${partialFailInfo.short}`,false);
       (partialFailInfo.rejects||[]).slice(0,3).forEach(r=>{
@@ -1074,6 +1156,7 @@ async function placeTile(cellIndex){
       });
       showFailDetails(partialFailInfo, cellIndex, {partial:true});
       setMsg(`${state.statusText} / 別候補NG：${partialFailInfo.short}`,'good',{judge:true});
+      scheduleReasonPolling(600);
     }
   }else{
     gained = -UNUSED_PENALTY;
@@ -1088,6 +1171,7 @@ async function placeTile(cellIndex){
     setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
     playChime(false);
     showFailDetails(failInfo, cellIndex);
+    scheduleReasonPolling(600);
     const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
   }
   p.score+=gained;
