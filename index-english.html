@@ -173,8 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v17';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v16.cleanImageIsolated';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v20';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v20.reasonQueueRestore';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -1101,14 +1101,45 @@ function showComboDetails(scoring,comboInfo){
 }
 
 
-const REASON_POLL_MAX_PARALLEL=2;
+const REASON_POLL_MAX_PARALLEL=6;
 let reasonPollTimer=null;
 let lastReasonDisplayContext=null;
 function candidateKeyFromText(text){return norm(String(text||'').split(/\s+/).filter(Boolean));}
+function reasonJobStatusOf(r){
+  return String(r?.reasonStatus || r?.status || '').toLowerCase();
+}
 function isReasonPending(r){
   if(!r||!r.__reject) return false;
   if(rejectReasonText(r)) return false;
+  const st=reasonJobStatusOf(r);
+  if(['success','none','unavailable','failure','failed','error','missing','cancelled','canceled'].includes(st)) return false;
+  if(st && !['pending','running','queued','retry','retrying'].includes(st)) return false;
   return !!(r.reasonJobId || r.text);
+}
+function updateReasonJobStateForText(text, patch={}){
+  const key=candidateKeyFromText(text);
+  if(!key) return false;
+  let changed=false;
+  function apply(r){
+    if(!r) return;
+    for(const [k,v] of Object.entries(patch)){
+      if(v===undefined) continue;
+      if(r[k]!==v){ r[k]=v; changed=true; }
+    }
+  }
+  const cached=linkGrammarCache[key];
+  if(cached&&cached.__reject) apply(cached);
+  for(const r of lastScanRejects||[]){
+    if(candidateKeyFromText(r.text)===key) apply(r);
+  }
+  return changed;
+}
+function pendingReasonLabel(r){
+  const st=reasonJobStatusOf(r);
+  if(['pending','running','queued','retry','retrying'].includes(st) || (!st && (r?.reasonJobId || r?.text))) return '理由解析中…';
+  if(['unavailable','missing'].includes(st)) return '理由解析待機中';
+  if(['failure','failed','error'].includes(st)) return '理由解析失敗';
+  return '詳細理由未取得';
 }
 function updateReasonForText(text, reasonExplain, status='success'){
   const key=candidateKeyFromText(text);
@@ -1175,20 +1206,42 @@ async function pollPendingReasons(){
       const res=await fetch(base+'/reason-result?'+qs);
       if(!res.ok) continue;
       const data=await res.json();
+      const targetText=data?.text || r.text || '';
       if(data?.status==='missing' && r.text){
-        await fetch(base+'/reason-job?text='+encodeURIComponent(r.text));
+        const jr=await fetch(base+'/reason-job?text='+encodeURIComponent(r.text));
+        if(jr.ok){
+          const jd=await jr.json();
+          changed = updateReasonJobStateForText(jd.text || r.text, {
+            reasonStatus: jd.status || jd.reasonStatus || 'pending',
+            reasonJobId: jd.id || jd.reasonJobId || r.reasonJobId || '',
+            reasonJobError: jd.error || '',
+            reasonJobAttempts: jd.attempts || 0,
+            reasonJobNextRetryAt: jd.nextRetryAt || null
+          }) || changed;
+        }
+        continue;
       }
       if(data?.status==='success' && data.reasonExplain){
-        changed = updateReasonForText(data.text || r.text, data.reasonExplain, 'success') || changed;
+        changed = updateReasonForText(targetText, data.reasonExplain, 'success') || changed;
+      }else if(data?.status){
+        changed = updateReasonJobStateForText(targetText, {
+          reasonStatus: data.status,
+          reasonJobId: data.id || r.reasonJobId || '',
+          reasonJobError: data.error || '',
+          reasonJobAttempts: data.attempts || 0,
+          reasonJobNextRetryAt: data.nextRetryAt || null
+        }) || changed;
       }
     }catch(e){ console.warn('reason-result poll failed', e); }
   }
   if(changed){
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     if(lastReasonDisplayContext){
-      const info=buildFailInfo(lastReasonDisplayContext.placeIndex,lastReasonDisplayContext.word);
-      const prefix=lastReasonDisplayContext.partial?'別候補NG：':'不成立理由：';
-      setMsg(prefix+info.short, lastReasonDisplayContext.cls||'bad', {judge:true});
+      const ctx={...lastReasonDisplayContext};
+      const info=buildFailInfo(ctx.placeIndex,ctx.word);
+      lastReasonDisplayContext={...ctx};
+      const prefix=ctx.partial?'別候補NG：':'不成立理由：';
+      setMsg(prefix+info.short, ctx.cls||'bad', {judge:true});
     }
     renderSafe();
   }
@@ -1230,19 +1283,21 @@ function buildFailInfo(placeIndex, word){
   const items=rejects.map(r=>{
     const text=String(r?.text||'候補なし').trim();
     let reason=rejectReasonText(r);
-    if(!reason) reason='理由解析中…';
+    if(!reason){
+      reason=pendingReasonLabel(r);
+    }
     return {text,reason};
   });
   // 1件だけ代表表示にすると、例: I am eating だけ見えて I like eating が隠れる。
   // 置いたカードを含むAPI判定NG候補は、上部メッセージ欄に複数件まとめて出す。
   const short = items.length
-    ? `API判定NG候補：` + items.map(it=>`「${it.text}」：${it.reason || '理由解析中…'}`).join(' / ')
-    : `今回置いた「${word}」を含む候補は理由解析中…`;
+    ? `API判定NG候補：` + items.map(it=>`「${it.text}」：${it.reason || '詳細理由未取得'}`).join(' / ')
+    : `今回置いた「${word}」を含む候補はAPI判定NG（詳細理由未取得）`;
   const lines=[];
   if(items.length){
     lines.push(...items.map(it=>`候補: <b>${esc(it.text)}</b>${it.reason?`：${esc(it.reason)}`:''}`));
   }else{
-    lines.push('理由解析中…。API内部ラベルは表示せず、reason-explain の成功結果だけを表示します。');
+    lines.push('API判定NG。具体的な学習者向け理由は reason-explain 成功時だけ表示します。');
   }
   return {short, detail:lines.join('<br>'), example:'', rejects};
 }
@@ -1342,7 +1397,7 @@ async function placeTile(cellIndex){
       partialFailInfo.short=`成立した経路あり。ただし別候補は不成立：${partialFailInfo.short}`;
       addLog(`${p.name}: 不成立候補あり：${partialFailInfo.short}`,false);
       (partialFailInfo.rejects||[]).slice(0,3).forEach(r=>{
-        const meta=rejectReasonText(r);
+        const meta=rejectReasonText(r)||pendingReasonLabel(r);
         addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
       });
       showFailDetails(partialFailInfo, cellIndex, {partial:true});
@@ -1356,7 +1411,7 @@ async function placeTile(cellIndex){
     const failInfo=buildFailInfo(cellIndex, word);
     addLog(`${p.name}: ${word} を配置。不成立：${failInfo.short} -${UNUSED_PENALTY}`,false);
     (failInfo.rejects||[]).slice(0,3).forEach(r=>{
-      const meta=rejectReasonText(r);
+      const meta=rejectReasonText(r)||pendingReasonLabel(r);
       addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
     });
     setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
