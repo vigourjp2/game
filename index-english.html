@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v10 reason job queue success-only cache 2026-06-27 -->
+<!-- latest: v12 do-not-cache-pending-rejects / gameOk true never NG 2026-06-27 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -165,7 +165,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v11.reasonJobNoRawLabels';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v12.okAndSuccessfulRejectsOnly';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -179,6 +179,26 @@ function clearEnglishJudgeCache(){
     });
     localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,'{}');
   }catch(e){}
+}
+
+function hasDisplayableReasonExplain(v){
+  const ex=v?.reasonExplain||null;
+  return !!String(ex?.explanationJa||ex?.explanationEn||'').trim();
+}
+function saveEnglishJudgeCache(){
+  // v12: localStorageへ保存してよいのは「OK判定」と「HF reason-explain成功済みNG」だけ。
+  // pending NG / raw type / phrase / 理由解析中 は保存しない。古い誤NGが次回の判定を汚すのを防ぐ。
+  const clean={};
+  for(const [k,v] of Object.entries(linkGrammarCache||{})){
+    if(v && typeof v==='object' && v.ok){ clean[k]=v; continue; }
+    if(v && typeof v==='object' && v.__reject && hasDisplayableReasonExplain(v)){ clean[k]=v; }
+  }
+  try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(clean));}catch(e){}
+}
+function purgeRejectsForKey(key){
+  if(!key) return;
+  if(linkGrammarCache[key] && linkGrammarCache[key].__reject) delete linkGrammarCache[key];
+  lastScanRejects=(lastScanRejects||[]).filter(r=>candidateKeyFromText(r.text)!==key);
 }
 function evFromApiResult(data, words){
   const w=lowerWords(words);
@@ -216,7 +236,7 @@ async function linkGrammarEvaluate(words){
     const data=await res.json();
     const ev=evFromApiResult(data,w);
     if(ev) linkGrammarCache[key]=ev;
-    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    saveEnglishJudgeCache();
     scheduleReasonPolling(600);
     linkGrammarStatus='ON'; renderSafe();
     return ev;
@@ -246,14 +266,17 @@ async function evaluateCandidatesByApi(routeCandidates){
     if(cached!==undefined){
       if(cached && typeof cached==='object' && cached.ok){
         out.push({...cached,cells:c.path.map(s=>s.i),dir:c.label,source:'api'});
-      }else if(cached && typeof cached==='object' && cached.__reject){
+        continue;
+      }
+      if(cached && typeof cached==='object' && cached.__reject && hasDisplayableReasonExplain(cached)){
         lastScanRejects.push({
           ...cached,
           cells:c.path.map(s=>s.i),
           dir:c.label
         });
+        continue;
       }
-      continue;
+      // v12: pending/理由なしNGキャッシュは信用しない。APIへ再確認する。
     }
     if(!byKey.has(key)){
       const item={id:String(pending.length), key, words:w, text:displayEnglish(w), routes:[]};
@@ -279,6 +302,7 @@ async function evaluateCandidatesByApi(routeCandidates){
 
       const ev=evFromApiResult(finalResult,item.words);
       if(ev){
+        purgeRejectsForKey(item.key);
         linkGrammarCache[item.key]=ev;
         for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label,source:'api'});
       }else{
@@ -306,7 +330,7 @@ async function evaluateCandidatesByApi(routeCandidates){
       }
     }
 
-    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    saveEnglishJudgeCache();
     scheduleReasonPolling(600);
     linkGrammarStatus='ON'; renderSafe();
   }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe();}
@@ -1011,7 +1035,7 @@ async function pollPendingReasons(){
     }catch(e){ console.warn('reason-result poll failed', e); }
   }
   if(changed){
-    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    saveEnglishJudgeCache();
     if(lastReasonDisplayContext){
       const info=buildFailInfo(lastReasonDisplayContext.placeIndex,lastReasonDisplayContext.word);
       const prefix=lastReasonDisplayContext.partial?'別候補NG：':'不成立理由：';
