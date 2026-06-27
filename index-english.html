@@ -163,6 +163,10 @@ const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
 let linkGrammarCache={};
+let lastScanDebug=null;
+let lastApiDebug=null;
+const DEBUG_MODE=(new URL(location.href).searchParams.get('debug')==='1');
+function dbgJoin(arr, fn){try{return (arr||[]).map(fn).join(' / ')||'なし';}catch(e){return 'DEBUG表示エラー '+e.message;}}
 try{linkGrammarCache=JSON.parse(localStorage.getItem(LINK_GRAMMAR_CACHE_KEY)||'{}')||{};}catch(e){linkGrammarCache={};}
 function evFromApiResult(data, words){
   const w=lowerWords(words);
@@ -207,6 +211,8 @@ async function linkGrammarEvaluate(words){
 }
 async function evaluateCandidatesByApi(routeCandidates){
   const out=[];
+  const debug={inputCount:routeCandidates.length,cached:[],pending:[],rawResults:[],accepted:[]};
+  lastApiDebug=debug; window.lastApiDebug=debug;
   if(!linkGrammarApi) return out;
   const pending=[];
   const byKey=new Map();
@@ -217,12 +223,13 @@ async function evaluateCandidatesByApi(routeCandidates){
     if(w.length<2) continue;
     const cached=linkGrammarCache[key];
     if(cached!==undefined){
-      if(cached && typeof cached==='object' && cached.ok) out.push({...cached,cells:c.path.map(s=>s.i),dir:c.label,source:'api'});
+      debug.cached.push({key,text:displayEnglish(w),hit:!!(cached&&typeof cached==='object'&&cached.ok)});
+      if(cached && typeof cached==='object' && cached.ok){ const ev={...cached,cells:c.path.map(s=>s.i),dir:c.label,source:'api'}; out.push(ev); debug.accepted.push({text:ev.text,route:c.path.map(s=>s.i),from:'cache'}); }
       continue;
     }
     if(!byKey.has(key)){
       const item={id:String(pending.length), key, words:w, text:displayEnglish(w), routes:[]};
-      byKey.set(key,item); pending.push(item);
+      byKey.set(key,item); pending.push(item); debug.pending.push({id:item.id,key:item.key,text:item.text});
     }
     byKey.get(key).routes.push(c);
   }
@@ -247,13 +254,14 @@ async function evaluateCandidatesByApi(routeCandidates){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     const results=Array.isArray(data?.results)?data.results:[];
+    debug.rawResults=results.map(r=>({id:String(r.id),text:r.text,gameOk:!!r.gameOk,ok:!!r.ok,type:r.type||'',reason:r.reason||'',sentenceType:r.sentenceType||''}));
     for(const r of results){
       const item=pending.find(x=>x.id===String(r.id));
       if(!item) continue;
       const ev=evFromApiResult(r,item.words);
       if(ev) linkGrammarCache[item.key]=ev;
       if(ev){
-        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
+        for(const route of item.routes){ const pushed={...ev,cells:route.path.map(s=>s.i),dir:route.label}; out.push(pushed); debug.accepted.push({text:pushed.text,route:pushed.cells,dir:pushed.dir,from:'api'}); }
       }
     }
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
@@ -798,7 +806,9 @@ async function scanFromCell(placeIndex){
     if(seenCand.has(k)) continue;
     seenCand.add(k); uniq.push(c);
   }
+  lastScanDebug={placeIndex,candidates:uniq.map(c=>({text:displayEnglish(c.path.map(s=>s.w)),route:c.path.map(s=>s.i),dir:c.label}))}; window.lastScanDebug=lastScanDebug;
   const apiMatches=await evaluateCandidatesByApi(uniq);
+  lastScanDebug.apiMatches=apiMatches.map(m=>({text:m.text,route:m.cells,dir:m.dir,ja:m.ja}));
   for(const ev of apiMatches){
     ev.ja=await resolveJapanese(ev.text.split(' '),ev);
     found.push(ev);
@@ -903,10 +913,28 @@ async function placeTile(cellIndex){
   // 種類別固定スロットなのでソートしない。各枠を維持する。
   setMsg('成立候補を全照合中…','info');
   const made=await scanFromCell(cellIndex);
+  if(DEBUG_MODE){
+    const cand=dbgJoin(lastScanDebug?.candidates, x=>x.text+'@'+x.route.join('-'));
+    const cached=dbgJoin(lastApiDebug?.cached, x=>`${x.text}:${x.hit?'HIT':'MISS/FALSE'}`);
+    const pend=dbgJoin(lastApiDebug?.pending, x=>`${x.id}:${x.text}`);
+    const raw=dbgJoin(lastApiDebug?.rawResults, x=>`${x.id}:${x.text}:${x.gameOk?'OK':'NG'}:${x.type||''}:${x.reason||x.sentenceType||''}`);
+    const acc=dbgJoin(lastApiDebug?.accepted, x=>x.text+'@'+x.route.join('-')+`(${x.from||''})`);
+    addLog(`[DEBUG] 候補 ${cand}`,false);
+    addLog(`[DEBUG] CACHE ${cached}`,false);
+    addLog(`[DEBUG] 送信 ${pend}`,false);
+    addLog(`[DEBUG] API結果 ${raw}`,false);
+    addLog(`[DEBUG] 採用前 ${acc}`,false);
+  }
   recentCells=[cellIndex]; routeFocusCells=[];
   let gained=1;
   if(made.length){
     const scoring=selectScoringMatches(made);
+    if(DEBUG_MODE){
+      const pre=dbgJoin(made, x=>x.text+'@'+(x.cells||[]).join('-'));
+      const post=dbgJoin(scoring, x=>x.text+'@'+(x.cells||[]).join('-'));
+      addLog(`[DEBUG] made ${pre}`,false);
+      addLog(`[DEBUG] scoring ${post}`,false);
+    }
     const {groups,comboInfo}=summarizeScoring(scoring);
     const useDelta=new Map();
     for(const m of scoring){
