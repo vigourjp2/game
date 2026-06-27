@@ -173,8 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v17';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v16.cleanImageIsolated';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v18-reason-no-stuck';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v18.reasonNoStuck';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -309,6 +309,7 @@ async function evaluateCandidatesByApi(routeCandidates){
           reasonStatus:finalResult?.reasonStatus || '',
           reasonJobId:finalResult?.reasonJobId || '',
           reasonExplain:finalResult?.reasonExplain || null,
+          reasonRequestedAt:Date.now(),
           type:finalResult?.type||'',
           sentenceType:finalResult?.sentenceType||'',
           fullParse:!!finalResult?.fullParse
@@ -1102,6 +1103,7 @@ function showComboDetails(scoring,comboInfo){
 
 
 const REASON_POLL_MAX_PARALLEL=2;
+const REASON_PENDING_FALLBACK_MS=12000;
 let reasonPollTimer=null;
 let lastReasonDisplayContext=null;
 function candidateKeyFromText(text){return norm(String(text||'').split(/\s+/).filter(Boolean));}
@@ -1176,15 +1178,22 @@ async function pollPendingReasons(){
       if(!res.ok) continue;
       const data=await res.json();
       if(data?.status==='missing' && r.text){
+        r.reasonStatus='missing';
+        r.reasonRequestedAt=r.reasonRequestedAt||Date.now();
         await fetch(base+'/reason-job?text='+encodeURIComponent(r.text));
+      }
+      if(data?.status && data.status!=='success' && data.status!=='missing'){
+        r.reasonStatus=data.status;
+        r.reasonRequestedAt=r.reasonRequestedAt||Date.now();
       }
       if(data?.status==='success' && data.reasonExplain){
         changed = updateReasonForText(data.text || r.text, data.reasonExplain, 'success') || changed;
       }
     }catch(e){ console.warn('reason-result poll failed', e); }
   }
-  if(changed){
-    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+  const fallbackReady=(uniq||[]).some(r=>!r.reasonExplain && !!fallbackRejectReasonText(r));
+  if(changed || fallbackReady){
+    if(changed){try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}}
     if(lastReasonDisplayContext){
       const info=buildFailInfo(lastReasonDisplayContext.placeIndex,lastReasonDisplayContext.word);
       const prefix=lastReasonDisplayContext.partial?'別候補NG：':'不成立理由：';
@@ -1204,12 +1213,25 @@ function apiRejectReason(raw){
   if(v==='link grammar parse failed') return '英文として解析できません';
   return v;
 }
+function fallbackRejectReasonText(r){
+  const text=String(r?.text||'').trim();
+  const words=text.split(/\s+/).filter(Boolean);
+  const age=Date.now()-Number(r?.reasonRequestedAt||r?.createdAt||0);
+  const status=String(r?.reasonStatus||'');
+  const mayFallback = !r?.reasonJobId || status==='missing' || status==='failure' || status==='failed' || status==='error' || age>REASON_PENDING_FALLBACK_MS;
+  if(!mayFallback) return '';
+  if(words.length<=1) return text ? `「${text}」だけでは単語または句で、主語＋動詞のある英文として完結していません。` : '英文として判定できる候補がまだ不足しています。';
+  const lower=words.map(w=>w.toLowerCase());
+  if(lower[0]==='i' && lower[1]==='am' && words.length===2) return '「I am」だけでは「私は〜です」の「〜」が未完成です。am の後ろに状態や動作を足してください。';
+  if(!/^(i|you|he|she|we|they|it|this|that|there)$/i.test(words[0]||'')) return '主語と動詞のつながりがはっきりせず、英語の文として自然に完結していません。';
+  return '英文として自然に完結していません。主語・動詞・必要な補語や目的語のつながりを確認してください。';
+}
 function rejectReasonText(r){
   const ex=r?.reasonExplain||null;
   const explained=String(ex?.explanationJa||ex?.explanationEn||'').trim();
   // v11: 学習者向けに表示してよいNG理由は reason-explain の成功結果だけ。
   // API raw reason/type/sentenceType（phrase, fragment, invalid, missing ...）は内部ラベルなので絶対に表示しない。
-  return explained || '';
+  return explained || fallbackRejectReasonText(r) || '';
 }
 
 function bestRejectCandidates(placeIndex){
