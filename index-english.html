@@ -173,7 +173,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='clean-image-isolated-v16';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v17';
 const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v16.cleanImageIsolated';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
@@ -789,7 +789,7 @@ function speakResult(m){
 }
 
 function sentenceImageCacheKey(sentence, jaText='') {
-  return 'sentencePixabay:v6:' + norm([sentence || '']);
+  return 'sentencePixabay:v7:' + norm([sentence || '']);
 }
 function sentenceImageCacheRead(key){
   try{
@@ -806,10 +806,31 @@ function sentenceImageCacheWrite(key,data){
     localStorage.setItem(key,JSON.stringify({...data,expiresAt:Date.now()+6*60*60*1000}));
   }catch(e){}
 }
+function sentenceImageRecentIds(){
+  try{
+    const arr=JSON.parse(localStorage.getItem('sentencePixabay:recentIds:v1')||'[]');
+    return Array.isArray(arr) ? arr.map(String).filter(Boolean).slice(0,12) : [];
+  }catch(e){ return []; }
+}
+function rememberSentenceImageId(id){
+  id=String(id||'').trim();
+  if(!id) return;
+  try{
+    const arr=sentenceImageRecentIds().filter(x=>x!==id);
+    arr.unshift(id);
+    localStorage.setItem('sentencePixabay:recentIds:v1',JSON.stringify(arr.slice(0,12)));
+  }catch(e){}
+}
+function sentenceImageIsRecentlyUsed(data){
+  const id=String(data?.id||'').trim();
+  return !!id && sentenceImageRecentIds().includes(id);
+}
 async function fetchSentenceImage(sentence){
   if(!linkGrammarApi) return {ok:false,error:'image api off'};
   const base=linkGrammarApi.replace(/\/$/,'');
-  const res=await fetch(base+'/sentence-image?q='+encodeURIComponent(sentence));
+  const avoid=sentenceImageRecentIds().join(',');
+  const url=base+'/sentence-image?q='+encodeURIComponent(sentence)+(avoid?'&avoid='+encodeURIComponent(avoid):'');
+  const res=await fetch(url);
   const data=await res.json().catch(()=>({ok:false,error:'invalid json'}));
   if(!res.ok) throw new Error(data?.error || ('HTTP '+res.status));
   return data;
@@ -843,13 +864,18 @@ async function showSentenceGeneratedImage(matches, index=0) {
   sub.textContent = jaText || '英文の意味に近い画像をPixabayから検索表示';
   panel.classList.remove('show'); void panel.offsetWidth; panel.classList.add('show');
   const cached=sentenceImageCacheRead(cacheKey);
-  if(cached){ renderSentenceImageData(art,sentence,cached); return; }
+  if(cached && !sentenceImageIsRecentlyUsed(cached)){
+    renderSentenceImageData(art,sentence,cached);
+    rememberSentenceImageId(cached.id);
+    return;
+  }
   art.innerHTML='<div class="sentenceImageLoading">画像検索中...</div>';
   try{
     const data=await fetchSentenceImage(sentence);
     if(data && data.ok && data.imageUrl){
       sentenceImageCacheWrite(cacheKey,data);
       renderSentenceImageData(art,sentence,data);
+      rememberSentenceImageId(data.id);
     }else{
       art.innerHTML='<div class="sentenceImageFallback">画像が見つかりませんでした<br><small>'+esc(data?.query||data?.error||'')+'</small></div>';
     }
