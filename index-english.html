@@ -158,7 +158,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v5.apiOnlyBatch';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v6.successOnly';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -199,7 +199,7 @@ async function linkGrammarEvaluate(words){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     const ev=evFromApiResult(data,w);
-    linkGrammarCache[key]=ev||false;
+    if(ev) linkGrammarCache[key]=ev;
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     linkGrammarStatus='ON'; renderSafe();
     return ev;
@@ -251,7 +251,7 @@ async function evaluateCandidatesByApi(routeCandidates){
       const item=pending.find(x=>x.id===String(r.id));
       if(!item) continue;
       const ev=evFromApiResult(r,item.words);
-      linkGrammarCache[item.key]=ev||false;
+      if(ev) linkGrammarCache[item.key]=ev;
       if(ev){
         for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
       }
@@ -378,6 +378,22 @@ function sortHand(hand){
     const ia=handInfo(a), ib=handInfo(b);
     return (ia.rank-ib.rank) || String(a).localeCompare(String(b),'en',{sensitivity:'base'});
   });
+}
+function displayHandLabel(w){
+  const ps=wordPos(w);
+  const labels=[];
+  if(ps.includes('subj')||ps.includes('pron')) labels.push('主語');
+  if(ps.includes('be')) labels.push('be');
+  if(ps.includes('modal')) labels.push('助');
+  if(ps.includes('verb')||ps.includes('verbWant')) labels.push('動詞');
+  if(ps.includes('ving')) labels.push('ing');
+  if(ps.includes('adj')) labels.push('形容詞');
+  if(ps.includes('noun')||ps.includes('place')||ps.includes('pronObj')) labels.push('名詞');
+  if(ps.includes('prep')||ps.includes('to')) labels.push('前置詞');
+  if(ps.includes('adv')||ps.includes('advTime')) labels.push('副詞');
+  if(ps.includes('article')) labels.push('冠詞');
+  if(ps.includes('not')) labels.push('否定');
+  return [...new Set(labels)].slice(0,2).join('/') || handInfo(w).label;
 }
 const HAND_SLOTS = [
   {key:'subj', label:'主語', poses:['subj']},
@@ -958,7 +974,7 @@ function render(){
   $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
   const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
   const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';const routeNo=routeFocusCells.indexOf(i);if(routeNo>=0)d.classList.add('routeHit');if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const ownerColor=state.players[c.owner]?.color||'#fff';const cnt=useCountOf(c);const uc=useColor(cnt, ownerColor);if(uc.rainbow)d.classList.add('rainbow');if(cnt<=0)d.classList.add('unused');const usedLabel=cnt>0?`×${cnt}`:'未';d.innerHTML=`<span class="owner" style="background:${ownerColor}"></span>${routeNo>=0?`<span class="routeStep">${routeNo+1}</span>`:''}<span class="word">${esc(c.w)}</span><span class="useCount">${usedLabel}</span>${cnt<=0?'<span class="unusedMark">未使用</span>':''}<span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${uc.bg}, ${hexAlpha(ownerColor,.13)}, rgba(255,255,255,.05))`;d.style.borderColor=uc.border;d.style.color=uc.text;} d.onclick=()=>placeTile(i);b.appendChild(d);});
-  const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const info=slotInfo(i,w);const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(info.label)}</small>`;t.onclick=()=>{selectedHandIndex=i;render();};h.appendChild(t);});
+  const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(displayHandLabel(w))}</small>`;t.onclick=()=>{selectedHandIndex=i;render();};h.appendChild(t);});
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
