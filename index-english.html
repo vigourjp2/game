@@ -173,8 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v22-ja-hydrate';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v26.reasonVisibleQueueClamp';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v32-exploration-reason';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v32.explorationReason';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -231,6 +231,16 @@ async function linkGrammarEvaluate(words){
     return ev;
   }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe(); return null;}
 }
+function reasonCandidateContext(){
+  const hand=[];
+  try{ hand.push(...((currentPlayer()?.hand)||[])); }catch(e){}
+  const deck=[];
+  try{ deck.push(...WORDS.map(x=>x.w)); }catch(e){}
+  return {
+    reasonHandCandidates:[...new Set(hand.map(String))],
+    reasonDeckCandidates:[...new Set(deck.map(String))]
+  };
+}
 async function singleApiCheckItem(base, item){
   const res=await fetch(base+'/check-and-translate',{
     method:'POST',
@@ -239,7 +249,8 @@ async function singleApiCheckItem(base, item){
       text:item.text,
       words:item.words,
       reasonPriorityEpoch:item.reasonPriorityEpoch || 0,
-      reasonPrioritySeq:item.reasonPrioritySeq || 0
+      reasonPrioritySeq:item.reasonPrioritySeq || 0,
+      ...reasonCandidateContext()
     })
   });
   if(!res.ok) throw new Error('HTTP '+res.status);
@@ -1192,7 +1203,8 @@ function pendingReasonLabel(r){
     if(qn>0) return `理由解析待ち${circledNumber(qn)}${retry}`;
     return `理由解析待ち${retry}`;
   }
-  if(['unavailable','missing'].includes(st)) return '理由解析待機中';
+  if(st==='unavailable') return '理由解析不可（外部AIなし）';
+  if(st==='missing') return '理由解析待機中';
   if(['failure','failed','error'].includes(st)) return `理由解析失敗${retry}`;
   return '詳細理由未取得';
 }
