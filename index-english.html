@@ -37,6 +37,10 @@
   .cell.hit{animation:hitGlow 1s ease both}.cell.badShake{animation:badShake .22s linear 2}@keyframes hitGlow{0%{box-shadow:0 0 0 rgba(134,239,172,0);filter:brightness(1)}18%{box-shadow:0 0 28px rgba(134,239,172,.95);filter:brightness(1.9)}100%{box-shadow:inset 0 0 16px rgba(255,255,255,.03);filter:brightness(1)}}@keyframes badShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
   .voiceNote{font-size:11px;color:#dbeafe;line-height:1.35;grid-column:1/-1;background:rgba(59,130,246,.12);border:1px solid rgba(147,197,253,.16);border-radius:12px;padding:8px}.soloBadge{background:rgba(134,239,172,.16);border-color:rgba(134,239,172,.3);color:#bbf7d0}
 
+
+  .cell.failFocus{animation:badShake .42s ease 0s 2;outline:3px solid rgba(248,113,113,.9);box-shadow:inset 0 0 16px rgba(255,255,255,.03),0 0 0 3px rgba(248,113,113,.32),0 0 26px rgba(248,113,113,.45)}
+  @keyframes badShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+  .failPanel{position:fixed;left:50%;top:18%;transform:translateX(-50%) scale(.96);z-index:71;width:min(640px,94vw);background:rgba(127,29,29,.96);border:2px solid rgba(254,202,202,.72);border-radius:22px;padding:14px 15px;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 36px rgba(248,113,113,.34);display:none;pointer-events:auto}.failPanel.show{display:block;animation:failIn 3.9s ease both}.failPanel h3{margin:0 34px 7px 0;font-size:18px;color:#fff}.failPanel .failMain{font-size:15px;line-height:1.45;color:#fee2e2;font-weight:900}.failPanel .failSub{font-size:13px;line-height:1.5;color:#ffedd5;margin-top:6px}.failPanel .failCandidates{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.failChip{font-size:11px;padding:4px 7px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#fff}.failClose{position:absolute;right:10px;top:9px;border:0;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;width:28px;height:28px;font-weight:1000}.failExample{color:#bbf7d0;font-weight:1000}.badPop{position:fixed;z-index:72;pointer-events:none;transform:translate(-50%,-50%);font-size:24px;font-weight:1000;color:#fecaca;text-shadow:0 4px 16px rgba(0,0,0,.8);animation:badPop 1.25s ease-out both}.badPop small{display:block;font-size:11px;color:#fff;text-align:center}.badSpark{position:fixed;width:7px;height:7px;border-radius:50%;background:#fca5a5;left:0;top:0;z-index:71;pointer-events:none;animation:badSpark .82s ease-out forwards}@keyframes failIn{0%{opacity:0;transform:translateX(-50%) scale(.86)}8%,82%{opacity:1;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%) scale(.96)}}@keyframes badPop{0%{opacity:0;transform:translate(-50%,-40%) scale(.8)}20%,78%{opacity:1;transform:translate(-50%,-70%) scale(1)}100%{opacity:0;transform:translate(-50%,-115%) scale(.9)}}@keyframes badSpark{to{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.1)}}
   @media(max-width:920px){#app{padding:8px}.top{grid-template-columns:1fr}.main{grid-template-columns:1fr}.side{grid-template-columns:1fr}.controls{grid-template-columns:1fr 1fr}.board{gap:4px;padding:5px}.cell{border-radius:10px}.hand{grid-template-columns:repeat(6,1fr);gap:5px}.tile{min-height:48px;font-size:12px;border-radius:12px}.statusGrid{grid-template-columns:repeat(4,1fr)}}
   @media(max-width:520px){.hero h1{font-size:19px}.status b{font-size:14px}.controls{grid-template-columns:1fr}.board{grid-template-columns:repeat(7,1fr);border-radius:14px}.word{font-size:clamp(8px,3.1vw,13px)}.hand{grid-template-columns:repeat(3,1fr)}.tile{font-size:11px;min-height:45px;padding:3px}.tile small{display:block;font-size:8px}.msg{text-align:left}.boardTop{align-items:flex-start;flex-direction:column}.startCard h1{font-size:23px}}
 </style>
@@ -60,6 +64,7 @@
 </div>
 <div id="fxBanner" class="fxBanner"><div class="fxBig">GOOD!</div><div class="fxEn" id="fxEn"></div><div class="fxJa" id="fxJa"></div><div class="fxPts" id="fxPts"></div></div>
 <div id="comboPanel" class="comboPanel"><button id="comboClose" class="comboClose" type="button">×</button><h3 id="comboTitle">成立詳細</h3><div id="comboList"></div></div>
+<div id="failPanel" class="failPanel"><button id="failClose" class="failClose" type="button">×</button><h3>不成立の理由</h3><div id="failMain" class="failMain"></div><div id="failSub" class="failSub"></div><div id="failCandidates" class="failCandidates"></div></div>
 <div id="app">
   <div class="top">
     <section class="panel hero">
@@ -263,6 +268,19 @@ async function evaluateCandidatesByApi(routeCandidates){
       if(ev) linkGrammarCache[item.key]=ev;
       if(ev){
         for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label});
+      }else{
+        for(const route of item.routes){
+          lastScanRejects.push({
+            text:item.text,
+            words:item.words,
+            cells:route.path.map(s=>s.i),
+            dir:route.label,
+            reason:r.reason||'',
+            type:r.type||'',
+            sentenceType:r.sentenceType||'',
+            fullParse:!!r.fullParse
+          });
+        }
       }
     }
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
@@ -766,6 +784,7 @@ function showFx(made,gained,cellIndex,comboInfo=null){
 }
 
 async function scanFromCell(placeIndex){
+  lastScanRejects=[];
   const found=[];
   const candidates=[];
   const starts=[];
@@ -866,6 +885,9 @@ function coord(i){const p=xy(i);return String.fromCharCode(65+p.x)+(p.y+1);}
 function routeText(m){return (m.cells||[]).map((i,n)=>`${n+1}.${coord(i)} ${state.board[i]?.w||''}`).join(' → ');}
 let routeFocusCells=[];
 let routeFocusTimer=null;
+let failFocusCell=-1;
+let failFocusTimer=null;
+let lastScanRejects=[];
 function highlightRoute(m,seq=0,duration=1600){
   routeFocusCells=(m?.cells||[]).slice();
   render();
@@ -901,6 +923,93 @@ function showComboDetails(scoring,comboInfo){
   }
   highlightRoute(scoring[0],0,5200);
 }
+
+function jpRejectReason(raw){
+  const r=String(raw||'').toLowerCase();
+  if(!r) return '';
+  if(r.includes('parse failed')) return '単語の並びとして文法的につながらない';
+  if(r.includes('fragment')) return '文の一部だけで、主語＋動詞までそろっていない';
+  if(r.includes('word order')) return '語順が自然な英文になっていない';
+  if(r.includes('object')) return '動詞の後ろに目的語が足りない';
+  if(r.includes('verb')) return '動詞まわりの形が足りない';
+  return raw;
+}
+function bestRejectCandidates(placeIndex){
+  const list=(lastScanRejects||[]).filter(r=>(r.cells||[]).includes(placeIndex));
+  return list.sort((a,b)=>(b.cells.length-a.cells.length)||(a.cells[0]-b.cells[0])).slice(0,5);
+}
+function sampleWordsByPos(posList, limit=3){
+  const poses=Array.isArray(posList)?posList:[posList];
+  const onBoard=(state.board||[]).map(c=>c?.w).filter(Boolean);
+  const inHands=(state.players||[]).flatMap(p=>p.hand||[]).filter(Boolean);
+  const pool=[...inHands, ...onBoard, ...WORDS.map(x=>x.w)];
+  const seen=new Set();
+  const out=[];
+  for(const word of pool){
+    const key=String(word||'').toLowerCase();
+    if(!key || seen.has(key)) continue;
+    if(poses.some(p=>wordPos(word).includes(p))){
+      seen.add(key);
+      out.push(word);
+      if(out.length>=limit) break;
+    }
+  }
+  return out;
+}
+function routeRejectText(r){
+  const text=String(r?.text||'').trim();
+  const reason=jpRejectReason(r?.reason||r?.type||'');
+  if(text && reason) return `候補「${text}」は、${reason}`;
+  if(text) return `候補「${text}」が完全な英文になっていない`;
+  if(reason) return reason;
+  return '';
+}
+function buildFailInfo(placeIndex, word){
+  const rejects=bestRejectCandidates(placeIndex);
+  const routeHint=rejects[0];
+  const rejectText=routeRejectText(routeHint);
+  const apiReason=jpRejectReason(routeHint?.reason||routeHint?.type||'');
+
+  let short=rejectText || '今回置いたカードを含む完全な英文が作れていない';
+  let detail='右方向・下方向のつながりをAPIで照合し、今回置いたカードを含む「完全な英文」だけを得点にする。';
+
+  if(routeHint?.text){
+    detail += `<br>最有力候補: <b>${esc(routeHint.text)}</b>`;
+  }
+  if(apiReason){
+    detail += `<br>API判定メモ: ${esc(apiReason)}`;
+  }
+  if(rejects.length>1){
+    detail += '<br>ほかの候補も成立しなかったため、盤面のつながりを作り直す必要がある。';
+  }else{
+    detail += '<br>文法パターンをHTML側で決め打ちせず、APIから返った不成立理由だけを表示する。';
+  }
+
+  return {short, detail, example:'', rejects};
+}
+function showFailDetails(info, cellIndex){
+  failFocusCell=cellIndex;
+  clearTimeout(failFocusTimer);
+  failFocusTimer=setTimeout(()=>{failFocusCell=-1;render();},3900);
+  const panel=$('failPanel');
+  if(panel){
+    $('failMain').innerHTML=esc(info.short);
+    $('failSub').innerHTML=info.detail;
+    const chips=(info.rejects||[]).slice(0,5).map(r=>`<span class="failChip">${esc(r.text)}${r.type?`：${esc(r.type)}`:''}</span>`).join('');
+    $('failCandidates').innerHTML=chips || (info.example?`<span class="failChip">${esc(info.example)}</span>`:'');
+    clearTimeout(panel._hideTimer);
+    panel.classList.remove('show'); void panel.offsetWidth; panel.classList.add('show');
+    panel._hideTimer=setTimeout(()=>panel.classList.remove('show'),3900);
+    const close=$('failClose');
+    if(close && !close._wired){ close._wired=true; close.onclick=()=>panel.classList.remove('show'); }
+  }
+  const cell=document.querySelectorAll('.cell')[cellIndex];
+  let x=innerWidth/2,y=innerHeight/2;
+  if(cell){const r=cell.getBoundingClientRect();x=r.left+r.width/2;y=r.top+r.height/2;}
+  const pop=document.createElement('div');pop.className='badPop';pop.style.left=x+'px';pop.style.top=y+'px';pop.innerHTML=`NO!<small>理由を表示</small>`;document.body.appendChild(pop);setTimeout(()=>pop.remove(),1250);
+  for(let i=0;i<14;i++){const sp=document.createElement('i');sp.className='badSpark';sp.style.left=x+'px';sp.style.top=y+'px';const a=Math.random()*Math.PI*2,d=24+Math.random()*58;sp.style.setProperty('--dx',Math.cos(a)*d+'px');sp.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(sp);setTimeout(()=>sp.remove(),850);}
+}
+
 async function placeTile(cellIndex){
   if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
   if(state.board[cellIndex]){setMsg('そこは埋まってる','bad');return;}
@@ -915,6 +1024,8 @@ async function placeTile(cellIndex){
   recentCells=[cellIndex]; routeFocusCells=[];
   let gained=1;
   if(made.length){
+    failFocusCell=-1;
+    const fp=$('failPanel'); if(fp) fp.classList.remove('show');
     const scoring=selectScoringMatches(made);
     const {groups,comboInfo}=summarizeScoring(scoring);
     const useDelta=new Map();
@@ -956,9 +1067,11 @@ async function placeTile(cellIndex){
     gained = -UNUSED_PENALTY;
     const cell=state.board[cellIndex];
     if(cell) cell.unusedPenaltyApplied=true;
-    addLog(`${p.name}: ${word} を配置。でも英文に未使用 -${UNUSED_PENALTY}`,false);
-    setMsg(`成立なし。未使用カード減点 -${UNUSED_PENALTY}。つなげ方を狙え！`,'bad');
+    const failInfo=buildFailInfo(cellIndex, word);
+    addLog(`${p.name}: ${word} を配置。不成立：${failInfo.short} -${UNUSED_PENALTY}`,false);
+    setMsg(`不成立：${failInfo.short} -${UNUSED_PENALTY}`,'bad');
     playChime(false);
+    showFailDetails(failInfo, cellIndex);
     const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
   }
   p.score+=gained;
@@ -974,15 +1087,15 @@ function recalcTiles(){state.players.forEach(p=>p.tiles=0);state.board.forEach(c
 function lightState(){return JSON.parse(JSON.stringify(state));}
 function applyState(s,why='同期'){
   if(!s||!Array.isArray(s.board)||!Array.isArray(s.players))return;
-  state=s;selectedHandIndex=-1;recentCells=[];recalcTiles();setMsg(why,'good');render();
+  state=s;selectedHandIndex=-1;recentCells=[];failFocusCell=-1;recalcTiles();setMsg(why,'good');render();
 }
 function passTurn(){const p=currentPlayer();addLog(`${p.name}: パス`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'pass'});render();}
 function swapHand(){const p=currentPlayer();p.hand=drawHand(99);p.score=Math.max(0,p.score-5);addLog(`${p.name}: 手札入替 -5`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'swap'});render();}
-function newGame(broadcastIt=true){clearEnglishJudgeCache();const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg(state.playerCount===1?'1人練習開始。手札は種類別に常備。英文を作ると英語→日本語で読み上げる':'新規ゲーム開始。手札は種類別に常備。','good');}
+function newGame(broadcastIt=true){clearEnglishJudgeCache();const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];failFocusCell=-1;const fp=$('failPanel'); if(fp) fp.classList.remove('show');if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg(state.playerCount===1?'1人練習開始。手札は種類別に常備。英文を作ると英語→日本語で読み上げる':'新規ゲーム開始。手札は種類別に常備。','good');}
 function render(){
   $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
   const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
-  const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';const routeNo=routeFocusCells.indexOf(i);if(routeNo>=0)d.classList.add('routeHit');if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const ownerColor=state.players[c.owner]?.color||'#fff';const cnt=useCountOf(c);const uc=useColor(cnt, ownerColor);if(uc.rainbow)d.classList.add('rainbow');if(cnt<=0)d.classList.add('unused');const usedLabel=cnt>0?`×${cnt}`:'未';d.innerHTML=`<span class="owner" style="background:${ownerColor}"></span>${routeNo>=0?`<span class="routeStep">${routeNo+1}</span>`:''}<span class="word">${esc(c.w)}</span><span class="useCount">${usedLabel}</span>${cnt<=0?'<span class="unusedMark">未使用</span>':''}<span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${uc.bg}, ${hexAlpha(ownerColor,.13)}, rgba(255,255,255,.05))`;d.style.borderColor=uc.border;d.style.color=uc.text;} d.onclick=()=>placeTile(i);b.appendChild(d);});
+  const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';const routeNo=routeFocusCells.indexOf(i);if(routeNo>=0)d.classList.add('routeHit');if(i===failFocusCell)d.classList.add('failFocus');if(!c&&selectedHandIndex>=0)d.classList.add('selectable');if(c){const ownerColor=state.players[c.owner]?.color||'#fff';const cnt=useCountOf(c);const uc=useColor(cnt, ownerColor);if(uc.rainbow)d.classList.add('rainbow');if(cnt<=0)d.classList.add('unused');const usedLabel=cnt>0?`×${cnt}`:'未';d.innerHTML=`<span class="owner" style="background:${ownerColor}"></span>${routeNo>=0?`<span class="routeStep">${routeNo+1}</span>`:''}<span class="word">${esc(c.w)}</span><span class="useCount">${usedLabel}</span>${cnt<=0?'<span class="unusedMark">未使用</span>':''}<span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${uc.bg}, ${hexAlpha(ownerColor,.13)}, rgba(255,255,255,.05))`;d.style.borderColor=uc.border;d.style.color=uc.text;} d.onclick=()=>placeTile(i);b.appendChild(d);});
   const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(displayHandLabel(w))}</small>`;t.onclick=()=>{selectedHandIndex=i;render();};h.appendChild(t);});
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
