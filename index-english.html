@@ -64,7 +64,6 @@
 </div>
 <div id="fxBanner" class="fxBanner"><div class="fxBig">GOOD!</div><div class="fxEn" id="fxEn"></div><div class="fxJa" id="fxJa"></div><div class="fxPts" id="fxPts"></div></div>
 <div id="comboPanel" class="comboPanel"><button id="comboClose" class="comboClose" type="button">×</button><h3 id="comboTitle">成立詳細</h3><div id="comboList"></div></div>
-<div id="failPanel" class="failPanel"><h3>不成立の理由</h3><div id="failMain" class="failMain"></div><div id="failSub" class="failSub"></div><div id="failCandidates" class="failCandidates"></div></div>
 <div id="app">
   <div class="top">
     <section class="panel hero">
@@ -112,7 +111,7 @@
 <script>
 (() => {
 'use strict';
-const APP_VERSION='reason-inline-20260627-005';
+const APP_VERSION='prod';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
@@ -969,27 +968,12 @@ function showFailDetails(info, cellIndex, opts={}){
   failFocusCell=cellIndex;
   clearTimeout(failFocusTimer);
   failFocusTimer=setTimeout(()=>{failFocusCell=-1;render();},3900);
-  const panel=$('failPanel');
-  if(panel){
-    const title=panel.querySelector('h3');
-    if(title) title.textContent=partial?'不成立候補の理由':'不成立の理由';
-    $('failMain').innerHTML=esc(info.short);
-    $('failSub').innerHTML=info.detail;
-    const chips=(info.rejects||[]).slice(0,5).map(r=>{
-      const meta=apiRejectReason(r.reason||r.type||r.sentenceType||'');
-      return `<span class="failChip">${esc(r.text||'候補なし')}${meta?` / ${esc(meta)}`:''}</span>`;
-    }).join('');
-    $('failCandidates').innerHTML=chips || (info.example?`<span class="failChip">${esc(info.example)}</span>`:'');
-    clearTimeout(panel._hideTimer);
-    panel.classList.remove('show'); void panel.offsetWidth; panel.classList.add('show');
-    panel._hideTimer=setTimeout(()=>panel.classList.remove('show'),8500);
-    panel.onclick=()=>{clearTimeout(panel._hideTimer);panel.classList.remove('show');};
-  }
+  // ポップアップ式の不成立理由パネルは使わない。理由は上部メッセージ欄とログだけに出す。
   const cell=document.querySelectorAll('.cell')[cellIndex];
   let x=innerWidth/2,y=innerHeight/2;
   if(cell){const r=cell.getBoundingClientRect();x=r.left+r.width/2;y=r.top+r.height/2;}
   if(!partial){
-    const pop=document.createElement('div');pop.className='badPop';pop.style.left=x+'px';pop.style.top=y+'px';pop.innerHTML=`NO!<small>理由を表示</small>`;document.body.appendChild(pop);setTimeout(()=>pop.remove(),1250);
+    const pop=document.createElement('div');pop.className='badPop';pop.style.left=x+'px';pop.style.top=y+'px';pop.innerHTML=`NO!<small>不成立</small>`;document.body.appendChild(pop);setTimeout(()=>pop.remove(),1250);
     for(let i=0;i<14;i++){const sp=document.createElement('i');sp.className='badSpark';sp.style.left=x+'px';sp.style.top=y+'px';const a=Math.random()*Math.PI*2,d=24+Math.random()*58;sp.style.setProperty('--dx',Math.cos(a)*d+'px');sp.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(sp);setTimeout(()=>sp.remove(),850);}
   }
 }
@@ -1009,7 +993,6 @@ async function placeTile(cellIndex){
   let gained=1;
   if(made.length){
     failFocusCell=-1;
-    const fp=$('failPanel'); if(fp) fp.classList.remove('show');
     const scoring=selectScoringMatches(made);
     const {groups,comboInfo}=summarizeScoring(scoring);
     const useDelta=new Map();
@@ -1091,7 +1074,7 @@ function applyState(s,why='同期'){
 }
 function passTurn(){const p=currentPlayer();addLog(`${p.name}: パス`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'pass'});render();}
 function swapHand(){const p=currentPlayer();p.hand=drawHand(99);p.score=Math.max(0,p.score-5);addLog(`${p.name}: 手札入替 -5`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'swap'});render();}
-function newGame(broadcastIt=true){clearEnglishJudgeCache();const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];failFocusCell=-1;const fp=$('failPanel'); if(fp) fp.classList.remove('show');if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg(state.playerCount===1?'1人練習開始。手札は種類別に常備。英文を作ると英語→日本語で読み上げる':'新規ゲーム開始。手札は種類別に常備。','good');}
+function newGame(broadcastIt=true){clearEnglishJudgeCache();const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];failFocusCell=-1if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg(state.playerCount===1?'1人練習開始。手札は種類別に常備。英文を作ると英語→日本語で読み上げる':'新規ゲーム開始。手札は種類別に常備。','good');}
 function render(){
   $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
   const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
@@ -1100,7 +1083,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">HTML:${esc(APP_VERSION)}</span><span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:API一任</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:API一任</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
   {const m=$('msg'); if(m){
     let t=state.statusText||''; let c=state.statusClass||'info';
     const generic=/成立なし|つなげ方/.test(t);
