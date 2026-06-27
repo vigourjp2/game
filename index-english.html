@@ -173,8 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v35-judge-lock-ui-no-hardcode';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v35.judgeLockUiNoHardcode';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v38-context-aware-reason-jobs';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v38.contextAwareReasonJobs';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -194,15 +194,19 @@ function evFromApiResult(data, words){
   if(!data || !data.gameOk) return null;
   const text=(data.text||displayEnglish(w)).replace(/[.!?]$/,'');
   const ja=(data.ja || data.translation?.ja || data.translation?.translatedText || '');
+  const sentenceType=data.sentenceType || data.acceptability?.sentenceType || '';
+  const displayKind=data.acceptability?.displayKind || (sentenceType==='contextual_short_answer' ? '短い返事文' : (data.kind || 'API完全英文判定'));
   return {
     ok:true,
-    kind:data.sentenceType || data.kind || 'API完全英文判定',
+    kind:displayKind,
     pts:48+Math.min(28,w.length*6),
     text,
     ja,
     source:'api',
     parser:data,
-    type:data.type || 'complete_sentence'
+    type:data.type || 'complete_sentence',
+    sentenceType,
+    utteranceType:data.acceptability?.utteranceType || sentenceType || ''
   };
 }
 async function linkGrammarEvaluate(words){
@@ -904,6 +908,7 @@ async function showSentenceGeneratedImage(matches, index=0) {
     if(!m || !m.text) continue;
     // v34: 成立文として採点されたものだけ画像対象。未完成/NG/古いパネルの残像を防ぐ。
     if(String(m.type||'complete_sentence') !== 'complete_sentence') continue;
+    if(String(m.sentenceType||m.utteranceType||'') === 'contextual_short_answer') continue;
     const k=norm(m.text.split(' '));
     if(seen.has(k)) continue;
     seen.add(k); unique.push(m);
