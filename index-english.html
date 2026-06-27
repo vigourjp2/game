@@ -174,7 +174,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
 const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v20';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v20.reasonQueueRestore';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v21.reasonQueueMobilePoll';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -1102,7 +1102,12 @@ function showComboDetails(scoring,comboInfo){
 
 
 const REASON_POLL_MAX_PARALLEL=6;
+const REASON_POLL_FAST_MS=1200;
+const REASON_POLL_SLOW_MS=2800;
 let reasonPollTimer=null;
+let reasonPollHeartbeat=null;
+let reasonPollInFlight=false;
+let reasonWakeLock=null;
 let lastReasonDisplayContext=null;
 function candidateKeyFromText(text){return norm(String(text||'').split(/\s+/).filter(Boolean));}
 function reasonJobStatusOf(r){
@@ -1182,12 +1187,7 @@ function updateReasonForText(text, reasonExplain, status='success'){
   }
   return changed;
 }
-function scheduleReasonPolling(delay=1000){
-  clearTimeout(reasonPollTimer);
-  reasonPollTimer=setTimeout(()=>{reasonPollTimer=null;pollPendingReasons().catch(e=>console.warn('reason poll failed',e));},Math.max(0,delay));
-}
-async function pollPendingReasons(){
-  if(!linkGrammarApi) return;
+function pendingReasonList(){
   const rejects=[];
   for(const v of Object.values(linkGrammarCache||{})) if(isReasonPending(v)) rejects.push(v);
   for(const r of lastScanRejects||[]) if(isReasonPending(r)) rejects.push(r);
@@ -1197,18 +1197,65 @@ async function pollPendingReasons(){
     if(seen.has(key)) continue;
     seen.add(key); uniq.push(r);
   }
-  if(!uniq.length) return;
-  const base=linkGrammarApi.replace(/\/$/,'');
+  return uniq;
+}
+function hasPendingReasons(){ return pendingReasonList().length>0; }
+async function ensureReasonWakeLock(){
+  try{
+    if(!hasPendingReasons() || document.visibilityState==='hidden') return;
+    if(reasonWakeLock) return;
+    if(navigator.wakeLock && location.protocol==='https:'){
+      reasonWakeLock=await navigator.wakeLock.request('screen');
+      reasonWakeLock.addEventListener('release',()=>{reasonWakeLock=null;});
+    }
+  }catch(e){ reasonWakeLock=null; }
+}
+function releaseReasonWakeLockIfDone(){
+  if(hasPendingReasons()) return;
+  const wl=reasonWakeLock; reasonWakeLock=null;
+  try{ wl?.release?.(); }catch(e){}
+}
+function startReasonHeartbeat(){
+  if(reasonPollHeartbeat) return;
+  reasonPollHeartbeat=setInterval(()=>{
+    if(!hasPendingReasons()){
+      clearInterval(reasonPollHeartbeat);
+      reasonPollHeartbeat=null;
+      releaseReasonWakeLockIfDone();
+      return;
+    }
+    scheduleReasonPolling(0);
+  }, REASON_POLL_SLOW_MS);
+}
+function scheduleReasonPolling(delay=1000){
+  clearTimeout(reasonPollTimer);
+  if(hasPendingReasons()){
+    startReasonHeartbeat();
+    ensureReasonWakeLock();
+  }
+  reasonPollTimer=setTimeout(()=>{
+    reasonPollTimer=null;
+    pollPendingReasons().catch(e=>console.warn('reason poll failed',e));
+  },Math.max(0,delay));
+}
+async function pollPendingReasons(){
+  if(reasonPollInFlight) return;
+  if(!linkGrammarApi) return;
+  const uniq=pendingReasonList();
+  if(!uniq.length){ releaseReasonWakeLockIfDone(); return; }
+  reasonPollInFlight=true;
   let changed=false;
+  try{
+  const base=linkGrammarApi.replace(/\/$/,'');
   for(const r of uniq.slice(0, REASON_POLL_MAX_PARALLEL)){
     try{
       const qs=r.reasonJobId ? ('id='+encodeURIComponent(r.reasonJobId)) : ('text='+encodeURIComponent(r.text||''));
-      const res=await fetch(base+'/reason-result?'+qs);
+      const res=await fetch(base+'/reason-result?'+qs,{cache:'no-store'});
       if(!res.ok) continue;
       const data=await res.json();
       const targetText=data?.text || r.text || '';
       if(data?.status==='missing' && r.text){
-        const jr=await fetch(base+'/reason-job?text='+encodeURIComponent(r.text));
+        const jr=await fetch(base+'/reason-job?text='+encodeURIComponent(r.text),{cache:'no-store'});
         if(jr.ok){
           const jd=await jr.json();
           changed = updateReasonJobStateForText(jd.text || r.text, {
@@ -1234,6 +1281,9 @@ async function pollPendingReasons(){
       }
     }catch(e){ console.warn('reason-result poll failed', e); }
   }
+  } finally {
+    reasonPollInFlight=false;
+  }
   if(changed){
     try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     if(lastReasonDisplayContext){
@@ -1245,11 +1295,16 @@ async function pollPendingReasons(){
     }
     renderSafe();
   }
-  const still=[];
-  for(const v of Object.values(linkGrammarCache||{})) if(isReasonPending(v)) still.push(v);
-  for(const r of lastScanRejects||[]) if(isReasonPending(r)) still.push(r);
-  if(still.length) scheduleReasonPolling(1800);
+  const still=pendingReasonList();
+  if(still.length) scheduleReasonPolling(changed ? REASON_POLL_FAST_MS : REASON_POLL_SLOW_MS);
+  else releaseReasonWakeLockIfDone();
 }
+
+['visibilitychange','pageshow','focus','online','pointerdown','touchstart'].forEach(ev=>{
+  window.addEventListener(ev,()=>{
+    if(document.visibilityState!=='hidden' && hasPendingReasons()) scheduleReasonPolling(0);
+  }, {passive:true});
+});
 
 function apiRejectReason(raw){
   const v=String(raw||'').trim();
