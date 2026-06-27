@@ -173,8 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v32-exploration-reason';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v32.explorationReason';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v34-oracle-exploration-no-hardcode';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v34.oracleExplorationNoHardcode';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -580,7 +580,11 @@ function applySubjectVerbAgreement(words){
   }
   return w;
 }
-function displayEnglish(words){ return capSentence(applySubjectVerbAgreement(words)).replace(/[.]$/,''); }
+function displayEnglish(words){
+  // v34: no JS grammar/case rewriting before API judgment.
+  // Send the exact card sequence to Strict Link Grammar; no auto-capitalization, no 3rd-person-s fix.
+  return (Array.isArray(words)?words:[]).map(x=>String(x||'').trim()).filter(Boolean).join(' ');
+}
 function isSubjWord(w){return ['i','you','he','she','we','they'].includes(w);}
 function beForSubject(w){
   w=String(w||'').toLowerCase();
@@ -898,12 +902,14 @@ async function showSentenceGeneratedImage(matches, index=0) {
   const unique=[]; const seen=new Set();
   for(const m of (matches || [])){
     if(!m || !m.text) continue;
+    // v34: 成立文として採点されたものだけ画像対象。未完成/NG/古いパネルの残像を防ぐ。
+    if(String(m.type||'complete_sentence') !== 'complete_sentence') continue;
     const k=norm(m.text.split(' '));
     if(seen.has(k)) continue;
     seen.add(k); unique.push(m);
   }
   const m = unique[index] || unique[0];
-  if(!m) return;
+  if(!m){ const panel=$('sentenceImagePanel'); if(panel) panel.classList.remove('show'); return; }
   const panel=$('sentenceImagePanel'), title=$('sentenceImageTitle'), sub=$('sentenceImageSub'), art=$('sentenceImageArt');
   if(!panel || !title || !sub || !art) return;
   const sentence = m.text || '';
@@ -1024,35 +1030,10 @@ async function scanFromCell(placeIndex){
   // v14: 画像追加前に存在していたローカル基本文法判定を復活させる。
   // APIは未知・拡張候補の確認用。I am sad / I like apples 等の基本文が
   // API待ち・API揺れで不成立になるデグレを防ぐ。
-  const apiInput=[];
-  const localSeen=new Set();
-  for(const c of uniq){
-    const words=c.path.map(s=>s.w);
-    const w=lowerWords(words);
-    const key=norm(w);
-    const local=grammarEvaluate(w);
-    if(local){
-      localSeen.add(key);
-      const ev={
-        ok:true,
-        kind:local.kind || '基本英文判定',
-        pts:local.pts || (32+Math.min(20,w.length*4)),
-        text:(local.text || displayEnglish(w)).replace(/[.!?]$/,''),
-        ja:await resolveJapanese(w,local),
-        source:local.source || 'grammar',
-        cells:c.path.map(s=>s.i),
-        dir:c.label,
-        type:'complete_sentence'
-      };
-      found.push(ev);
-    }else{
-      apiInput.push(c);
-    }
-  }
-  const apiMatches=await evaluateCandidatesByApi(apiInput);
+  // v34: JS側の文法補正・大文字化・3単現補正もAPI判定前には一切しない。
+  // 盤面候補はすべて Strict Link Grammar API に通し、APIが gameOk:true のものだけ採点する。
+  const apiMatches=await evaluateCandidatesByApi(uniq);
   for(const ev of apiMatches){
-    const key=norm((ev.text||'').split(' '));
-    if(localSeen.has(key)) continue;
     ev.ja=await resolveJapanese(ev.text.split(' '),ev);
     found.push(ev);
   }
@@ -1430,9 +1411,15 @@ function routeRejectText(r){
   if(reason) return `API判定NG: ${reason}`;
   return '';
 }
-function buildFailInfo(placeIndex, word){
+function buildFailInfo(placeIndex, word, successes=[]){
   lastReasonDisplayContext={placeIndex,word,partial:false,cls:'bad'};
-  const rejects=bestRejectCandidates(placeIndex);
+  const successCellSets=(successes||[]).map(m=>new Set(m.cells||[]));
+  const rejects=bestRejectCandidates(placeIndex).filter(r=>{
+    const rcells=r.cells||[];
+    // v33: 成立した長い経路に完全包含される短いNG候補は、成功時の別候補NGとして出さない。
+    // 例: I am happy 成立時に、部分経路 Am happy の探索理由「happy Am」を表示しない。
+    return !successCellSets.some(ss=>rcells.length>0 && rcells.every(i=>ss.has(i)));
+  });
   const items=rejects.map(r=>{
     const text=String(r?.text||'候補なし').trim();
     let reason=rejectReasonText(r);
@@ -1486,6 +1473,8 @@ async function placeTile(cellIndex){
   if(!word){setMsg('その手札は空','bad');return;}
   placementJudgeBusy=true;
   const myJudgeSeq=++placementJudgeSeq;
+  // v34: 新しい配置を始めたら、前回の成立画像パネルを必ず閉じる。NG時に古い画像が残らないようにする。
+  { const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show'); }
   state.board[cellIndex]={w:word,owner:state.turn%state.playerCount,baseOwner:state.turn%state.playerCount,at:Date.now(),useCount:0,unusedPenaltyApplied:false};
   p.hand[selectedHandIndex]=drawOneForSlot(selectedHandIndex);
   // 種類別固定スロットなのでソートしない。各枠を維持する。
@@ -1545,7 +1534,7 @@ async function placeTile(cellIndex){
     showComboDetails(scoring,comboInfo);
     showSentenceGeneratedImage(scoring);
     speakResultsSequential(scoring);
-    const partialFailInfo=buildFailInfo(cellIndex, word);
+    const partialFailInfo=buildFailInfo(cellIndex, word, scoring);
     if((partialFailInfo.rejects||[]).length){
       lastReasonDisplayContext={placeIndex:cellIndex,word,partial:true,cls:'good'};
       partialFailInfo.short=`成立した経路あり。ただし別候補は不成立：${partialFailInfo.short}`;
@@ -1603,7 +1592,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:基本文法+API</span><span class="chip">今回置いたカード必須</span><span class="chip">画像は成立後のみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:StrictLG APIのみ</span><span class="chip">今回置いたカード必須</span><span class="chip">画像は成立後のみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
   {const m=$('msg'); if(m){
     let t=state.statusText||''; let c=state.statusClass||'info';
     const generic=/成立なし|つなげ方/.test(t);
