@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v10 reason job queue success-only cache 2026-06-27 -->
+<!-- latest: v14 placement judge lock + stale async guard 2026-06-27 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -1124,17 +1124,39 @@ function showFailDetails(info, cellIndex, opts={}){
   }
 }
 
+let placementJudgeBusy=false;
+let placementJudgeSeq=0;
 async function placeTile(cellIndex){
+  // v14: 判定中に次のカードを置かせない。
+  // 連打で複数の scan/check-and-translate が並走すると、古い判定結果が後から戻って
+  // 新しい盤面へ上書きされ、gameOk:true の文まで NG/pending に見える。
+  if(placementJudgeBusy){
+    setMsg('判定中…。結果が出てから次のカードを置いてください。','info');
+    return;
+  }
   if(selectedHandIndex<0){setMsg('先に手札を選んで！','bad');return;}
   if(state.board[cellIndex]){setMsg('そこは埋まってる','bad');return;}
   const p=currentPlayer();
   const word=p.hand[selectedHandIndex];
   if(!word){setMsg('その手札は空','bad');return;}
+  placementJudgeBusy=true;
+  const myJudgeSeq=++placementJudgeSeq;
   state.board[cellIndex]={w:word,owner:state.turn%state.playerCount,baseOwner:state.turn%state.playerCount,at:Date.now(),useCount:0,unusedPenaltyApplied:false};
   p.hand[selectedHandIndex]=drawOneForSlot(selectedHandIndex);
   // 種類別固定スロットなのでソートしない。各枠を維持する。
-  setMsg('成立候補を全照合中…','info');
-  const made=await scanFromCell(cellIndex);
+  setMsg('成立候補を全照合中…。連打防止のため判定完了まで配置ロック中。','info');
+  let made=[];
+  try{
+    made=await scanFromCell(cellIndex);
+  }catch(e){
+    console.warn('scanFromCell failed',e);
+    made=[];
+  }
+  // v14: 万一、古い非同期判定が後から戻ってきても画面・点数へ反映しない。
+  if(myJudgeSeq!==placementJudgeSeq){
+    console.warn('stale placeTile result ignored', {myJudgeSeq, placementJudgeSeq});
+    return;
+  }
   recentCells=[cellIndex]; routeFocusCells=[];
   let gained=1;
   if(made.length){
@@ -1212,6 +1234,7 @@ async function placeTile(cellIndex){
   broadcast({type:'englishPlace',gameId:state.gameId,state:lightState(),cellIndex,by:clientId});
   render();
   if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
+  placementJudgeBusy=false;
 }
 function drawOne(){return WORDS[Math.floor(Math.random()*WORDS.length)].w}
 function nextTurn(){state.turn=(state.turn+1)%state.playerCount;state.turnNo++;}
