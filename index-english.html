@@ -165,7 +165,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v7.guaranteedReason';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v11.reasonJobNoRawLabels';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -286,7 +286,7 @@ async function evaluateCandidatesByApi(routeCandidates){
           __reject:true,
           text:item.text,
           words:item.words,
-          reason:finalResult?.reasonExplain?.explanationJa || finalResult?.reasonExplain?.explanationEn || finalResult?.reason || '',
+          reason:finalResult?.reasonExplain?.explanationJa || finalResult?.reasonExplain?.explanationEn || '',
           reasonSource:finalResult?.reasonExplain?.method || finalResult?.reasonSource || '',
           reasonStatus:finalResult?.reasonStatus || '',
           reasonJobId:finalResult?.reasonJobId || '',
@@ -1034,14 +1034,9 @@ function apiRejectReason(raw){
 function rejectReasonText(r){
   const ex=r?.reasonExplain||null;
   const explained=String(ex?.explanationJa||ex?.explanationEn||'').trim();
-  if(explained) return explained;
-  const raw=String(r?.reason||r?.type||r?.sentenceType||'').trim();
-  if(!raw) return '';
-  // 外部説明モデルに失敗した場合、内部エラー文や短い生ラベルを学習者向け理由として出さない。
-  // 個別英文の判定ではなく、API/モデル診断の表示整形。
-  if(/unavailable|service failed|fetch failed|provider|timeout|api error|failed/i.test(raw)) return '';
-  if(/missing verb|missing predicate|lacks a verb|parse failed|fragment|invalid|word_salad/i.test(raw)) return '';
-  return apiRejectReason(raw);
+  // v11: 学習者向けに表示してよいNG理由は reason-explain の成功結果だけ。
+  // API raw reason/type/sentenceType（phrase, fragment, invalid, missing ...）は内部ラベルなので絶対に表示しない。
+  return explained || '';
 }
 
 function bestRejectCandidates(placeIndex){
@@ -1068,13 +1063,13 @@ function buildFailInfo(placeIndex, word){
   // 1件だけ代表表示にすると、例: I am eating だけ見えて I like eating が隠れる。
   // 置いたカードを含むAPI判定NG候補は、上部メッセージ欄に複数件まとめて出す。
   const short = items.length
-    ? `API判定NG候補：` + items.map(it=>`「${it.text}」${it.reason?`：${it.reason}`:''}`).join(' / ')
-    : `今回置いた「${word}」を含む候補をAPIに渡せていない/またはAPIから判定理由が返っていない`;
+    ? `API判定NG候補：` + items.map(it=>`「${it.text}」：${it.reason || '理由解析中…'}`).join(' / ')
+    : `今回置いた「${word}」を含む候補は理由解析中…`;
   const lines=[];
   if(items.length){
     lines.push(...items.map(it=>`候補: <b>${esc(it.text)}</b>${it.reason?`：${esc(it.reason)}`:''}`));
   }else{
-    lines.push('API判定の詳細なし。候補がAPIに渡っていない、API未応答、または古いHTML/キャッシュの可能性。');
+    lines.push('理由解析中…。API内部ラベルは表示せず、reason-explain の成功結果だけを表示します。');
   }
   return {short, detail:lines.join('<br>'), example:'', rejects};
 }
