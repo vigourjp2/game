@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
+<!-- latest: strict Link Grammar + HF Chat API default 2026-06-27-0927 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -98,7 +99,7 @@
     </section>
     <aside class="side">
       <section class="panel scorePanel"><h2>スコア / 陣地</h2><div class="players" id="players"></div></section>
-      <section class="panel dictPanel"><h2>成立ルール</h2><div class="rules">全ルート照合。<b>文の成立判定はAPI裁定</b>（Link Grammar + LanguageTool + 翻訳API）。<br><b>文</b>: You go to school / I like you / She likes apples<br><b>句</b>: listen to music / be good at<br><b>方針</b>: ローカル品詞テンプレは手札・短句補助のみ</div><div class="targetList" id="targetList"></div></section>
+      <section class="panel dictPanel"><h2>成立ルール</h2><div class="rules">今回置いたカードを含む候補だけ照合。<b>文の成立判定はStrict Link Grammar APIのみ</b>。<br><b>API</b>: LanguageToolで補正 → link-parser strict parse（-null=0 / islands禁止）→ OK文だけ翻訳。<br><b>方針</b>: ローカル品詞テンプレで英文成立を裁定しない</div><div class="targetList" id="targetList"></div></section>
       <section class="panel logPanel"><h2>ログ</h2><div class="log" id="log"></div></section>
     </aside>
   </main>
@@ -157,9 +158,9 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v3';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v4.strictLG';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
-let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || '').trim();
+let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
 let linkGrammarCache={};
 try{linkGrammarCache=JSON.parse(localStorage.getItem(LINK_GRAMMAR_CACHE_KEY)||'{}')||{};}catch(e){linkGrammarCache={};}
@@ -167,7 +168,7 @@ async function linkGrammarEvaluate(words){
   const w=lowerWords(words);
   const key=norm(w);
   if(!linkGrammarApi) return null;
-  if(!isLikelyCompleteSentenceWords(w) || hasOrphanTail(w)) return null;
+  if(w.length<2) return null;
   const cached=linkGrammarCache[key];
   if(cached!==undefined){
     if(cached && typeof cached==='object' && cached.ok){
@@ -921,7 +922,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">LinkGrammar:${esc(linkGrammarStatus)}</span><span class="chip">Harper:判定OFF</span><span class="chip">PhraseBank:${PHRASE_BANK.length}</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">Harper:判定OFF</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
 }
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
