@@ -173,7 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v13.confirmedOnlyNoPendingRejects';
+const IMAGE_INTEGRATION_VERSION='clean-image-isolated-v16';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v16.cleanImageIsolated';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -788,7 +789,7 @@ function speakResult(m){
 }
 
 function sentenceImageCacheKey(sentence, jaText='') {
-  return 'sentencePixabay:v1:' + norm([sentence || '', jaText || '']);
+  return 'sentencePixabay:v6:' + norm([sentence || '']);
 }
 function sentenceImageCacheRead(key){
   try{
@@ -944,8 +945,39 @@ async function scanFromCell(placeIndex){
     if(seenCand.has(k)) continue;
     seenCand.add(k); uniq.push(c);
   }
-  const apiMatches=await evaluateCandidatesByApi(uniq);
+  // 画像表示は成立後処理なので、成立判定とは完全分離する。
+  // v14: 画像追加前に存在していたローカル基本文法判定を復活させる。
+  // APIは未知・拡張候補の確認用。I am sad / I like apples 等の基本文が
+  // API待ち・API揺れで不成立になるデグレを防ぐ。
+  const apiInput=[];
+  const localSeen=new Set();
+  for(const c of uniq){
+    const words=c.path.map(s=>s.w);
+    const w=lowerWords(words);
+    const key=norm(w);
+    const local=grammarEvaluate(w);
+    if(local){
+      localSeen.add(key);
+      const ev={
+        ok:true,
+        kind:local.kind || '基本英文判定',
+        pts:local.pts || (32+Math.min(20,w.length*4)),
+        text:(local.text || displayEnglish(w)).replace(/[.!?]$/,''),
+        ja:await resolveJapanese(w,local),
+        source:local.source || 'grammar',
+        cells:c.path.map(s=>s.i),
+        dir:c.label,
+        type:'complete_sentence'
+      };
+      found.push(ev);
+    }else{
+      apiInput.push(c);
+    }
+  }
+  const apiMatches=await evaluateCandidatesByApi(apiInput);
   for(const ev of apiMatches){
+    const key=norm((ev.text||'').split(' '));
+    if(localSeen.has(key)) continue;
     ev.ja=await resolveJapanese(ev.text.split(' '),ev);
     found.push(ev);
   }
@@ -1336,7 +1368,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:API一任</span><span class="chip">今回置いたカード必須</span><span class="chip">語数上限なし/曲がり制限なし</span><span class="chip">英文成立はAPIのみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:基本文法+API</span><span class="chip">今回置いたカード必須</span><span class="chip">画像は成立後のみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
   {const m=$('msg'); if(m){
     let t=state.statusText||''; let c=state.statusClass||'info';
     const generic=/成立なし|つなげ方/.test(t);
