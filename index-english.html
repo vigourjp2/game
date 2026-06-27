@@ -174,7 +174,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
 const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v22-ja-hydrate';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v22.reasonQueueMobilePollJaHydrate';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v23.reasonNewestRoutePriority';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -235,7 +235,12 @@ async function singleApiCheckItem(base, item){
   const res=await fetch(base+'/check-and-translate',{
     method:'POST',
     headers:{'content-type':'application/json'},
-    body:JSON.stringify({text:item.text,words:item.words})
+    body:JSON.stringify({
+      text:item.text,
+      words:item.words,
+      reasonPriorityEpoch:item.reasonPriorityEpoch || 0,
+      reasonPrioritySeq:item.reasonPrioritySeq || 0
+    })
   });
   if(!res.ok) throw new Error('HTTP '+res.status);
   const data=await res.json();
@@ -246,6 +251,9 @@ async function evaluateCandidatesByApi(routeCandidates){
   if(!linkGrammarApi) return out;
   const pending=[];
   const byKey=new Map();
+  // v23: この一手で発生したNG候補群。古いpendingより新しい一手を優先処理するための世代番号。
+  const reasonPriorityEpoch=Date.now();
+  const byKeyFirstOrder=new Map();
   for(const c of routeCandidates){
     const words=c.path.map(s=>s.w);
     const w=lowerWords(words);
@@ -272,8 +280,9 @@ async function evaluateCandidatesByApi(routeCandidates){
       }
     }
     if(!byKey.has(key)){
-      const item={id:String(pending.length), key, words:w, text:displayEnglish(w), routes:[]};
-      byKey.set(key,item); pending.push(item);
+      const seq=pending.length;
+      const item={id:String(seq), key, words:w, text:displayEnglish(w), routes:[], reasonPriorityEpoch, reasonPrioritySeq:seq};
+      byKey.set(key,item); byKeyFirstOrder.set(key,seq); pending.push(item);
     }
     byKey.get(key).routes.push(c);
   }
@@ -309,6 +318,15 @@ async function evaluateCandidatesByApi(routeCandidates){
           reasonStatus:finalResult?.reasonStatus || '',
           reasonJobId:finalResult?.reasonJobId || '',
           reasonExplain:finalResult?.reasonExplain || null,
+          reasonPriorityEpoch:item.reasonPriorityEpoch || reasonPriorityEpoch,
+          reasonPrioritySeq:item.reasonPrioritySeq || 0,
+          reasonJobAttempts:finalResult?.reasonJobAttempts || finalResult?.attempts || 0,
+          reasonJobNextRetryAt:finalResult?.reasonJobNextRetryAt || finalResult?.nextRetryAt || null,
+          reasonQueueRole:finalResult?.queueRole || finalResult?.reasonQueueRole || '',
+          reasonQueueIndex:finalResult?.queueIndex ?? finalResult?.reasonQueueIndex ?? null,
+          reasonQueueLabel:finalResult?.queueLabel || finalResult?.reasonQueueLabel || '',
+          reasonQueueRevision:finalResult?.queueRevision || 0,
+          reasonRunningText:finalResult?.runningText || '',
           type:finalResult?.type||'',
           sentenceType:finalResult?.sentenceType||'',
           fullParse:!!finalResult?.fullParse
@@ -1121,7 +1139,7 @@ function showComboDetails(scoring,comboInfo){
 }
 
 
-const REASON_POLL_MAX_PARALLEL=6;
+const REASON_POLL_MAX_ITEMS=8;
 const REASON_POLL_FAST_MS=1200;
 const REASON_POLL_SLOW_MS=2800;
 let reasonPollTimer=null;
@@ -1132,6 +1150,10 @@ let lastReasonDisplayContext=null;
 function candidateKeyFromText(text){return norm(String(text||'').split(/\s+/).filter(Boolean));}
 function reasonJobStatusOf(r){
   return String(r?.reasonStatus || r?.status || '').toLowerCase();
+}
+function circledNumber(n){
+  const nums=['','①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫','⑬','⑭','⑮','⑯','⑰','⑱','⑲','⑳'];
+  return nums[n] || `(${n})`;
 }
 function isReasonPending(r){
   if(!r||!r.__reject) return false;
@@ -1161,9 +1183,17 @@ function updateReasonJobStateForText(text, patch={}){
 }
 function pendingReasonLabel(r){
   const st=reasonJobStatusOf(r);
-  if(['pending','running','queued','retry','retrying'].includes(st) || (!st && (r?.reasonJobId || r?.text))) return '理由解析中…';
+  const role=String(r?.reasonQueueRole||r?.queueRole||'').toLowerCase();
+  const qn=Number(r?.reasonQueueIndex ?? r?.queueIndex ?? 0);
+  const at=Number(r?.reasonJobAttempts||r?.attempts||0);
+  const retry=at>0 ? `（再試行${at}）` : '';
+  if(st==='running' || role==='running') return `理由解析中…${retry}`;
+  if(['pending','queued','retry','retrying'].includes(st) || role==='waiting' || (!st && (r?.reasonJobId || r?.text))){
+    if(qn>0) return `理由解析待ち${circledNumber(qn)}${retry}`;
+    return `理由解析待ち${retry}`;
+  }
   if(['unavailable','missing'].includes(st)) return '理由解析待機中';
-  if(['failure','failed','error'].includes(st)) return '理由解析失敗';
+  if(['failure','failed','error'].includes(st)) return `理由解析失敗${retry}`;
   return '詳細理由未取得';
 }
 function updateReasonForText(text, reasonExplain, status='success'){
@@ -1199,6 +1229,12 @@ function updateReasonForText(text, reasonExplain, status='success'){
       reasonStatus:status,
       reasonJobId:sample?.reasonJobId || '',
       reasonExplain,
+      reasonPriorityEpoch:sample?.reasonPriorityEpoch || 0,
+      reasonPrioritySeq:sample?.reasonPrioritySeq || 0,
+      reasonQueueRole:sample?.reasonQueueRole || '',
+      reasonQueueIndex:sample?.reasonQueueIndex ?? null,
+      reasonQueueLabel:sample?.reasonQueueLabel || '',
+      reasonQueueRevision:sample?.reasonQueueRevision || 0,
       type:sample?.type || '',
       sentenceType:sample?.sentenceType || '',
       fullParse:!!sample?.fullParse
@@ -1209,11 +1245,27 @@ function updateReasonForText(text, reasonExplain, status='success'){
 }
 function pendingReasonList(){
   const rejects=[];
-  for(const v of Object.values(linkGrammarCache||{})) if(isReasonPending(v)) rejects.push(v);
-  for(const r of lastScanRejects||[]) if(isReasonPending(r)) rejects.push(r);
+  // v23: 現在の一手で発生したNGを先に見る。localStorage由来の古いpendingは後ろ。
+  for(const r of lastScanRejects||[]) if(isReasonPending(r)) rejects.push({...r,__reasonOrigin:'lastScan'});
+  for(const v of Object.values(linkGrammarCache||{})) if(isReasonPending(v)) rejects.push({...v,__reasonOrigin:'cache'});
+  rejects.sort((a,b)=>{
+    const ar=String(a.reasonQueueRole||a.queueRole||'').toLowerCase();
+    const br=String(b.reasonQueueRole||b.queueRole||'').toLowerCase();
+    const arank=ar==='running'?0:(ar==='waiting'?1:2);
+    const brank=br==='running'?0:(br==='waiting'?1:2);
+    if(arank!==brank) return arank-brank;
+    const aq=Number(a.reasonQueueIndex??a.queueIndex??999999), bq=Number(b.reasonQueueIndex??b.queueIndex??999999);
+    if(aq!==bq) return aq-bq;
+    const ae=Number(a.reasonPriorityEpoch||0), be=Number(b.reasonPriorityEpoch||0);
+    if(be!==ae) return be-ae;
+    const as=Number(a.reasonPrioritySeq||999999), bs=Number(b.reasonPrioritySeq||999999);
+    if(as!==bs) return as-bs;
+    if(a.__reasonOrigin!==b.__reasonOrigin) return a.__reasonOrigin==='lastScan' ? -1 : 1;
+    return String(a.text||'').localeCompare(String(b.text||''));
+  });
   const uniq=[]; const seen=new Set();
   for(const r of rejects){
-    const key=(r.reasonJobId||'')+'|'+candidateKeyFromText(r.text);
+    const key=candidateKeyFromText(r.text);
     if(seen.has(key)) continue;
     seen.add(key); uniq.push(r);
   }
@@ -1267,7 +1319,7 @@ async function pollPendingReasons(){
   let changed=false;
   try{
   const base=linkGrammarApi.replace(/\/$/,'');
-  for(const r of uniq.slice(0, REASON_POLL_MAX_PARALLEL)){
+  for(const r of uniq.slice(0, REASON_POLL_MAX_ITEMS)){
     try{
       const qs=r.reasonJobId ? ('id='+encodeURIComponent(r.reasonJobId)) : ('text='+encodeURIComponent(r.text||''));
       const res=await fetch(base+'/reason-result?'+qs,{cache:'no-store'});
@@ -1283,7 +1335,14 @@ async function pollPendingReasons(){
             reasonJobId: jd.id || jd.reasonJobId || r.reasonJobId || '',
             reasonJobError: jd.error || '',
             reasonJobAttempts: jd.attempts || 0,
-            reasonJobNextRetryAt: jd.nextRetryAt || null
+            reasonJobNextRetryAt: jd.nextRetryAt || null,
+            reasonPriorityEpoch: jd.priorityEpoch || r.reasonPriorityEpoch || 0,
+            reasonPrioritySeq: jd.prioritySeq ?? r.reasonPrioritySeq ?? 0,
+            reasonQueueRole: jd.queueRole || '',
+            reasonQueueIndex: jd.queueIndex ?? null,
+            reasonQueueLabel: jd.queueLabel || '',
+            reasonQueueRevision: jd.queueRevision || 0,
+            reasonRunningText: jd.runningText || ''
           }) || changed;
         }
         continue;
@@ -1296,7 +1355,14 @@ async function pollPendingReasons(){
           reasonJobId: data.id || r.reasonJobId || '',
           reasonJobError: data.error || '',
           reasonJobAttempts: data.attempts || 0,
-          reasonJobNextRetryAt: data.nextRetryAt || null
+          reasonJobNextRetryAt: data.nextRetryAt || null,
+          reasonPriorityEpoch: data.priorityEpoch || r.reasonPriorityEpoch || 0,
+          reasonPrioritySeq: data.prioritySeq ?? r.reasonPrioritySeq ?? 0,
+          reasonQueueRole: data.queueRole || '',
+          reasonQueueIndex: data.queueIndex ?? null,
+          reasonQueueLabel: data.queueLabel || '',
+          reasonQueueRevision: data.queueRevision || 0,
+          reasonRunningText: data.runningText || ''
         }) || changed;
       }
     }catch(e){ console.warn('reason-result poll failed', e); }
