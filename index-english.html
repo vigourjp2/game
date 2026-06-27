@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: strict Link Grammar + HF Chat API default 2026-06-27-0927 -->
+<!-- latest: v5 guaranteed reason fallback 2026-06-27-0935 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -165,7 +165,7 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v6.successOnly';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v7.guaranteedReason';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -959,8 +959,8 @@ function rejectReasonText(r){
   if(!raw) return '';
   // 外部説明モデルに失敗した場合、内部エラー文や短い生ラベルを学習者向け理由として出さない。
   // 個別英文の判定ではなく、API/モデル診断の表示整形。
-  if(/service failed|fetch failed|provider|timeout|api error|failed/i.test(raw)) return '理由説明を取得できませんでした';
-  if(/missing verb|missing predicate|lacks a verb|parse failed|fragment|invalid/i.test(raw)) return '外部説明モデルの詳しい理由を取得できませんでした';
+  if(/unavailable|service failed|fetch failed|provider|timeout|api error|failed/i.test(raw)) return '';
+  if(/missing verb|missing predicate|lacks a verb|parse failed|fragment|invalid|word_salad/i.test(raw)) return '';
   return apiRejectReason(raw);
 }
 
@@ -980,7 +980,8 @@ function buildFailInfo(placeIndex, word){
   const rejects=bestRejectCandidates(placeIndex);
   const items=rejects.map(r=>{
     const text=String(r?.text||'候補なし').trim();
-    const reason=rejectReasonText(r);
+    let reason=rejectReasonText(r);
+    if(!reason) reason='完全な英文として理由を確認中です。もう一度置くと詳しい理由が表示されます。';
     return {text,reason};
   });
   // 1件だけ代表表示にすると、例: I am eating だけ見えて I like eating が隠れる。
