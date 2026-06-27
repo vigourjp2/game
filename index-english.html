@@ -173,8 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v20';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v21.reasonQueueMobilePoll';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v22-ja-hydrate';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v22.reasonQueueMobilePollJaHydrate';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
@@ -693,7 +693,7 @@ async function evaluateSequenceAsync(words){
   return null;
 }
 
-const TRANSLATION_CACHE_KEY='englishPittan.translationCache.v2';
+const TRANSLATION_CACHE_KEY='englishPittan.translationCache.v3';
 let translationCache={};
 try{translationCache=JSON.parse(localStorage.getItem(TRANSLATION_CACHE_KEY)||'{}')||{};}catch(e){translationCache={};}
 async function translateWithApi(text){
@@ -703,7 +703,7 @@ async function translateWithApi(text){
   if(translationCache[key]) return translationCache[key];
   try{
     const base=linkGrammarApi.replace(/\/$/,'');
-    const res=await fetch(base+'/translate?text='+encodeURIComponent(text));
+    const res=await fetch(base+'/translate?text='+encodeURIComponent(text),{cache:'no-store'});
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     const ja=(data && (data.ja || data.translatedText || data.translation?.ja || data.translation?.translatedText)) || '';
@@ -717,11 +717,31 @@ async function translateWithApi(text){
 }
 async function resolveJapanese(words,ev){
   if(ev && ev.ja) return ev.ja;
-  if(ev && ev.source==='api') return '';
   const key=norm(words);
   if(EXACT_JA.has(key)) return EXACT_JA.get(key);
   if(PHRASE_MAP.has(key)) return PHRASE_MAP.get(key).ja;
+  // API判定で成立した文・時の副詞を足した拡張文は、ここで空文字にせず後段の hydrateJapaneseForMatches でAPI翻訳する。
   return '';
+}
+async function hydrateJapaneseForMatches(matches){
+  // 成立判定後の表示・読み上げ専用。判定結果そのものは変えない。
+  // v22: I am happy today のようにローカル基本文+時の副詞で成立した文は、
+  // EXACT_JAにないため ja が空になっていた。ここで選ばれた成立文だけ翻訳を補完する。
+  for(const m of (matches||[])){
+    if(!m || m.ja) continue;
+    const text=String(m.text||'').trim();
+    if(!text) continue;
+    let ja='';
+    try{ ja=await translateWithApi(text); }catch(e){ ja=''; }
+    if(!ja){
+      try{
+        const local=translateSequence(text.split(/\s+/),m);
+        if(local && local.toLowerCase()!==text.toLowerCase()) ja=local;
+      }catch(e){}
+    }
+    if(ja) m.ja=ja;
+  }
+  return matches;
 }
 function translateSequence(words,ev){
   const key=norm(words);
@@ -1409,6 +1429,7 @@ async function placeTile(cellIndex){
   if(made.length){
     failFocusCell=-1;
     const scoring=selectScoringMatches(made);
+    await hydrateJapaneseForMatches(scoring);
     const {groups,comboInfo}=summarizeScoring(scoring);
     const useDelta=new Map();
     for(const m of scoring){
