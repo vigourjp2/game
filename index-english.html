@@ -239,8 +239,8 @@ async function linkGrammarEvaluate(words){
     // reason job 側の handCandidates/deckCandidates が空になり、補完理由が出せなかった。
     const reasonContext=reasonCandidateContext();
     const payload={text,words:originalWords,...reasonContext};
-    let res=await fetch(base+'/check-and-translate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
-    if(res.status===404) res=await fetch(base+'/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    let res=await fetchWithTimeout(base+'/check-and-translate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)},7500);
+    if(res.status===404) res=await fetchWithTimeout(base+'/check',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)},7500);
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     const ev=evFromApiResult(data,originalWords);
@@ -277,8 +277,14 @@ function reasonCandidateContext(){
     reasonDeckCandidates:[...new Set(deck.map(String))]
   };
 }
+function fetchWithTimeout(url, options={}, timeoutMs=7500){
+  const ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(()=>{ try{ctrl.abort();}catch(e){} }, timeoutMs) : null;
+  const opts = ctrl ? {...options, signal:ctrl.signal} : options;
+  return fetch(url, opts).finally(()=>{ if(timer) clearTimeout(timer); });
+}
 async function singleApiCheckItem(base, item){
-  const res=await fetch(base+'/check-and-translate',{
+  const res=await fetchWithTimeout(base+'/check-and-translate',{
     method:'POST',
     headers:{'content-type':'application/json'},
     body:JSON.stringify({
@@ -292,7 +298,7 @@ async function singleApiCheckItem(base, item){
       reasonDisabled:true,
       ...reasonCandidateContext()
     })
-  });
+  }, 7500);
   if(!res.ok) throw new Error('HTTP '+res.status);
   const data=await res.json();
   return data;
@@ -1357,6 +1363,17 @@ async function placeTile(cellIndex){
   activeJudgeWordForReason=String(word||'');
   placementJudgeBusy=true;
   const myJudgeSeq=++placementJudgeSeq;
+  // v76: API/ネットワーク/Render cold start で判定Promiseが戻らない時も、操作ロックを永久化しない。
+  // タイムアウト時は世代番号を進め、後から戻った古い判定結果は反映しない。
+  let placementLockTimer=setTimeout(()=>{
+    if(placementJudgeBusy && myJudgeSeq===placementJudgeSeq){
+      placementJudgeSeq++;
+      placementJudgeBusy=false;
+      linkGrammarStatus='ERR';
+      setMsg('判定タイムアウト。API応答が遅いため操作ロックを解除しました。もう一度置くか、APIのhealthを確認してください。','bad');
+      render();
+    }
+  },12000);
   // v35: 新しい配置を始めたら、前回の成立画像パネルを必ず閉じる。NG時に古い画像が残らないようにする。
   { const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show'); }
   state.board[cellIndex]={w:word,owner:state.turn%state.playerCount,baseOwner:state.turn%state.playerCount,at:Date.now(),useCount:0,unusedPenaltyApplied:false};
@@ -1374,6 +1391,7 @@ async function placeTile(cellIndex){
   // v14: 万一、古い非同期判定が後から戻ってきても画面・点数へ反映しない。
   if(myJudgeSeq!==placementJudgeSeq){
     console.warn('stale placeTile result ignored', {myJudgeSeq, placementJudgeSeq});
+    try{ clearTimeout(placementLockTimer); }catch(e){}
     return;
   }
   recentCells=[cellIndex]; routeFocusCells=[];
@@ -1457,6 +1475,7 @@ async function placeTile(cellIndex){
   broadcast({type:'englishPlace',gameId:state.gameId,state:lightState(),cellIndex,by:clientId});
   render();
   if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
+  try{ clearTimeout(placementLockTimer); }catch(e){}
   placementJudgeBusy=false;
   // v74: クライアント側で補完文を合成しない。
   if(lastReasonDisplayContext && !lastReasonDisplayContext.partial){
