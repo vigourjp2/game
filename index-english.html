@@ -709,7 +709,8 @@ async function showSentenceGeneratedImage(matches, index=0) {
   for(const m of (matches || [])){
     if(!m || !m.text) continue;
     // v34: 成立文として採点されたものだけ画像対象。未完成/NG/古いパネルの残像を防ぐ。
-    if(String(m.type||'complete_sentence') !== 'complete_sentence') continue;
+    if(m.gameOk !== true) continue;
+    if(String(m.type||'') !== 'complete_sentence') continue;
     if(String(m.sentenceType||m.utteranceType||'') === 'contextual_short_answer') continue;
     const k=norm(m.text.split(' '));
     if(seen.has(k)) continue;
