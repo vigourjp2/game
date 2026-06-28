@@ -310,6 +310,30 @@ async function singleApiCheckText(text, seq=0){
   const base=linkGrammarApi.replace(/\/$/,'');
   return singleApiCheckItem(base,{text:displayEnglish(words),words,reasonPriorityEpoch:Date.now(),reasonPrioritySeq:seq});
 }
+async function batchApiCheckItems(base, items, reasonPriorityEpoch){
+  // v85: 盤面候補を1件ずつ /check-and-translate へ直列送信しない。
+  // 1候補7.5秒×複数候補で12秒watchdogを踏むのがゲーム崩壊の主因だった。
+  // batchは成立判定だけ。翻訳/理由jobは後追いにして、1手の待ち時間を最小化する。
+  const res=await fetchWithTimeout(base+'/check-and-translate-batch',{
+    method:'POST',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({
+      candidates:items.map((item,i)=>({id:item.id ?? String(i), text:item.text, words:item.words})),
+      limit:240,
+      translate:false,
+      withTranslate:false,
+      reasonMode:'none',
+      reasonDisabled:true,
+      reasonPriorityEpoch:reasonPriorityEpoch || Date.now(),
+      ...reasonCandidateContext()
+    })
+  }, 26000);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data=await res.json();
+  const arr=Array.isArray(data?.results)?data.results:[];
+  const byId=new Map(arr.map(x=>[String(x.id),x]));
+  return items.map((item,i)=>byId.get(String(item.id ?? i)) || null);
+}
 async function evaluateCandidatesByApi(routeCandidates){
   const out=[];
   if(!linkGrammarApi) return out;
@@ -357,22 +381,28 @@ async function evaluateCandidatesByApi(routeCandidates){
     linkGrammarStatus='CHECK'; renderSafe();
     const base=linkGrammarApi.replace(/\/$/,'');
 
-    // 判定の正本は /check-and-translate の最終レスポンスだけ。
-    // /check-and-translate-batch や parses/stdout の途中ログは成立/不成立表示に使わない。
-    for(const item of pending){
-      let finalResult=null;
-      try{
-        finalResult=await singleApiCheckItem(base,item);
-      }catch(e){
-        finalResult={reason:'API一時未応答', type:'api_error'};
+    let batchResults=[];
+    try{
+      batchResults=await batchApiCheckItems(base,pending,reasonPriorityEpoch);
+    }catch(e){
+      // v85: batchが404/一時失敗の古いAPIでも遊べるよう、最後の保険だけ直列fallback。
+      // 通常経路ではここへ来ない。reason jobは作らない。
+      console.warn('batch judge failed; fallback to single checks', e);
+      for(const item of pending){
+        try{ batchResults.push(await singleApiCheckItem(base,item)); }
+        catch(err){ batchResults.push({reason:'API一時未応答', type:'api_error'}); }
       }
+    }
 
+    for(let i=0;i<pending.length;i++){
+      const item=pending[i];
+      const finalResult=batchResults[i] || {reason:'API一時未応答', type:'api_error'};
       const ev=evFromApiResult(finalResult,item.words);
       if(ev){
         linkGrammarCache[item.key]=ev;
-        // v13: APIがgameOk:trueを返した候補は、同じ英文のNG/pending表示から即時除去する。
+        // APIがgameOk:trueを返した候補は、同じ英文のNG/pending表示から即時除去する。
         lastScanRejects=(lastScanRejects||[]).filter(r=>candidateKeyFromText(r.text)!==item.key);
-        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label,source:'api'});
+        for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label,source:'api-batch'});
       }else{
         const rejectBase={
           __reject:true,
@@ -396,7 +426,6 @@ async function evaluateCandidatesByApi(routeCandidates){
           sentenceType:finalResult?.sentenceType||'',
           fullParse:!!finalResult?.fullParse
         };
-        // v13: NGは現在スキャン用には持つが、localStorageへは成功済みreasonだけ保存する。
         if(rejectReasonText(rejectBase) && rejectBase.reasonStatus==='success'){
           linkGrammarCache[item.key]=rejectBase;
         }else{
@@ -1536,23 +1565,71 @@ async function placeTile(cellIndex){
   displayedRejectReasonPlacementKeys=new Set();
   placementJudgeBusy=true;
   const myJudgeSeq=++placementJudgeSeq;
-  // v76: API/ネットワーク/Render cold start で判定Promiseが戻らない時も、操作ロックを永久化しない。
-  // タイムアウト時は世代番号を進め、後から戻った古い判定結果は反映しない。
+  // v84: 判定中の配置はまだ確定ではないため、タイムアウト時に必ずロールバックできるようスナップショットを保持する。
+  // v76はロック解除だけ行い、盤面/手札の仮変更を残したため、採点前カードが盤面に残ってゲーム状態が壊れた。
+  const placementSnapshot={
+    cellIndex,
+    handIndex:selectedHandIndex,
+    word,
+    prevCell: state.board[cellIndex] ? JSON.parse(JSON.stringify(state.board[cellIndex])) : null,
+    prevHandWord: word,
+    prevSelectedHandIndex:selectedHandIndex,
+    turn:state.turn,
+    turnNo:state.turnNo,
+    wordsMade:state.wordsMade,
+    scores:state.players.map(p=>p.score),
+    tiles:state.players.map(p=>p.tiles),
+    lastJudgeMsg:state.lastJudgeMsg||'',
+    lastJudgeClass:state.lastJudgeClass||'info'
+  };
+  function rollbackTimedOutPlacement(reasonText){
+    try{
+      const snap=placementSnapshot;
+      if(!snap || state.turn!==snap.turn) return false;
+      state.board[snap.cellIndex]=snap.prevCell;
+      if(state.players[snap.turn%state.playerCount] && snap.handIndex>=0){
+        state.players[snap.turn%state.playerCount].hand[snap.handIndex]=snap.prevHandWord;
+      }
+      state.turn=snap.turn;
+      state.turnNo=snap.turnNo;
+      state.wordsMade=snap.wordsMade;
+      state.players.forEach((pl,i)=>{ if(Number.isFinite(snap.scores[i])) pl.score=snap.scores[i]; if(Number.isFinite(snap.tiles[i])) pl.tiles=snap.tiles[i]; });
+      recentCells=[];
+      routeFocusCells=[];
+      failFocusCell=-1;
+      selectedHandIndex=-1;
+      activeJudgeWordForReason='';
+      lastScanRejects=[];
+      lastReasonDisplayContext=null;
+      const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
+      const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show');
+      setMsg(reasonText || '判定タイムアウト。仮配置を取り消しました。APIのhealthを確認してから、もう一度置いてください。','bad',{judge:true});
+      recalcTiles();
+      return true;
+    }catch(e){
+      console.warn('rollbackTimedOutPlacement failed', e);
+      return false;
+    }
+  }
+  // v76/v84: API/ネットワーク/Render cold start で判定Promiseが戻らない時も、操作ロックを永久化しない。
+  // タイムアウト時は世代番号を進め、後から戻った古い判定結果は反映せず、仮配置も取り消す。
+  let placementTimedOut=false;
   let placementLockTimer=setTimeout(()=>{
     if(placementJudgeBusy && myJudgeSeq===placementJudgeSeq){
+      placementTimedOut=true;
       placementJudgeSeq++;
       placementJudgeBusy=false;
       linkGrammarStatus='ERR';
-      setMsg('判定タイムアウト。API応答が遅いため操作ロックを解除しました。もう一度置くか、APIのhealthを確認してください。','bad');
+      rollbackTimedOutPlacement('判定タイムアウト。API一括判定が30秒以内に返りませんでした。仮配置を取り消しました。APIのhealthを確認してください。');
       render();
     }
-  },12000);
+  },30000);
   // v35: 新しい配置を始めたら、前回の成立画像パネルを必ず閉じる。NG時に古い画像が残らないようにする。
   { const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show'); }
   state.board[cellIndex]={w:word,owner:state.turn%state.playerCount,baseOwner:state.turn%state.playerCount,at:Date.now(),useCount:0,unusedPenaltyApplied:false};
   p.hand[selectedHandIndex]=drawOneForSlot(selectedHandIndex);
   // 種類別固定スロットなのでソートしない。各枠を維持する。
-  setMsg('Strict Link Grammarで判定中…。成立確定ではありません。判定完了まで操作ロック中。','info');
+  setMsg('API一括判定中…。候補をまとめて確認しています。','info');
   render();
   let made=[];
   try{
@@ -1563,8 +1640,13 @@ async function placeTile(cellIndex){
   }
   // v14: 万一、古い非同期判定が後から戻ってきても画面・点数へ反映しない。
   if(myJudgeSeq!==placementJudgeSeq){
-    console.warn('stale placeTile result ignored', {myJudgeSeq, placementJudgeSeq});
+    console.warn('stale placeTile result ignored', {myJudgeSeq, placementJudgeSeq, placementTimedOut});
     try{ clearTimeout(placementLockTimer); }catch(e){}
+    // v84: timeout後に古いAPI結果が返ってきても、点数・ターン・盤面へ絶対反映しない。
+    // タイムアウト時点でrollback済みだが、未実行ならここでも保険で取り消す。
+    if(placementTimedOut) rollbackTimedOutPlacement('古い判定結果を破棄しました。仮配置は取り消し済みです。');
+    placementJudgeBusy=false;
+    render();
     return;
   }
   recentCells=[cellIndex]; routeFocusCells=[];
