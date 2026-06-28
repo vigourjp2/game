@@ -137,7 +137,7 @@ try{
 }catch(e){ console.error('early start bind failed', e); }
 try{
 
-const APP_VERSION='v97-pos-metadata-no-fixed-time-list';
+const APP_VERSION='v101-no-browser-judge-cache';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
@@ -197,20 +197,17 @@ const PHRASE_MAP = new Map();
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
 const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v44-case-preserve-frontend';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v96.timeAdverbOverlapGate';
+// v101: 判定キャッシュは完全廃止。毎回ブラウザAPIへ確認する。
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let __storedLgApi=''; try{ __storedLgApi=localStorage.getItem(LINK_GRAMMAR_API_KEY)||''; }catch(e){ __storedLgApi=''; }
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || __storedLgApi || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
-let linkGrammarCache={};
-try{linkGrammarCache=JSON.parse(localStorage.getItem(LINK_GRAMMAR_CACHE_KEY)||'{}')||{};}catch(e){linkGrammarCache={};}
 function clearEnglishJudgeCache(){
-  linkGrammarCache={};
+  // v101: 旧版の判定キャッシュを掃除するだけ。新規保存はしない。
   try{
     Object.keys(localStorage).forEach(k=>{
       if(k==='englishPittan.harperCache.v1' || k.startsWith('englishPittan.linkGrammarCache.')) localStorage.removeItem(k);
     });
-    localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,'{}');
   }catch(e){}
 }
 function evFromApiResult(data, words){
@@ -242,11 +239,7 @@ async function linkGrammarEvaluate(words){
   const key=norm(w);
   if(!linkGrammarApi) return null;
   if(w.length<2) return null;
-  const cached=linkGrammarCache[key];
-  if(cached!==undefined){
-    if(cached && typeof cached==='object' && cached.ok) return {...cached, source:'api', parser:'cache'};
-    return null;
-  }
+  // v101: キャッシュは使わない。毎回APIへ確認する。
   try{
     linkGrammarStatus='CHECK'; renderSafe();
     const base=linkGrammarApi.replace(/\/$/,'');
@@ -262,8 +255,7 @@ async function linkGrammarEvaluate(words){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const data=await res.json();
     const ev=evFromApiResult(data,originalWords);
-    if(ev) linkGrammarCache[key]=ev;
-    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+    // v101: 成立結果も保存しない。
     scheduleReasonPolling(600);
     linkGrammarStatus='ON'; renderSafe();
     return ev;
@@ -289,10 +281,12 @@ function reasonCandidateContext(){
   }catch(e){}
   const deck=[];
   try{ deck.push(...WORDS.map(x=>x.w)); }catch(e){}
+  const all=[...board,...hand,...deck];
   return {
     reasonBoardCandidates:[...new Set(board.map(String))],
     reasonHandCandidates:[...new Set(hand.map(String))],
-    reasonDeckCandidates:[...new Set(deck.map(String))]
+    reasonDeckCandidates:[...new Set(deck.map(String))],
+    reasonWordMetaMap:wordMetaForApi([...new Set(all.map(String))])
   };
 }
 function fetchWithTimeout(url, options={}, timeoutMs=7500){
@@ -343,8 +337,8 @@ async function batchApiCheckItems(base, items, reasonPriorityEpoch){
       withTranslate:false,
       reasonMode:'none',
       reasonDisabled:true,
-      strictGameGate:true,
-      acceptabilityModelGate:true,
+      strictGameGate:false,
+      acceptabilityModelGate:false,
       reasonPriorityEpoch:reasonPriorityEpoch || Date.now(),
       ...reasonCandidateContext()
     })
@@ -369,26 +363,7 @@ async function evaluateCandidatesByApi(routeCandidates){
     const w=lowerWords(words);
     const key=norm(w);
     if(w.length<2) continue;
-    const cached=linkGrammarCache[key];
-    if(cached!==undefined){
-      if(cached && typeof cached==='object' && cached.ok){
-        out.push({...cached,cells:c.path.map(s=>s.i),dir:c.label,source:'api'});
-        continue;
-      }else if(cached && typeof cached==='object' && cached.__reject){
-        // v13: 未確定NG/pending NGキャッシュは絶対に信用しない。
-        // reason-explain成功済みのNGだけキャッシュ利用し、それ以外はAPIへ再確認する。
-        if(rejectReasonText(cached) && cached.reasonStatus==='success'){
-          lastScanRejects.push({
-            ...cached,
-            cells:c.path.map(s=>s.i),
-            dir:c.label
-          });
-          continue;
-        }else{
-          delete linkGrammarCache[key];
-        }
-      }
-    }
+    // v101: 判定キャッシュは読まない。
     if(!byKey.has(key)){
       const seq=pending.length;
       const item={id:String(seq), key, words, text:displayEnglish(words), routes:[], reasonPriorityEpoch, reasonPrioritySeq:seq};
@@ -428,7 +403,7 @@ async function evaluateCandidatesByApi(routeCandidates){
     if(successRows.length){
       for(const row of successRows){
         const {item, ev}=row;
-        linkGrammarCache[item.key]=ev;
+        // v101: 成立結果はキャッシュ保存しない。
         for(const route of item.routes) out.push({...ev,cells:route.path.map(s=>s.i),dir:route.label,source:'api-batch'});
       }
       lastScanRejects=[];
@@ -474,11 +449,7 @@ async function evaluateCandidatesByApi(routeCandidates){
           sentenceType:finalResult?.sentenceType||'',
           fullParse:!!finalResult?.fullParse
         };
-        if(rejectReasonText(rejectBase) && rejectBase.reasonStatus==='success'){
-          linkGrammarCache[item.key]=rejectBase;
-        }else{
-          delete linkGrammarCache[item.key];
-        }
+        // v101: NG理由もキャッシュ保存しない。表示中の lastScanRejects だけで扱う。
         lastScanRejects.push({
           ...rejectBase,
           cells:top.route.path.map(s=>s.i),
@@ -487,7 +458,6 @@ async function evaluateCandidatesByApi(routeCandidates){
       }
     }
 
-    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     scheduleReasonPolling(600);
     linkGrammarStatus='ON'; renderSafe();
   }catch(e){console.warn('English API failed',e); linkGrammarStatus='ERR'; renderSafe();}
@@ -909,6 +879,44 @@ function showFx(made,gained,cellIndex,comboInfo=null){
   for(let i=0;i<sparkCount;i++){const sp=document.createElement('i');sp.className='spark';sp.style.left=x+'px';sp.style.top=y+'px';const a=Math.random()*Math.PI*2,d=30+Math.random()*(comboN>1?130:90);sp.style.setProperty('--dx',Math.cos(a)*d+'px');sp.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(sp);setTimeout(()=>sp.remove(),900);}
 }
 
+
+async function rescueAcceptedPrefixCandidates(routeCandidates, placeIndex){
+  const out=[];
+  if(!linkGrammarApi || !Array.isArray(routeCandidates) || !routeCandidates.length) return out;
+  const base=linkGrammarApi.replace(/\/$/,'');
+  const seen=new Set();
+  const items=[];
+  for(const c of routeCandidates){
+    const path=Array.isArray(c.path)?c.path:[];
+    for(let n=2;n<=path.length;n++){
+      const seg=path.slice(0,n);
+      if(!seg.some(s=>s.i===placeIndex)) continue;
+      const words=seg.map(s=>String(s.w||'').trim()).filter(Boolean);
+      if(words.length<2) continue;
+      const key=seg.map(s=>s.i).join(',')+'|'+norm(words);
+      if(seen.has(key)) continue;
+      seen.add(key);
+      items.push({seg, words, text:displayEnglish(words), label:c.label});
+    }
+  }
+  // 短い完成文を優先して救済する。NG理由を出すより先に、現在APIの正答を拾う。
+  items.sort((a,b)=>a.words.length-b.words.length || a.seg[0].i-b.seg[0].i);
+  for(const item of items.slice(0,32)){
+    try{
+      const data=await singleApiCheckItem(base,{text:item.text, words:item.words, wordMeta:wordMetaForApi(item.words), reasonPriorityEpoch:Date.now(), reasonPrioritySeq:0});
+      const ev=evFromApiResult(data,item.words);
+      if(ev){
+        out.push({...ev,cells:item.seg.map(s=>s.i),dir:item.label||'prefix-rescue',source:'api-prefix-rescue-v100'});
+      }
+    }catch(e){ console.warn('prefix rescue check failed', item.text, e); }
+    if(out.length) break;
+  }
+  if(out.length){
+    lastScanRejects=[];
+  }
+  return out;
+}
+
 async function scanFromCell(placeIndex){
   lastScanRejects=[];
   const found=[];
@@ -984,7 +992,12 @@ async function scanFromCell(placeIndex){
     if(seenCand.has(k)) continue;
     seenCand.add(k); uniq.push(c);
   }
-  const apiMatches=await evaluateCandidatesByApi(uniq);
+  let apiMatches=await evaluateCandidatesByApi(uniq);
+  // v100: 成立0なら、古いNGキャッシュ/バッチ経路漏れを疑ってprefixを単体APIで再確認する。
+  // `I am hungry today` がNGでも、prefixの `I am hungry` がOKならここで救済する。
+  if(!apiMatches.length){
+    apiMatches=await rescueAcceptedPrefixCandidates(uniq, placeIndex);
+  }
   for(const ev of apiMatches){
     ev.ja=await resolveJapanese(ev.text.split(' '),ev);
     found.push(ev);
@@ -1137,8 +1150,7 @@ function updateReasonJobStateForText(text, patch={}){
       if(r[k]!==v){ r[k]=v; changed=true; }
     }
   }
-  const cached=linkGrammarCache[key];
-  if(cached&&cached.__reject) apply(cached);
+  // v101: キャッシュ更新なし。現在表示中の候補だけ更新する。
   for(const r of lastScanRejects||[]){
     if(candidateKeyFromText(r.text)===key) apply(r);
   }
@@ -1178,8 +1190,7 @@ function updateReasonForText(text, reasonExplain, status='success'){
     r.reasonStatus=status;
     changed=true;
   }
-  let cached=linkGrammarCache[key];
-  if(cached&&cached.__reject) apply(cached);
+  // v101: キャッシュ更新なし。現在表示中の候補だけ更新する。
   let sample=null;
   for(const r of lastScanRejects||[]){
     if(candidateKeyFromText(r.text)===key){
@@ -1187,30 +1198,7 @@ function updateReasonForText(text, reasonExplain, status='success'){
       apply(r);
     }
   }
-  // v13: HF reason成功時だけ、初めてNGキャッシュとして保存する。
-  const explanation=String(reasonExplain.explanationJa||reasonExplain.explanationEn||'').trim();
-  if(explanation){
-    linkGrammarCache[key]={
-      __reject:true,
-      text:text || sample?.text || '',
-      words:sample?.words || String(text||'').split(/\s+/).filter(Boolean),
-      reason:explanation,
-      reasonSource:reasonExplain.method || 'hf-chat-reason-only',
-      reasonStatus:status,
-      reasonJobId:sample?.reasonJobId || '',
-      reasonExplain,
-      reasonPriorityEpoch:sample?.reasonPriorityEpoch || 0,
-      reasonPrioritySeq:sample?.reasonPrioritySeq || 0,
-      reasonQueueRole:sample?.reasonQueueRole || '',
-      reasonQueueIndex:sample?.reasonQueueIndex ?? null,
-      reasonQueueLabel:sample?.reasonQueueLabel || '',
-      reasonQueueRevision:sample?.reasonQueueRevision || 0,
-      type:sample?.type || '',
-      sentenceType:sample?.sentenceType || '',
-      fullParse:!!sample?.fullParse
-    };
-    changed=true;
-  }
+  // v101: 理由解析結果はキャッシュ保存しない。lastScanRejectsの表示だけ更新する。
   return changed;
 }
 function pendingReasonList(){
@@ -1357,7 +1345,6 @@ async function pollPendingReasons(){
     reasonPollInFlight=false;
   }
   if(changed){
-    try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
     if(lastReasonDisplayContext){
       const ctx={...lastReasonDisplayContext};
       const info=buildFailInfo(ctx.placeIndex,ctx.word);
@@ -1510,6 +1497,11 @@ function requestDisplayedRejectReason(r){
         if(hand.length) qs.set('hand', hand.join(','));
         if(board.length) qs.set('board', board.join(','));
         if(deck.length) qs.set('deck', deck.join(','));
+        try{
+          const baseWords=String(text||'').trim().split(/\s+/).filter(Boolean);
+          const allMetaWords=[...new Set([...baseWords,...hand,...board,...deck].map(String))];
+          qs.set('wordMetaMap', JSON.stringify(wordMetaForApi(allMetaWords)));
+        }catch(e){}
         if(r.reasonPriorityEpoch) qs.set('reasonPriorityEpoch', String(r.reasonPriorityEpoch));
         if(r.reasonPrioritySeq!==undefined) qs.set('reasonPrioritySeq', String(r.reasonPrioritySeq));
         // v95: 理由補完候補も採点と同じAPIゲートで検証させる。
@@ -1529,8 +1521,7 @@ function requestDisplayedRejectReason(r){
           reasonPriorityEpoch:data.priorityEpoch || 0,
           reasonPrioritySeq:data.prioritySeq || 0
         });
-        try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
-        try{
+            try{
           const rid=String(data?.id||'');
           if(rid){
             addLog(`ブラウザAPI確認: ${base}/reason-result?id=${encodeURIComponent(rid)}`, true);
@@ -1999,7 +1990,7 @@ function render(){
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}${(tp.handMeta&&tp.handMeta[selectedHandIndex])?'（3単現）':''}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:StrictLG APIのみ</span><span class="chip">今回置いたカード必須</span><span class="chip">画像は成立後のみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:StrictLG+LT API</span><span class="chip">今回置いたカード必須</span><span class="chip">画像は成立後のみ</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
   {const m=$('msg'); if(m){
     let t=state.statusText||''; let c=state.statusClass||'info';
     const generic=/成立なし|つなげ方/.test(t);
