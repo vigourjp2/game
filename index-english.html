@@ -1306,10 +1306,12 @@ function updateReasonForText(text, reasonExplain, status='success'){
   return changed;
 }
 function pendingReasonList(){
+  // v70: reason poll は「今回の一手でAPIが返した reasonJobId」だけを見る。
+  // v69 は localStorage/linkGrammarCache の古い pending も拾い、missing時に再ジョブ化してキューを増やしていた。
   const rejects=[];
-  // v23: 現在の一手で発生したNGを先に見る。localStorage由来の古いpendingは後ろ。
-  for(const r of lastScanRejects||[]) if(isReasonPending(r)) rejects.push({...r,__reasonOrigin:'lastScan'});
-  for(const v of Object.values(linkGrammarCache||{})) if(isReasonPending(v)) rejects.push({...v,__reasonOrigin:'cache'});
+  for(const r of lastScanRejects||[]){
+    if(isReasonPending(r) && r.reasonJobId) rejects.push({...r,__reasonOrigin:'lastScan'});
+  }
   rejects.sort((a,b)=>{
     const ar=String(a.reasonQueueRole||a.queueRole||'').toLowerCase();
     const br=String(b.reasonQueueRole||b.queueRole||'').toLowerCase();
@@ -1322,12 +1324,11 @@ function pendingReasonList(){
     if(be!==ae) return be-ae;
     const as=Number(a.reasonPrioritySeq||999999), bs=Number(b.reasonPrioritySeq||999999);
     if(as!==bs) return as-bs;
-    if(a.__reasonOrigin!==b.__reasonOrigin) return a.__reasonOrigin==='lastScan' ? -1 : 1;
     return String(a.text||'').localeCompare(String(b.text||''));
   });
   const uniq=[]; const seen=new Set();
   for(const r of rejects){
-    const key=candidateKeyFromText(r.text);
+    const key=r.reasonJobId || candidateKeyFromText(r.text);
     if(seen.has(key)) continue;
     seen.add(key); uniq.push(r);
   }
@@ -1388,25 +1389,17 @@ async function pollPendingReasons(){
       if(!res.ok) continue;
       const data=await res.json();
       const targetText=data?.text || r.text || '';
-      if(data?.status==='missing' && r.text){
-        const jr=await fetch(base+'/reason-job?text='+encodeURIComponent(r.text),{cache:'no-store'});
-        if(jr.ok){
-          const jd=await jr.json();
-          changed = updateReasonJobStateForText(jd.text || r.text, {
-            reasonStatus: jd.status || jd.reasonStatus || 'pending',
-            reasonJobId: jd.id || jd.reasonJobId || r.reasonJobId || '',
-            reasonJobError: jd.error || '',
-            reasonJobAttempts: jd.attempts || 0,
-            reasonJobNextRetryAt: jd.nextRetryAt || null,
-            reasonPriorityEpoch: jd.priorityEpoch || r.reasonPriorityEpoch || 0,
-            reasonPrioritySeq: jd.prioritySeq ?? r.reasonPrioritySeq ?? 0,
-            reasonQueueRole: jd.queueRole || '',
-            reasonQueueIndex: jd.queueIndex ?? null,
-            reasonQueueLabel: jd.queueLabel || '',
-            reasonQueueRevision: jd.queueRevision || 0,
-            reasonRunningText: jd.runningText || ''
-          }) || changed;
-        }
+      if(data?.status==='missing'){
+        // v70: poll 側から /reason-job?text=... を呼ばない。
+        // missing を見つけても新規ジョブを作らず、この一手の表示だけ更新する。
+        changed = updateReasonJobStateForText(r.text || targetText, {
+          reasonStatus:'missing',
+          reasonJobId:r.reasonJobId || '',
+          reasonJobError:'reason-result missing; not re-enqueued by client',
+          reasonQueueRole:'',
+          reasonQueueIndex:null,
+          reasonQueueLabel:''
+        }) || changed;
         continue;
       }
       if(data?.status==='success' && data.reasonExplain){
@@ -1457,7 +1450,7 @@ async function pollPendingReasons(){
 
 
 function currentReasonHandWords(includeSelectedOnly=false, ctx=null){
-  // v69: 不成立を出したプレイヤーの手札スナップショットを優先する。
+  // v70: 不成立を出したプレイヤーの手札スナップショットを優先する。
   // placeTile の最後で nextTurn() した後に currentPlayer() が変わっても、
   // 直前に置いた人の手札（例: apples）を補完候補として使えるようにする。
   const out=[];
@@ -1475,7 +1468,7 @@ function currentReasonHandWords(includeSelectedOnly=false, ctx=null){
   return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
 }
 function boardLineReasonTexts(placeIndex){
-  // v69: lastScanRejects が古くなった/空になった場合でも、現在盤面から
+  // v70: lastScanRejects が古くなった/空になった場合でも、現在盤面から
   // 横・縦の連続列を直接作る。判定はAPIだけ。ここでは候補文を漏らさない。
   const out=[];
   function pushRun(run){
@@ -1510,7 +1503,7 @@ let handCompletionInFlight=false;
 let handCompletionLastKey='';
 let handCompletionLastAt=0;
 async function refreshFailReasonWithHandCandidates(opts={}){
-  // v69: 手札補完は「配置直後」だけではなく、失敗理由が表示されている間に
+  // v70: 手札補完は「配置直後」だけではなく、失敗理由が表示されている間に
   // 継続的に復旧確認する。例: 盤面 I like / 手札 apples → I like apples。
   if(!linkGrammarApi || handCompletionInFlight) return false;
   const ctx=lastReasonDisplayContext;
@@ -1562,7 +1555,11 @@ async function refreshFailReasonWithSelectedHand(){
 }
 
 function schedulePostJudgeHandCompletionReason(){
-  // v69: 置いた直後は scanFromCell/check/reason の非同期処理中で、
+  // v70: クライアント側の手札補完probeは停止。NG候補ごとに/check-and-translateを乱発してreasonキューを増やすため。
+  // 補完候補は最初の/checkに同梱したreasonHandCandidatesをreason job側で探索する。
+  return;
+
+  // v70: 置いた直後は scanFromCell/check/reason の非同期処理中で、
   // 80msだけでは手札補完が走らないことがある。複数回リトライする。
   [0, 250, 800, 1600].forEach(ms=>{
     setTimeout(()=>{
@@ -1761,7 +1758,7 @@ async function placeTile(cellIndex){
   render();
   if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
   placementJudgeBusy=false;
-  // v69: ロック解除後にも必ずもう一度、盤面+全手札の補完候補を確認する。
+  // v70: ロック解除後にも必ずもう一度、盤面+全手札の補完候補を確認する。
   // 例: 盤面 I like / 手札 apples → I like apples。
   if(lastReasonDisplayContext && !lastReasonDisplayContext.partial){
     schedulePostJudgeHandCompletionReason();
@@ -1824,18 +1821,7 @@ function handleNet(raw){eachPayload(raw,(msg)=>{
   }
 });}
 
-// v69: 配置直後のsetTimeoutだけでは、古いメッセージ復元・reason polling・turn更新に負ける場合がある。
-// 不成立理由が表示されていて、直前のNG文に手札を1枚足せば成立する可能性がある間は、
-// 低頻度で補完確認を継続する。API判定だけを採用し、ローカル文法ハードコードはしない。
-setInterval(()=>{
-  try{
-    if(!lastReasonDisplayContext || lastReasonDisplayContext.partial) return;
-    const m=String($('msg')?.textContent||'');
-    if(!m.includes('不成立理由') && !m.includes('API判定NG候補') && !m.includes('成立する経路')) return;
-    refreshFailReasonWithHandCandidates({selectedOnly:false}).catch(e=>console.warn('persistent hand completion failed', e));
-  }catch(e){}
-}, 1400);
-
+// v70: persistent hand completion polling removed. Reason polling must not enqueue extra jobs.
 $('startBtn').onclick=()=>{clearEnglishJudgeCache();unlockSpeech();$('start').style.display='none';render();};
 $('connectBtn').onclick=()=>{unlockSpeech();connect();};
 $('newGameBtn').onclick=()=>newGame(true);
