@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v81 reason browser API poll fix 2026-06-28 -->
+<!-- latest: v82 reason single displayed job / no permanent analyzing 2026-06-28 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -136,7 +136,7 @@ try{
 }catch(e){ console.error('early start bind failed', e); }
 try{
 
-const APP_VERSION='v74-no-local-grammar-hardcode';
+const APP_VERSION='v82-reason-single-displayed-job-no-permanent-analyzing';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
@@ -429,6 +429,19 @@ window.setLinkGrammarApi=setLinkGrammarApi;
 // 成立判定/理由/翻訳は外部APIだけを正本にする。
 const HARPER_CACHE_KEY='englishPittan.harperCache.disabled.v74';
 let harperStatus='OFF';
+async function checkReasonApiHealth(label='起動時API確認'){
+  if(!linkGrammarApi) return null;
+  try{
+    const base=linkGrammarApi.replace(/\/$/,'');
+    const res=await fetchWithTimeout(base+'/health',{cache:'no-store'},5000);
+    const data=await res.json().catch(()=>({ok:false,error:'invalid json'}));
+    addLog(`${label}: ${base}/health ${data?.ok?'OK':'NG'} / HF_TOKEN:${data?.hfTokenPresent?'あり':'なし'} / reason:${data?.hfDisabledForReason?'StrictLG探索':'外部'}`, !!data?.ok);
+    return data;
+  }catch(e){
+    addLog(`${label}: /health 失敗 ${String(e?.message||e)}`, false);
+    return null;
+  }
+}
 function renderSafe(){try{ if(typeof render==='function') render(); }catch(e){}}
 function capSentence(words){
   return (Array.isArray(words)?words:[]).map(x=>String(x||'').trim()).filter(Boolean).join(' ');
@@ -1010,9 +1023,13 @@ function isReasonPending(r){
   if(!r||!r.__reject) return false;
   if(rejectReasonText(r)) return false;
   const st=reasonJobStatusOf(r);
-  if(['success','none','unavailable','failure','failed','error','missing','cancelled','canceled'].includes(st)) return false;
+  if(['success','none','unavailable','failure','failed','error','missing','timeout','cancelled','canceled'].includes(st)) return false;
+  // v82: polling is only for a real browser API job id.
+  // A displayed candidate may be marked pending for a few ms before /reason-job-context returns.
+  // Do not poll by text, because that can attach to stale jobs and keeps the UI looking stuck.
+  if(!r.reasonJobId) return false;
   if(st && !['pending','running','queued','retry','retrying'].includes(st)) return false;
-  return !!(r.reasonJobId || r.text);
+  return true;
 }
 function updateReasonJobStateForText(text, patch={}){
   const key=candidateKeyFromText(text);
@@ -1037,19 +1054,22 @@ function pendingReasonLabel(r){
   const role=String(r?.reasonQueueRole||r?.queueRole||'').toLowerCase();
   const at=Number(r?.reasonJobAttempts||r?.attempts||0);
   const retry=at>0 ? `（再試行${at}）` : '';
-  // v74: queueIndex はAPIサーバ全体の待ち位置で、自分のジョブ数ではない。
-  // これを丸数字で表示すると「待ちが勝手に増える」ように見えるため、画面には出さない。
+  const err=String(r?.reasonJobError||r?.error||'').toLowerCase();
+  // v74/v82: queueIndex はAPIサーバ全体の待ち位置なので画面には出さない。
   if(st==='running' || role==='running') return `理由解析中…${retry}`;
-  if(['pending','queued','retry','retrying'].includes(st) || role==='waiting' || (!st && r?.reasonJobId)){
-    return `理由解析待ち${retry}`;
+  if(['pending','queued','retry','retrying'].includes(st) || role==='waiting'){
+    return r?.reasonJobId ? `理由解析待ち${retry}` : `理由解析開始中…${retry}`;
   }
-  if(st==='unavailable') return '理由解析不可（外部AIなし）';
-  if(st==='missing') return '理由解析待機中';
-  if(['failure','failed','error','timeout'].includes(st)) return `理由解析保留${retry}`;
-  // 表示対象のNG候補は buildFailInfo() から直後に reason-job-context へ投げる。
-  // ここで「詳細理由未取得」と出すと、ユーザーには処理が止まった不具合に見える。
-  // jobId がまだ返る前の数百msは、未取得ではなく開始中として表示する。
-  return `理由解析開始中…${retry}`;
+  if(st==='unavailable'){
+    if(err.includes('hf_token') || err.includes('token') || err.includes('credits') || err.includes('quota')) return '理由解析不可（外部AIなし）';
+    return '理由解析不可（補完候補なし）';
+  }
+  if(st==='missing') return '理由解析ジョブ不明（再実行なし）';
+  if(st==='timeout') return '理由解析タイムアウト';
+  if(['failure','failed','error'].includes(st)) return `理由解析失敗（補完候補なし）${retry}`;
+  if(r?.reasonJobId) return `理由解析待ち${retry}`;
+  // v82: 代表候補以外をいつまでも「解析中」に見せない。
+  return 'API判定NG（代表候補のみ理由解析）';
 }
 function updateReasonForText(text, reasonExplain, status='success'){
   const key=candidateKeyFromText(text);
@@ -1349,6 +1369,7 @@ function routeRejectText(r){
 }
 
 let displayedRejectReasonRequestKeys=new Set();
+let displayedRejectReasonPlacementKeys=new Set();
 function requestDisplayedRejectReason(r){
   // v74: 盤面スキャン中はreason jobを作らないが、画面に表示する表示中NG候補だけは
   // 1本だけ明示的に理由解析へ投げる。これは文のハードコードではなく、表示対象の1件だけを説明するため。
@@ -1362,9 +1383,16 @@ function requestDisplayedRejectReason(r){
     try{ for(const c of (state?.board||[])){ if(c&&c.w) board.push(String(c.w)); } }catch(e){}
     const deck=[];
     try{ deck.push(...WORDS.map(x=>x.w)); }catch(e){}
-    const key=JSON.stringify({placement:lastReasonDisplayContext?.placementId || lastReasonDisplayContext?.placeIndex || -1, text});
+    const placementKey=String(lastReasonDisplayContext?.placementId || lastReasonDisplayContext?.placeIndex || -1);
+    const placementOnceKey='placement:'+placementKey;
+    // v82: 実装コメントでは「表示対象1件だけ」なのに、buildFailInfo() の再描画ごとに
+    // 次のNG候補を順番に job 化していた。結果として候補が増殖し、最後の1件だけ
+    // 「理由解析中…」で残る。1配置につき代表1件だけに固定する。
+    if(displayedRejectReasonPlacementKeys.has(placementOnceKey)) return false;
+    const key=JSON.stringify({placement:placementKey, text});
     if(displayedRejectReasonRequestKeys.has(key)) return false;
     displayedRejectReasonRequestKeys.add(key);
+    displayedRejectReasonPlacementKeys.add(placementOnceKey);
     // /check-and-translate は盤面スキャン中 reasonMode:none で呼ぶため、
     // 最初の表示時点では reasonStatus/jobId が空になる。
     // この表示対象だけは今からジョブ化するので、即座に pending にして
@@ -1432,7 +1460,14 @@ function requestDisplayedRejectReason(r){
 }
 
 function buildFailInfo(placeIndex, word, successes=[]){
-  { const pi=state.turn%state.playerCount; const hp=(state.players[pi]?.hand||[]).map(String); lastReasonDisplayContext={placeIndex,word,partial:false,cls:'bad',playerIndex:pi,handSnapshot:hp,placementId:Date.now().toString(36)+'-'+String(placeIndex)}; }
+  { 
+    const prev=lastReasonDisplayContext||{};
+    const same=prev && prev.placeIndex===placeIndex && String(prev.word||'')===String(word||'');
+    const pi=same && Number.isInteger(prev.playerIndex) ? prev.playerIndex : (state.turn%state.playerCount);
+    const hp=(same && Array.isArray(prev.handSnapshot) && prev.handSnapshot.length) ? prev.handSnapshot.map(String) : ((state.players[pi]?.hand||[]).map(String));
+    const placementId=same && prev.placementId ? prev.placementId : (Date.now().toString(36)+'-'+String(placeIndex));
+    lastReasonDisplayContext={...prev,placeIndex,word,partial:false,cls:'bad',playerIndex:pi,handSnapshot:hp,placementId};
+  }
   const successCellSets=(successes||[]).map(m=>new Set(m.cells||[]));
   const rejects=bestRejectCandidates(placeIndex).filter(r=>{
     const rcells=r.cells||[];
@@ -1497,6 +1532,8 @@ async function placeTile(cellIndex){
   const word=p.hand[selectedHandIndex];
   if(!word){setMsg('その手札は空','bad');return;}
   activeJudgeWordForReason=String(word||'');
+  displayedRejectReasonRequestKeys=new Set();
+  displayedRejectReasonPlacementKeys=new Set();
   placementJudgeBusy=true;
   const myJudgeSeq=++placementJudgeSeq;
   // v76: API/ネットワーク/Render cold start で判定Promiseが戻らない時も、操作ロックを永久化しない。
@@ -1628,7 +1665,7 @@ function applyState(s,why='同期'){
 }
 function passTurn(){const p=currentPlayer();addLog(`${p.name}: パス`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'pass'});render();}
 function swapHand(){const p=currentPlayer();p.hand=drawHand(99);p.score=Math.max(0,p.score-5);addLog(`${p.name}: 手札入替 -5`,false);nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'swap'});render();}
-function newGame(broadcastIt=true){clearEnglishJudgeCache();const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];failFocusCell=-1; if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg(state.playerCount===1?'1人練習開始。手札は種類別に常備。英文を作ると英語→日本語で読み上げる':'新規ゲーム開始。手札は種類別に常備。','good');}
+function newGame(broadcastIt=true){clearEnglishJudgeCache();displayedRejectReasonRequestKeys=new Set();displayedRejectReasonPlacementKeys=new Set();const pc=Number($('playerCount').value)||2;state=freshState(pc);const name=safeName();state.players[0].name=name;localStorage.englishName=name;selectedHandIndex=-1;recentCells=[];failFocusCell=-1; if(broadcastIt)broadcast({type:'englishNewGame',gameId:state.gameId,state:lightState()});render();setMsg(state.playerCount===1?'1人練習開始。手札は種類別に常備。英文を作ると英語→日本語で読み上げる':'新規ゲーム開始。手札は種類別に常備。','good');}
 function render(){
   $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
   const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
@@ -1676,7 +1713,7 @@ function handleNet(raw){eachPayload(raw,(msg)=>{
 });}
 
 // v70: persistent hand completion polling removed. Reason polling must not enqueue extra jobs.
-$('startBtn').onclick=()=>{clearEnglishJudgeCache();try{unlockSpeech();}catch(e){console.warn('unlockSpeech unavailable',e);}$('start').style.display='none';render();};
+$('startBtn').onclick=()=>{clearEnglishJudgeCache();try{unlockSpeech();}catch(e){console.warn('unlockSpeech unavailable',e);}$('start').style.display='none';render();checkReasonApiHealth('ブラウザAPI確認');};
 $('connectBtn').onclick=()=>{try{unlockSpeech();}catch(e){console.warn('unlockSpeech unavailable',e);}connect();};
 $('newGameBtn').onclick=()=>newGame(true);
 $('resetBtn').onclick=()=>{if(confirm('盤面をリセットしてオンラインにも送信する？'))newGame(true);};
