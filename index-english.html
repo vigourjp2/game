@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v14 placement judge lock + stale async guard 2026-06-27 -->
+<!-- latest: v72 reason queue display fix + client poll timeout 2026-06-28 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -281,6 +281,10 @@ async function singleApiCheckItem(base, item){
       words:item.words,
       reasonPriorityEpoch:item.reasonPriorityEpoch || 0,
       reasonPrioritySeq:item.reasonPrioritySeq || 0,
+      // v72: 盤面スキャン中の全NG候補でreason jobを作らない。
+      // /check-and-translate は成立判定だけに使い、理由jobは明示要求だけに限定する。
+      reasonMode:'none',
+      reasonDisabled:true,
       ...reasonCandidateContext()
     })
   });
@@ -1245,17 +1249,17 @@ function updateReasonJobStateForText(text, patch={}){
 function pendingReasonLabel(r){
   const st=reasonJobStatusOf(r);
   const role=String(r?.reasonQueueRole||r?.queueRole||'').toLowerCase();
-  const qn=Number(r?.reasonQueueIndex ?? r?.queueIndex ?? 0);
   const at=Number(r?.reasonJobAttempts||r?.attempts||0);
   const retry=at>0 ? `（再試行${at}）` : '';
+  // v72: queueIndex はAPIサーバ全体の待ち位置で、自分のジョブ数ではない。
+  // これを丸数字で表示すると「待ちが勝手に増える」ように見えるため、画面には出さない。
   if(st==='running' || role==='running') return `理由解析中…${retry}`;
-  if(['pending','queued','retry','retrying'].includes(st) || role==='waiting' || (!st && (r?.reasonJobId || r?.text))){
-    if(qn>0) return `理由解析待ち${circledNumber(qn)}${retry}`;
+  if(['pending','queued','retry','retrying'].includes(st) || role==='waiting' || (!st && r?.reasonJobId)){
     return `理由解析待ち${retry}`;
   }
   if(st==='unavailable') return '理由解析不可（外部AIなし）';
   if(st==='missing') return '理由解析待機中';
-  if(['failure','failed','error'].includes(st)) return `理由解析失敗${retry}`;
+  if(['failure','failed','error','timeout'].includes(st)) return `理由解析保留${retry}`;
   return '詳細理由未取得';
 }
 function updateReasonForText(text, reasonExplain, status='success'){
@@ -1307,10 +1311,19 @@ function updateReasonForText(text, reasonExplain, status='success'){
 }
 function pendingReasonList(){
   // v70: reason poll は「今回の一手でAPIが返した reasonJobId」だけを見る。
-  // v69 は localStorage/linkGrammarCache の古い pending も拾い、missing時に再ジョブ化してキューを増やしていた。
+  // v72: さらに同一reasonJobIdだけに限定し、古いpending/queueIndex表示で増殖して見える状態を避ける。
   const rejects=[];
   for(const r of lastScanRejects||[]){
-    if(isReasonPending(r) && r.reasonJobId) rejects.push({...r,__reasonOrigin:'lastScan'});
+    if(isReasonPending(r) && r.reasonJobId){
+      const id=String(r.reasonJobId||'');
+      if(id && !reasonPollFirstSeenAt[id]) reasonPollFirstSeenAt[id]=Date.now();
+      if(id && Date.now()-reasonPollFirstSeenAt[id] > REASON_POLL_GIVEUP_MS){
+        r.reasonStatus='timeout';
+        r.reasonJobError='reason polling timed out on client; not re-enqueued';
+        continue;
+      }
+      rejects.push({...r,__reasonOrigin:'lastScan'});
+    }
   }
   rejects.sort((a,b)=>{
     const ar=String(a.reasonQueueRole||a.queueRole||'').toLowerCase();
