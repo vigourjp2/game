@@ -1041,7 +1041,10 @@ function pendingReasonLabel(r){
   if(st==='unavailable') return '理由解析不可（外部AIなし）';
   if(st==='missing') return '理由解析待機中';
   if(['failure','failed','error','timeout'].includes(st)) return `理由解析保留${retry}`;
-  return '詳細理由未取得';
+  // 表示対象のNG候補は buildFailInfo() から直後に reason-job-context へ投げる。
+  // ここで「詳細理由未取得」と出すと、ユーザーには処理が止まった不具合に見える。
+  // jobId がまだ返る前の数百msは、未取得ではなく開始中として表示する。
+  return `理由解析開始中…${retry}`;
 }
 function updateReasonForText(text, reasonExplain, status='success'){
   const key=candidateKeyFromText(text);
@@ -1343,6 +1346,16 @@ function requestDisplayedRejectReason(r){
     const key=JSON.stringify({placement:lastReasonDisplayContext?.placementId || lastReasonDisplayContext?.placeIndex || -1, text});
     if(displayedRejectReasonRequestKeys.has(key)) return false;
     displayedRejectReasonRequestKeys.add(key);
+    // /check-and-translate は盤面スキャン中 reasonMode:none で呼ぶため、
+    // 最初の表示時点では reasonStatus/jobId が空になる。
+    // この表示対象だけは今からジョブ化するので、即座に pending にして
+    // 『詳細理由未取得』のまま表示しない。
+    updateReasonJobStateForText(text, {
+      reasonStatus:'pending',
+      reasonQueueRole:'waiting',
+      reasonQueueIndex:null,
+      reasonQueueLabel:'理由解析待ち'
+    });
     setTimeout(async()=>{
       try{
         const base=linkGrammarApi.replace(/\/$/,'');
@@ -1409,8 +1422,8 @@ function buildFailInfo(placeIndex, word, successes=[]){
   // 1件だけ表示にすると、例: I am eating だけ見えて I like eating が隠れる。
   // 置いたカードを含むAPI判定NG候補は、上部メッセージ欄に複数件まとめて出す。
   const short = items.length
-    ? `API判定NG候補：` + items.map(it=>`「${it.text}」：${it.reason || '詳細理由未取得'}`).join(' / ')
-    : `今回置いた「${word}」を含む候補はAPI判定NG（詳細理由未取得）`;
+    ? `API判定NG候補：` + items.map(it=>`「${it.text}」：${it.reason || '理由解析開始中…'}`).join(' / ')
+    : `今回置いた「${word}」を含む候補はAPI判定NG（理由解析開始中…）`;
   const lines=[];
   if(items.length){
     lines.push(...items.map(it=>`候補: <b>${esc(it.text)}</b>${it.reason?`：${esc(it.reason)}`:''}`));
