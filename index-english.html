@@ -127,6 +127,7 @@ const COLORS = ['#38bdf8','#f472b6','#a3e635','#facc15'];
 const clientId = (crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0,8) : ('c'+Math.floor(Math.random()*999999));
 let socket=null,retryTimer=null,heartbeat=null,rx=0;
 let selectedHandIndex=-1;
+let activeJudgeWordForReason='';
 let recentCells=[];
 let lastJudgeMsg='';
 let lastJudgeClass='info';
@@ -254,6 +255,15 @@ function reasonCandidateContext(){
   }catch(e){}
   const hand=[];
   try{ hand.push(...((currentPlayer()?.hand)||[])); }catch(e){}
+  // v66: 理由補完は「現在の手札」だけでなく、選択中カード・いま置いたカードも候補に入れる。
+  // 種類別常備手札では、置いた瞬間に手札スロットが補充されるため、
+  // APIへreason contextを送る時点で「今使った語」が手札から消えてしまうことがあった。
+  // ここで補う。これは判定ではなく補完候補の文脈送信だけ。
+  try{
+    const hp=currentPlayer()?.hand||[];
+    if(selectedHandIndex>=0 && hp[selectedHandIndex]) hand.push(String(hp[selectedHandIndex]));
+    if(activeJudgeWordForReason) hand.push(String(activeJudgeWordForReason));
+  }catch(e){}
   const deck=[];
   try{ deck.push(...WORDS.map(x=>x.w)); }catch(e){}
   return {
@@ -277,6 +287,13 @@ async function singleApiCheckItem(base, item){
   if(!res.ok) throw new Error('HTTP '+res.status);
   const data=await res.json();
   return data;
+}
+async function singleApiCheckText(text, seq=0){
+  if(!linkGrammarApi) return null;
+  const words=String(text||'').trim().split(/\s+/).filter(Boolean);
+  if(words.length<2) return null;
+  const base=linkGrammarApi.replace(/\/$/,'');
+  return singleApiCheckItem(base,{text:displayEnglish(words),words,reasonPriorityEpoch:Date.now(),reasonPrioritySeq:seq});
 }
 async function evaluateCandidatesByApi(routeCandidates){
   const out=[];
@@ -1039,6 +1056,35 @@ async function scanFromCell(placeIndex){
   }
   for(const st of starts){ dfs(st.x,st.y,[{i:st.i,w:st.w}],null,0); }
 
+  // v66: DFSだけに頼らず、盤面の横列・縦列の連続カードを全候補化する。
+  // 例: 上から I / like / apples と縦に並んだ場合、
+  // like apples だけでなく I like apples も必ずAPI候補へ送る。
+  // 判定はAPIのみ。ここでは盤面候補を漏らさないための抽出だけ。
+  function pushStraightSegments(cells,label){
+    let run=[];
+    function flush(){
+      if(run.length>=2){
+        for(let a=0;a<run.length;a++){
+          for(let b=a+1;b<run.length;b++){
+            const seg=run.slice(a,b+1);
+            if(seg.some(s=>s.i===placeIndex)) pushPath(seg,label);
+          }
+        }
+      }
+      run=[];
+    }
+    for(const s of cells){
+      if(s && s.w) run.push(s); else flush();
+    }
+    flush();
+  }
+  for(let y=0;y<N;y++){
+    pushStraightSegments(Array.from({length:N},(_,x)=>{const i=idx(x,y), c=state.board[i]; return c?{i,w:c.w}:null;}),'横');
+  }
+  for(let x=0;x<N;x++){
+    pushStraightSegments(Array.from({length:N},(_,y)=>{const i=idx(x,y), c=state.board[i]; return c?{i,w:c.w}:null;}),'縦');
+  }
+
   // 盤面から作った候補は、文っぽさをHTML側で決めず、全部APIへまとめて投げる。
   // JS側の品詞テンプレ/単語別翻訳/「主語があるから文っぽい」判定では採点しない。
   const seenCand=new Set();
@@ -1408,6 +1454,40 @@ async function pollPendingReasons(){
   }, {passive:true});
 });
 
+
+async function refreshFailReasonWithSelectedHand(){
+  // v66: 手札を選んだだけでも、直前NG候補 + 選択中手札で成立する補完をAPI確認して表示する。
+  // 例: 盤面に I like があり、手札 apples を選択したら I like apples を候補表示する。
+  if(placementJudgeBusy || selectedHandIndex<0 || !linkGrammarApi) return;
+  const p=currentPlayer();
+  const handWord=String((p?.hand||[])[selectedHandIndex]||'').trim();
+  if(!handWord) return;
+  const ctx=lastReasonDisplayContext;
+  const rejects=(ctx ? bestRejectCandidates(ctx.placeIndex) : (lastScanRejects||[])).slice(0,8);
+  if(!rejects.length) return;
+  const tried=new Set();
+  let seq=0;
+  for(const r of rejects){
+    const baseText=String(r?.text||'').trim();
+    if(!baseText) continue;
+    const probes=[baseText+' '+handWord, handWord+' '+baseText];
+    for(const probe of probes){
+      const key=norm(String(probe).split(/\s+/));
+      if(tried.has(key)) continue;
+      tried.add(key);
+      try{
+        const data=await singleApiCheckText(probe, seq++);
+        const ok=!!(data && (data.gameOk===true || data.ok===true) && (data.type==='complete_sentence' || data.acceptability?.gameOk===true));
+        if(ok){
+          const where=probe.toLowerCase().endsWith((' '+handWord).toLowerCase())?'後ろ':'前';
+          setMsg(`不成立理由：手札の「${handWord}」を${where}に置くと英文になります。候補: ${displayEnglish(String(probe).split(/\s+/))}`,'bad',{judge:true});
+          return;
+        }
+      }catch(e){ console.warn('selected hand completion check failed', e); }
+    }
+  }
+}
+
 function apiRejectReason(raw){
   const v=String(raw||'').trim();
   if(!v) return '';
@@ -1494,6 +1574,7 @@ async function placeTile(cellIndex){
   const p=currentPlayer();
   const word=p.hand[selectedHandIndex];
   if(!word){setMsg('その手札は空','bad');return;}
+  activeJudgeWordForReason=String(word||'');
   placementJudgeBusy=true;
   const myJudgeSeq=++placementJudgeSeq;
   // v35: 新しい配置を始めたら、前回の成立画像パネルを必ず閉じる。NG時に古い画像が残らないようにする。
@@ -1612,7 +1693,7 @@ function render(){
   $('turnNo').textContent=state.turnNo;$('wordsMade').textContent=state.wordsMade;$('filledNo').textContent=state.board.filter(Boolean).length;$('roomNo').textContent='english';$('myId').textContent=clientId;
   const tp=currentPlayer();$('turnPlayer').textContent=tp?tp.name:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
   const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';const routeNo=routeFocusCells.indexOf(i);if(routeNo>=0)d.classList.add('routeHit');if(i===failFocusCell)d.classList.add('failFocus');if(!c&&selectedHandIndex>=0&&!placementJudgeBusy)d.classList.add('selectable');if(c){const ownerColor=state.players[c.owner]?.color||'#fff';const cnt=useCountOf(c);const uc=useColor(cnt, ownerColor);if(uc.rainbow)d.classList.add('rainbow');if(cnt<=0)d.classList.add('unused');const usedLabel=cnt>0?`×${cnt}`:'未';d.innerHTML=`<span class="owner" style="background:${ownerColor}"></span>${routeNo>=0?`<span class="routeStep">${routeNo+1}</span>`:''}<span class="word">${esc(c.w)}</span><span class="useCount">${usedLabel}</span>${cnt<=0?'<span class="unusedMark">未使用</span>':''}<span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${uc.bg}, ${hexAlpha(ownerColor,.13)}, rgba(255,255,255,.05))`;d.style.borderColor=uc.border;d.style.color=uc.text;} d.onclick=()=>placeTile(i);b.appendChild(d);});
-  const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(displayHandLabel(w))}</small>`;t.onclick=()=>{if(placementJudgeBusy){setMsg('判定中…。成立確定ではありません。結果が出るまで操作ロック中。','info');return;}selectedHandIndex=i;render();};h.appendChild(t);});
+  const h=$('hand');h.innerHTML='';(tp?.hand||[]).forEach((w,i)=>{const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(displayHandLabel(w))}</small>`;t.onclick=()=>{if(placementJudgeBusy){setMsg('判定中…。成立確定ではありません。結果が出るまで操作ロック中。','info');return;}selectedHandIndex=i;render();refreshFailReasonWithSelectedHand();};h.appendChild(t);});
   $('selectedInfo').textContent=selectedHandIndex>=0?`選択: ${(tp.hand||[])[selectedHandIndex]}`:'未選択';
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'');row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname">${esc(p.name)} <small>陣地${p.tiles||0}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
