@@ -986,30 +986,24 @@ async function scanFromCell(placeIndex){
   return found.filter(f=>{const k=f.cells.join(',')+'|'+norm(f.text.split(' ')); if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,24);
 }
 function selectScoringMatches(matches){
-  // APIが gameOk:true を返した完全英文だけ採点。包含関係は長い英文を優先して整理する。
-  const sorted=[...matches].sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
-  const picked=[];
-  function isSubset(a,b){
-    const bs=new Set(b.cells);
-    return a.cells.every(i=>bs.has(i));
-  }
-  function keepSubsetCombo(m){
-    return !!m.exact && m.cells.length>=3 && /フレーズ|前置詞句|否定/.test(m.kind||'');
-  }
-  for(const m of sorted){
-    const subsetOfPicked=picked.some(big=>isSubset(m,big));
-    if(subsetOfPicked && !keepSubsetCombo(m)) continue;
-    picked.push(m);
-  }
-  // 同じセル列・同じ英文は重複させない。
+  // v94: 「一回使ったカードを同じターンの別成立経路で使えない」ように見える原因を撤去。
+  // 旧実装は長い成立経路を先に採用し、短い成立経路がそのセル集合の部分集合なら捨てていた。
+  // そのため、同じカードを共有するコンボが減り、「使用済みカードは再利用不可」に見えていた。
+  // ゲーム仕様として、盤面カードは1ターン内でも複数の成立経路に参加できる。
+  // ここでは API が gameOk:true と返した distinct な「セル列 + 英文」を全部採点対象にする。
   const seen=new Set();
   const out=[];
-  for(const m of picked){
-    const k=(m.cells||[]).join(',')+'|'+norm(m.text.split(' '));
+  for(const m of (matches||[])){
+    const k=(m.cells||[]).join(',')+'|'+norm(String(m.text||'').split(' '));
     if(seen.has(k)) continue;
-    seen.add(k); out.push(m);
+    seen.add(k);
+    out.push(m);
   }
-  return out.sort((a,b)=>(a.cells[0]-b.cells[0])||(b.cells.length-a.cells.length));
+  return out.sort((a,b)=>
+    (a.cells?.[0]??999)-(b.cells?.[0]??999) ||
+    ((b.cells||[]).length-(a.cells||[]).length) ||
+    String(a.text||'').localeCompare(String(b.text||''))
+  );
 }
 function summarizeScoring(scoring){
   const groups=new Map();
