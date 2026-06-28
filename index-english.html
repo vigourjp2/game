@@ -1851,8 +1851,11 @@ async function placeTile(cellIndex){
     // 操作ロック中に行うのは成立判定まで。成立0なら短い断片は即「採点前」、長いものだけTOP1 NGへ進む。
     const __baseTextForPartial=String((bestRejectCandidates(cellIndex)[0]?.text) || longestLineTextIncludingCell(cellIndex) || word || '').trim().replace(/[.!?]$/,'');
     const __baseWordsForPartial=__baseTextForPartial.split(/\s+/).filter(Boolean);
-    const continuation=(__baseWordsForPartial.length>0 && __baseWordsForPartial.length<=3)
-      ? {baseText:__baseTextForPartial, text:'', used:[], status:'partial-fast-no-lock-v90'}
+    // v92: 3語は完成文が多い（I am happy / I like apples / I am interesting）。
+    // v90 の <=3 採点前扱いは広すぎて、成立判定が少しでも漏れた時に完成文まで
+    // 『まだ作りかけ』と嘘表示した。即時採点前に倒すのは 1〜2語だけに限定する。
+    const continuation=(__baseWordsForPartial.length>0 && __baseWordsForPartial.length<=2)
+      ? {baseText:__baseTextForPartial, text:'', used:[], status:'partial-fast-no-lock-v92-len2-only'}
       : null;
     if(continuation){
       gained=0;
