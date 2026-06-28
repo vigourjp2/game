@@ -1622,9 +1622,15 @@ async function findContinuationCandidate(placeIndex, word){
   const baseText=String(topReject?.text || longestLineTextIncludingCell(placeIndex) || word || '').trim().replace(/[.!?]$/,'');
   const baseWords=baseText.split(/\s+/).filter(Boolean);
   if(!baseWords.length) return null;
+  // v89: 1〜2語の作りかけは、補完候補APIを待たず即「採点前」にする。
+  // v88 は I / I like の直後にも completion probe のAPI batchを待っていたため、
+  // 盤面が「判定中…操作ロック中」で長時間止まって見えた。
+  // すでに scanFromCell() で成立0は確認済みなので、短い断片は罰点化せず即ロック解除する。
+  if(baseWords.length < 3){
+    return {baseText, text:'', used:[], status:'partial-short-no-block'};
+  }
   const hand=completionHandWordsForPlayer(playerIndex);
   if(!hand.length){
-    if(baseWords.length<3) return {baseText, text:'', used:[], status:'partial-no-hand'};
     return null;
   }
   const items=buildCompletionProbeItems(baseText, hand);
