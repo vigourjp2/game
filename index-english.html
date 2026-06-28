@@ -1364,6 +1364,8 @@ function requestDisplayedRejectReason(r){
         if(hand.length) qs.set('hand', hand.join(','));
         if(board.length) qs.set('board', board.join(','));
         if(deck.length) qs.set('deck', deck.join(','));
+        if(r.reasonPriorityEpoch) qs.set('reasonPriorityEpoch', String(r.reasonPriorityEpoch));
+        if(r.reasonPrioritySeq!==undefined) qs.set('reasonPrioritySeq', String(r.reasonPrioritySeq));
         const res=await fetch(base+'/reason-job-context?'+qs.toString(), {cache:'no-store'});
         if(!res.ok) throw new Error('HTTP '+res.status);
         const data=await res.json();
@@ -1391,6 +1393,12 @@ function requestDisplayedRejectReason(r){
       }catch(e){
         console.warn('displayed reject reason request failed', e);
         updateReasonJobStateForText(text, {reasonStatus:'unavailable', reasonJobError:String(e?.message||e)});
+        renderSafe();
+        if(lastReasonDisplayContext){
+          const c={...lastReasonDisplayContext};
+          const info=buildFailInfo(c.placeIndex,c.word);
+          setMsg((c.partial?'別候補NG：':'不成立理由：')+info.short, c.cls||'bad', {judge:true});
+        }
       }
     }, 0);
     return true;
