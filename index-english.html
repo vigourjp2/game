@@ -1440,7 +1440,7 @@ async function pollPendingReasons(){
       lastReasonDisplayContext={...ctx};
       const prefix=ctx.partial?'別候補NG：':'不成立理由：';
       setMsg(prefix+info.short, ctx.cls||'bad', {judge:true});
-      if(!ctx.partial) setTimeout(()=>refreshFailReasonWithHandCandidates({selectedOnly:false}), 80);
+      if(!ctx.partial) schedulePostJudgeHandCompletionReason();
     }
     renderSafe();
   }
@@ -1473,7 +1473,10 @@ async function refreshFailReasonWithHandCandidates(opts={}){
   // v67: 手札は「選択した時だけ」ではなく、未選択でも全手札を補完候補に使う。
   // 例: 盤面 I like / 手札 apples なら、apples未選択でも I like apples をAPI確認して表示する。
   // ここでは文法判定しない。候補を作り、/check-and-translate の gameOk:true だけ採用する。
-  if(placementJudgeBusy || !linkGrammarApi) return false;
+  // v68: placementJudgeBusy中でも補完理由APIは実行してよい。
+  // v67はここでreturnしていたため、配置直後のsetTimeout(80ms)が
+  // 判定ロック中に発火すると、I like + 手札apples の補完確認が何も走らなかった。
+  if(!linkGrammarApi) return false;
   const handWords=currentReasonHandWords(!!opts.selectedOnly);
   if(!handWords.length) return false;
   const ctx=lastReasonDisplayContext;
@@ -1508,6 +1511,16 @@ async function refreshFailReasonWithSelectedHand(){
   // 後方互換: 選択時はまず選択カードだけを優先する。
   if(selectedHandIndex<0) return;
   return refreshFailReasonWithHandCandidates({selectedOnly:true});
+}
+
+function schedulePostJudgeHandCompletionReason(){
+  // v68: 置いた直後は scanFromCell/check/reason の非同期処理中で、
+  // 80msだけでは手札補完が走らないことがある。複数回リトライする。
+  [0, 250, 800, 1600].forEach(ms=>{
+    setTimeout(()=>{
+      refreshFailReasonWithHandCandidates({selectedOnly:false}).catch(e=>console.warn('post judge hand completion failed', e));
+    }, ms);
+  });
 }
 
 function apiRejectReason(raw){
@@ -1685,7 +1698,7 @@ async function placeTile(cellIndex){
       addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
     });
     setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
-    setTimeout(()=>refreshFailReasonWithHandCandidates({selectedOnly:false}), 80);
+    schedulePostJudgeHandCompletionReason();
     playChime(false);
     showFailDetails(failInfo, cellIndex);
     scheduleReasonPolling(600);
@@ -1700,6 +1713,11 @@ async function placeTile(cellIndex){
   render();
   if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
   placementJudgeBusy=false;
+  // v68: ロック解除後にも必ずもう一度、盤面+全手札の補完候補を確認する。
+  // 例: 盤面 I like / 手札 apples → I like apples。
+  if(lastReasonDisplayContext && !lastReasonDisplayContext.partial){
+    schedulePostJudgeHandCompletionReason();
+  }
 }
 function drawOne(){return WORDS[Math.floor(Math.random()*WORDS.length)].w}
 function nextTurn(){state.turn=(state.turn+1)%state.playerCount;state.turnNo++;}
