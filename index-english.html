@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v82 reason single displayed job / no permanent analyzing 2026-06-28 -->
+<!-- latest: v95 reason suggestion uses same API gate / cache reset 2026-06-28 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -137,7 +137,7 @@ try{
 }catch(e){ console.error('early start bind failed', e); }
 try{
 
-const APP_VERSION='v82-reason-single-displayed-job-no-permanent-analyzing';
+const APP_VERSION='v95-reason-same-api-gate-cache-reset';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
@@ -190,7 +190,7 @@ const PHRASE_MAP = new Map();
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
 const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v44-case-preserve-frontend';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v53.reasonDisplayHfFilter';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v95.reasonSameApiGate';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let __storedLgApi=''; try{ __storedLgApi=localStorage.getItem(LINK_GRAMMAR_API_KEY)||''; }catch(e){ __storedLgApi=''; }
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || __storedLgApi || 'https://english-pittan-lg-api.onrender.com').trim();
@@ -1502,6 +1502,10 @@ function requestDisplayedRejectReason(r){
         if(deck.length) qs.set('deck', deck.join(','));
         if(r.reasonPriorityEpoch) qs.set('reasonPriorityEpoch', String(r.reasonPriorityEpoch));
         if(r.reasonPrioritySeq!==undefined) qs.set('reasonPrioritySeq', String(r.reasonPrioritySeq));
+        // v95: 理由補完候補も採点と同じAPIゲートで検証させる。
+        // Link Grammarだけで通った変な補完（例: I am Japanese need）を説明として出さない。
+        qs.set('strictGameGate','1');
+        qs.set('acceptabilityModelGate','1');
         const res=await fetch(base+'/reason-job-context?'+qs.toString(), {cache:'no-store'});
         if(!res.ok) throw new Error('HTTP '+res.status);
         const data=await res.json();
