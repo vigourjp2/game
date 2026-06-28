@@ -335,6 +335,8 @@ async function batchApiCheckItems(base, items, reasonPriorityEpoch){
       withTranslate:false,
       reasonMode:'none',
       reasonDisabled:true,
+      strictGameGate:true,
+      acceptabilityModelGate:true,
       reasonPriorityEpoch:reasonPriorityEpoch || Date.now(),
       ...reasonCandidateContext()
     })
@@ -1044,6 +1046,22 @@ function highlightRoute(m,seq=0,duration=1600){
   const items=document.querySelectorAll('.comboItem');
   items.forEach((el,i)=>el.classList.toggle('active',i===seq));
 }
+
+function clearResultOverlays(){
+  try{
+    const cp=$('comboPanel');
+    if(cp){
+      clearTimeout(cp._hideTimer);
+      cp._hideTimer=null;
+      cp.classList.remove('show');
+    }
+    const ip=$('sentenceImagePanel');
+    if(ip) ip.classList.remove('show');
+    routeFocusCells=[];
+    failFocusCell=-1;
+  }catch(e){ console.warn('clearResultOverlays failed', e); }
+}
+
 function showComboDetails(scoring,comboInfo){
   const panel=$('comboPanel'), listEl=$('comboList'), title=$('comboTitle');
   if(!panel||!listEl) return;
@@ -1745,8 +1763,7 @@ async function placeTile(cellIndex){
       activeJudgeWordForReason='';
       lastScanRejects=[];
       lastReasonDisplayContext=null;
-      const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
-      const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show');
+      clearResultOverlays();
       setMsg(reasonText || '判定タイムアウト。仮配置を取り消しました。APIのhealthを確認してから、もう一度置いてください。','bad',{judge:true});
       recalcTiles();
       return true;
@@ -1768,8 +1785,9 @@ async function placeTile(cellIndex){
       render();
     }
   },30000);
-  // v35: 新しい配置を始めたら、前回の成立画像パネルを必ず閉じる。NG時に古い画像が残らないようにする。
-  { const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show'); }
+  // v93: 新しい配置を始めたら、前回の成立コンボ/画像/経路ハイライトを必ず閉じる。
+  // 採点前やNGになった時に古いGOOD表示が残って矛盾しないようにする。
+  clearResultOverlays();
   state.board[cellIndex]={w:word,owner:state.turn%state.playerCount,baseOwner:state.turn%state.playerCount,at:Date.now(),useCount:0,unusedPenaltyApplied:false};
   p.hand[selectedHandIndex]=drawOneForSlot(selectedHandIndex);
   if(Array.isArray(p.handMeta)) p.handMeta[selectedHandIndex]=null;
@@ -1866,8 +1884,7 @@ async function placeTile(cellIndex){
       const msg=continuationMessage(continuation);
       addLog(`${p.name}: ${word} を配置。採点前：${continuation.text || continuation.baseText}（罰点なし）`,true);
       setMsg(msg,'info',{judge:true});
-      const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
-      const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show');
+      clearResultOverlays();
     }else{
       gained = -UNUSED_PENALTY;
       const cell=state.board[cellIndex];
@@ -1883,8 +1900,7 @@ async function placeTile(cellIndex){
       playChime(false);
       showFailDetails(failInfo, cellIndex);
       scheduleReasonPolling(600);
-      const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
-      const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show');
+      clearResultOverlays();
     }
   }
   p.score+=gained;
