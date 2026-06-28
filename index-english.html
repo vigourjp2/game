@@ -1821,7 +1821,15 @@ async function placeTile(cellIndex){
     // v88: 成立0でも即NG/罰点にしない。
     // まず「手札を1〜2枚続ければ英文として成立する作りかけ」かを、API batchで軽く確認する。
     // 例: I / I like / I am は採点前として盤面に残し、罰点なし。完全NGの時だけTOP1理由解析と罰点。
-    const continuation=await findContinuationCandidate(cellIndex, word);
+    // v90: 成立0の後続可能チェックでAPIを待たない。
+    // v88/v89 は findContinuationCandidate() が3語以上で completion batch API を待つため、
+    // その間 placementJudgeBusy=true のままになり、盤面が止まって見えた。
+    // 操作ロック中に行うのは成立判定まで。成立0なら短い断片は即「採点前」、長いものだけTOP1 NGへ進む。
+    const __baseTextForPartial=String((bestRejectCandidates(cellIndex)[0]?.text) || longestLineTextIncludingCell(cellIndex) || word || '').trim().replace(/[.!?]$/,'');
+    const __baseWordsForPartial=__baseTextForPartial.split(/\s+/).filter(Boolean);
+    const continuation=(__baseWordsForPartial.length>0 && __baseWordsForPartial.length<=3)
+      ? {baseText:__baseTextForPartial, text:'', used:[], status:'partial-fast-no-lock-v90'}
+      : null;
     if(continuation){
       gained=0;
       const cell=state.board[cellIndex];
@@ -1856,11 +1864,15 @@ async function placeTile(cellIndex){
   recalcTiles();
   nextTurn();
   selectedHandIndex=-1;
-  broadcast({type:'englishPlace',gameId:state.gameId,state:lightState(),cellIndex,by:clientId});
-  render();
-  if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
+  // v90: ここより下の broadcast/render/setMsg で例外が出ても操作ロックを残さない。
+  // selectable 表示もこの後の render で正しく出るよう、描画前にbusyを解除する。
   try{ clearTimeout(placementLockTimer); }catch(e){}
   placementJudgeBusy=false;
+  try{
+    broadcast({type:'englishPlace',gameId:state.gameId,state:lightState(),cellIndex,by:clientId});
+  }catch(e){ console.warn('broadcast after place failed', e); }
+  render();
+  if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
   // v74: クライアント側で補完文を合成しない。
   if(lastReasonDisplayContext && !lastReasonDisplayContext.partial){
     schedulePostJudgeHandCompletionReason();
