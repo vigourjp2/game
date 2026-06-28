@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v72 reason queue display fix + client poll timeout 2026-06-28 -->
+<!-- latest: v73 reason queue display fix + client poll timeout 2026-06-28 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -281,7 +281,7 @@ async function singleApiCheckItem(base, item){
       words:item.words,
       reasonPriorityEpoch:item.reasonPriorityEpoch || 0,
       reasonPrioritySeq:item.reasonPrioritySeq || 0,
-      // v72: 盤面スキャン中の全NG候補でreason jobを作らない。
+      // v73: 盤面スキャン中の全NG候補でreason jobを作らない。
       // /check-and-translate は成立判定だけに使い、理由jobは明示要求だけに限定する。
       reasonMode:'none',
       reasonDisabled:true,
@@ -1251,7 +1251,7 @@ function pendingReasonLabel(r){
   const role=String(r?.reasonQueueRole||r?.queueRole||'').toLowerCase();
   const at=Number(r?.reasonJobAttempts||r?.attempts||0);
   const retry=at>0 ? `（再試行${at}）` : '';
-  // v72: queueIndex はAPIサーバ全体の待ち位置で、自分のジョブ数ではない。
+  // v73: queueIndex はAPIサーバ全体の待ち位置で、自分のジョブ数ではない。
   // これを丸数字で表示すると「待ちが勝手に増える」ように見えるため、画面には出さない。
   if(st==='running' || role==='running') return `理由解析中…${retry}`;
   if(['pending','queued','retry','retrying'].includes(st) || role==='waiting' || (!st && r?.reasonJobId)){
@@ -1311,7 +1311,7 @@ function updateReasonForText(text, reasonExplain, status='success'){
 }
 function pendingReasonList(){
   // v70: reason poll は「今回の一手でAPIが返した reasonJobId」だけを見る。
-  // v72: さらに同一reasonJobIdだけに限定し、古いpending/queueIndex表示で増殖して見える状態を避ける。
+  // v73: さらに同一reasonJobIdだけに限定し、古いpending/queueIndex表示で増殖して見える状態を避ける。
   const rejects=[];
   for(const r of lastScanRejects||[]){
     if(isReasonPending(r) && r.reasonJobId){
@@ -1607,6 +1607,65 @@ function routeRejectText(r){
   if(reason) return `API判定NG: ${reason}`;
   return '';
 }
+
+let representativeReasonRequestKeys=new Set();
+function requestRepresentativeReasonForReject(r){
+  // v73: 盤面スキャン中はreason jobを作らないが、画面に表示する代表NG候補だけは
+  // 1本だけ明示的に理由解析へ投げる。これは文のハードコードではなく、表示対象の1件だけを説明するため。
+  try{
+    if(!linkGrammarApi || !r) return false;
+    const text=String(r.text||'').trim();
+    if(!text || rejectReasonText(r) || r.reasonJobId) return false;
+    const ctx=lastReasonDisplayContext;
+    const hand=currentReasonHandWords(false, ctx);
+    const board=[];
+    try{ for(const c of (state?.board||[])){ if(c&&c.w) board.push(String(c.w)); } }catch(e){}
+    const deck=[];
+    try{ deck.push(...WORDS.map(x=>x.w)); }catch(e){}
+    const key=JSON.stringify({text,hand,board});
+    if(representativeReasonRequestKeys.has(key)) return false;
+    representativeReasonRequestKeys.add(key);
+    setTimeout(async()=>{
+      try{
+        const base=linkGrammarApi.replace(/\/$/,'');
+        const qs=new URLSearchParams();
+        qs.set('text', text);
+        if(hand.length) qs.set('hand', hand.join(','));
+        if(board.length) qs.set('board', board.join(','));
+        if(deck.length) qs.set('deck', deck.join(','));
+        const res=await fetch(base+'/reason-job-context?'+qs.toString(), {cache:'no-store'});
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data=await res.json();
+        updateReasonJobStateForText(text, {
+          reasonStatus:data.status || 'pending',
+          reasonJobId:data.id || '',
+          reasonQueueRole:data.queueRole || '',
+          reasonQueueIndex:data.queueIndex ?? null,
+          reasonQueueLabel:data.queueLabel || '',
+          reasonQueueRevision:data.queueRevision || 0,
+          reasonPriorityEpoch:data.priorityEpoch || 0,
+          reasonPrioritySeq:data.prioritySeq || 0
+        });
+        try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+        if(data?.reasonExplain){
+          updateReasonForText(text, data.reasonExplain, data.status || 'success');
+        }
+        scheduleReasonPolling(0);
+        renderSafe();
+        if(lastReasonDisplayContext){
+          const c={...lastReasonDisplayContext};
+          const info=buildFailInfo(c.placeIndex,c.word);
+          setMsg((c.partial?'別候補NG：':'不成立理由：')+info.short, c.cls||'bad', {judge:true});
+        }
+      }catch(e){
+        console.warn('representative reason request failed', e);
+        updateReasonJobStateForText(text, {reasonStatus:'unavailable', reasonJobError:String(e?.message||e)});
+      }
+    }, 0);
+    return true;
+  }catch(e){ console.warn('requestRepresentativeReasonForReject failed', e); return false; }
+}
+
 function buildFailInfo(placeIndex, word, successes=[]){
   { const pi=state.turn%state.playerCount; const hp=(state.players[pi]?.hand||[]).map(String); lastReasonDisplayContext={placeIndex,word,partial:false,cls:'bad',playerIndex:pi,handSnapshot:hp}; }
   const successCellSets=(successes||[]).map(m=>new Set(m.cells||[]));
@@ -1624,6 +1683,11 @@ function buildFailInfo(placeIndex, word, successes=[]){
     }
     return {text,reason};
   });
+  // v73: 詳細理由未取得のまま放置しない。表示対象の代表NG候補だけ、1本だけ明示reason job化する。
+  try{
+    const firstNeedReason=rejects.find(r=>String(r?.text||'').trim() && !rejectReasonText(r) && !r.reasonJobId);
+    if(firstNeedReason) requestRepresentativeReasonForReject(firstNeedReason);
+  }catch(e){}
   // 1件だけ代表表示にすると、例: I am eating だけ見えて I like eating が隠れる。
   // 置いたカードを含むAPI判定NG候補は、上部メッセージ欄に複数件まとめて出す。
   const short = items.length
