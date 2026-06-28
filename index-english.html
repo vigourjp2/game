@@ -1570,6 +1570,95 @@ function showFailDetails(info, cellIndex, opts={}){
   }
 }
 
+
+function longestLineTextIncludingCell(placeIndex){
+  const opts=[];
+  const pxy=xy(placeIndex);
+  function collect(dx,dy,label){
+    const cells=[];
+    let x=pxy.x, y=pxy.y;
+    while(x-dx>=0 && y-dy>=0 && x-dx<N && y-dy<N && state.board[idx(x-dx,y-dy)]?.w){ x-=dx; y-=dy; }
+    while(x>=0 && y>=0 && x<N && y<N && state.board[idx(x,y)]?.w){
+      const i=idx(x,y); cells.push({i,w:state.board[i].w}); x+=dx; y+=dy;
+    }
+    if(cells.some(c=>c.i===placeIndex)) opts.push({label,cells,text:displayEnglish(cells.map(c=>c.w))});
+  }
+  collect(1,0,'横');
+  collect(0,1,'縦');
+  opts.sort((a,b)=>(b.cells.length-a.cells.length)||(a.cells[0].i-b.cells[0].i));
+  return opts[0]?.text || String(state.board[placeIndex]?.w || '').trim();
+}
+function completionHandWordsForPlayer(playerIndex){
+  const arr=[];
+  try{ arr.push(...((state.players[playerIndex]?.hand)||[])); }catch(e){}
+  try{ if(activeJudgeWordForReason) arr.push(String(activeJudgeWordForReason)); }catch(e){}
+  return [...new Set(arr.map(x=>String(x||'').trim()).filter(Boolean))];
+}
+function buildCompletionProbeItems(baseText, handWords){
+  const base=String(baseText||'').trim().replace(/[.!?]$/,'');
+  const baseWords=base.split(/\s+/).filter(Boolean);
+  const hand=[...new Set((handWords||[]).map(x=>String(x||'').trim()).filter(Boolean))];
+  const items=[]; const seen=new Set();
+  function add(words, how, used){
+    const text=displayEnglish(words).replace(/[.!?]$/,'');
+    const k=text.toLowerCase();
+    if(!text || seen.has(k)) return;
+    seen.add(k);
+    items.push({id:String(items.length), text, words, completionHow:how, completionUsed:used});
+  }
+  if(!baseWords.length) return items;
+  for(const a of hand) add([...baseWords,a], 'add-right-1', [a]);
+  for(const a of hand){
+    for(const b of hand){
+      if(a.toLowerCase()===b.toLowerCase()) continue;
+      add([...baseWords,a,b], 'add-right-2', [a,b]);
+    }
+  }
+  return items.slice(0,72);
+}
+async function findContinuationCandidate(placeIndex, word){
+  const playerIndex=state.turn%state.playerCount;
+  const topReject=bestRejectCandidates(placeIndex)[0] || null;
+  const baseText=String(topReject?.text || longestLineTextIncludingCell(placeIndex) || word || '').trim().replace(/[.!?]$/,'');
+  const baseWords=baseText.split(/\s+/).filter(Boolean);
+  if(!baseWords.length) return null;
+  const hand=completionHandWordsForPlayer(playerIndex);
+  if(!hand.length){
+    if(baseWords.length<3) return {baseText, text:'', used:[], status:'partial-no-hand'};
+    return null;
+  }
+  const items=buildCompletionProbeItems(baseText, hand);
+  if(!items.length){
+    if(baseWords.length<3) return {baseText, text:'', used:[], status:'partial-no-items'};
+    return null;
+  }
+  if(!linkGrammarApi){
+    return baseWords.length<3 ? {baseText, text:'', used:[], status:'partial-api-off'} : null;
+  }
+  try{
+    const base=linkGrammarApi.replace(/\/$/,'');
+    const rows=await batchApiCheckItems(base,items,Date.now());
+    for(let i=0;i<items.length;i++){
+      const ev=evFromApiResult(rows[i],items[i].words);
+      if(ev){
+        return {baseText, text:ev.text || items[i].text, ja:ev.ja || rows[i]?.ja || '', used:items[i].completionUsed || [], status:'verified', ev};
+      }
+    }
+  }catch(e){
+    console.warn('continuation probe failed', e);
+    // APIが一時的に失敗しただけで、短い作りかけを罰点化しない。
+    if(baseWords.length<3) return {baseText, text:'', used:[], status:'probe-error'};
+  }
+  return null;
+}
+function continuationMessage(c){
+  if(!c) return '';
+  if(c.text && c.used?.length){
+    return `採点前：「${c.baseText}」はまだ作りかけです。手札の「${c.used.join('」「')}」を続けると候補「${c.text}」になります。`;
+  }
+  return `採点前：「${c.baseText}」はまだ作りかけです。続けて単語を置いてください。`;
+}
+
 let placementJudgeBusy=false;
 let placementJudgeSeq=0;
 async function placeTile(cellIndex){
@@ -1723,22 +1812,39 @@ async function placeTile(cellIndex){
     lastScanRejects=[];
     lastReasonDisplayContext=null;
   }else{
-    gained = -UNUSED_PENALTY;
-    const cell=state.board[cellIndex];
-    if(cell) cell.unusedPenaltyApplied=true;
-    const failInfo=buildFailInfo(cellIndex, word);
-    addLog(`${p.name}: ${word} を配置。不成立：${failInfo.short} -${UNUSED_PENALTY}`,false);
-    (failInfo.rejects||[]).slice(0,1).forEach(r=>{
-      const meta=rejectReasonText(r)||pendingReasonLabel(r);
-      addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
-    });
-    setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
-    schedulePostJudgeHandCompletionReason();
-    playChime(false);
-    showFailDetails(failInfo, cellIndex);
-    scheduleReasonPolling(600);
-    const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
-    const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show');
+    // v88: 成立0でも即NG/罰点にしない。
+    // まず「手札を1〜2枚続ければ英文として成立する作りかけ」かを、API batchで軽く確認する。
+    // 例: I / I like / I am は採点前として盤面に残し、罰点なし。完全NGの時だけTOP1理由解析と罰点。
+    const continuation=await findContinuationCandidate(cellIndex, word);
+    if(continuation){
+      gained=0;
+      const cell=state.board[cellIndex];
+      if(cell){ cell.unusedPenaltyApplied=false; cell.pendingSentence=true; }
+      lastScanRejects=[];
+      lastReasonDisplayContext=null;
+      const msg=continuationMessage(continuation);
+      addLog(`${p.name}: ${word} を配置。採点前：${continuation.text || continuation.baseText}（罰点なし）`,true);
+      setMsg(msg,'info',{judge:true});
+      const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
+      const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show');
+    }else{
+      gained = -UNUSED_PENALTY;
+      const cell=state.board[cellIndex];
+      if(cell){ cell.unusedPenaltyApplied=true; cell.pendingSentence=false; }
+      const failInfo=buildFailInfo(cellIndex, word);
+      addLog(`${p.name}: ${word} を配置。不成立：${failInfo.short} -${UNUSED_PENALTY}`,false);
+      (failInfo.rejects||[]).slice(0,1).forEach(r=>{
+        const meta=rejectReasonText(r)||pendingReasonLabel(r);
+        addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
+      });
+      setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
+      schedulePostJudgeHandCompletionReason();
+      playChime(false);
+      showFailDetails(failInfo, cellIndex);
+      scheduleReasonPolling(600);
+      const cp=$('comboPanel'); if(cp) cp.classList.remove('show');
+      const ip=$('sentenceImagePanel'); if(ip) ip.classList.remove('show');
+    }
   }
   p.score+=gained;
   recalcTiles();
