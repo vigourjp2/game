@@ -196,7 +196,7 @@ const PHRASE_MAP = new Map();
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v44-case-preserve-frontend';
+const IMAGE_INTEGRATION_VERSION='sentence-image-v104-gameok-propagation-fix';
 // v101: 判定キャッシュは完全廃止。毎回ブラウザAPIへ確認する。
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let __storedLgApi=''; try{ __storedLgApi=localStorage.getItem(LINK_GRAMMAR_API_KEY)||''; }catch(e){ __storedLgApi=''; }
@@ -219,6 +219,10 @@ function evFromApiResult(data, words){
   const displayKind=data.acceptability?.displayKind || (sentenceType==='contextual_short_answer' ? '短い返事文' : (data.kind || 'API完全英文判定'));
   return {
     ok:true,
+    // v104: API が gameOk:true と返した成立結果であることを、後続UIにも明示的に引き継ぐ。
+    // v103 では画像表示側を m.gameOk===true に強化したのに、evFromApiResult() が
+    // gameOk を持たないイベントへ変換していたため、GOOD/COMBO は出るのに画像だけ全件除外された。
+    gameOk:true,
     kind:displayKind,
     pts:48+Math.min(28,w.length*6),
     text,
@@ -684,6 +688,7 @@ function sentenceImageIsRecentlyUsed(data){
   const id=String(data?.id||'').trim();
   return !!id && sentenceImageRecentIds().includes(id);
 }
+let sentenceImageSeq=0;
 async function fetchSentenceImage(sentence){
   if(!linkGrammarApi) return {ok:false,error:'image api off'};
   const base=linkGrammarApi.replace(/\/$/,'');
@@ -705,6 +710,7 @@ function renderSentenceImageData(art, sentence, data){
   art.innerHTML=`<img src="${img}" alt="${esc(sentence)}" loading="lazy" referrerpolicy="no-referrer"><div class="sentenceImageCredit"><a href="${page}" target="_blank" rel="noopener">Pixabay</a> / ${tags}</div>`;
 }
 async function showSentenceGeneratedImage(matches, index=0) {
+  const myImageSeq=++sentenceImageSeq;
   const unique=[]; const seen=new Set();
   for(const m of (matches || [])){
     if(!m || !m.text) continue;
@@ -735,6 +741,7 @@ async function showSentenceGeneratedImage(matches, index=0) {
   art.innerHTML='<div class="sentenceImageLoading">画像検索中...</div>';
   try{
     const data=await fetchSentenceImage(sentence);
+    if(myImageSeq!==sentenceImageSeq) return;
     if(data && data.ok && data.imageUrl){
       sentenceImageCacheWrite(cacheKey,data);
       renderSentenceImageData(art,sentence,data);
@@ -743,6 +750,7 @@ async function showSentenceGeneratedImage(matches, index=0) {
       art.innerHTML='<div class="sentenceImageFallback">画像が見つかりませんでした<br><small>'+esc(data?.query||data?.error||'')+'</small></div>';
     }
   }catch(e){
+    if(myImageSeq!==sentenceImageSeq) return;
     art.innerHTML='<div class="sentenceImageFallback">画像APIエラー<br><small>'+esc(String(e.message||e))+'</small></div>';
   }
 }
