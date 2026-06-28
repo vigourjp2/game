@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v95 reason suggestion uses same API gate / cache reset 2026-06-28 -->
+<!-- latest: v96 reject redundant time-adverb suggestions / advisory secondary HF 2026-06-28 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -137,7 +137,7 @@ try{
 }catch(e){ console.error('early start bind failed', e); }
 try{
 
-const APP_VERSION='v95-reason-same-api-gate-cache-reset';
+const APP_VERSION='v97-pos-metadata-no-fixed-time-list';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
@@ -171,6 +171,13 @@ const WORDS = [
   {w:'very',pos:['adv'],lv:1},{w:'well',pos:['adv','noun'],lv:1},{w:'often',pos:['advTime'],lv:2},{w:'always',pos:['advTime'],lv:2},{w:'sometimes',pos:['advTime'],lv:2},{w:'now',pos:['advTime'],lv:1},{w:'today',pos:['advTime'],lv:1},{w:'everyday',pos:['advTime'],lv:2},{w:'tomorrow',pos:['advTime'],lv:2},{w:'yesterday',pos:['advTime'],lv:2}
 ];
 const POS = Object.fromEntries(WORDS.map(x=>[x.w.toLowerCase(),x.pos]));
+function wordMetaForApi(words){
+  return (words||[]).map(w=>{
+    const word=String(w||'').trim();
+    const pos=POS[word.toLowerCase()] || [];
+    return {w:word,pos:[...pos]};
+  }).filter(x=>x.w);
+}
 // v87: 選択中の動詞手札を三人称単数現在形へ一時変化/戻す。
 // 判定ルールではなく、プレイヤーの手札操作UI。API判定は従来通り外部APIだけ。
 const THIRD_PERSON_BASE_TO_S = {
@@ -190,7 +197,7 @@ const PHRASE_MAP = new Map();
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
 const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v44-case-preserve-frontend';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v95.reasonSameApiGate';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v96.timeAdverbOverlapGate';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let __storedLgApi=''; try{ __storedLgApi=localStorage.getItem(LINK_GRAMMAR_API_KEY)||''; }catch(e){ __storedLgApi=''; }
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || __storedLgApi || 'https://english-pittan-lg-api.onrender.com').trim();
@@ -301,6 +308,7 @@ async function singleApiCheckItem(base, item){
     body:JSON.stringify({
       text:item.text,
       words:item.words,
+      wordMeta:item.wordMeta || wordMetaForApi(item.words),
       reasonPriorityEpoch:item.reasonPriorityEpoch || 0,
       reasonPrioritySeq:item.reasonPrioritySeq || 0,
       // v74: 盤面スキャン中の全NG候補でreason jobを作らない。
@@ -329,7 +337,7 @@ async function batchApiCheckItems(base, items, reasonPriorityEpoch){
     method:'POST',
     headers:{'content-type':'application/json'},
     body:JSON.stringify({
-      candidates:items.map((item,i)=>({id:item.id ?? String(i), text:item.text, words:item.words})),
+      candidates:items.map((item,i)=>({id:item.id ?? String(i), text:item.text, words:item.words, wordMeta:item.wordMeta || wordMetaForApi(item.words)})),
       limit:240,
       translate:false,
       withTranslate:false,
@@ -1468,8 +1476,10 @@ function requestDisplayedRejectReason(r){
     if(!text || rejectReasonText(r) || r.reasonJobId) return false;
     const ctx=lastReasonDisplayContext;
     const hand=currentReasonHandWords(false, ctx);
+    // v96: 理由補完に盤面全体の単語を渡すと、実際の経路に使えない離れたカードまで混ぜて
+    // 離れたカードや補充手札まで混ぜた非プレイ可能候補を作る。
+    // 表示中NG候補の説明では、盤面側の追加材料は使わせない（手札/山札だけ）。
     const board=[];
-    try{ for(const c of (state?.board||[])){ if(c&&c.w) board.push(String(c.w)); } }catch(e){}
     const deck=[];
     try{ deck.push(...WORDS.map(x=>x.w)); }catch(e){}
     const placementKey=String(lastReasonDisplayContext?.placementId || lastReasonDisplayContext?.placeIndex || -1);
@@ -1644,7 +1654,7 @@ function buildCompletionProbeItems(baseText, handWords){
     const k=text.toLowerCase();
     if(!text || seen.has(k)) return;
     seen.add(k);
-    items.push({id:String(items.length), text, words, completionHow:how, completionUsed:used});
+    items.push({id:String(items.length), text, words, wordMeta:wordMetaForApi(words), completionHow:how, completionUsed:used});
   }
   if(!baseWords.length) return items;
   for(const a of hand) add([...baseWords,a], 'add-right-1', [a]);
