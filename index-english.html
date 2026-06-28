@@ -173,8 +173,8 @@ const PHRASE_MAP = new Map(PHRASE_BANK.map(([text,ja,kind,pts,level])=>[text.toL
 
 // Link Grammar Parser API連携。Cloudflare PagesだけではCライブラリを実行できないため、
 // 無料コンテナ等に置いたAPI URLを ?lgapi=https://... または localStorage で指定する。
-const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v39-clean-no-autocorrect-board-aware';
-const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v39.cleanNoAutocorrectBoardAware';
+const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v42-acceptability-diagnose';
+const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v42.acceptDiagnose';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
 let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
