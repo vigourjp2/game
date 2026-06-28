@@ -255,7 +255,7 @@ function reasonCandidateContext(){
   }catch(e){}
   const hand=[];
   try{ hand.push(...((currentPlayer()?.hand)||[])); }catch(e){}
-  // v66: 理由補完は「現在の手札」だけでなく、選択中カード・いま置いたカードも候補に入れる。
+  // v67: 理由補完は「現在の手札」だけでなく、選択中カード・いま置いたカードも候補に入れる。
   // 種類別常備手札では、置いた瞬間に手札スロットが補充されるため、
   // APIへreason contextを送る時点で「今使った語」が手札から消えてしまうことがあった。
   // ここで補う。これは判定ではなく補完候補の文脈送信だけ。
@@ -1056,7 +1056,7 @@ async function scanFromCell(placeIndex){
   }
   for(const st of starts){ dfs(st.x,st.y,[{i:st.i,w:st.w}],null,0); }
 
-  // v66: DFSだけに頼らず、盤面の横列・縦列の連続カードを全候補化する。
+  // v67: DFSだけに頼らず、盤面の横列・縦列の連続カードを全候補化する。
   // 例: 上から I / like / apples と縦に並んだ場合、
   // like apples だけでなく I like apples も必ずAPI候補へ送る。
   // 判定はAPIのみ。ここでは盤面候補を漏らさないための抽出だけ。
@@ -1440,6 +1440,7 @@ async function pollPendingReasons(){
       lastReasonDisplayContext={...ctx};
       const prefix=ctx.partial?'別候補NG：':'不成立理由：';
       setMsg(prefix+info.short, ctx.cls||'bad', {judge:true});
+      if(!ctx.partial) setTimeout(()=>refreshFailReasonWithHandCandidates({selectedOnly:false}), 80);
     }
     renderSafe();
   }
@@ -1455,37 +1456,58 @@ async function pollPendingReasons(){
 });
 
 
-async function refreshFailReasonWithSelectedHand(){
-  // v66: 手札を選んだだけでも、直前NG候補 + 選択中手札で成立する補完をAPI確認して表示する。
-  // 例: 盤面に I like があり、手札 apples を選択したら I like apples を候補表示する。
-  if(placementJudgeBusy || selectedHandIndex<0 || !linkGrammarApi) return;
+function currentReasonHandWords(includeSelectedOnly=false){
   const p=currentPlayer();
-  const handWord=String((p?.hand||[])[selectedHandIndex]||'').trim();
-  if(!handWord) return;
+  const out=[];
+  const hp=(p?.hand||[]);
+  if(includeSelectedOnly){
+    if(selectedHandIndex>=0 && hp[selectedHandIndex]) out.push(String(hp[selectedHandIndex]));
+  }else{
+    out.push(...hp.map(String));
+    if(selectedHandIndex>=0 && hp[selectedHandIndex]) out.push(String(hp[selectedHandIndex]));
+  }
+  if(activeJudgeWordForReason) out.push(String(activeJudgeWordForReason));
+  return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
+}
+async function refreshFailReasonWithHandCandidates(opts={}){
+  // v67: 手札は「選択した時だけ」ではなく、未選択でも全手札を補完候補に使う。
+  // 例: 盤面 I like / 手札 apples なら、apples未選択でも I like apples をAPI確認して表示する。
+  // ここでは文法判定しない。候補を作り、/check-and-translate の gameOk:true だけ採用する。
+  if(placementJudgeBusy || !linkGrammarApi) return false;
+  const handWords=currentReasonHandWords(!!opts.selectedOnly);
+  if(!handWords.length) return false;
   const ctx=lastReasonDisplayContext;
   const rejects=(ctx ? bestRejectCandidates(ctx.placeIndex) : (lastScanRejects||[])).slice(0,8);
-  if(!rejects.length) return;
+  if(!rejects.length) return false;
   const tried=new Set();
   let seq=0;
   for(const r of rejects){
     const baseText=String(r?.text||'').trim();
     if(!baseText) continue;
-    const probes=[baseText+' '+handWord, handWord+' '+baseText];
-    for(const probe of probes){
-      const key=norm(String(probe).split(/\s+/));
-      if(tried.has(key)) continue;
-      tried.add(key);
-      try{
-        const data=await singleApiCheckText(probe, seq++);
-        const ok=!!(data && (data.gameOk===true || data.ok===true) && (data.type==='complete_sentence' || data.acceptability?.gameOk===true));
-        if(ok){
-          const where=probe.toLowerCase().endsWith((' '+handWord).toLowerCase())?'後ろ':'前';
-          setMsg(`不成立理由：手札の「${handWord}」を${where}に置くと英文になります。候補: ${displayEnglish(String(probe).split(/\s+/))}`,'bad',{judge:true});
-          return;
-        }
-      }catch(e){ console.warn('selected hand completion check failed', e); }
+    for(const handWord of handWords){
+      const probes=[baseText+' '+handWord, handWord+' '+baseText];
+      for(const probe of probes){
+        const key=norm(String(probe).split(/\s+/));
+        if(tried.has(key)) continue;
+        tried.add(key);
+        try{
+          const data=await singleApiCheckText(probe, seq++);
+          const ok=!!(data && (data.gameOk===true || data.ok===true) && (data.type==='complete_sentence' || data.acceptability?.gameOk===true));
+          if(ok){
+            const where=probe.toLowerCase().endsWith((' '+handWord).toLowerCase())?'後ろ':'前';
+            setMsg(`不成立理由：手札の「${handWord}」を${where}に置くと英文になります。候補: ${displayEnglish(String(probe).split(/\s+/))}`,'bad',{judge:true});
+            return true;
+          }
+        }catch(e){ console.warn('hand completion check failed', e); }
+      }
     }
   }
+  return false;
+}
+async function refreshFailReasonWithSelectedHand(){
+  // 後方互換: 選択時はまず選択カードだけを優先する。
+  if(selectedHandIndex<0) return;
+  return refreshFailReasonWithHandCandidates({selectedOnly:true});
 }
 
 function apiRejectReason(raw){
@@ -1663,6 +1685,7 @@ async function placeTile(cellIndex){
       addLog(`理由: ${r.text||'候補なし'}${meta?`：${meta}`:''}`,false);
     });
     setMsg(`不成立理由：${failInfo.short}　-${UNUSED_PENALTY}`,'bad',{judge:true});
+    setTimeout(()=>refreshFailReasonWithHandCandidates({selectedOnly:false}), 80);
     playChime(false);
     showFailDetails(failInfo, cellIndex);
     scheduleReasonPolling(600);
