@@ -903,16 +903,42 @@ async function scanFromCell(placeIndex){
   lastScanRejects=[];
   const found=[];
   const candidates=[];
+  const starts=[];
+
+  // v91: 曲がり候補を復活。
+  // v86 の「直線限定」は撤回。ゲーム本来の右/下隣接ルートを戻す。
+  // ただし v87 以降の方針どおり、成立が1件以上ある場合は NG 経路を完全無視し、
+  // 成立0のときだけ TOP1 のNG理由に絞る。曲がり候補は採点候補として復活させるが、
+  // 失敗表示を大量に出して画面を壊す用途には使わない。
+  for(let y=0;y<N;y++){
+    for(let x=0;x<N;x++){
+      const c=state.board[idx(x,y)];
+      if(c) starts.push({x,y,i:idx(x,y),w:c.w});
+    }
+  }
 
   function pushPath(path,label){
     if(path.length<2 || !path.some(s=>s.i===placeIndex)) return;
     candidates.push({path:path.slice(),label});
   }
 
-  // v86: 英文候補は「横一直線」または「縦一直線」の連続カードだけに戻す。
-  // v74/v85 の右・下DFSは、離れた行/列を勝手にL字・階段状につなぎ、
-  // 例: I am happy → she → speak → apples のような、プレイヤーの意図しない文を大量生成していた。
-  // 判定はAPIのみのまま。ここでは候補抽出の形だけをゲームとして自然な直線に制限する。
+  function dfs(x,y,path,lastMove,turns){
+    pushPath(path, turns===0 ? (lastMove==='D'?'縦':'横') : `隣接ルート${turns}曲がり`);
+    for(const mv of [{dx:1,dy:0,k:'R'},{dx:0,dy:1,k:'D'}]){
+      const nx=x+mv.dx, ny=y+mv.dy;
+      if(nx<0||ny<0||nx>=N||ny>=N) continue;
+      const ni=idx(nx,ny);
+      const cell=state.board[ni];
+      if(!cell) continue;
+      if(path.some(s=>s.i===ni)) continue;
+      const nt = lastMove && lastMove!==mv.k ? turns+1 : turns;
+      // 曲がり判定は復活。文法のOK/NGは外部APIだけが決める。
+      dfs(nx,ny,path.concat({i:ni,w:cell.w}),mv.k,nt);
+    }
+  }
+  for(const st of starts){ dfs(st.x,st.y,[{i:st.i,w:st.w}],null,0); }
+
+  // 直線候補も明示的に追加する。DFSと重複しても下の重複排除で落とす。
   function pushStraightSegments(cells,label){
     let run=[];
     function flush(){
@@ -948,8 +974,6 @@ async function scanFromCell(placeIndex){
     if(seenCand.has(k)) continue;
     seenCand.add(k); uniq.push(c);
   }
-  // v74: ローカル基本文法判定は使わない。
-  // 盤面候補はすべて外部APIに通し、APIが gameOk:true のものだけ採点する。
   const apiMatches=await evaluateCandidatesByApi(uniq);
   for(const ev of apiMatches){
     ev.ja=await resolveJapanese(ev.text.split(' '),ev);
