@@ -119,12 +119,30 @@
 <script>
 (() => {
 'use strict';
+// v75: boot guard. Start button must not die if later initialization throws.
+try{
+  const __earlyStartBtn=document.getElementById('startBtn');
+  if(__earlyStartBtn){
+    __earlyStartBtn.addEventListener('click',()=>{
+      try{
+        const st=document.getElementById('start');
+        if(st) st.style.display='none';
+        if(typeof unlockSpeech==='function') unlockSpeech();
+        if(typeof clearEnglishJudgeCache==='function') clearEnglishJudgeCache();
+        if(typeof render==='function') render();
+      }catch(e){ console.error('early start fallback failed', e); }
+    });
+  }
+}catch(e){ console.error('early start bind failed', e); }
+try{
+
 const APP_VERSION='v74-no-local-grammar-hardcode';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
 const COLORS = ['#38bdf8','#f472b6','#a3e635','#facc15'];
-const clientId = (crypto && crypto.randomUUID) ? crypto.randomUUID().slice(0,8) : ('c'+Math.floor(Math.random()*999999));
+const __crypto = (typeof globalThis!=='undefined' && globalThis.crypto) ? globalThis.crypto : null;
+const clientId = (__crypto && typeof __crypto.randomUUID==='function') ? __crypto.randomUUID().slice(0,8) : ('c'+Math.floor(Math.random()*999999));
 let socket=null,retryTimer=null,heartbeat=null,rx=0;
 let selectedHandIndex=-1;
 let activeJudgeWordForReason='';
@@ -163,7 +181,8 @@ const PHRASE_MAP = new Map();
 const IMAGE_INTEGRATION_VERSION='sentence-image-diversity-v44-case-preserve-frontend';
 const LINK_GRAMMAR_CACHE_KEY='englishPittan.linkGrammarCache.v53.reasonDisplayHfFilter';
 const LINK_GRAMMAR_API_KEY='englishPittan.linkGrammarApi';
-let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || localStorage.getItem(LINK_GRAMMAR_API_KEY) || 'https://english-pittan-lg-api.onrender.com').trim();
+let __storedLgApi=''; try{ __storedLgApi=localStorage.getItem(LINK_GRAMMAR_API_KEY)||''; }catch(e){ __storedLgApi=''; }
+let linkGrammarApi=(new URL(location.href).searchParams.get('lgapi') || __storedLgApi || 'https://english-pittan-lg-api.onrender.com').trim();
 let linkGrammarStatus=linkGrammarApi ? 'READY' : 'OFF';
 let linkGrammarCache={};
 try{linkGrammarCache=JSON.parse(localStorage.getItem(LINK_GRAMMAR_CACHE_KEY)||'{}')||{};}catch(e){linkGrammarCache={};}
@@ -1512,6 +1531,13 @@ $('nameInput').value=localStorage.englishName||('P-'+clientId);
 $('nameInput').addEventListener('change',()=>{localStorage.englishName=safeName();state.players[0].name=safeName();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'rename'});render();});
 $('playerCount').addEventListener('change',()=>newGame(false));
 newGame(false);render();
+}catch(__bootErr){
+  console.error('english-pittan boot failed', __bootErr);
+  try{
+    const m=document.getElementById('msg');
+    if(m){ m.textContent='起動エラー: '+(__bootErr&&(__bootErr.message||String(__bootErr))); m.className='msg bad'; }
+  }catch(e){}
+}
 })();
 
 const sentenceImageCloseBtn=document.getElementById('sentenceImageClose');
