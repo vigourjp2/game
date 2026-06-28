@@ -681,6 +681,95 @@ async function showSentenceGeneratedImage(matches, index=0) {
   }
 }
 
+
+function pickSpeechVoice(langPrefix){
+  try{
+    const synth=window.speechSynthesis;
+    if(!synth || typeof synth.getVoices!=='function') return null;
+    const voices=synth.getVoices()||[];
+    const prefix=String(langPrefix||'').toLowerCase();
+    if(!voices.length) return null;
+    return voices.find(v=>String(v.lang||'').toLowerCase()===prefix)
+      || voices.find(v=>String(v.lang||'').toLowerCase().startsWith(prefix.split('-')[0]))
+      || null;
+  }catch(e){ return null; }
+}
+function unlockSpeech(){
+  // スマホChrome/Safari対策: ユーザー操作中に SpeechSynthesis と AudioContext を一度だけ起こす。
+  try{
+    const C=window.AudioContext||window.webkitAudioContext;
+    if(C){
+      const ctx=new C();
+      if(ctx.state==='suspended' && typeof ctx.resume==='function') ctx.resume().catch(()=>{});
+      setTimeout(()=>{try{ctx.close();}catch(e){}},180);
+    }
+  }catch(e){}
+  try{
+    if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return false;
+    const u=new SpeechSynthesisUtterance('ready');
+    u.lang='en-US';
+    u.volume=0.01;
+    u.rate=1;
+    const v=pickSpeechVoice('en-US')||pickSpeechVoice('en');
+    if(v) u.voice=v;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    setTimeout(()=>{try{window.speechSynthesis.cancel();}catch(e){}},90);
+    return true;
+  }catch(e){
+    console.warn('unlockSpeech failed', e);
+    return false;
+  }
+}
+function speakOne(enText, jaText, done){
+  const finish=()=>{ if(typeof done==='function') done(); };
+  try{
+    if(!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) { finish(); return; }
+    const synth=window.speechSynthesis;
+    const queue=[];
+    const en=String(enText||'').trim();
+    const ja=String(jaText||'').trim();
+    if(en){
+      const u=new SpeechSynthesisUtterance(en);
+      u.lang='en-US';
+      u.rate=.92;
+      u.pitch=1;
+      u.volume=1;
+      const v=pickSpeechVoice('en-US')||pickSpeechVoice('en');
+      if(v) u.voice=v;
+      queue.push(u);
+    }
+    if(ja){
+      const u=new SpeechSynthesisUtterance(ja);
+      u.lang='ja-JP';
+      u.rate=1.02;
+      u.pitch=1;
+      u.volume=1;
+      const v=pickSpeechVoice('ja-JP')||pickSpeechVoice('ja');
+      if(v) u.voice=v;
+      queue.push(u);
+    }
+    if(!queue.length){ finish(); return; }
+    let i=0;
+    const speakNext=()=>{
+      const u=queue[i++];
+      if(!u){ finish(); return; }
+      let ended=false;
+      const goNext=()=>{ if(ended) return; ended=true; setTimeout(speakNext,180); };
+      u.onend=goNext;
+      u.onerror=(e)=>{ console.warn('speech utterance failed', e); goNext(); };
+      synth.speak(u);
+      // Android Chromeで onend が返らない保険。長文でも途中で詰まらない程度に長め。
+      const guardMs=Math.max(1800, Math.min(9000, String(u.text||'').length*160+900));
+      setTimeout(goNext, guardMs);
+    };
+    speakNext();
+  }catch(e){
+    console.warn('speakOne failed', e);
+    finish();
+  }
+}
+
 function speakResultsSequential(matches){
   if(!matches||!matches.length) return;
   const unique=[]; const seen=new Set();
@@ -1540,8 +1629,8 @@ function handleNet(raw){eachPayload(raw,(msg)=>{
 });}
 
 // v70: persistent hand completion polling removed. Reason polling must not enqueue extra jobs.
-$('startBtn').onclick=()=>{clearEnglishJudgeCache();unlockSpeech();$('start').style.display='none';render();};
-$('connectBtn').onclick=()=>{unlockSpeech();connect();};
+$('startBtn').onclick=()=>{clearEnglishJudgeCache();try{unlockSpeech();}catch(e){console.warn('unlockSpeech unavailable',e);}$('start').style.display='none';render();};
+$('connectBtn').onclick=()=>{try{unlockSpeech();}catch(e){console.warn('unlockSpeech unavailable',e);}connect();};
 $('newGameBtn').onclick=()=>newGame(true);
 $('resetBtn').onclick=()=>{if(confirm('盤面をリセットしてオンラインにも送信する？'))newGame(true);};
 $('passBtn').onclick=passTurn;
