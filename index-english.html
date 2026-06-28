@@ -1456,10 +1456,15 @@ async function pollPendingReasons(){
 });
 
 
-function currentReasonHandWords(includeSelectedOnly=false){
-  const p=currentPlayer();
+function currentReasonHandWords(includeSelectedOnly=false, ctx=null){
+  // v69: 不成立を出したプレイヤーの手札スナップショットを優先する。
+  // placeTile の最後で nextTurn() した後に currentPlayer() が変わっても、
+  // 直前に置いた人の手札（例: apples）を補完候補として使えるようにする。
   const out=[];
-  const hp=(p?.hand||[]);
+  const ctxHand=Array.isArray(ctx?.handSnapshot)?ctx.handSnapshot:[];
+  if(ctxHand.length) out.push(...ctxHand.map(String));
+  const pFromCtx = Number.isInteger(ctx?.playerIndex) ? state.players[ctx.playerIndex] : null;
+  const hp=(pFromCtx?.hand || currentPlayer()?.hand || []);
   if(includeSelectedOnly){
     if(selectedHandIndex>=0 && hp[selectedHandIndex]) out.push(String(hp[selectedHandIndex]));
   }else{
@@ -1469,41 +1474,84 @@ function currentReasonHandWords(includeSelectedOnly=false){
   if(activeJudgeWordForReason) out.push(String(activeJudgeWordForReason));
   return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
 }
-async function refreshFailReasonWithHandCandidates(opts={}){
-  // v67: 手札は「選択した時だけ」ではなく、未選択でも全手札を補完候補に使う。
-  // 例: 盤面 I like / 手札 apples なら、apples未選択でも I like apples をAPI確認して表示する。
-  // ここでは文法判定しない。候補を作り、/check-and-translate の gameOk:true だけ採用する。
-  // v68: placementJudgeBusy中でも補完理由APIは実行してよい。
-  // v67はここでreturnしていたため、配置直後のsetTimeout(80ms)が
-  // 判定ロック中に発火すると、I like + 手札apples の補完確認が何も走らなかった。
-  if(!linkGrammarApi) return false;
-  const handWords=currentReasonHandWords(!!opts.selectedOnly);
-  if(!handWords.length) return false;
-  const ctx=lastReasonDisplayContext;
-  const rejects=(ctx ? bestRejectCandidates(ctx.placeIndex) : (lastScanRejects||[])).slice(0,8);
-  if(!rejects.length) return false;
-  const tried=new Set();
-  let seq=0;
-  for(const r of rejects){
-    const baseText=String(r?.text||'').trim();
-    if(!baseText) continue;
-    for(const handWord of handWords){
-      const probes=[baseText+' '+handWord, handWord+' '+baseText];
-      for(const probe of probes){
-        const key=norm(String(probe).split(/\s+/));
-        if(tried.has(key)) continue;
-        tried.add(key);
-        try{
-          const data=await singleApiCheckText(probe, seq++);
-          const ok=!!(data && (data.gameOk===true || data.ok===true) && (data.type==='complete_sentence' || data.acceptability?.gameOk===true));
-          if(ok){
-            const where=probe.toLowerCase().endsWith((' '+handWord).toLowerCase())?'後ろ':'前';
-            setMsg(`不成立理由：手札の「${handWord}」を${where}に置くと英文になります。候補: ${displayEnglish(String(probe).split(/\s+/))}`,'bad',{judge:true});
-            return true;
-          }
-        }catch(e){ console.warn('hand completion check failed', e); }
+function boardLineReasonTexts(placeIndex){
+  // v69: lastScanRejects が古くなった/空になった場合でも、現在盤面から
+  // 横・縦の連続列を直接作る。判定はAPIだけ。ここでは候補文を漏らさない。
+  const out=[];
+  function pushRun(run){
+    if(run.length<2) return;
+    for(let a=0;a<run.length;a++){
+      for(let b=a+1;b<run.length;b++){
+        const seg=run.slice(a,b+1);
+        if(Number.isInteger(placeIndex) && !seg.some(s=>s.i===placeIndex)) continue;
+        out.push(seg.map(s=>String(s.w||'')).join(' '));
       }
     }
+  }
+  for(let y=0;y<N;y++){
+    let run=[];
+    for(let x=0;x<N;x++){
+      const i=idx(x,y), c=state.board[i];
+      if(c&&c.w) run.push({i,w:c.w}); else {pushRun(run); run=[];}
+    }
+    pushRun(run);
+  }
+  for(let x=0;x<N;x++){
+    let run=[];
+    for(let y=0;y<N;y++){
+      const i=idx(x,y), c=state.board[i];
+      if(c&&c.w) run.push({i,w:c.w}); else {pushRun(run); run=[];}
+    }
+    pushRun(run);
+  }
+  return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
+}
+let handCompletionInFlight=false;
+let handCompletionLastKey='';
+let handCompletionLastAt=0;
+async function refreshFailReasonWithHandCandidates(opts={}){
+  // v69: 手札補完は「配置直後」だけではなく、失敗理由が表示されている間に
+  // 継続的に復旧確認する。例: 盤面 I like / 手札 apples → I like apples。
+  if(!linkGrammarApi || handCompletionInFlight) return false;
+  const ctx=lastReasonDisplayContext;
+  const handWords=currentReasonHandWords(!!opts.selectedOnly, ctx);
+  if(!handWords.length) return false;
+  const rejectTexts=[];
+  const rejects=(ctx ? bestRejectCandidates(ctx.placeIndex) : (lastScanRejects||[])).slice(0,10);
+  rejects.forEach(r=>{ const t=String(r?.text||'').trim(); if(t) rejectTexts.push(t); });
+  if(ctx) rejectTexts.push(...boardLineReasonTexts(ctx.placeIndex));
+  const baseTexts=[...new Set(rejectTexts.map(x=>String(x||'').trim()).filter(Boolean))].slice(0,12);
+  if(!baseTexts.length) return false;
+  const key=JSON.stringify({placeIndex:ctx?.placeIndex??-1, bases:baseTexts, hand:handWords});
+  const now=Date.now();
+  if(!opts.force && key===handCompletionLastKey && now-handCompletionLastAt<7000) return false;
+  handCompletionLastKey=key; handCompletionLastAt=now;
+  handCompletionInFlight=true;
+  const tried=new Set();
+  let seq=0;
+  try{
+    for(const baseText of baseTexts){
+      if(!baseText) continue;
+      for(const handWord of handWords){
+        const probes=[baseText+' '+handWord, handWord+' '+baseText];
+        for(const probe of probes){
+          const key2=norm(String(probe).split(/\s+/));
+          if(tried.has(key2)) continue;
+          tried.add(key2);
+          try{
+            const data=await singleApiCheckText(probe, seq++);
+            const ok=!!(data && (data.gameOk===true || data.ok===true) && (data.type==='complete_sentence' || data.acceptability?.gameOk===true));
+            if(ok){
+              const where=probe.toLowerCase().endsWith((' '+handWord).toLowerCase())?'後ろ':'前';
+              setMsg(`不成立理由：手札の「${handWord}」を${where}に置くと英文になります。候補: ${displayEnglish(String(probe).split(/\s+/))}`,'bad',{judge:true});
+              return true;
+            }
+          }catch(e){ console.warn('hand completion check failed', e); }
+        }
+      }
+    }
+  }finally{
+    handCompletionInFlight=false;
   }
   return false;
 }
@@ -1514,11 +1562,11 @@ async function refreshFailReasonWithSelectedHand(){
 }
 
 function schedulePostJudgeHandCompletionReason(){
-  // v68: 置いた直後は scanFromCell/check/reason の非同期処理中で、
+  // v69: 置いた直後は scanFromCell/check/reason の非同期処理中で、
   // 80msだけでは手札補完が走らないことがある。複数回リトライする。
   [0, 250, 800, 1600].forEach(ms=>{
     setTimeout(()=>{
-      refreshFailReasonWithHandCandidates({selectedOnly:false}).catch(e=>console.warn('post judge hand completion failed', e));
+      refreshFailReasonWithHandCandidates({selectedOnly:false,force:ms===0}).catch(e=>console.warn('post judge hand completion failed', e));
     }, ms);
   });
 }
@@ -1550,7 +1598,7 @@ function routeRejectText(r){
   return '';
 }
 function buildFailInfo(placeIndex, word, successes=[]){
-  lastReasonDisplayContext={placeIndex,word,partial:false,cls:'bad'};
+  { const pi=state.turn%state.playerCount; const hp=(state.players[pi]?.hand||[]).map(String); lastReasonDisplayContext={placeIndex,word,partial:false,cls:'bad',playerIndex:pi,handSnapshot:hp}; }
   const successCellSets=(successes||[]).map(m=>new Set(m.cells||[]));
   const rejects=bestRejectCandidates(placeIndex).filter(r=>{
     const rcells=r.cells||[];
@@ -1713,7 +1761,7 @@ async function placeTile(cellIndex){
   render();
   if(state.lastJudgeMsg){setMsg(state.lastJudgeMsg,state.lastJudgeClass||'info');}
   placementJudgeBusy=false;
-  // v68: ロック解除後にも必ずもう一度、盤面+全手札の補完候補を確認する。
+  // v69: ロック解除後にも必ずもう一度、盤面+全手札の補完候補を確認する。
   // 例: 盤面 I like / 手札 apples → I like apples。
   if(lastReasonDisplayContext && !lastReasonDisplayContext.partial){
     schedulePostJudgeHandCompletionReason();
@@ -1775,6 +1823,19 @@ function handleNet(raw){eachPayload(raw,(msg)=>{
     if(msg.state.gameId!==state.gameId || incomingTurn>=state.turnNo){applyState(msg.state,'オンライン同期');}
   }
 });}
+
+// v69: 配置直後のsetTimeoutだけでは、古いメッセージ復元・reason polling・turn更新に負ける場合がある。
+// 不成立理由が表示されていて、直前のNG文に手札を1枚足せば成立する可能性がある間は、
+// 低頻度で補完確認を継続する。API判定だけを採用し、ローカル文法ハードコードはしない。
+setInterval(()=>{
+  try{
+    if(!lastReasonDisplayContext || lastReasonDisplayContext.partial) return;
+    const m=String($('msg')?.textContent||'');
+    if(!m.includes('不成立理由') && !m.includes('API判定NG候補') && !m.includes('成立する経路')) return;
+    refreshFailReasonWithHandCandidates({selectedOnly:false}).catch(e=>console.warn('persistent hand completion failed', e));
+  }catch(e){}
+}, 1400);
+
 $('startBtn').onclick=()=>{clearEnglishJudgeCache();unlockSpeech();$('start').style.display='none';render();};
 $('connectBtn').onclick=()=>{unlockSpeech();connect();};
 $('newGameBtn').onclick=()=>newGame(true);
