@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <title>English Word Pittan Online</title>
 <!-- fix: grammar-engine generated pattern evaluator 2026-06-26-2110 -->
-<!-- latest: v73 reason queue display fix + client poll timeout 2026-06-28 -->
+<!-- latest: v81 reason browser API poll fix 2026-06-28 -->
 <style>
   :root{
     --bg1:#07101d;--bg2:#102a52;--panel:rgba(15,23,42,.82);--line:rgba(255,255,255,.18);
@@ -988,6 +988,11 @@ function showComboDetails(scoring,comboInfo){
 const REASON_POLL_MAX_ITEMS=8;
 const REASON_POLL_FAST_MS=1200;
 const REASON_POLL_SLOW_MS=2800;
+// v81: reasonJobId 取得後の polling で使う変数が未定義だと、
+// pendingReasonList() が ReferenceError で落ち、/reason-result を一度も叩けない。
+// 画面は「理由解析待ち」のまま固まる。ブラウザAPI確認以前にここで止まっていた。
+const REASON_POLL_GIVEUP_MS=45000;
+const reasonPollFirstSeenAt=Object.create(null);
 let reasonPollTimer=null;
 let reasonPollHeartbeat=null;
 let reasonPollInFlight=false;
@@ -1095,6 +1100,9 @@ function updateReasonForText(text, reasonExplain, status='success'){
 }
 function pendingReasonList(){
   // v70: reason poll は「今回の一手でAPIが返した reasonJobId」だけを見る。
+  // v81: この関数はheartbeat/render経由で頻繁に呼ぶため、未定義変数等で例外を投げると
+  // poll全体が止まる。必ず空配列へ倒してUIロック/待ち表示の永久化を避ける。
+  try{
   // v74: さらに同一reasonJobIdだけに限定し、古いpending/queueIndex表示で増殖して見える状態を避ける。
   const rejects=[];
   for(const r of lastScanRejects||[]){
@@ -1130,6 +1138,10 @@ function pendingReasonList(){
     seen.add(key); uniq.push(r);
   }
   return uniq;
+  }catch(e){
+    console.warn('pendingReasonList failed', e);
+    return [];
+  }
 }
 function hasPendingReasons(){ return pendingReasonList().length>0; }
 async function ensureReasonWakeLock(){
@@ -1217,7 +1229,14 @@ async function pollPendingReasons(){
           reasonRunningText: data.runningText || ''
         }) || changed;
       }
-    }catch(e){ console.warn('reason-result poll failed', e); }
+    }catch(e){
+      console.warn('reason-result poll failed', e);
+      changed = updateReasonJobStateForText(r.text || '', {
+        reasonStatus:'error',
+        reasonJobId:r.reasonJobId || '',
+        reasonJobError:'browser fetch /reason-result failed: '+String(e?.message||e)
+      }) || changed;
+    }
   }
   } finally {
     reasonPollInFlight=false;
@@ -1380,6 +1399,13 @@ function requestDisplayedRejectReason(r){
           reasonPrioritySeq:data.prioritySeq || 0
         });
         try{localStorage.setItem(LINK_GRAMMAR_CACHE_KEY,JSON.stringify(linkGrammarCache));}catch(e){}
+        try{
+          const rid=String(data?.id||'');
+          if(rid){
+            addLog(`ブラウザAPI確認: ${base}/reason-result?id=${encodeURIComponent(rid)}`, true);
+            addLog(`理由キュー確認: ${base}/reason-queue`, true);
+          }
+        }catch(e){}
         if(data?.reasonExplain){
           updateReasonForText(text, data.reasonExplain, data.status || 'success');
         }
