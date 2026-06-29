@@ -137,7 +137,7 @@ try{
 }catch(e){ console.error('early start bind failed', e); }
 try{
 
-const APP_VERSION='v101-no-browser-judge-cache';
+const APP_VERSION='v108-place-card-combo-rescue';
 const $ = id => document.getElementById(id);
 const WS_URL = 'wss://mine-server-git2.vigourjp2.workers.dev/room/english';
 const N = 7;
@@ -913,18 +913,33 @@ async function rescueAcceptedPrefixCandidates(routeCandidates, placeIndex){
       items.push({seg, words, text:displayEnglish(words), label:c.label});
     }
   }
-  // 短い完成文を優先して救済する。NG理由を出すより先に、現在APIの正答を拾う。
-  items.sort((a,b)=>a.words.length-b.words.length || a.seg[0].i-b.seg[0].i);
-  for(const item of items.slice(0,32)){
-    try{
-      const data=await singleApiCheckItem(base,{text:item.text, words:item.words, wordMeta:wordMetaForApi(item.words), reasonPriorityEpoch:Date.now(), reasonPrioritySeq:0});
-      const ev=evFromApiResult(data,item.words);
-      if(ev){
-        out.push({...ev,cells:item.seg.map(s=>s.i),dir:item.label||'prefix-rescue',source:'api-prefix-rescue-v100'});
-      }
-    }catch(e){ console.warn('prefix rescue check failed', item.text, e); }
-    if(out.length) break;
+  // v108: 救済でもコンボを殺さない。
+  // 旧実装は短い候補から確認し、最初に1件OKが出た時点で break していた。
+  // そのため today 配置時に `like soccer today` が先に通ると、
+  // 同じ today を含む `I am happy today` / `I like soccer today` まで確認せずコンボ漏れした。
+  // 文そのもののハードコードではなく、今回置いたセルを含む候補だけを長い順にAPI確認し、OKを全部返す。
+  items.sort((a,b)=>b.words.length-a.words.length || a.seg[0].i-b.seg[0].i);
+  const targets=items.slice(0,64);
+  const acceptedKeys=new Set();
+  const concurrency=4;
+  let next=0;
+  async function worker(){
+    while(next<targets.length){
+      const item=targets[next++];
+      try{
+        const data=await singleApiCheckItem(base,{text:item.text, words:item.words, wordMeta:wordMetaForApi(item.words), reasonPriorityEpoch:Date.now(), reasonPrioritySeq:0});
+        const ev=evFromApiResult(data,item.words);
+        if(ev){
+          const k=item.seg.map(s=>s.i).join(',')+'|'+norm(item.words);
+          if(!acceptedKeys.has(k)){
+            acceptedKeys.add(k);
+            out.push({...ev,cells:item.seg.map(s=>s.i),dir:item.label||'prefix-rescue',source:'api-prefix-rescue-v108'});
+          }
+        }
+      }catch(e){ console.warn('prefix rescue check failed', item.text, e); }
+    }
   }
+  await Promise.all(Array.from({length:Math.min(concurrency,targets.length)}, worker));
   if(out.length){
     lastScanRejects=[];
   }
