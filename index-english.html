@@ -28,6 +28,7 @@
 
   .fxBanner{position:fixed;left:50%;top:18%;transform:translateX(-50%) scale(.9);z-index:70;pointer-events:none;opacity:0;min-width:min(520px,92vw);text-align:center;padding:18px 16px;border-radius:24px;background:linear-gradient(135deg,rgba(22,163,74,.92),rgba(37,99,235,.9));border:2px solid rgba(255,255,255,.38);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 40px rgba(134,239,172,.35)}
   .fxBanner.show{animation:bannerBoom 2.4s ease both}.fxBanner.combo{background:linear-gradient(135deg,rgba(245,158,11,.94),rgba(219,39,119,.92),rgba(37,99,235,.9));box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 50px rgba(250,204,21,.52)}.fxBig{font-size:30px;font-weight:1000;letter-spacing:.02em;text-shadow:0 3px 12px rgba(0,0,0,.35)}.fxEn{font-size:21px;font-weight:1000;margin-top:4px}.fxJa{font-size:16px;color:#fef3c7;margin-top:2px}.fxPts{font-size:18px;color:#bbf7d0;font-weight:1000;margin-top:4px}
+  .winnerOverlay{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:18px;background:radial-gradient(circle at 50% 20%,rgba(250,204,21,.22),rgba(2,6,23,.76) 48%,rgba(0,0,0,.86));pointer-events:auto}.winnerOverlay.show{display:flex;animation:winnerFade .22s ease both}.winnerCard{width:min(620px,94vw);border-radius:28px;padding:22px;text-align:center;background:linear-gradient(135deg,rgba(15,23,42,.96),rgba(30,41,59,.92));border:2px solid rgba(250,204,21,.72);box-shadow:0 30px 100px rgba(0,0,0,.65),0 0 55px rgba(250,204,21,.35)}.winnerTitle{font-size:38px;font-weight:1000;letter-spacing:.04em;color:#fde68a;text-shadow:0 3px 16px rgba(0,0,0,.5)}.winnerName{font-size:28px;font-weight:1000;margin-top:8px}.winnerScore{font-size:18px;font-weight:900;color:#bbf7d0;margin-top:8px}.winnerRank{margin-top:14px;display:grid;gap:6px}.winnerRankRow{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);border-radius:13px;padding:8px;text-align:left}.winnerNote{margin-top:16px;font-size:13px;color:#dbeafe;line-height:1.45}@keyframes winnerFade{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
 
   .sentenceImagePanel{position:fixed;right:14px;top:88px;z-index:68;width:min(380px,94vw);display:none;background:rgba(15,23,42,.96);border:2px solid rgba(147,197,253,.55);border-radius:22px;padding:12px;box-shadow:0 24px 70px rgba(0,0,0,.58),0 0 32px rgba(56,189,248,.2);pointer-events:auto}.sentenceImagePanel.show{display:block;animation:sentenceImagePop .22s ease both}.sentenceImageClose{position:absolute;right:8px;top:8px;width:34px;height:34px;border:0;border-radius:999px;background:rgba(255,255,255,.18);color:#fff;font-weight:1000;font-size:20px;z-index:5;pointer-events:auto;touch-action:manipulation}.sentenceImageTitle{padding-right:34px;font-size:18px;font-weight:1000;color:#fff;line-height:1.25;overflow-wrap:anywhere}.sentenceImageSub{margin-top:4px;font-size:13px;color:#fde68a;line-height:1.35;overflow-wrap:anywhere}.sentenceImageArt{position:relative;margin-top:10px;height:220px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center}.sentenceImageArt svg{width:100%;height:100%;display:block}.sentenceImageArt img{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;display:block;background:rgba(255,255,255,.92)}.sentenceImageLoading,.sentenceImageFallback{font-size:14px;line-height:1.55;color:#dbeafe;padding:12px}.sentenceImageCredit{position:absolute;left:8px;right:8px;bottom:8px;border-radius:12px;background:rgba(2,6,23,.68);border:1px solid rgba(255,255,255,.14);padding:5px 7px;font-size:10px;color:#bfdbfe;line-height:1.25;text-align:left;max-height:42px;overflow:hidden}.sentenceImageCredit a{color:#bfdbfe;text-decoration:underline}.sentenceImagePrompt{position:absolute;left:8px;right:8px;bottom:8px;border-radius:12px;background:rgba(2,6,23,.68);border:1px solid rgba(255,255,255,.14);padding:5px 7px;font-size:10px;color:#bfdbfe;line-height:1.25;text-align:left;max-height:42px;overflow:hidden}@keyframes sentenceImagePop{from{opacity:0;transform:translateY(-8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}@media(max-width:780px){.sentenceImagePanel{left:50%;right:auto;top:auto;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(380px,94vw)}.sentenceImagePanel.show{animation:sentenceImagePopMobile .22s ease both}@keyframes sentenceImagePopMobile{from{opacity:0;transform:translateX(-50%) translateY(8px) scale(.96)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}}
   .comboPanel{position:fixed;left:50%;top:33%;transform:translateX(-50%);z-index:69;width:min(620px,94vw);max-height:48vh;overflow:auto;background:rgba(15,23,42,.96);border:2px solid rgba(250,204,21,.55);border-radius:20px;padding:12px;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 35px rgba(250,204,21,.25);display:none;pointer-events:auto}.comboPanel.show{display:block;animation:comboHold .25s ease both}.comboPanel h3{margin:0 34px 8px 0;font-size:17px;color:#fde68a}.comboClose{position:sticky;top:0;float:right;z-index:2;width:30px;height:30px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(15,23,42,.92);color:#fff;font-size:20px;font-weight:1000;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.35)}.comboItem{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);border-radius:13px;padding:8px;margin-top:7px}.comboItem.active{outline:2px solid rgba(56,189,248,.75);background:rgba(56,189,248,.13)}.comboItem b{color:#fff;font-size:15px}.comboJa{color:#fef3c7;font-size:12px;margin-top:2px}.comboRoute{font-size:11px;color:#bfdbfe;margin-top:4px;line-height:1.35}.comboCards{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.routeChip{font-size:10px;font-weight:900;border-radius:999px;background:rgba(56,189,248,.18);border:1px solid rgba(125,211,252,.35);padding:3px 6px;color:#dbeafe}.cell.routeHit{outline:3px solid rgba(250,204,21,.95);box-shadow:0 0 18px rgba(250,204,21,.75), inset 0 0 14px rgba(250,204,21,.2);transform:scale(1.04)}.routeStep{position:absolute;right:4px;top:4px;min-width:16px;height:16px;border-radius:999px;background:#facc15;color:#111827;font-size:10px;font-weight:1000;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.35)}@keyframes comboHold{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
@@ -65,6 +66,7 @@
   </div>
 </div>
 <div id="fxBanner" class="fxBanner"><div class="fxBig">GOOD!</div><div class="fxEn" id="fxEn"></div><div class="fxJa" id="fxJa"></div><div class="fxPts" id="fxPts"></div></div>
+<div id="winnerOverlay" class="winnerOverlay" aria-live="polite"><div class="winnerCard"><div class="winnerTitle" id="winnerTitle">WINNER!</div><div class="winnerName" id="winnerName"></div><div class="winnerScore" id="winnerScore"></div><div class="winnerRank" id="winnerRank"></div><div class="winnerNote">盤面がすべて埋まったためゲーム終了。陣地数優先、同数なら得点で判定。</div></div></div>
 <div id="comboPanel" class="comboPanel"><button id="comboClose" class="comboClose" type="button">×</button><h3 id="comboTitle">成立詳細</h3><div id="comboList"></div></div>
 <div id="sentenceImagePanel" class="sentenceImagePanel" aria-live="polite">
   <button id="sentenceImageClose" class="sentenceImageClose" type="button">×</button>
@@ -137,7 +139,7 @@ try{
 }catch(e){ console.error('early start bind failed', e); }
 try{
 
-const APP_VERSION='v113-board-full-winner';
+const APP_VERSION='v116-winner-only-from-v112';
 const $ = id => document.getElementById(id);
 const N = 7;
 const COLORS = ['#38bdf8','#f472b6','#a3e635','#facc15'];
@@ -1923,17 +1925,16 @@ function continuationMessage(c){
 let placementJudgeBusy=false;
 let placementJudgeSeq=0;
 async function placeTile(cellIndex){
+  if(state?.gameOver){
+    setMsg('ゲーム終了済みです。新規ゲームで再開してください。','bad');
+    renderWinnerOverlay();
+    return;
+  }
   // v14: 判定中に次のカードを置かせない。
   // 連打で複数の scan/check-and-translate が並走すると、古い判定結果が後から戻って
   // 新しい盤面へ上書きされ、gameOk:true の文まで NG/pending に見える。
   if(placementJudgeBusy){
     setMsg('判定中…。結果が出てから次のカードを置いてください。','info');
-    return;
-  }
-  if(state?.gameOver){
-    setMsg('ゲーム終了済みです。新規ゲームで再開してください。','bad');
-    selectedHandIndex=-1;
-    render();
     return;
   }
   if(!isMyTurn()){
@@ -2160,7 +2161,7 @@ function thirdPersonFormOf(word){
   return w+'s';
 }
 function toggleSelectedThirdPerson(){
-  if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください','bad');return;}
+  if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください。','bad');renderWinnerOverlay();return;}
   if(placementJudgeBusy){setMsg('判定中…。結果が出てから手札を変化してください。','info');return;}
   if(!isMyTurn()){setMsg('自分のターンではありません','bad');return;}
   const p=currentPlayer();
@@ -2199,19 +2200,15 @@ function toggleSelectedThirdPerson(){
   broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'third-person-toggle'});
 }
 
-function drawOne(){return WORDS[Math.floor(Math.random()*WORDS.length)].w}
-function nextTurn(){state.turn=(state.turn+1)%state.playerCount;state.turnNo++;}
-function recalcTiles(){state.players.forEach(p=>p.tiles=0);state.board.forEach(c=>{if(c&&state.players[c.owner])state.players[c.owner].tiles++;});}
-function isBoardFull(){return !!(state?.board?.length) && state.board.every(Boolean);}
-function sortedPlayersForWin(){
-  return (state.players||[]).map((p,i)=>({i,name:p?.name||`Player ${i+1}`,color:p?.color||COLORS[i]||'#fff',tiles:Number(p?.tiles||0),score:Number(p?.score||0)}))
-    .sort((a,b)=>(b.tiles-a.tiles)||(b.score-a.score)||(a.i-b.i));
+function isBoardFull(){return Array.isArray(state?.board) && state.board.length===N*N && state.board.every(Boolean);}
+function rankingByTilesThenScore(){
+  return (state.players||[]).map((p,i)=>({i,name:p?.name||('Player '+(i+1)),color:p?.color||COLORS[i]||'#fff',tiles:Number(p?.tiles||0),score:Number(p?.score||0)})).sort((a,b)=>(b.tiles-a.tiles)||(b.score-a.score)||(a.i-b.i));
 }
 function finishGame(reason='board-full'){
   recalcTiles();
-  const ranking=sortedPlayersForWin();
+  const ranking=rankingByTilesThenScore();
   const top=ranking[0];
-  if(!top) return false;
+  if(!top) return;
   const winners=ranking.filter(x=>x.tiles===top.tiles && x.score===top.score);
   state.gameOver=true;
   state.winnerIndex=top.i;
@@ -2219,56 +2216,45 @@ function finishGame(reason='board-full'){
   state.endedAt=Date.now();
   state.endReason=reason;
   state.attackChance=null;
-  selectedHandIndex=-1;
   const label=winners.length>1 ? `DRAW: ${winners.map(x=>playerDisplay(x.i)).join(' / ')}` : `WINNER: ${playerDisplay(top.i)}`;
   addLog(`${label} / 陣地${top.tiles} / ${top.score}点`,true);
-  setMsg(`${label}！ 陣地${top.tiles} / ${top.score}点`, 'good');
-  playWinnerFx(ranking);
-  return true;
+  setMsg(`${label}！ 盤面がすべて埋まりました。`, 'good');
+  showWinnerFx();
+  renderWinnerOverlay();
 }
-function ensureWinnerOverlay(){
-  let el=document.getElementById('winnerOverlay');
-  if(el) return el;
-  el=document.createElement('div');
-  el.id='winnerOverlay';
-  el.style.cssText='position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;padding:18px;background:radial-gradient(circle at 50% 20%,rgba(250,204,21,.20),rgba(3,7,18,.76) 45%,rgba(3,7,18,.92));backdrop-filter:blur(6px);pointer-events:none;';
-  el.innerHTML='<div id="winnerCard" style="width:min(620px,94vw);border-radius:28px;padding:22px;text-align:center;background:linear-gradient(135deg,rgba(15,23,42,.96),rgba(30,41,59,.92));border:2px solid rgba(250,204,21,.72);box-shadow:0 30px 100px rgba(0,0,0,.65),0 0 55px rgba(250,204,21,.35);"><div id="winnerTitle" style="font-size:38px;font-weight:1000;letter-spacing:.04em;color:#fde68a;text-shadow:0 3px 16px rgba(0,0,0,.5);">WINNER!</div><div id="winnerName" style="font-size:28px;font-weight:1000;margin-top:8px;"></div><div id="winnerScore" style="font-size:18px;font-weight:900;color:#bbf7d0;margin-top:8px;"></div><div id="winnerRank" style="margin-top:14px;display:grid;gap:6px;"></div><div style="margin-top:16px;font-size:13px;color:#dbeafe;">盤面がすべて埋まったためゲーム終了。陣地数優先、同数なら得点で判定。</div></div>';
-  document.body.appendChild(el);
-  return el;
-}
-function updateWinnerOverlay(){
-  const el=ensureWinnerOverlay();
-  if(!state?.gameOver){ el.style.display='none'; return; }
-  const ranking=sortedPlayersForWin();
+function renderWinnerOverlay(){
+  const el=$('winnerOverlay');
+  if(!el) return;
+  if(!state?.gameOver){el.classList.remove('show');return;}
+  const ranking=rankingByTilesThenScore();
   const top=ranking[0];
   const winners=Array.isArray(state.winnerIndexes)&&state.winnerIndexes.length ? state.winnerIndexes : [state.winnerIndex];
   const draw=winners.length>1;
-  el.style.display='flex';
-  const title=document.getElementById('winnerTitle');
-  const name=document.getElementById('winnerName');
-  const score=document.getElementById('winnerScore');
-  const rank=document.getElementById('winnerRank');
+  const title=$('winnerTitle'), name=$('winnerName'), score=$('winnerScore'), rank=$('winnerRank');
   if(title) title.textContent=draw?'DRAW!':'WINNER!';
   if(name){ name.textContent=draw?winners.map(i=>playerDisplay(i)).join(' / '):playerDisplay(top?.i??state.winnerIndex??0); name.style.color=top?.color||'#fde68a'; }
-  if(score) score.textContent=top?`陣地 ${top.tiles} / 得点 ${top.score}`:'';
-  if(rank) rank.innerHTML=ranking.map((r,idx)=>`<div style="display:grid;grid-template-columns:42px 1fr auto;gap:8px;align-items:center;padding:8px 10px;border-radius:13px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);"><b style="color:#fde68a">#${idx+1}</b><span style="text-align:left;color:${r.color};font-weight:1000">${esc(playerDisplay(r.i))}</span><span style="font-weight:1000">陣地${r.tiles} / ${r.score}点</span></div>`).join('');
-}
-function playWinnerFx(ranking){
-  try{playChime(true);setTimeout(()=>playChime(true),260);}catch(e){}
-  const top=ranking?.[0];
-  const fx=$('fxBanner');
-  if(fx){
-    fx.classList.add('combo');
-    fx.querySelector('.fxBig').textContent='WINNER!';
-    $('fxEn').textContent=top?playerDisplay(top.i):'GAME SET';
-    $('fxJa').textContent=top?`陣地 ${top.tiles} / 得点 ${top.score}`:'盤面がすべて埋まりました';
-    $('fxPts').textContent='GAME SET';
-    fx.classList.remove('show');void fx.offsetWidth;fx.classList.add('show');
+  if(score) score.textContent=top?`陣地 ${top.tiles} / ${top.score} 点`:'';
+  if(rank){
+    rank.innerHTML=ranking.map((r,idx)=>`<div class="winnerRankRow"><b style="color:${r.color}">${idx+1}. ${playerTag(r.i)}</b><span>${esc(r.name)}</span><b>陣地${r.tiles} / ${r.score}点</b></div>`).join('');
   }
-  updateWinnerOverlay();
-  const cx=innerWidth/2, cy=innerHeight*.36;
-  for(let i=0;i<72;i++){const sp=document.createElement('i');sp.className='spark';sp.style.left=cx+'px';sp.style.top=cy+'px';const a=Math.random()*Math.PI*2,d=70+Math.random()*220;sp.style.setProperty('--dx',Math.cos(a)*d+'px');sp.style.setProperty('--dy',Math.sin(a)*d+'px');document.body.appendChild(sp);setTimeout(()=>sp.remove(),1100);}
+  el.classList.add('show');
 }
+function showWinnerFx(){
+  const fx=$('fxBanner');
+  if(!fx) return;
+  const ranking=rankingByTilesThenScore();
+  const top=ranking[0];
+  const winners=Array.isArray(state.winnerIndexes)&&state.winnerIndexes.length ? state.winnerIndexes : [state.winnerIndex];
+  fx.classList.add('combo');
+  fx.querySelector('.fxBig').textContent=winners.length>1?'DRAW!':'WINNER!';
+  $('fxEn').textContent=winners.length>1?winners.map(i=>playerDisplay(i)).join(' / '):(top?playerDisplay(top.i):'GAME SET');
+  $('fxJa').textContent=top?`陣地${top.tiles} / ${top.score}点`:'';
+  $('fxPts').textContent='GAME SET';
+  fx.classList.remove('show'); void fx.offsetWidth; fx.classList.add('show');
+}
+function drawOne(){return WORDS[Math.floor(Math.random()*WORDS.length)].w}
+function nextTurn(){state.turn=(state.turn+1)%state.playerCount;state.turnNo++;}
+function recalcTiles(){state.players.forEach(p=>p.tiles=0);state.board.forEach(c=>{if(c&&state.players[c.owner])state.players[c.owner].tiles++;});}
 function lightState(){return JSON.parse(JSON.stringify(state));}
 function roomHostIdOf(s){ return String(s?.roomHostId || ''); }
 function roomCreatedAtOf(s){ return Number(s?.roomCreatedAt || 0); }
@@ -2324,8 +2310,8 @@ function applyState(s,why='同期'){
   setMsg(`${why} / 自分は${hasSeat?playerTag(playerIndexForClient(clientId)):'席割当待ち'}です`,'good');render();
   return hasSeat && !incomingHadSeat;
 }
-function passTurn(){if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください','bad');return;}if(!isMyTurn()){setMsg('自分のターンではありません','bad');return;}const p=currentPlayer();addLog(`${p.name}: パス`,false);state.attackChance=null;nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'pass'});render();}
-function swapHand(){if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください','bad');return;}if(!isMyTurn()){setMsg('自分のターンではありません','bad');return;}const p=currentPlayer();p.hand=drawHand(99);p.handMeta=[];p.score=Math.max(0,p.score-5);addLog(`${p.name}: 手札入替 -5`,false);state.attackChance=null;nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'swap'});render();}
+function passTurn(){if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください','bad');renderWinnerOverlay();return;}if(!isMyTurn()){setMsg('自分のターンではありません','bad');return;}const p=currentPlayer();addLog(`${p.name}: パス`,false);state.attackChance=null;nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'pass'});render();}
+function swapHand(){if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください','bad');renderWinnerOverlay();return;}if(!isMyTurn()){setMsg('自分のターンではありません','bad');return;}const p=currentPlayer();p.hand=drawHand(99);p.handMeta=[];p.score=Math.max(0,p.score-5);addLog(`${p.name}: 手札入替 -5`,false);state.attackChance=null;nextTurn();broadcast({type:'englishState',gameId:state.gameId,state:lightState(),reason:'swap'});render();}
 function newGame(broadcastIt=true){
   if(broadcastIt && isOnlineGame() && !canHostControl()){
     setMsg('新規ゲーム開始はP1端末だけです。P2以降はP1の開始を待ってください。','bad');
@@ -2342,12 +2328,11 @@ function render(){
   const attackNow=!state.gameOver && isAttackChanceActiveFor(state.turn%state.playerCount);
   $('turnPlayer').textContent=tp?`${playerDisplay(state.turn%state.playerCount)}${attackNow?'（アタックチャンス）':''}`:'-';$('turnPlayer').style.color=tp?tp.color:'#fff';
   const b=$('board');b.innerHTML='';state.board.forEach((c,i)=>{const d=document.createElement('button');const rule=canPlaceAt(i);d.className='cell '+(!c?'empty ':'')+(recentCells.includes(i)?'recent hit ':'');d.type='button';const routeNo=routeFocusCells.indexOf(i);if(routeNo>=0)d.classList.add('routeHit');if(i===failFocusCell)d.classList.add('failFocus');if(rule.ok&&selectedHandIndex>=0&&!placementJudgeBusy&&myTurn)d.classList.add('selectable');if(c){const ownerColor=state.players[c.owner]?.color||'#fff';if(c.pendingSentence)d.classList.add('unused');d.innerHTML=`<span class="owner" style="background:${ownerColor}"></span>${routeNo>=0?`<span class="routeStep">${routeNo+1}</span>`:''}<span class="word">${esc(c.w)}</span>${c.pendingSentence?'<span class="unusedMark">採点前</span>':''}<span class="pts">P${(c.owner||0)+1}</span>`;d.style.background=`linear-gradient(180deg, ${hexAlpha(ownerColor,.42)}, ${hexAlpha(ownerColor,.18)}, rgba(255,255,255,.05))`;d.style.borderColor=hexAlpha(ownerColor,.86);d.style.color='#fff';} d.onclick=()=>placeTile(i);b.appendChild(d);});
-  const h=$('hand');h.innerHTML='';(lp?.hand||[]).forEach((w,i)=>{const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'')+(!myTurn?' used':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(displayHandLabel(w))}</small>`;t.onclick=()=>{if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください。','bad');return;}if(placementJudgeBusy){setMsg('判定中…。成立確定ではありません。結果が出るまで操作ロック中。','info');return;}if(!myTurn){setMsg(`ちょっと待って。今は${playerDisplay(state.turn%state.playerCount)}のターンです。あなたは${lpIndex>=0?playerTag(lpIndex):'観戦'}です。`,'bad');return;}selectedHandIndex=i;render();refreshFailReasonWithSelectedHand();};h.appendChild(t);});
+  const h=$('hand');h.innerHTML='';(lp?.hand||[]).forEach((w,i)=>{const pos=handInfo(w);const t=document.createElement('button');t.type='button';t.className='tile cat-'+pos.key+' '+(i===selectedHandIndex?'on':'')+(!myTurn?' used':'');t.innerHTML=`<span>${esc(w)}</span><small>${esc(displayHandLabel(w))}</small>`;t.onclick=()=>{if(state?.gameOver){setMsg('ゲーム終了済みです。新規ゲームで再開してください。','bad');renderWinnerOverlay();return;}if(placementJudgeBusy){setMsg('判定中…。成立確定ではありません。結果が出るまで操作ロック中。','info');return;}if(!myTurn){setMsg(`ちょっと待って。今は${playerDisplay(state.turn%state.playerCount)}のターンです。あなたは${lpIndex>=0?playerTag(lpIndex):'観戦'}です。`,'bad');return;}selectedHandIndex=i;render();refreshFailReasonWithSelectedHand();};h.appendChild(t);});
   $('selectedInfo').textContent=lpIndex<0?'観戦中（空きプレイヤー枠なし）':(selectedHandIndex>=0?`${playerTag(lpIndex)} 選択: ${(lp.hand||[])[selectedHandIndex]}${(lp.handMeta&&lp.handMeta[selectedHandIndex])?'（3単現）':''}`:`${playerTag(lpIndex)} ${myTurn?'手札を選択':'待機中'}`);
   const ps=$('players');ps.innerHTML='';state.players.forEach((p,i)=>{const row=document.createElement('div');row.className='player '+(i===state.turn?'current':'')+(p.clientId===clientId?' me':'');row.style.borderColor=hexAlpha(p.color,.70);row.innerHTML=`<span class="dot" style="background:${p.color}"></span><span class="pname"><b style="color:${p.color}">${playerTag(i)}</b> ${esc(p.name||'')} <small>${p.clientId===clientId?'自分 / ':''}陣地${p.tiles||0}${state.attackChance?.playerIndex===i?' / AC':''}</small></span><span class="pscore">${p.score}</span>`;ps.appendChild(row);});
   const log=$('log');log.innerHTML='';state.log.forEach(x=>{const div=document.createElement('div');div.className='logItem';div.innerHTML=`<span class="${x.good?'goodText':'badText'}">●</span> ${esc(x.text)}`;log.appendChild(div);});
-  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:StrictLG+LT API</span><span class="chip">ターン本人のみ操作</span><span class="chip">初手左上・以降隣接</span><span class="chip">角でAC</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
-  updateWinnerOverlay();
+  $('targetList').innerHTML=`<span class="chip">StrictLG:${esc(linkGrammarStatus)}</span><span class="chip">判定:StrictLG+LT API</span><span class="chip">ターン本人のみ操作</span><span class="chip">初手左上・以降隣接</span><span class="chip">角でAC</span><span class="chip">満杯でWINNER</span>`+targets.slice(0,10).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
   {const m=$('msg'); if(m){
     let t=state.statusText||''; let c=state.statusClass||'info';
     const generic=/成立なし|つなげ方/.test(t);
@@ -2355,6 +2340,7 @@ function render(){
     if(!t) t='単語タイルを選んで空きマスに置く';
     m.textContent=t; m.className='msg '+c;
   }}
+  renderWinnerOverlay();
 }
 function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function hexAlpha(hex,a){const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return `rgba(${r},${g},${b},${a})`;}
