@@ -1,13 +1,11 @@
-name = "mine-server-git2"
+name = "english-pittan-room"
 main = "src/index.js"
-compatibility_date = "2025-01-01"
-workers_dev = true
-preview_urls = true
+compatibility_date = "2026-06-30"
 
 [[durable_objects.bindings]]
 name = "ROOM"
-class_name = "Room"
+class_name = "EnglishRoom"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["Room"]
+new_sqlite_classes = ["EnglishRoom"]
