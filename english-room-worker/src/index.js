@@ -7,7 +7,7 @@ export default {
       return env.ROOM.get(id).fetch(request);
     }
     if (url.pathname === '/health') {
-      return Response.json({ ok: true, service: 'english-pittan-room-worker', version: 'v111-server-authoritative-seats' });
+      return Response.json({ ok: true, service: 'english-pittan-room-worker', version: 'v113-board-full-winner' });
     }
     return new Response('English Pittan room worker. Use /room/english for WebSocket.', { status: 200 });
   }
@@ -157,6 +157,9 @@ export class EnglishRoom {
     }
     if (!this.room.state) {
       return session.seatIndex === 0 ? { ok: true } : { ok: false, reason: 'P1の新規ゲーム開始待ちです。' };
+    }
+    if (this.room.state.gameOver) {
+      return { ok: false, reason: 'ゲーム終了済みです。新規ゲームで再開してください。' };
     }
     const turn = Number(this.room.state.turn || 0) % normalizePlayerCount(this.room.state.playerCount || this.room.playerCount);
     if (session.seatIndex !== turn) {
