@@ -7,7 +7,7 @@ export default {
       return env.ROOM.get(id).fetch(request);
     }
     if (url.pathname === '/health') {
-      return Response.json({ ok: true, service: 'english-pittan-room-worker', version: 'v111-server-authoritative-seats' });
+      return Response.json({ ok: true, service: 'english-pittan-room-worker', version: 'v118-p2-seat-cleanup-from-v112' });
     }
     return new Response('English Pittan room worker. Use /room/english for WebSocket.', { status: 200 });
   }
@@ -85,9 +85,23 @@ export class EnglishRoom {
     return (this.room.seats || []).findIndex(s => s && s.clientId === cid);
   }
 
+  pruneInactiveSeats() {
+    // v118: 席テーブルだけ掃除する。画面側のP1/P2判定・順番待ち処理・stateは触らない。
+    // Durable Objectのroom.seatsは永続なので、ブラウザ更新/別端末/キャッシュ削除で
+    // もう接続していないclientIdが席を占有すると、新しいP2が観戦扱いになる。
+    const activeIds = new Set([...this.sessions.values()].map(s => String(s.clientId || '')).filter(Boolean));
+    for (let i = 0; i < this.room.playerCount; i++) {
+      const seat = this.room.seats?.[i];
+      if (seat?.clientId && !activeIds.has(String(seat.clientId))) {
+        this.room.seats[i] = null;
+      }
+    }
+  }
+
   assignSeat(session) {
     const cid = String(session.clientId || '');
     if (!cid) return -1;
+    this.pruneInactiveSeats();
     const existing = this.seatIndexForClient(cid);
     if (existing >= 0) {
       this.room.seats[existing] = { clientId: cid, name: safeName(session.name, this.room.seats[existing]?.name || `Player ${existing + 1}`) };
