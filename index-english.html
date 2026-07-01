@@ -408,13 +408,10 @@ async function evaluateCandidatesByApi(routeCandidates){
     try{
       batchResults=await batchApiCheckItems(base,pending,reasonPriorityEpoch);
     }catch(e){
-      // v85: batchが404/一時失敗の古いAPIでも遊べるよう、最後の保険だけ直列fallback。
-      // 通常経路ではここへ来ない。reason jobは作らない。
-      console.warn('batch judge failed; fallback to single checks', e);
-      for(const item of pending){
-        try{ batchResults.push(await singleApiCheckItem(base,item)); }
-        catch(err){ batchResults.push({reason:'API一時未応答', type:'api_error'}); }
-      }
+      // v123: ここで単体 /check-and-translate に戻すと、結局0.7〜1.0秒×候補数で遅くなる。
+      // バッチ失敗時は単体fallbackしない。全候補をAPI一時未応答扱いにして、旧経路の再発を防ぐ。
+      console.warn('batch judge failed; no single fallback in v123', e);
+      batchResults = pending.map(()=>({reason:'API一時未応答', type:'api_error'}));
     }
 
     // v87: 先に成立有無だけを見る。
@@ -1121,7 +1118,8 @@ async function rescueAcceptedPrefixCandidates(routeCandidates, placeIndex){
   // v121のAPI側batch高速化は /check-and-translate-batch にしか効かないため、
   // ここが単体APIのままだと、成立0の局面で0.7〜1.0秒×最大32回の遅延が残る。
   // まとめてbatchへ渡して、最初に成立したprefixだけ採用する。
-  const rescueItems=items.slice(0,32).map((item,i)=>({
+  // v123: combo/候補数をここで制限しない。全prefix候補をbatchへ渡す。
+  const rescueItems=items.map((item,i)=>({
     ...item,
     id:String(i),
     wordMeta:wordMetaForApi(item.words),
@@ -1139,17 +1137,8 @@ async function rescueAcceptedPrefixCandidates(routeCandidates, placeIndex){
       }
     }
   }catch(e){
-    console.warn('prefix rescue batch failed; fallback to first 4 single checks', e);
-    for(const item of rescueItems.slice(0,4)){
-      try{
-        const data=await singleApiCheckItem(base,{text:item.text, words:item.words, wordMeta:item.wordMeta, reasonPriorityEpoch:item.reasonPriorityEpoch, reasonPrioritySeq:item.reasonPrioritySeq});
-        const ev=evFromApiResult(data,item.words);
-        if(ev){
-          out.push({...ev,cells:item.seg.map(s=>s.i),dir:item.label||'prefix-rescue',source:'api-prefix-rescue-v122-single-fallback'});
-          break;
-        }
-      }catch(err){ console.warn('prefix rescue fallback check failed', item.text, err); }
-    }
+    // v123: prefix救済でも単体fallbackしない。ここが旧oneshot連発の再発点だった。
+    console.warn('prefix rescue batch failed; no single fallback in v123', e);
   }
   if(out.length){
     lastScanRejects=[];
@@ -1244,7 +1233,8 @@ async function scanFromCell(placeIndex){
   }
   found.sort((a,b)=>(b.cells.length-a.cells.length)||(b.pts-a.pts));
   const seen=new Set();
-  return found.filter(f=>{const k=f.cells.join(',')+'|'+norm(f.text.split(' ')); if(seen.has(k)) return false; seen.add(k); return true;}).slice(0,24);
+  // v123: combo数を制限しない。成立したセル列+英文は全件採点対象へ返す。
+  return found.filter(f=>{const k=f.cells.join(',')+'|'+norm(f.text.split(' ')); if(seen.has(k)) return false; seen.add(k); return true;});
 }
 function selectScoringMatches(matches){
   // v94: 「一回使ったカードを同じターンの別成立経路で使えない」ように見える原因を撤去。
@@ -1895,7 +1885,8 @@ function buildCompletionProbeItems(baseText, handWords){
       add([...baseWords,a,b], 'add-right-2', [a,b]);
     }
   }
-  return items.slice(0,72);
+  // v123: 補完候補も固定上限で切らない。
+  return items;
 }
 async function findContinuationCandidate(placeIndex, word){
   const playerIndex=state.turn%state.playerCount;
