@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>小5 漢字｜手書き自動認識テスト</title>
+<style>
+:root{--bg:#0f172a;--ink:#f8fafc;--muted:#cbd5e1;--line:#334155;--pri:#2563eb;--ok:#16a34a;--ng:#dc2626;--warn:#f97316}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+.app{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+.top{padding:5px 8px calc(5px + env(safe-area-inset-top));background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(15,23,42,.82));border-bottom:1px solid var(--line)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.title{font-weight:900;font-size:13px;color:#93c5fd}.badge{border:1px solid var(--line);background:#1e293b;border-radius:999px;padding:4px 7px;font-size:11px;font-weight:900;color:#dbeafe}
+.q{font-weight:900;font-size:clamp(15px,4.1vw,24px);line-height:1.22;margin-top:4px;white-space:pre-line;max-height:5.2em;overflow:auto}.sub{font-size:11px;color:var(--muted);font-weight:800;margin-top:3px;line-height:1.25}.score{margin-left:auto;color:#cbd5e1;font-weight:900;font-size:12px}
+.canvasWrap{position:relative;min-height:0;background:#fff;touch-action:none;overflow:hidden}
+#kanjiCanvas{display:block;width:100%;height:100%;background:#fff;touch-action:none;cursor:crosshair}
+.guide{pointer-events:none;position:absolute;inset:0;background:
+linear-gradient(to right,transparent calc(50% - .5px),rgba(148,163,184,.45) calc(50% - .5px),rgba(148,163,184,.45) calc(50% + .5px),transparent calc(50% + .5px)),
+linear-gradient(to bottom,transparent calc(50% - .5px),rgba(148,163,184,.45) calc(50% - .5px),rgba(148,163,184,.45) calc(50% + .5px),transparent calc(50% + .5px))}
+.guide:before{content:"";position:absolute;inset:4px;border:2px dashed rgba(148,163,184,.45);border-radius:18px}
+.ghost{pointer-events:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:min(62vw,62vh);font-weight:900;color:rgba(15,23,42,.055);line-height:1}
+.resultBox{display:none;position:absolute;left:10px;right:10px;bottom:10px;max-height:78vh;overflow:auto;background:rgba(15,23,42,.94);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:18px;padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.28)}
+.resultBox.open{display:block}.resultMain{font-size:clamp(24px,6.5vw,36px);font-weight:900}.okTxt{color:#86efac}.ngTxt{color:#fca5a5}.maybeTxt{color:#fde68a}.ans{font-size:clamp(48px,13vw,78px);font-weight:900;letter-spacing:.08em;line-height:1.05;margin-top:4px}.mean{color:#cbd5e1;font-weight:800;line-height:1.45;margin-top:4px}.cands{color:#bfdbfe;font-weight:900;line-height:1.5;margin-top:7px}
+.strokeVisualWrap{margin-top:10px;padding:10px 10px 12px;border:1px solid rgba(255,255,255,.12);border-radius:16px;background:rgba(255,255,255,.05)}
+.strokeVisualHead{color:#fde68a;font-weight:900;font-size:clamp(16px,4.2vw,21px);margin-bottom:8px}
+.strokeVisualBox{display:flex;justify-content:center;align-items:center;min-height:220px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.18);border-radius:14px;overflow:hidden}
+#strokeVisual{width:220px;height:220px;display:flex;justify-content:center;align-items:center}
+.strokeVisualNote{margin-top:8px;color:#dbeafe;font-size:clamp(13px,3.4vw,17px);font-weight:800;line-height:1.45}
+.strokeCharFallback{font-size:148px;line-height:1;color:#fff;font-weight:900;font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif}
+.kvgSvg{width:220px;height:220px;display:block}
+.kvgOutline{fill:none;stroke:rgba(15,23,42,.16);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.kvgDraw{fill:none;stroke:#0f172a;stroke-width:3.8;stroke-linecap:round;stroke-linejoin:round}
+.kvgNum{font:bold 5px sans-serif;fill:#f97316;paint-order:stroke;stroke:#fff;stroke-width:1.8px}
+.replayBtn{margin-top:8px;min-height:40px;padding:8px 14px;border:0;border-radius:12px;background:#1d4ed8;color:#fff;font-weight:900}
+.bottom{padding:5px 6px calc(5px + env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(15,23,42,.98),rgba(15,23,42,.84));border-top:1px solid var(--line)}
+button,select{border:0;border-radius:12px;padding:8px 9px;font-weight:900;color:#fff;background:#334155;font-size:12px;min-height:36px}select{background:#1e293b;border:1px solid #334155;max-width:138px}
+button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{background:var(--ng)}button.warn{background:var(--warn)}button:active{transform:translateY(1px)}
+.small{font-size:10px;color:#94a3b8;font-weight:700;line-height:1.15;margin-top:3px}.toggle{display:flex;gap:6px;align-items:center;color:#cbd5e1;font-size:12px;font-weight:800}input[type=checkbox]{width:17px;height:17px}
+.bottom .row{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:2px}.bottom .row>*{flex:0 0 auto}
+#candidateList{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
+@media (orientation:landscape){.top{padding-top:5px}.q{font-size:20px}.sub,.small{display:none}.bottom{padding-top:5px}button,select{min-height:36px;padding:7px 9px}}
+
+
+.judgeFx{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;opacity:0;z-index:25}
+.judgeFx.show{animation:judgeFxFade 1.6s ease forwards}
+.judgeFxCore{min-width:min(76vw,420px);max-width:88vw;border-radius:26px;padding:20px 24px;text-align:center;font-weight:900;backdrop-filter:blur(6px);box-shadow:0 18px 44px rgba(0,0,0,.28);transform:scale(.86)}
+.judgeFx.show .judgeFxCore{animation:judgeFxPop 1.6s ease forwards}
+.judgeFxBadge{font-size:clamp(38px,11vw,72px);line-height:1;margin-bottom:8px}
+.judgeFxTitle{font-size:clamp(24px,7vw,42px);line-height:1.15;letter-spacing:.03em}
+.judgeFxSub{margin-top:7px;font-size:clamp(13px,3.8vw,18px);line-height:1.4;font-weight:800;opacity:.96}
+.judgeFx.ok .judgeFxCore{background:rgba(22,163,74,.20);border:2px solid rgba(134,239,172,.88);color:#f0fdf4}
+.judgeFx.ok:before,.judgeFx.ng:before,.judgeFx.maybe:before{content:"";position:absolute;inset:0}
+.judgeFx.ok:before{background:radial-gradient(circle at center,rgba(34,197,94,.26),rgba(34,197,94,.10) 34%,rgba(34,197,94,0) 66%)}
+.judgeFx.ng .judgeFxCore{background:rgba(220,38,38,.18);border:2px solid rgba(252,165,165,.90);color:#fff1f2}
+.judgeFx.ng:before{background:radial-gradient(circle at center,rgba(239,68,68,.24),rgba(239,68,68,.08) 34%,rgba(239,68,68,0) 66%)}
+.judgeFx.maybe .judgeFxCore{background:rgba(245,158,11,.18);border:2px solid rgba(253,224,71,.92);color:#fffbeb}
+.judgeFx.maybe:before{background:radial-gradient(circle at center,rgba(245,158,11,.24),rgba(245,158,11,.08) 34%,rgba(245,158,11,0) 66%)}
+@keyframes judgeFxFade{0%{opacity:0}10%{opacity:1}78%{opacity:1}100%{opacity:0}}
+@keyframes judgeFxPop{0%{transform:scale(.80) translateY(22px)}16%{transform:scale(1.05) translateY(0)}74%{transform:scale(1)}100%{transform:scale(.98) translateY(-4px)}}
+
+/* fixed shared id hide */
+#sharedIdPanel,#shareIdPanel,#scoreUserPanel,#firebaseUserPanel,.sharedIdPanel,.shareIdPanel,.scoreUserPanel,.firebaseUserPanel,
+input[id*="share" i],input[id*="共有" i],button[id*="share" i],button[id*="共有" i],
+label[for*="share" i],label[for*="共有" i]{
+  display:none!important;
+}
+</style>
+<script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/kanji-canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/asdfjkl/kanjicanvas@master/docs/resources/javascript/ref-patterns.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.7/dist/hanzi-writer.min.js"></script>
+<script src="../../score-user-fixed.js"></script>
+</head>
+<body>
+<div class="app">
+<header class="top">
+  <div class="row"><span class="title">小5 漢字 手書き自動認識</span><span class="badge">小5 50問</span><span class="badge">夏休み漢字</span><span class="score" id="score">0問中 0問正解</span></div>
+  <div class="q" id="question">開始を押してね</div>
+  <div class="sub" id="status">□穴あけ問題。日本語例文＋熟語から一文字を書いて「自動判定」。</div>
+</header>
+
+<main class="canvasWrap">
+  <canvas id="kanjiCanvas" data-candidate-list="candidateList"></canvas>
+  <div class="guide"></div>
+  <div class="ghost" id="ghost"></div>
+  <div class="resultBox" id="resultBox">
+    <div class="resultMain" id="resultMain">---</div>
+    <div class="ans" id="answerText">---</div>
+    <div class="mean" id="meaning">---</div>
+    <div class="strokeVisualWrap">
+      <div class="strokeVisualHead">正しい漢字の画像（KanjiVGカラー筆順・番号色分け）</div>
+      <div class="strokeVisualBox"><div id="strokeVisual"></div></div>
+      <div class="strokeVisualNote" id="strokeVisualNote">---</div>
+      <button class="replayBtn" type="button" onclick="replayStrokeVisual()">もう一回再生</button>
+    </div>
+    <div class="cands" id="candidates">---</div>
+  </div>
+
+  <div class="judgeFx" id="judgeFx" aria-hidden="true">
+    <div class="judgeFxCore">
+      <div class="judgeFxBadge" id="judgeFxBadge">○</div>
+      <div class="judgeFxTitle" id="judgeFxTitle">正解！</div>
+      <div class="judgeFxSub" id="judgeFxSub">よく書けました</div>
+    </div>
+  </div>
+  <div id="candidateList"></div>
+</main>
+
+<footer class="bottom">
+  <div class="row">
+    <button class="primary" onclick="start()">開始</button>
+    <select id="mode" onchange="start()">
+      <option value="all">この50問</option>
+      <option value="wrong">間違い復習</option>
+    </select>
+    <button onclick="undo()">一画戻す</button>
+    <button onclick="clearPad()">消す</button>
+    <button class="warn" onclick="recognizeNow()">自動判定</button>
+    <button class="primary" onclick="next()">次</button>
+    <label class="toggle"><input id="ghostToggle" type="checkbox" onchange="drawGhost()">薄い答え</label>
+  </div>
+  <div class="small">漢検モード：日本語例文（穴あけ）＋熟語（穴あけ）。判定後に正解画像と、判定時と同じ色分けのKanjiVG筆順を表示。</div>
+</footer>
+</div>
+<canvas id="fallbackRef" width="320" height="320" style="display:none"></canvas>
+<canvas id="fallbackTmp" width="320" height="320" style="display:none"></canvas>
+
+<script>
+const QUESTIONS=[{"char": "因", "word": "原因", "reading": "げんいん", "prompt": "原□と結果。", "meaning": "ものごとのもとになるわけ。"}, {"char": "留", "word": "留学生", "reading": "りゅうがくせい", "prompt": "□学生。", "meaning": "外国へ留学して学ぶ学生。"}, {"char": "現", "word": "表現", "reading": "ひょうげん", "prompt": "英語での表□。", "meaning": "考えや気持ちを表すこと。"}, {"char": "接", "word": "直接", "reading": "ちょくせつ", "prompt": "ちょく□話す。", "meaning": "間に何も入れず、じかに。"}, {"char": "像", "word": "想像", "reading": "そうぞう", "prompt": "場面を想□する。", "meaning": "頭の中に思いうかべること。"}, {"char": "経", "word": "経験", "reading": "けいけん", "prompt": "じぶんの□験。", "meaning": "実際に見たり、したりしたこと。"}, {"char": "象", "word": "印象", "reading": "いんしょう", "prompt": "印□に残る。", "meaning": "心に残る感じ。"}, {"char": "構", "word": "構図", "reading": "こうず", "prompt": "絵の□図。", "meaning": "絵や写真の組み立て。"}, {"char": "絶", "word": "絶対", "reading": "ぜったい", "prompt": "□対に行く。", "meaning": "まちがいなく、必ず。"}, {"char": "運", "word": "運が悪い", "reading": "うんがわるい", "prompt": "□が悪い。", "meaning": "めぐり合わせがよくない。"}, {"char": "丸", "word": "一丸", "reading": "いちがん", "prompt": "一□となる。", "meaning": "みんなが心を一つにすること。"}, {"char": "外", "word": "ほか", "reading": "ほか", "prompt": "思いのほ□か。", "meaning": "予想とは違って。"}, {"char": "許", "word": "許可", "reading": "きょか", "prompt": "□可をもらう。", "meaning": "してもよいとみとめること。"}, {"char": "赤", "word": "赤飯", "reading": "せきはん", "prompt": "□飯をたく。", "meaning": "もち米を赤く炊いたご飯。"}, {"char": "銅", "word": "銅メダル", "reading": "どうメダル", "prompt": "□メダルを取る。", "meaning": "三位のメダル。"}, {"char": "修", "word": "修復", "reading": "しゅうふく", "prompt": "絵画の□復。", "meaning": "こわれたものや傷んだものを直すこと。"}, {"char": "犬", "word": "愛犬家", "reading": "あいけんか", "prompt": "愛□家。", "meaning": "犬が大好きな人。"}, {"char": "情", "word": "心情", "reading": "しんじょう", "prompt": "心□の変化。", "meaning": "心の中の気持ち。"}, {"char": "西", "word": "西部", "reading": "せいぶ", "prompt": "アメリカ□部。", "meaning": "西のほうの地域。"}, {"char": "太", "word": "丸太", "reading": "まるた", "prompt": "丸□を切る。", "meaning": "切り倒した木の幹。"}, {"char": "確", "word": "正確", "reading": "せいかく", "prompt": "正□に答える。", "meaning": "まちがいがなく、たしかであること。"}, {"char": "賞", "word": "賞状", "reading": "しょうじょう", "prompt": "□状をもらう。", "meaning": "表彰のための紙。"}, {"char": "限", "word": "期限", "reading": "きげん", "prompt": "期□を決める。", "meaning": "いつまでというさだめ。"}, {"char": "解", "word": "理解", "reading": "りかい", "prompt": "話を理□する。", "meaning": "意味がわかること。"}, {"char": "祖", "word": "祖父母", "reading": "そふぼ", "prompt": "□父母に会う。", "meaning": "おじいさんとおばあさん。"}, {"char": "容", "word": "内容", "reading": "ないよう", "prompt": "物語の内□。", "meaning": "中身。"}, {"char": "術", "word": "技術", "reading": "ぎじゅつ", "prompt": "新しい技□。", "meaning": "わざやうでまえ。"}, {"char": "適", "word": "適切", "reading": "てきせつ", "prompt": "□切な方法。", "meaning": "ちょうどよくふさわしいこと。"}, {"char": "造", "word": "木造", "reading": "もくぞう", "prompt": "木□の家。", "meaning": "木で作られた建物。"}, {"char": "複", "word": "複数", "reading": "ふくすう", "prompt": "□数のチーム。", "meaning": "二つ以上ある数。"}, {"char": "桜", "word": "桜", "reading": "さくら", "prompt": "□の木。", "meaning": "春に花がさく木。"}, {"char": "破", "word": "読破", "reading": "どくは", "prompt": "本を読□する。", "meaning": "最後まで読み切ること。"}, {"char": "眼", "word": "眼科", "reading": "がんか", "prompt": "□科に通う。", "meaning": "目を診る診療科。"}, {"char": "停", "word": "停車", "reading": "ていしゃ", "prompt": "駅に□車する。", "meaning": "乗り物が止まること。"}, {"char": "際", "word": "国際", "reading": "こくさい", "prompt": "国□会議を開く。", "meaning": "国と国との間に関係すること。"}, {"char": "質", "word": "質問", "reading": "しつもん", "prompt": "□問に答える。", "meaning": "わからないことをたずねること。"}, {"char": "識", "word": "意識", "reading": "いしき", "prompt": "意□を失う。", "meaning": "はっきり気づいている心のはたらき。"}, {"char": "準", "word": "準備", "reading": "じゅんび", "prompt": "運動会の□備。", "meaning": "用意すること。"}, {"char": "貿", "word": "貿易", "reading": "ぼうえき", "prompt": "他国との□易。", "meaning": "国と国との間で品物を売り買いすること。"}, {"char": "喜", "word": "喜ぶ", "reading": "よろこぶ", "prompt": "兄がよろ□ぶ。", "meaning": "うれしく思う。"}, {"char": "破", "word": "破れる", "reading": "やぶれる", "prompt": "紙がや□れる。", "meaning": "さけたり、こわれたりする。"}, {"char": "報", "word": "報告", "reading": "ほうこく", "prompt": "結果を□告する。", "meaning": "知らせること。"}, {"char": "似", "word": "似る", "reading": "にる", "prompt": "親に□る。", "meaning": "よくにかよう。"}, {"char": "直", "word": "直ちに", "reading": "ただちに", "prompt": "□ちに帰る。", "meaning": "すぐに。"}, {"char": "数", "word": "数える", "reading": "かぞえる", "prompt": "人□をかぞえる。", "meaning": "いくつかを調べる。"}, {"char": "造", "word": "造る", "reading": "つくる", "prompt": "大きな船を□る。", "meaning": "材料を使ってつくる。"}, {"char": "厚", "word": "分厚い", "reading": "ぶあつい", "prompt": "ぶ□い雲。", "meaning": "厚みがたっぷりあること。"}, {"char": "属", "word": "所属", "reading": "しょぞく", "prompt": "所□するチーム。", "meaning": "ある集団のなかまになること。"}, {"char": "潔", "word": "清潔", "reading": "せいけつ", "prompt": "清□なハンカチ。", "meaning": "きれいで汚れがないこと。"}, {"char": "確", "word": "確かめる", "reading": "たしかめる", "prompt": "後でたし□める。", "meaning": "まちがいがないかはっきりさせる。"}];
+const STROKE_ORDER_COLORS=["#ef4444","#f97316","#f59e0b","#84cc16","#22c55e","#14b8a6","#06b6d4","#3b82f6","#8b5cf6","#ec4899"];
+function getStrokeOrderColor(i){return STROKE_ORDER_COLORS[i%STROKE_ORDER_COLORS.length]}
+let order=[],idx=0,ok=0,done=0,engineReady=false;
+let canvas,canvasWrap,strokes=[],curStroke=null,drawing=false;
+let currentStrokeWriter=null;
+let wrongIds=JSON.parse(localStorage.getItem('grade5KanjiWrong')||'[]');
+
+function $(id){return document.getElementById(id)}
+function showJudgeFx(kind,msg=''){
+  const box=$('judgeFx'),badge=$('judgeFxBadge'),title=$('judgeFxTitle'),sub=$('judgeFxSub');
+  if(!box||!badge||!title||!sub)return;
+  box.className='judgeFx '+kind;
+  if(kind==='ok'){badge.textContent='○';title.textContent='正解！';sub.textContent='よく書けました';}
+  else if(kind==='maybe'){badge.textContent='△';title.textContent='おしい！';sub.textContent='候補には入っています';}
+  else {badge.textContent='×';title.textContent='不正解';sub.textContent='もう一度見直そう';}
+  if(msg)sub.textContent += '　' + msg;
+  void box.offsetWidth;
+  box.classList.add('show');
+  clearTimeout(showJudgeFx._tm);
+  showJudgeFx._tm=setTimeout(()=>{box.className='judgeFx';},1650);
+  try{ if(navigator.vibrate){ navigator.vibrate(kind==='ok'?[40,40,70]:kind==='maybe'?[30,30,30]:[80,40,80]); } }catch(e){}
+}
+
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function start(){
+  let mode=$('mode').value;
+  let pool=QUESTIONS.map((q,i)=>({...q,id:i})).filter(q=>isKanjiChar(q.char));
+  if(mode==='wrong') pool=pool.filter(q=>wrongIds.includes(q.id));
+  if(!pool.length) pool=QUESTIONS.map((q,i)=>({...q,id:i}));
+  order=shuffle(pool);idx=0;ok=0;done=0;showQ();
+}
+function maskedWord(q){return [...q.word].map((c,i)=>i===q.index?'□':c).join('')}
+const kanjiHintCache={};
+const KANJI_FALLBACK_HINTS={
+  '申':{readings:'もうす・シン',meanings:'申し出る。十二支のさる。'},
+  '謝':{readings:'あやまる・シャ',meanings:'あやまる。礼を言う。'},
+  '認':{readings:'みとめる・ニン',meanings:'みとめる。たしかめる。'},
+  '識':{readings:'しる・シキ',meanings:'物事を知る。見分ける。'},
+  '愛':{readings:'あい・いとしい',meanings:'大切に思う。かわいがる。'},
+  '感':{readings:'カン',meanings:'心に受ける。感じる。'},
+  '訪':{readings:'おとずれる・ホウ',meanings:'たずねて行く。'},
+  '防':{readings:'ふせぐ・ボウ',meanings:'ふせぐ。守る。'},
+  '救':{readings:'すくう・キュウ',meanings:'助ける。'},
+  '招':{readings:'まねく・ショウ',meanings:'人をまねく。'},
+  '払':{readings:'はらう・フツ',meanings:'はらいのける。支払う。'},
+  '抱':{readings:'だく・いだく・ホウ',meanings:'腕でかかえる。心に持つ。'},
+  '創':{readings:'つくる・ソウ',meanings:'新しく作り出す。'},
+  '解':{readings:'とく・カイ',meanings:'ほどく。分かる。'},
+  '群':{readings:'むれ・グン',meanings:'むれ。集まり。'}
+};
+const BUILTIN_KANJI_PROMPTS={
+  '申':{sentence:'大会に□し込む。',word:'□請（しんせい）'},
+  '認':{sentence:'先生が答えを□める。',word:'□識（にんしき）'},
+  '識':{sentence:'物事を正しく□別する。',word:'知□（ちしき）'},
+  '謝':{sentence:'失敗を□る。',word:'感□（かんしゃ）'},
+  '訪':{sentence:'友人の家を□ねる。',word:'□問（ほうもん）'},
+  '防':{sentence:'雨を□ぐ。',word:'予□（よぼう）'},
+  '救':{sentence:'困っている人を□う。',word:'□助（きゅうじょ）'},
+  '招':{sentence:'友人を家に□く。',word:'□待（しょうたい）'},
+  '抱':{sentence:'赤ちゃんを□く。',word:'□負（ほうふ）'},
+  '創':{sentence:'新しい作品を□る。',word:'□造（そうぞう）'},
+  '解':{sentence:'問題を□く。',word:'理□（りかい）'},
+  '愛':{sentence:'家族を□する。',word:'□情（あいじょう）'},
+  '感':{sentence:'強く心に□じる。',word:'□想（かんそう）'},
+  '進':{sentence:'前へ□む。',word:'前□（ぜんしん）'},
+  '深':{sentence:'海が□い。',word:'□夜（しんや）'},
+  '真':{sentence:'□面目に取り組む。',word:'写□（しゃしん）'},
+  '神':{sentence:'□社に参る。',word:'精□（せいしん）'},
+  '身':{sentence:'□近な話題を選ぶ。',word:'全□（ぜんしん）'},
+  '植':{sentence:'庭に木を□える。',word:'□物（しょくぶつ）'},
+  '乗':{sentence:'電車に□る。',word:'□車（じょうしゃ）'},
+  '勝':{sentence:'試合に□つ。',word:'優□（ゆうしょう）'},
+  '商':{sentence:'店で□品を買う。',word:'□店（しょうてん）'},
+  '消':{sentence:'火を□す。',word:'□防（しょうぼう）'},
+  '助':{sentence:'友だちを□ける。',word:'□手（じょしゅ）'},
+  '暑':{sentence:'今日はとても□い。',word:'残□（ざんしょ）'},
+  '所':{sentence:'住む□を決める。',word:'場□（ばしょ）'},
+  '宿':{sentence:'旅先で□に泊まる。',word:'□題（しゅくだい）'},
+  '重':{sentence:'荷物が□い。',word:'体□（たいじゅう）'},
+  '住':{sentence:'大阪に□む。',word:'□所（じゅうしょ）'},
+  '集':{sentence:'人が□まる。',word:'□合（しゅうごう）'},
+  '習':{sentence:'漢字を□う。',word:'学□（がくしゅう）'},
+  '終':{sentence:'授業が□わる。',word:'□了（しゅうりょう）'}
+};
+const dynamicPromptCache={};
+function maskFirstWritten(word,ch){return [...String(word||'')].map(c=>c===ch?'□':c).join('')}
+function isKanjiChar(ch){return /^[\u3400-\u9fff]$/.test(ch)}
+async function getDynamicKanjiPrompt(ch){
+  if(BUILTIN_KANJI_PROMPTS[ch])return BUILTIN_KANJI_PROMPTS[ch];
+  if(dynamicPromptCache[ch])return dynamicPromptCache[ch];
+  try{
+    const r=await fetch(`https://kanjiapi.dev/v1/words/${encodeURIComponent(ch)}`,{cache:'force-cache'});
+    if(!r.ok)throw new Error('word fetch failed');
+    const words=await r.json();
+    let picked=null;
+    for(const w of words||[]){
+      const v=(w.variants||[]).find(v=>v.written&&v.written.includes(ch)&&[...v.written].length>=2);
+      if(v){picked={written:v.written,reading:v.pronounced||''};break}
+    }
+    if(picked){
+      const masked=maskFirstWritten(picked.written,ch);
+      dynamicPromptCache[ch]={sentence:`日本語の中で「${masked}」を使う。`,word:`${masked}${picked.reading?'（'+picked.reading+'）':''}`};
+      return dynamicPromptCache[ch];
+    }
+  }catch(e){}
+  const hint=await getKanjiHint(ch);
+  dynamicPromptCache[ch]={sentence:`意味「${hint.meanings}」に合う□を書け。`,word:`読み：${hint.readings}`};
+  return dynamicPromptCache[ch];
+}
+async function applyHolePrompt(cur,questionNo){
+  const line1=`Q${questionNo}. □に入る漢字を一文字で大きく書け`;
+  const line2=`【問題】${cur.prompt||maskedWord(cur)}`;
+  const line3=`【ことば】${cur.word}${cur.reading?'（'+cur.reading+'）':''}`;
+  $('question').textContent=`${line1}
+${line2}
+${line3}`;
+}
+
+function cleanKanjiApiList(arr){return (arr||[]).map(x=>String(x).replace(/[-.]/g,'')).filter(Boolean).slice(0,6).join('・')}
+async function getKanjiHint(ch){
+  if(kanjiHintCache[ch])return kanjiHintCache[ch];
+  if(KANJI_FALLBACK_HINTS[ch]){kanjiHintCache[ch]=KANJI_FALLBACK_HINTS[ch];return kanjiHintCache[ch]}
+  const url=`https://kanjiapi.dev/v1/kanji/${encodeURIComponent(ch)}`;
+  try{
+    const r=await fetch(url,{cache:'force-cache'});
+    if(!r.ok)throw new Error('kanji hint fetch failed');
+    const d=await r.json();
+    const readings=[cleanKanjiApiList(d.kun_readings),cleanKanjiApiList(d.on_readings)].filter(Boolean).join('／');
+    const meanings=(d.meanings||[]).slice(0,4).join('、');
+    const grade=d.grade?`／学年:${d.grade}`:'';
+    const strokes=d.stroke_count?`／${d.stroke_count}画`:'';
+    kanjiHintCache[ch]={readings:readings||'読み情報なし',meanings:meanings||'意味情報なし',extra:`${strokes}${grade}`};
+  }catch(e){
+    kanjiHintCache[ch]={readings:'読みヒント取得失敗',meanings:'通信後に再読み込みしてください',extra:''};
+  }
+  return kanjiHintCache[ch];
+}
+async function applyKanjiHint(cur,questionNo){
+  applyHolePrompt(cur,questionNo);
+}
+function showQ(){
+  if(!order.length) start();
+  const cur=order[idx];
+  const questionNo=idx+1;
+  $('question').textContent=`Q${questionNo}. 問題を準備中…（答えの漢字は判定後だけ表示）`;
+  applyHolePrompt(cur,questionNo);
+  $('answerText').textContent=`正解：${cur.char}`;
+  $('meaning').textContent=`${cur.word}${cur.reading?'（'+cur.reading+'）':''}　${cur.meaning}`;
+  $('resultBox').classList.remove('open');
+  if($('strokeVisual')) $('strokeVisual').innerHTML='';
+  if($('strokeVisualNote')) $('strokeVisualNote').textContent='判定後に正しい漢字画像を表示';
+  clearPad(false);drawGhost();updateScore();
+}
+function next(){idx=(idx+1)%order.length;showQ()}
+function updateScore(){$('score').textContent=`${done}問中 ${ok}問正解`}
+function drawGhost(){if(!order.length){$('ghost').textContent='';return}$('ghost').textContent=$('ghostToggle').checked ? order[idx].char : ''}
+function pos(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}}
+function clearPad(hide=true){strokes=[];curStroke=null;if(window.KanjiCanvas && engineReady) KanjiCanvas.erase('kanjiCanvas'); else fallbackRedraw();if(hide)$('resultBox').classList.remove('open')}
+function undo(){if(strokes.length)strokes.pop();if(window.KanjiCanvas && engineReady) KanjiCanvas.deleteLast('kanjiCanvas'); else fallbackRedraw();$('resultBox').classList.remove('open')}
+function resizeCanvas(){
+  canvas=$('kanjiCanvas');canvasWrap=canvas.parentElement;
+  const r=canvasWrap.getBoundingClientRect();
+  const w=Math.max(1,Math.round(r.width)),h=Math.max(1,Math.round(r.height));
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+}
+function syncBeforeInput(){resizeCanvas()}
+function initEngine(){resizeCanvas();if(window.KanjiCanvas && KanjiCanvas.init){KanjiCanvas.init('kanjiCanvas');engineReady=true;$('status').textContent='認識エンジンOK。夏休み漢字50問の□に入る一文字を書いて「自動判定」。判定時は正解/不正解の演出を表示。'}else{engineReady=false;$('status').textContent='認識エンジン未読込。形比較で動作中。';attachFallbackDrawing();}start()}
+function normalizeCandidates(raw){if(!raw)return [];if(Array.isArray(raw))return raw.map(x=>String(x)).filter(Boolean);return String(raw).replace(/候補|認識候補|Candidates|candidate/gi,'').replace(/[\s,、|｜/／・]+/g,'').split('').filter(Boolean)}
+function getCandidateList(){const el=$('candidateList');const txt=el?(el.textContent||el.innerText||''):'';return normalizeCandidates(txt)}
+function recognizeNow(){
+  if(!order.length)return;
+  const ans=order[idx].char;
+  let cands=[];
+  if(window.KanjiCanvas && engineReady){
+    try{
+      const raw=KanjiCanvas.recognize('kanjiCanvas');
+      cands=normalizeCandidates(raw);
+      setTimeout(()=>{let domCands=getCandidateList(); if(!cands.length && domCands.length)cands=domCands; judgeCandidates(ans,cands);},80);
+      return;
+    }catch(e){cands=[]}
+  }
+  judgeCandidates(ans,cands);
+}
+function judgeCandidates(ans,cands){
+  cands=[...new Set(cands)];
+  const pos=cands.indexOf(ans);
+  const shape=fallbackScore(ans);
+  let msg,isOk=false,level='ng';
+  if(pos===0){isOk=true;level='ok';msg=`○ 正解！ 認識1位・形${shape}点`;}
+  else if(pos>0 && pos<5){isOk=true;level='ok';msg=`○ 正解扱い！ 候補${pos+1}位・形${shape}点`;}
+  else if(pos>=5 && pos<10 && shape>=25){isOk=true;level='ok';msg=`○ 手書きOK！ 候補${pos+1}位・形${shape}点`;}
+  else if(shape>=60){isOk=true;level='ok';msg=`○ 見た目OK！ 形${shape}点`;}
+  else if(pos>=0 && pos<10){level='maybe';msg=`△ 正解候補あり（${pos+1}位）・形${shape}点`;}
+  else if(shape>=35){level='maybe';msg=`△ 見た目は近い（形${shape}点）`;}
+  else {level='ng';msg=`× たぶん違う（形${shape}点）`;}
+  finishJudge(isOk,msg,cands,level);
+}
+function finishJudge(isOk,msg,cands,level=''){ 
+  const cur=order[idx];
+  done++; if(isOk)ok++;
+  if(isOk) wrongIds=wrongIds.filter(id=>id!==cur.id); else if(!wrongIds.includes(cur.id)) wrongIds.push(cur.id);
+  localStorage.setItem('grade5KanjiWrong',JSON.stringify(wrongIds));
+  updateScore();
+  const cls=isOk?'okTxt':(level==='maybe'||msg.startsWith('△'))?'maybeTxt':'ngTxt';
+  $('resultMain').className='resultMain '+cls;
+  $('resultMain').textContent=msg;
+  $('candidates').textContent=cands.length ? `認識候補：${cands.slice(0,10).join('、')}` : '認識候補：なし';
+  showStrokeVisual(cur.char);
+  const fxKind=isOk?'ok':((level==='maybe'||msg.startsWith('△'))?'maybe':'ng');
+  showJudgeFx(fxKind, isOk ? '正解です' : (fxKind==='maybe' ? 'あと少し' : '正解は「'+cur.char+'」'));
+  $('resultBox').classList.add('open');
+  $('resultBox').scrollTop=0;
+}
+function loadHanziWriterData(char,onComplete){ 
+  const urls=[
+    `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${encodeURIComponent(char)}.json`,
+    `https://unpkg.com/hanzi-writer-data@2.0/${encodeURIComponent(char)}.json`
+  ];
+  (function tryNext(i){if(i>=urls.length){onComplete(null);return}fetch(urls[i]).then(r=>{if(!r.ok)throw new Error('fetch failed');return r.json()}).then(data=>onComplete(data)).catch(()=>tryNext(i+1));})(0);
+}
+function kanjiVGFileName(ch){return ch.codePointAt(0).toString(16).padStart(5,'0')}
+async function loadKanjiVG(ch){
+  const hex=kanjiVGFileName(ch);
+  const urls=[
+    `https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@master/kanji/${hex}.svg`,
+    `https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/${hex}.svg`
+  ];
+  for(const url of urls){
+    try{const r=await fetch(url,{cache:'force-cache'}); if(!r.ok)throw new Error('kvg fetch failed'); return await r.text()}catch(e){}
+  }
+  return null;
+}
+function playKanjiVG(svg){
+  const draws=[...svg.querySelectorAll('.kvgDraw')];
+  draws.forEach((p,i)=>{
+    let len=80; try{len=p.getTotalLength()}catch(e){}
+    p.style.transition='none'; p.style.strokeDasharray=len; p.style.strokeDashoffset=len;
+    setTimeout(()=>{p.style.transition='stroke-dashoffset .55s ease';p.style.strokeDashoffset='0'},120+i*520);
+  });
+}
+async function showKanjiVGStroke(ch){
+  const el=$('strokeVisual'),note=$('strokeVisualNote'); if(!el||!note)return false;
+  const txt=await loadKanjiVG(ch); if(!txt)return false;
+  const doc=new DOMParser().parseFromString(txt,'image/svg+xml');
+  const paths=[...doc.querySelectorAll('path[d]')].filter(p=>p.getAttribute('d'));
+  if(!paths.length)return false;
+  el.innerHTML='';
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox','0 0 109 109'); svg.setAttribute('class','kvgSvg');
+  paths.forEach(p=>{
+    const o=document.createElementNS('http://www.w3.org/2000/svg','path');
+    o.setAttribute('d',p.getAttribute('d')); o.setAttribute('class','kvgOutline'); svg.appendChild(o);
+  });
+  paths.forEach((p,i)=>{
+    const color=getStrokeOrderColor(i);
+    const d=document.createElementNS('http://www.w3.org/2000/svg','path');
+    d.setAttribute('d',p.getAttribute('d'));
+    d.setAttribute('class','kvgDraw');
+    d.style.stroke=color;
+    svg.appendChild(d);
+    const m=(p.getAttribute('d').match(/M\s*([0-9.]+),?\s*([0-9.]+)/)||[]);
+    if(m[1]&&m[2]){
+      const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x',m[1]);
+      t.setAttribute('y',m[2]);
+      t.setAttribute('class','kvgNum');
+      t.style.fill=color;
+      t.textContent=String(i+1);
+      svg.appendChild(t);
+    }
+  });
+  el.appendChild(svg);
+  note.textContent=`KanjiVG筆順データを、判定時の筆順番号と同じ色分けで一画ずつ再生中。`;
+  currentStrokeWriter={animateCharacter:()=>playKanjiVG(svg)};
+  setTimeout(()=>playKanjiVG(svg),80);
+  return true;
+}
+function showHanziWriterStroke(ch){
+  const el=$('strokeVisual'),note=$('strokeVisualNote'); if(!el||!note)return false;
+  if(window.HanziWriter){ 
+    try{ 
+      currentStrokeWriter=HanziWriter.create('strokeVisual',ch,{width:220,height:220,padding:10,showOutline:true,showCharacter:false,strokeAnimationSpeed:.85,delayBetweenStrokes:180,outlineColor:'rgba(15,23,42,0.16)',strokeColor:'#0f172a',radicalColor:'#0f172a',charDataLoader:(char,onComplete)=>loadHanziWriterData(char,onComplete)});
+      note.textContent=`KanjiVGが読めないため、代替の筆順データで「${ch}」を再生中。※色分けはKanjiVG表示時のみ一致`;
+      setTimeout(()=>{try{currentStrokeWriter.animateCharacter()}catch(e){}},80); return true;
+    }catch(e){}
+  }
+  return false;
+}
+function showStrokeVisual(ch){ 
+  const el=$('strokeVisual'),note=$('strokeVisualNote'); if(!el||!note)return;
+  el.innerHTML=''; note.textContent=`「${ch}」のKanjiVG筆順を読込中…`; currentStrokeWriter=null;
+  showKanjiVGStroke(ch).then(ok=>{
+    if(ok)return;
+    el.innerHTML='';
+    if(showHanziWriterStroke(ch))return;
+    el.innerHTML=`<div class="strokeCharFallback">${ch}</div>`;
+    note.textContent=`ネット読込できないため「${ch}」の字だけ表示。`;
+  });
+}
+function replayStrokeVisual(){if(currentStrokeWriter && currentStrokeWriter.animateCharacter){try{currentStrokeWriter.animateCharacter();return}catch(e){}} const cur=order[idx]; if(cur)showStrokeVisual(cur.char)}
+
+/* fallback drawing / shape score */
+function attachFallbackDrawing(){const ctx=canvas.getContext('2d');canvas.addEventListener('pointerdown',e=>{syncBeforeInput();e.preventDefault();drawing=true;canvas.setPointerCapture(e.pointerId);curStroke=[pos(e)];strokes.push(curStroke);});canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();curStroke.push(pos(e));fallbackRedraw();});function end(e){if(!drawing)return;drawing=false;e.preventDefault();}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end)}
+function fallbackRedraw(){if(!canvas)return;const ctx=canvas.getContext('2d'),r=canvas.getBoundingClientRect();ctx.clearRect(0,0,r.width,r.height);strokes.forEach(s=>{if(s.length<2)return;ctx.beginPath();ctx.moveTo(s[0].x,s[0].y);for(let i=1;i<s.length;i++){const p=s[i],pr=s[i-1],mx=(p.x+pr.x)/2,my=(p.y+pr.y)/2;ctx.quadraticCurveTo(pr.x,pr.y,mx,my)}ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#0f172a';ctx.lineWidth=11;ctx.stroke()})}
+function fallbackScore(ch){renderFallbackUser();renderFallbackRef(ch);const ref=$('fallbackRef').getContext('2d').getImageData(0,0,320,320).data;const usr=$('fallbackTmp').getContext('2d').getImageData(0,0,320,320).data;let overlap=0,userInk=0,refInk=0,near=0,W=320,H=320,rm=new Uint8Array(W*H),um=new Uint8Array(W*H);for(let i=0,p=0;i<ref.length;i+=4,p++){rm[p]=ref[i]<180?1:0;um[p]=usr[i]<200?1:0;if(rm[p])refInk++;if(um[p])userInk++;if(rm[p]&&um[p])overlap++}for(let y=3;y<H-3;y++)for(let x=3;x<W-3;x++){const p=y*W+x;if(!um[p])continue;let hit=false;for(let dy=-3;dy<=3&&!hit;dy++)for(let dx=-3;dx<=3;dx++){if(rm[(y+dy)*W+x+dx]){hit=true;break}}if(hit)near++}const precision=userInk?near/userInk:0,recall=refInk?overlap/refInk:0,density=Math.min(userInk,refInk)/Math.max(userInk,refInk||1);return Math.round((precision*.70+recall*.12+density*.18)*100)}
+function renderFallbackRef(ch){const c=$('fallbackRef'),g=c.getContext('2d');g.clearRect(0,0,320,320);g.fillStyle='#fff';g.fillRect(0,0,320,320);g.fillStyle='#000';g.textAlign='center';g.textBaseline='middle';g.font='260px "Yu Mincho","Hiragino Mincho ProN","Noto Serif CJK JP",serif';g.fillText(ch,160,174)}
+function renderFallbackUser(){ 
+  const out=$('fallbackTmp'),g=out.getContext('2d');g.clearRect(0,0,320,320);g.fillStyle='#fff';g.fillRect(0,0,320,320);
+  const srcCanvas=$('kanjiCanvas');const sw=srcCanvas.width,sh=srcCanvas.height;if(!sw||!sh)return;const sctx=srcCanvas.getContext('2d');let img;try{img=sctx.getImageData(0,0,sw,sh)}catch(e){return}
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,ink=0;const data=img.data;
+  for(let y=0;y<sh;y++){for(let x=0;x<sw;x++){const i=(y*sw+x)*4;const r=data[i],gg=data[i+1],b=data[i+2],a=data[i+3];const dark=(r+gg+b)/3<220;const saturated=(Math.max(r,gg,b)-Math.min(r,gg,b))>28;if(a>20&&(dark||saturated)&&!(r>230&&gg>230&&b>230)){const gray=Math.abs(r-gg)<8&&Math.abs(gg-b)<8&&r>145;if(gray)continue;minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);ink++}}}
+  if(!ink)return;const bW=Math.max(1,maxX-minX+1),bH=Math.max(1,maxY-minY+1),margin=30,scale=Math.min((320-margin*2)/bW,(320-margin*2)/bH),dw=bW*scale,dh=bH*scale,dx=(320-dw)/2,dy=(320-dh)/2;g.drawImage(srcCanvas,minX,minY,bW,bH,dx,dy,dw,dh);
+  const outImg=g.getImageData(0,0,320,320),od=outImg.data;for(let i=0;i<od.length;i+=4){const r=od[i],gg=od[i+1],b=od[i+2],a=od[i+3];const dark=(r+gg+b)/3<235;const saturated=(Math.max(r,gg,b)-Math.min(r,gg,b))>25;if(a>20&&(dark||saturated)&&!(r>245&&gg>245&&b>245)){od[i]=0;od[i+1]=0;od[i+2]=0;od[i+3]=255}else{od[i]=255;od[i+1]=255;od[i+2]=255;od[i+3]=255}}g.putImageData(outImg,0,0);
+}
+window.addEventListener('resize',()=>{resizeCanvas();if(!engineReady)fallbackRedraw()});
+if(window.visualViewport) visualViewport.addEventListener('resize',()=>{resizeCanvas();if(!engineReady)fallbackRedraw()});
+try{new ResizeObserver(()=>{resizeCanvas();if(!engineReady)fallbackRedraw()}).observe(document.querySelector('.canvasWrap'))}catch(e){}
+window.addEventListener('load',()=>setTimeout(initEngine,500));
+</script>
+
+<script src="../../firebase-config.js"></script>
+<script id="periodic-test-score-addon">
+(function(){
+  const META={id:"high-kanji",name:"高校 漢字"};
+  const FIXED_USER='gakushu-main';
+  const KEY='periodicTestBest:'+META.id;
+  const LAST='periodicTestLast:'+META.id;
+  let firebaseState='確認中';
+  let fbCache=null;
+  function $(id){return document.getElementById(id)}
+  function getUserId(){return FIXED_USER}
+  function firebaseConfigured(){
+    const c=window.GAKUSHU_FIREBASE_CONFIG;
+    return !!(c&&c.apiKey&&c.databaseURL&&!String(c.apiKey).includes('PASTE_')&&!String(c.databaseURL).includes('PASTE_'));
+  }
+  async function fb(){
+    if(fbCache)return fbCache;
+    if(!firebaseConfigured()){firebaseState='Firebase未設定・一時端末保存';return null}
+    try{
+      const [appMod,dbMod]=await Promise.all([
+        import('https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js'),
+        import('https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js')
+      ]);
+      const app=appMod.getApps().length?appMod.getApps()[0]:appMod.initializeApp(window.GAKUSHU_FIREBASE_CONFIG);
+      const db=dbMod.getDatabase(app);
+      fbCache={db,...dbMod};
+      firebaseState='Firebase DB同期ON';
+      return fbCache;
+    }catch(e){console.warn('Firebase init failed',e);firebaseState='Firebase接続失敗・一時端末保存';return null}
+  }
+  function pathFor(){return 'scoreUsers/'+FIXED_USER+'/subjects/'+META.id}
+  function readBest(){const v=localStorage.getItem(KEY);return v==null?null:Number(v)}
+  async function readRemoteBest(){
+    const f=await fb();if(!f)return null;
+    try{const snap=await f.get(f.ref(f.db,pathFor()));const v=snap.exists()?snap.val():null;return v&&typeof v.best==='number'?v.best:null}catch(e){console.warn(e);return null}
+  }
+  async function writeRemoteBest(score){
+    const f=await fb();if(!f)return;
+    try{
+      const p=f.ref(f.db,pathFor());
+      const snap=await f.get(p);
+      const old=snap.exists()?snap.val():null;
+      const oldBest=old&&typeof old.best==='number'?old.best:null;
+      const payload={...(old||{}),best:oldBest==null||score>oldBest?score:oldBest,subjectName:META.name,subjectId:META.id,updatedAt:f.serverTimestamp(),lastScore:score,scoreUserId:FIXED_USER};
+      await f.set(p,payload);
+      firebaseState='Firebase DB同期済';
+      updateInlineBest();
+    }catch(e){console.warn('Firebase write failed',e);firebaseState='Firebase書込失敗・一時端末保存';updateInlineBest()}
+  }
+  async function removeRemoteBest(){
+    const f=await fb();if(!f)return;
+    try{await f.remove(f.ref(f.db,pathFor()));firebaseState='Firebase DBリセット済'}catch(e){console.warn(e);firebaseState='Firebaseリセット失敗'}
+  }
+  function updateInlineBest(){
+    const b=readBest();
+    document.querySelectorAll('[data-periodic-best],.periodicBestInline').forEach(el=>{el.textContent=b==null?'最高 --点':'最高 '+b+'点'});
+  }
+  async function syncFromRemote(){
+    const rb=await readRemoteBest();
+    if(rb!=null){const lb=readBest();if(lb==null||rb>lb)localStorage.setItem(KEY,String(rb))}
+    updateInlineBest();
+  }
+  async function watchRemote(){
+    const f=await fb();if(!f)return;
+    try{f.onValue(f.ref(f.db,pathFor()),snap=>{const v=snap.val();if(v&&typeof v.best==='number'){const lb=readBest();if(lb==null||v.best>=lb)localStorage.setItem(KEY,String(v.best))}else{localStorage.removeItem(KEY)}updateInlineBest()})}catch(e){console.warn(e)}
+  }
+  function writeBest(score){
+    score=Math.max(0,Math.min(100,Math.round(Number(score)||0)));
+    const old=readBest();
+    localStorage.setItem(LAST,JSON.stringify({score,at:new Date().toISOString(),name:META.name,scoreUserId:FIXED_USER}));
+    if(old==null||score>old){localStorage.setItem(KEY,String(score));writeRemoteBest(score);}
+    else {writeRemoteBest(score);}
+    updateInlineBest();
+  }
+  window.__recordPeriodicTestScore=function(score,opts){if(opts&&opts.completed===false)return;writeBest(score)};
+  window.__resetPeriodicTestBest=async function(){
+    if(confirm(META.name+' の歴代最高得点をリセットする？')){localStorage.removeItem(KEY);localStorage.removeItem(LAST);await removeRemoteBest();updateInlineBest()}
+  };
+  function ensureInlineInfo(){
+    const old=$('periodicTestPanel');if(old)old.remove();
+    let host=document.querySelector('[data-periodic-host]')||document.querySelector('header')||document.body.firstElementChild||document.body;
+    if(!document.querySelector('.periodicBestInline')){
+      const box=document.createElement('div');
+      box.className='periodicBestInlineBox';
+      box.innerHTML='<span>定期テスト最高：</span><b class="periodicBestInline" data-periodic-best>最高 --点</b><button type="button" class="periodicResetInline">リセット</button>';
+      const st=document.createElement('style');
+      st.textContent='.periodicBestInlineBox{position:static!important;z-index:auto!important;margin:8px 12px;padding:8px 10px;border:1px solid rgba(148,163,184,.35);border-radius:12px;background:rgba(15,23,42,.06);font-weight:900;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.periodicBestInlineBox button{border:0;border-radius:999px;padding:6px 10px;background:#64748b;color:white;font-weight:900}';
+      document.head.appendChild(st);
+      if(host===document.body)document.body.insertBefore(box,document.body.firstChild);else host.appendChild(box);
+      box.querySelector('button').onclick=window.__resetPeriodicTestBest;
+    }
+    updateInlineBest();
+  }
+  function scoreFromOkTotal(ok,total){ok=Number(ok);total=Number(total);if(!total||total<1)return null;return Math.round(ok/total*100)}
+  function num(s){const n=Number(String(s||'').replace(/[^0-9.]/g,''));return Number.isFinite(n)?n:null}
+  function extractScore(){
+    const bodyText=(document.body&&document.body.innerText)||'';
+    let best=null;
+    const patterns=[/正解\s*([0-9]+)\s*\/\s*([0-9]+)/g,/([0-9]+)問中\s*([0-9]+)問正解/g,/([0-9]+)\s*\/\s*([0-9]+)\s*問/g];
+    for(const re of patterns){let m;while((m=re.exec(bodyText))){let a=Number(m[1]),b=Number(m[2]);let sc=null;if(re.source.startsWith('([0-9]+)問中'))sc=scoreFromOkTotal(b,a);else sc=scoreFromOkTotal(a,b);if(sc!=null)best=sc}}
+    let m=bodyText.match(/(?:得点|スコア|点数)[^0-9]{0,8}([0-9]{1,3})\s*点/);if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    m=bodyText.match(/([0-9]{1,3})\s*点相当/);if(m)best=Math.max(0,Math.min(100,Number(m[1])));
+    const scoreEl=$('score');if(scoreEl){const n=num(scoreEl.textContent);if(n!=null&&n>=0&&n<=100)best=Math.round(n)}
+    return best;
+  }
+  function completionSignal(){
+    const t=(document.body&&document.body.innerText)||'';
+    if(/終了|完了|最後|1周終わり|テスト終了|全問終了|結果/.test(t))return true;
+    const qno=$('qno')?.textContent||'';const m=qno.match(/([0-9]+)\s*\/\s*([0-9]+)/);
+    if(m&&Number(m[1])>=Number(m[2])&&Number(m[2])>0&&/正解\s*[0-9]+\s*\//.test(t))return true;
+    const m2=t.match(/([0-9]+)問中\s*([0-9]+)問正解/);
+    if(m2&&Number(m2[1])>0)return true;
+    return false;
+  }
+  let recordedAt=0,lastScoreKey='';
+  function maybeRecord(){
+    if(Date.now()-recordedAt<1500)return;
+    if(!completionSignal())return;
+    const s=extractScore();if(s==null)return;
+    const key=String(s)+'|'+((document.body&&document.body.innerText)||'').slice(0,80);
+    if(key===lastScoreKey)return;
+    lastScoreKey=key;recordedAt=Date.now();writeBest(s);
+  }
+  const oldAlert=window.alert;
+  window.alert=function(msg){try{if(String(msg).match(/1周終わり|終了|完了|結果/))setTimeout(maybeRecord,50)}catch(e){}return oldAlert.apply(this,arguments)};
+  window.addEventListener('storage',()=>syncFromRemote());
+  window.addEventListener('load',()=>{ensureInlineInfo();syncFromRemote();watchRemote();setInterval(maybeRecord,1200);const mo=new MutationObserver(()=>maybeRecord());mo.observe(document.body,{childList:true,subtree:true,characterData:true})});
+})();
+</script>
+</body></html>
