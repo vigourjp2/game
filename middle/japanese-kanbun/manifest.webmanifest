@@ -1,0 +1,13 @@
+{
+  "name":"漢文ダンジョン｜返り点・送り仮名",
+  "short_name":"漢文ダンジョン",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#f4f1e8",
+  "theme_color":"#991b1b",
+  "lang":"ja",
+  "icons":[
+    {"src":"./icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"./icon-512.png","sizes":"512x512","type":"image/png"}
+  ]
+}

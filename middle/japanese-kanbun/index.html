@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#991b1b">
+<meta name="description" content="中1 漢文入門① 返り点・送り仮名を、タップ・読み順パズル・定期テストで攻略する学習ゲーム。">
+<title>漢文ダンジョン｜返り点・送り仮名</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./styles.css">
+<script src="../../score-user-fixed.js"></script>
+<script src="../../firebase-config.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <a class="brand homeLink" href="../../">
+      <span class="seal">漢</span><span><b>漢文ダンジョン</b><small>中1・漢文入門①</small></span>
+    </a>
+    <div class="top-actions">
+      <span class="mini" id="bestMini">最高 --点</span>
+      <button class="mini hideMobile" id="soundBtn" type="button">🔊 ON</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="homePanel">
+      <span class="kicker">🏯 返り点・送り仮名をゲームで攻略</span>
+      <h1>漢文を、<em>読む順番</em>の<br>ゲームに変える。</h1>
+      <p class="lead">写真の「漢文入門①」を、ただ暗記する教材じゃなく、<b>見分ける → 読む順を作る → 送り仮名を判断する → 50問で仕上げる</b>流れに再設計。スマホのタップだけで遊べる。</p>
+      <div class="heroStats">
+        <span class="stat">🎯 範囲 <b>返り点・送り仮名</b></span>
+        <span class="stat">🧩 読み順パズル <b>実装</b></span>
+        <span class="stat">📝 定期テスト <b>50問100点</b></span>
+        <span class="stat" id="streakStat">🔥 連続正解 <b>0</b></span>
+      </div>
+    </section>
+
+    <div class="sectionTitle"><h2>攻略モード</h2><span>最初は「超速チュートリアル」→「読み順バトル」がおすすめ</span></div>
+    <section class="modeGrid" id="modeGrid">
+      <button class="mode" data-mode="lesson"><span class="ico">📜</span><h3>超速チュートリアル</h3><p>レ点・一二点・上下点・複合返り点、送り仮名のルールを1画面で整理。</p><strong>約3分</strong></button>
+      <button class="mode" data-mode="marks"><span class="ico">🎯</span><h3>返り点ハント</h3><p>「1字返る？」「2字以上？」「一二点を挟む？」を高速4択。</p><strong>10問 / 周回式</strong></button>
+      <button class="mode" data-mode="order"><span class="ico">🧩</span><h3>読み順バトル</h3><p>漢字を実際にタップして、日本語で読む順番を完成させる。</p><strong>実戦操作</strong></button>
+      <button class="mode" data-mode="okuri"><span class="ico">✍️</span><h3>送り仮名道場</h3><p>カタカナ・位置・歴史的仮名遣い・必要な助詞や活用語尾を判断。</p><strong>10問 / 周回式</strong></button>
+      <button class="mode exam" data-mode="exam"><span class="ico">🔥</span><h3>定期テスト決戦</h3><p>知識・読み順・送り仮名を混ぜた50問。1問2点、終了時に最高得点を保存。</p><strong>50問 / 100点</strong></button>
+    </section>
+
+    <section class="panel" id="lessonPanel">
+      <div class="gameShell">
+        <div class="gameHead"><div class="roundTitle">📜 超速チュートリアル</div><button class="btn ghost" data-back>メニューへ</button></div>
+        <div class="gameBody">
+          <div class="lessonGrid">
+            <article class="lesson"><h3>① 返り点って何？</h3><p>漢文を<b>日本語の語順に合わせて読むため</b>の符号。基本は上から進み、返り点で「戻って読む」。</p><div class="example">不<sub>レ</sub> 知 → 「知」→「不」の順</div></article>
+            <article class="lesson"><h3>② 返り点の使い分け</h3><p><span class="rule">レ点</span> 1字だけ返る。<br><span class="rule">一・二・三…点</span> 2字以上隔てて返る。<br><span class="rule">上・中・下点</span> 一二点の範囲を挟んで、さらに大きく返る。</p><p>一二点と上下点を併用するときは、<b>一二点側を先に処理</b>する。</p></article>
+            <article class="lesson"><h3>③ レ点が合体する形</h3><p>一点・上点などはレ点と組み合わさることがある。見た目が複雑でも、考え方は同じ。「まずレ点で1字返る → そのあと大きい返り点に従う」。</p><div class="example">ポイント：一気に全部見ない。<br>小さい戻り → 大きい戻り。</div></article>
+            <article class="lesson"><h3>④ 送り仮名</h3><p>漢文を日本語として読むために補うもの。<b>漢字の右下にカタカナ</b>で付け、古典文法・歴史的仮名遣いに従う。</p><p>活用語尾、助詞・助動詞、副詞・接続詞・感動詞の語尾など、日本語として読むのに必要な部分を補う。</p></article>
+            <article class="lesson"><h3>⑤ 写真の例題を読む</h3><p>「勿・以・悪・小・為・之」の読む順番は、写真の番号どおり：</p><div class="example"><b>悪 → 小 → 以 → 之 → 為 → 勿</b><br>「悪の小なるを以て之を為すこと勿かれ。」</div></article>
+            <article class="lesson"><h3>⑥ テストでの解き方</h3><ol><li>返り点が付いた字は、すぐ読まず保留。</li><li>レ点なら直下を読んで1字戻る。</li><li>一二点は「一」まで進んで「二」へ戻る。</li><li>上下点があれば、一二点の内側を先に片付ける。</li></ol></article>
+          </div>
+          <p class="sourceNote">※ 添付写真の「漢文入門①（返り点・送り仮名）」の範囲を中心に、ゲーム向けに表現を整理しています。</p>
+          <div class="actions"><button class="btn primary" id="lessonToOrder">🧩 読み順バトルへ</button><button class="btn gold" id="lessonToExam">🔥 50問テストへ</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="gamePanel">
+      <div class="gameShell">
+        <div class="gameHead">
+          <div class="gameHeadLeft"><span class="roundTitle" id="roundTitle">ゲーム</span><div class="progress"><i id="progressBar"></i></div></div>
+          <div class="hud"><span id="qNo">1 / 10</span><span id="scoreHud">0点</span><span id="streakHud">🔥 0</span></div>
+        </div>
+        <div class="gameBody" id="questionArea"></div>
+        <div class="result" id="resultArea"></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div><div class="confetti" id="confetti"></div>
+<div class="modal" id="helpModal"><div class="modalBox"><div class="modalHead"><h2>返り点のコツ</h2><button class="close" id="closeHelp">閉じる</button></div><p class="sub">上から下へ進み、返り点の付いた字はいったん保留。「戻れ」の合図が来たら戻って読む。レ点は1字、一二点は2字以上、上下点は一二点を挟む大きな戻り。</p></div></div>
+<script src="./app.js"></script>
+</body>
+</html>

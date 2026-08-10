@@ -47,24 +47,6 @@ button.primary{background:var(--pri)}button.ok{background:var(--ok)}button.ng{ba
 .kvgLoading{color:#dbeafe;font-weight:900}
 
 
-
-.judgeFx{position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center;opacity:0;z-index:25}
-.judgeFx.show{animation:judgeFxFade 1.6s ease forwards}
-.judgeFxCore{min-width:min(76vw,420px);max-width:88vw;border-radius:26px;padding:20px 24px;text-align:center;font-weight:900;backdrop-filter:blur(6px);box-shadow:0 18px 44px rgba(0,0,0,.28);transform:scale(.86)}
-.judgeFx.show .judgeFxCore{animation:judgeFxPop 1.6s ease forwards}
-.judgeFxBadge{font-size:clamp(38px,11vw,72px);line-height:1;margin-bottom:8px}
-.judgeFxTitle{font-size:clamp(24px,7vw,42px);line-height:1.15;letter-spacing:.03em}
-.judgeFxSub{margin-top:7px;font-size:clamp(13px,3.8vw,18px);line-height:1.4;font-weight:800;opacity:.96}
-.judgeFx.ok .judgeFxCore{background:rgba(22,163,74,.20);border:2px solid rgba(134,239,172,.88);color:#f0fdf4}
-.judgeFx.ok:before,.judgeFx.ng:before,.judgeFx.maybe:before{content:"";position:absolute;inset:0}
-.judgeFx.ok:before{background:radial-gradient(circle at center,rgba(34,197,94,.26),rgba(34,197,94,.10) 34%,rgba(34,197,94,0) 66%)}
-.judgeFx.ng .judgeFxCore{background:rgba(220,38,38,.18);border:2px solid rgba(252,165,165,.90);color:#fff1f2}
-.judgeFx.ng:before{background:radial-gradient(circle at center,rgba(239,68,68,.24),rgba(239,68,68,.08) 34%,rgba(239,68,68,0) 66%)}
-.judgeFx.maybe .judgeFxCore{background:rgba(245,158,11,.18);border:2px solid rgba(253,224,71,.92);color:#fffbeb}
-.judgeFx.maybe:before{background:radial-gradient(circle at center,rgba(245,158,11,.24),rgba(245,158,11,.08) 34%,rgba(245,158,11,0) 66%)}
-@keyframes judgeFxFade{0%{opacity:0}10%{opacity:1}78%{opacity:1}100%{opacity:0}}
-@keyframes judgeFxPop{0%{transform:scale(.80) translateY(22px)}16%{transform:scale(1.05) translateY(0)}74%{transform:scale(1)}100%{transform:scale(.98) translateY(-4px)}}
-
 /* fixed shared id hide */
 #sharedIdPanel,#shareIdPanel,#scoreUserPanel,#firebaseUserPanel,.sharedIdPanel,.shareIdPanel,.scoreUserPanel,.firebaseUserPanel,
 input[id*="share" i],input[id*="共有" i],button[id*="share" i],button[id*="共有" i],
@@ -82,7 +64,7 @@ label[for*="share" i],label[for*="共有" i]{
 <header class="top">
   <div class="row"><span class="title">小1 漢字 手書き自動認識</span><span class="badge">小1 80字</span><span class="badge">太さ量なし</span><span class="score" id="score">0問中 0問正解</span></div>
   <div class="q" id="question">開始を押してね</div>
-  <div class="sub" id="status">小学1年生で習う漢字80字。読みと意味を見て一文字を大きく書いて判定。判定時はせいかい演出を表示。</div>
+  <div class="sub" id="status">小学1年生で習う漢字80字。読みと意味を見て一文字を大きく書いて判定。</div>
 </header>
 
 <main class="canvasWrap">
@@ -104,14 +86,6 @@ label[for*="share" i],label[for*="共有" i]{
       <div class="componentLine" id="componentDetails">---</div>
     </div>
     <div class="cands" id="candidates">---</div>
-  </div>
-
-  <div class="judgeFx" id="judgeFx" aria-hidden="true">
-    <div class="judgeFxCore">
-      <div class="judgeFxBadge" id="judgeFxBadge">○</div>
-      <div class="judgeFxTitle" id="judgeFxTitle">せいかい！</div>
-      <div class="judgeFxSub" id="judgeFxSub">よくできました</div>
-    </div>
   </div>
   <div id="candidateList"></div>
 </main>
@@ -153,21 +127,6 @@ try { wrongIds=JSON.parse(safeGet('grade1KanjiWrong','[]')); }
 catch(e) { wrongIds=[]; }
 
 function $(id){return document.getElementById(id)}
-function showJudgeFx(kind,msg=''){
-  const box=$('judgeFx'),badge=$('judgeFxBadge'),title=$('judgeFxTitle'),sub=$('judgeFxSub');
-  if(!box||!badge||!title||!sub)return;
-  box.className='judgeFx '+kind;
-  if(kind==='ok'){badge.textContent='○';title.textContent='せいかい！';sub.textContent='よくできました';}
-  else if(kind==='maybe'){badge.textContent='△';title.textContent='おしい！';sub.textContent='あと すこし';}
-  else {badge.textContent='×';title.textContent='ちがうよ';sub.textContent='もう いちど みなおそう';}
-  if(msg)sub.textContent += '　' + msg;
-  void box.offsetWidth;
-  box.classList.add('show');
-  clearTimeout(showJudgeFx._tm);
-  showJudgeFx._tm=setTimeout(()=>{box.className='judgeFx';},1650);
-  try{ if(navigator.vibrate){ navigator.vibrate(kind==='ok'?[40,40,70]:kind==='maybe'?[30,30,30]:[80,40,80]); } }catch(e){}
-}
-
 function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
 function start(){
   let mode=$('mode').value;
@@ -1009,11 +968,8 @@ function finishJudge(isOk,msg,cands,level='',comp=null,total=null,trace=null,vis
       `判定：認識候補に正解があることを必須条件にし、見た目部品も比較。KanjiVG部品未取得時は0点/P?にせず、候補＋全体字形で判定。<br>${traceLine}${visualLine}`;
   }
 
-  const fxKind=isOk?'ok':((level==='maybe'||msg.startsWith('△'))?'maybe':'ng');
-  showJudgeFx(fxKind, isOk ? 'せいかい' : (fxKind==='maybe' ? 'あと すこし' : 'せいかいは「'+cur.char+'」'));
   showStrokeVisual(cur.char);
   $('resultBox').classList.add('open');
-  $('resultBox').scrollTop=0;
 }
 function kanjiVGFileName(ch){
   const cp=[...ch][0].codePointAt(0).toString(16).padStart(5,'0');
