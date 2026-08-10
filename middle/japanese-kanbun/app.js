@@ -32,8 +32,8 @@ const okuriQuestions=[
  {q:'送り仮名として補う代表例に入るのは？',a:'用言の活用語尾',o:['漢字の部首名','ページ番号','返り点の番号'],e:'動詞・形容詞などの活用語尾は重要な送り仮名。'},
  {q:'送り仮名として補う代表例に入るのは？',a:'助詞・助動詞',o:['英単語','漢字の画数','句読点の名称'],e:'日本語の文として必要な助詞・助動詞も補う。'},
  {q:'「日本語らしく読むために必要なものを付ける」という説明は何のルール？',a:'送り仮名',o:['レ点','句読点','ルビ'],e:'送り仮名は日本語として成立させるために必要な部分を補う。'},
- {q:'「不レ知」を「知らず」と読むとき、「ズ」は何に当たる？',a:'送り仮名',o:['返り点','ふりがな','句点'],e:'「ズ」は日本語として読むために補う送り仮名。'},
- {q:'「可レ行」を「行ふべし」と読むとき、「フ」「ベシ」のような部分は？',a:'送り仮名',o:['返り点','漢字本文','読み順番号'],e:'活用や助動詞に当たる部分を送り仮名として補う。'},
+ {q:'次の漢文を「知らず」と読むとき、「ズ」は何に当たる？',a:'送り仮名',o:['返り点','ふりがな','句点'],e:'「ズ」は日本語として読むために補う送り仮名。',kanbun:{chars:['不','知'],marks:['レ',''],okuri:['ズ','']}},
+ {q:'次の漢文を「行ふべし」と読むとき、「フ」「ベシ」のような部分は？',a:'送り仮名',o:['返り点','漢字本文','読み順番号'],e:'活用や助動詞に当たる部分を送り仮名として補う。',kanbun:{chars:['可','行'],marks:['レ','']}},
  {q:'送り仮名と返り点の役割の組み合わせで正しいのは？',a:'送り仮名＝日本語の形を補う／返り点＝読む順を示す',o:['どちらも読む順だけ示す','どちらも意味だけ訳す','役割は完全に同じ'],e:'送り仮名は語形、返り点は語順を主に補助する。'},
  {q:'送り仮名を付けるとき、不要なものまで自由に足してよい？',a:'必要なものを付ける',o:['好きなだけ足す','必ず3文字足す','全漢字に同じ仮名を付ける'],e:'日本語として読むために必要なものを選ぶ。'}
 ];
@@ -54,23 +54,23 @@ const orderProblems=[
 ];
 
 const examExtra=[
- {q:'写真の例「勿・以・悪・小・為・之」で、最初に読む字は？',a:'悪',o:['勿','以','為'],e:'写真の読み順番号「1」は悪。'},
- {q:'同じ例で、2番目に読む字は？',a:'小',o:['以','之','勿'],e:'読む順は 悪→小→以→之→為→勿。'},
- {q:'同じ例で、最後に読む字は？',a:'勿',o:['為','之','以'],e:'「勿」が6番目。'},
- {q:'「悪→小→以→之→為→勿」の3番目は？',a:'以',o:['悪','為','勿'],e:'3番目は「以」。'},
- {q:'「悪→小→以→之→為→勿」の4番目は？',a:'之',o:['小','為','勿'],e:'4番目は「之」。'},
+ {q:'次の写真例の漢文で、最初に読む字は？',a:'悪',o:['勿','以','為'],e:'写真の読み順番号「1」は悪。',kanbun:{chars:['勿','以','悪','小','為','之'],marks:['下','二','','一','上レ','']}},
+ {q:'次の写真例の漢文で、2番目に読む字は？',a:'小',o:['以','之','勿'],e:'読む順は 悪→小→以→之→為→勿。',kanbun:{chars:['勿','以','悪','小','為','之'],marks:['下','二','','一','上レ','']}},
+ {q:'次の写真例の漢文で、最後に読む字は？',a:'勿',o:['為','之','以'],e:'「勿」が6番目。',kanbun:{chars:['勿','以','悪','小','為','之'],marks:['下','二','','一','上レ','']}},
+ {q:'次の写真例の漢文で、3番目に読む字は？',a:'以',o:['悪','為','勿'],e:'3番目は「以」。',kanbun:{chars:['勿','以','悪','小','為','之'],marks:['下','二','','一','上レ','']}},
+ {q:'次の写真例の漢文で、4番目に読む字は？',a:'之',o:['小','為','勿'],e:'4番目は「之」。',kanbun:{chars:['勿','以','悪','小','為','之'],marks:['下','二','','一','上レ','']}},
  {q:'返り点で一番小さい戻りの基本単位は？',a:'1字戻るレ点',o:['3字戻る上下点','送り仮名','句点'],e:'レ点は隣り合う2字で1字返る。'},
- {q:'「不レ知」の読む順として正しいものは？',a:'知 → 不',o:['不 → 知','不だけ読む','知だけ読む'],e:'レ点なので直下の知を先に読む。'},
- {q:'「甲二・乙・丙一」の読む順は？',a:'乙 → 丙 → 甲',o:['甲 → 乙 → 丙','丙 → 乙 → 甲','乙 → 甲 → 丙'],e:'二の甲を保留し、一の丙まで進んで甲へ戻る。'},
+ {q:'次の漢文の読む順として正しいものは？',a:'知 → 不',o:['不 → 知','不だけ読む','知だけ読む'],e:'レ点なので直下の知を先に読む。',kanbun:{chars:['不','知'],marks:['レ','']}},
+ {q:'次の漢文の読む順は？',a:'乙 → 丙 → 甲',o:['甲 → 乙 → 丙','丙 → 乙 → 甲','乙 → 甲 → 丙'],e:'二の甲を保留し、一の丙まで進んで甲へ戻る。',kanbun:{chars:['甲','乙','丙'],marks:['二','','一']}},
  {q:'レ点付きの字を見つけた直後の操作は？',a:'その字を保留して直下へ進む',o:['必ずそこで終了','その字を2回読む','下の字を削除'],e:'レ点は直下→上の字。'},
  {q:'「送り仮名＝カタカナ」は正しい？',a:'正しい',o:['誤り。ひらがなだけ','誤り。数字','誤り。英字'],e:'漢文の訓点ではカタカナで送る。'},
  {q:'1字だけ上へ返る返り点は？',a:'レ点',o:['一・二点','上・下点','送り仮名'],e:'1字だけ返るのがレ点。'},
  {q:'2字以上隔てて返るときの基本は？',a:'一・二点',o:['レ点だけ','送り仮名','句読点'],e:'2字以上隔てるときは一二点を使う。'},
  {q:'送り仮名を付ける位置として正しいのは？',a:'漢字の右下',o:['漢字の左上','本文の欄外だけ','ページ最下部'],e:'基本位置は漢字の右下。'},
  {q:'送り仮名の仮名遣いは何を基本にする？',a:'歴史的仮名遣い',o:['現代仮名遣いだけ','ローマ字','英語式'],e:'古典文法と歴史的仮名遣いに従う。'},
- {q:'写真の例「悪→小→以→之→為→勿」で5番目は？',a:'為',o:['之','以','勿'],e:'5番目は「為」。'},
- {q:'写真の例の読む順として正しいものは？',a:'悪 → 小 → 以 → 之 → 為 → 勿',o:['勿 → 以 → 悪 → 小 → 為 → 之','悪 → 以 → 小 → 為 → 之 → 勿','之 → 為 → 小 → 悪 → 以 → 勿'],e:'写真の番号1〜6を追うと、悪→小→以→之→為→勿。'},
- {q:'「有レ志」の読む順は？',a:'志 → 有',o:['有 → 志','有だけ','志だけ'],e:'レ点なので「志」を先に読み、「有」へ戻る。'},
+ {q:'次の写真例の漢文で、5番目に読む字は？',a:'為',o:['之','以','勿'],e:'5番目は「為」。',kanbun:{chars:['勿','以','悪','小','為','之'],marks:['下','二','','一','上レ','']}},
+ {q:'次の写真例の漢文の読む順として正しいものは？',a:'悪 → 小 → 以 → 之 → 為 → 勿',o:['勿 → 以 → 悪 → 小 → 為 → 之','悪 → 以 → 小 → 為 → 之 → 勿','之 → 為 → 小 → 悪 → 以 → 勿'],e:'写真の番号1〜6を追うと、悪→小→以→之→為→勿。',kanbun:{chars:['勿','以','悪','小','為','之'],marks:['下','二','','一','上レ','']}},
+ {q:'次の漢文の読む順は？',a:'志 → 有',o:['有 → 志','有だけ','志だけ'],e:'レ点なので「志」を先に読み、「有」へ戻る。',kanbun:{chars:['有','志'],marks:['レ','']}},
  {q:'一二点と上下点が併用されたときの順序は？',a:'一二点を先に処理してから上下点',o:['上下点を先にする','どちらも無視する','必ず全文を逆順にする'],e:'まず内側の一二点、次に外側の上下点。'}
 ];
 
@@ -79,6 +79,7 @@ function saveState(){state.streak=streak;state.lastMode=currentMode;localStorage
 function updatePersistentUI(){const b=localStorage.getItem(BEST_KEY);$('#bestMini').textContent=b==null?'最高 --点':`最高 ${b}点`;$('#streakStat').innerHTML=`🔥 連続正解 <b>${streak}</b>`}
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function kanbunMarkup(k,{interactive=false}={}){if(!k||!Array.isArray(k.chars))return '';const marks=k.marks||[],okuri=k.okuri||[];return `<div class="kanbunColumn">${k.chars.map((c,i)=>`${interactive?`<button class="kanCell pick" type="button" data-i="${i}" aria-label="${esc(c)}">`:`<span class="kanCell static">`}<span class="kanChar">${esc(c)}</span>${marks[i]?`<small class="kanMark${String(marks[i]).length>1?' combo':''}">${esc(marks[i])}</small>`:''}${okuri[i]?`<small class="kanOkuri">${esc(okuri[i])}</small>`:''}${interactive?'</button>':'</span>'}`).join('')}</div>`}
 function showPanel(id){$$('.panel').forEach(x=>x.classList.remove('active'));if(id)$('#'+id).classList.add('active');window.scrollTo({top:id?$('#'+id).offsetTop-70:0,behavior:'smooth'})}
 function returnMenu(){currentMode=null;showPanel(null);$('#modeGrid').scrollIntoView({behavior:'smooth',block:'start'})}
 
@@ -104,21 +105,21 @@ function modeName(){return ({marks:'🎯 返り点ハント',okuri:'✍️ 送�
 function pointsPer(){return currentMode==='exam'?2:10}
 function renderHUD(){const total=deck.length;$('#roundTitle').textContent=modeName();$('#qNo').textContent=`${Math.min(qIndex+1,total)} / ${total}`;$('#scoreHud').textContent=`${score}点`;$('#streakHud').textContent=`🔥 ${streak}`;$('#progressBar').style.width=`${(qIndex/total)*100}%`}
 function renderQuestion(){answered=false;renderHUD();const q=deck[qIndex];if(!q){finish();return}if(q.type==='order')renderOrder(q);else renderMC(q)}
-function renderMC(q){const opts=shuffle([q.a,...q.o.filter(x=>x!==q.a)]).slice(0,4);$('#questionArea').innerHTML=`
+function renderMC(q){const opts=shuffle([q.a,...q.o.filter(x=>x!==q.a)]).slice(0,4);const preview=q.kanbun?`<div class="mcKanbun"><div class="verticalLabel">上から下へ読む漢文</div>${kanbunMarkup(q.kanbun)}</div>`:'';$('#questionArea').innerHTML=`
  <span class="promptTag">${currentMode==='okuri'?'送り仮名':'返り点・基本'}</span>
- <div class="question">${esc(q.q)}</div><div class="sub">正しいものを1つ選べ。</div>
+ <div class="question">${esc(q.q)}</div>${preview}<div class="sub">正しいものを1つ選べ。</div>
  <div class="choices">${opts.map((o,i)=>`<button class="choice" data-answer="${esc(o)}"><span style="color:#9a3412">${'ABCD'[i]}.</span> ${esc(o)}</button>`).join('')}</div>
  <div class="feedback" id="feedback"></div>
  <div class="actions"><button class="btn primary" id="nextBtn" disabled>次へ →</button><button class="btn ghost" id="helpBtn">ヒント</button><button class="btn ghost" id="menuBtn">メニュー</button></div>`;
  $$('.choice').forEach(b=>b.addEventListener('click',()=>answerMC(b,b.dataset.answer,q)));$('#nextBtn').addEventListener('click',next);$('#helpBtn').addEventListener('click',()=>$('#helpModal').classList.add('show'));$('#menuBtn').addEventListener('click',returnMenu)}
 function answerMC(btn,val,q){if(answered)return;answered=true;const ok=val===q.a;$$('.choice').forEach(b=>{b.disabled=true;if(b.dataset.answer===q.a)b.classList.add('correct')});if(!ok)btn.classList.add('wrong');settle(ok,q.e,`${q.q} → ${q.a}`)}
 function renderOrder(q){let picked=[],hadError=false;$('#questionArea').innerHTML=`
- <span class="promptTag">${esc(q.title)}</span><div class="question">日本語として読む順に、漢字をタップ。</div><div class="sub">返り点を見て、1番目から順番に選べ。間違えたタップはその場で戻る。</div>
- <div class="verticalCard"><div class="kanbunLine" id="kanbunLine">${q.chars.map((c,i)=>`<button class="kanCell pick" data-i="${i}" aria-label="${esc(c)}"><span>${esc(c)}</span>${q.marks[i]?`<small class="kanMark">${esc(q.marks[i])}</small>`:''}</button>`).join('')}</div><div class="orderTray" id="orderTray"><span class="sub">ここに読む順が並ぶ</span></div></div>
+ <span class="promptTag">${esc(q.title)}</span><div class="question">日本語として読む順に、漢字をタップ。</div><div class="sub">本文は教科書と同じ<b>縦書き</b>。上から下へ見て、返り点に従い1番目から選べ。</div>
+ <div class="verticalCard"><div class="verticalLabel">漢文本文｜上 → 下</div><div class="kanbunStage" id="kanbunLine">${kanbunMarkup({chars:q.chars,marks:q.marks}, {interactive:true})}</div><div class="orderTray" id="orderTray"><span class="sub">ここに読む順が並ぶ</span></div></div>
  <div class="feedback" id="feedback"></div>
  <div class="actions"><button class="btn primary" id="nextBtn" disabled>次へ →</button><button class="btn ghost" id="resetOrder">やり直す</button><button class="btn ghost" id="menuBtn">メニュー</button></div>`;
- const cells=$$('.kanCell');
- function draw(){const tray=$('#orderTray');tray.innerHTML=picked.length?picked.map((ix,n)=>`<span class="orderChip">${n+1}. ${esc(q.chars[ix])}</span>${n<picked.length-1?'<span class="orderArrow">→</span>':''}`).join(''):'<span class="sub">ここに読む順が並ぶ</span>';cells.forEach((c,i)=>c.classList.toggle('done',picked.includes(i)))}
+ const cells=$$('.kanbunStage .kanCell');
+ function draw(){const tray=$('#orderTray');tray.innerHTML=picked.length?picked.map((ix,n)=>`<span class="orderChip">${n+1}. ${esc(q.chars[ix])}</span>${n<picked.length-1?'<span class="orderArrow">→</span>':''}`).join(''):'<span class="sub">ここに読む順が並ぶ</span>';cells.forEach((c,i)=>{c.classList.toggle('done',picked.includes(i));const old=c.querySelector('.kanNum');if(old)old.remove();const n=picked.indexOf(i);if(n>=0)c.insertAdjacentHTML('beforeend',`<b class="kanNum">${n+1}</b>`)})}
  cells.forEach(c=>c.addEventListener('click',()=>{if(answered||picked.includes(+c.dataset.i))return;const ix=+c.dataset.i, expected=q.target[picked.length];if(ix!==expected){hadError=true;c.classList.remove('bad');void c.offsetWidth;c.classList.add('bad');wrongTap();return}picked.push(ix);tick();draw();if(picked.length===q.target.length){answered=true;const ok=currentMode==='exam'?!hadError:true;settle(ok,q.ex,`${q.title} → ${q.reading}`)}}));
  $('#resetOrder').addEventListener('click',()=>{if(answered)return;picked=[];hadError=currentMode==='exam'?hadError:false;draw()});$('#nextBtn').addEventListener('click',next);$('#menuBtn').addEventListener('click',returnMenu);draw();
 }
