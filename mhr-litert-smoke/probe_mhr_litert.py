@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, hashlib, json, time, traceback
+import argparse, hashlib, inspect, json, time, traceback
 from pathlib import Path
 
 
@@ -27,12 +27,12 @@ def main() -> int:
         import litert_torch
         from mhr.mhr import MHR
 
-        class MHRFloat32FK(torch.nn.Module):
-            """Official MHR forward path with only FK precision forced to float32."""
+        class MHRFloat32Base(torch.nn.Module):
             def __init__(self, inner):
                 super().__init__()
                 self.inner = inner
-
+            def make_skeleton(self, joints):
+                raise NotImplementedError
             def forward(self, identity, params, face):
                 identity = identity.expand(params.shape[0], -1)
                 coeffs = torch.cat([identity, face], dim=1)
@@ -45,9 +45,7 @@ def main() -> int:
                 joints = self.inner.character_torch.model_parameters_to_joint_parameters(
                     torch.concatenate((params, padding), axis=1)
                 )
-                skel = self.inner.character_torch.joint_parameters_to_skeleton_state(
-                    joints, use_double_precision=False
-                )
+                skel = self.make_skeleton(joints)
                 unposed = rest_pose + self.inner.pose_correctives_model.forward(
                     joint_parameters=joints
                 )
@@ -55,6 +53,25 @@ def main() -> int:
                     skel_state=skel, rest_vertex_positions=unposed
                 )
                 return verts, skel
+
+        class CharacterF32FK(MHRFloat32Base):
+            def make_skeleton(self, joints):
+                return self.inner.character_torch.joint_parameters_to_skeleton_state(
+                    joints, use_double_precision=False
+                )
+
+        class SkeletonF32FK(MHRFloat32Base):
+            def make_skeleton(self, joints):
+                return self.inner.character_torch.skeleton.joint_parameters_to_skeleton_state(
+                    joints, use_double_precision=False
+                )
+
+        class LocalGlobalF32FK(MHRFloat32Base):
+            def make_skeleton(self, joints):
+                local = self.inner.character_torch.joint_parameters_to_local_skeleton_state(joints)
+                return self.inner.character_torch.skeleton.local_skeleton_state_to_skeleton_state(
+                    local, use_double_precision=False
+                )
 
         report.update(
             torch_version=torch.__version__,
@@ -65,19 +82,34 @@ def main() -> int:
         if not (assets / 'lod1.fbx').is_file() and (assets / 'assets' / 'lod1.fbx').is_file():
             assets = assets / 'assets'
         report['assets_dir'] = str(assets)
-        report['lod1_fbx_exists'] = (assets / 'lod1.fbx').is_file()
         report['official_torchscript_exists'] = (assets / 'mhr_model.pt').is_file()
 
         t0 = time.time()
         official = MHR.from_files(
-            folder=assets,
-            device=torch.device('cpu'),
-            lod=1,
-            wants_pose_correctives=True,
+            folder=assets, device=torch.device('cpu'), lod=1, wants_pose_correctives=True
         ).eval()
-        f32_model = MHRFloat32FK(official).eval()
         report['mhr_load_ok'] = True
         report['mhr_load_seconds'] = time.time() - t0
+
+        char_fk = official.character_torch.joint_parameters_to_skeleton_state
+        report['character_fk_signature'] = str(inspect.signature(char_fk))
+        skeleton = getattr(official.character_torch, 'skeleton', None)
+        skel_fk = getattr(skeleton, 'joint_parameters_to_skeleton_state', None)
+        local_global = getattr(skeleton, 'local_skeleton_state_to_skeleton_state', None)
+        report['skeleton_fk_signature'] = str(inspect.signature(skel_fk)) if skel_fk else None
+        report['local_global_fk_signature'] = str(inspect.signature(local_global)) if local_global else None
+
+        if 'use_double_precision' in report['character_fk_signature']:
+            f32_model = CharacterF32FK(official).eval()
+            report['f32_fk_path'] = 'character_kwarg'
+        elif skel_fk and 'use_double_precision' in report['skeleton_fk_signature']:
+            f32_model = SkeletonF32FK(official).eval()
+            report['f32_fk_path'] = 'skeleton_kwarg'
+        elif local_global and 'use_double_precision' in report['local_global_fk_signature']:
+            f32_model = LocalGlobalF32FK(official).eval()
+            report['f32_fk_path'] = 'local_then_global_kwarg'
+        else:
+            raise RuntimeError('No float32-FK precision control found in installed PyMomentum API')
 
         torch.manual_seed(1234)
         inputs = (
@@ -90,10 +122,10 @@ def main() -> int:
             f32_v, f32_s = f32_model(*inputs)
         report['pytorch_output_shapes'] = [list(f32_v.shape), list(f32_s.shape)]
         report['pytorch_output_dtypes'] = [str(f32_v.dtype), str(f32_s.dtype)]
-        report['f32_vs_official_vertices_max_abs'] = float((f32_v - official_v).abs().max())
-        report['f32_vs_official_vertices_mean_abs'] = float((f32_v - official_v).abs().mean())
-        report['f32_vs_official_skeleton_max_abs'] = float((f32_s - official_s).abs().max())
-        report['f32_vs_official_skeleton_mean_abs'] = float((f32_s - official_s).abs().mean())
+        report['f32_vs_official_vertices_max_abs'] = float((f32_v-official_v).abs().max())
+        report['f32_vs_official_vertices_mean_abs'] = float((f32_v-official_v).abs().mean())
+        report['f32_vs_official_skeleton_max_abs'] = float((f32_s-official_s).abs().max())
+        report['f32_vs_official_skeleton_mean_abs'] = float((f32_s-official_s).abs().mean())
 
         t0 = time.time()
         ep = torch.export.export(f32_model, inputs)
@@ -117,20 +149,16 @@ def main() -> int:
         report['tflite_sha256'] = sha256(tflite_path)
 
         litert_out = edge(*inputs)
-        if isinstance(litert_out, (tuple, list)):
-            lv = np.asarray(litert_out[0])
-            ls = np.asarray(litert_out[1])
-        else:
+        if not isinstance(litert_out, (tuple, list)) or len(litert_out) != 2:
             raise RuntimeError(f'Expected two LiteRT outputs, got {type(litert_out)!r}')
-        fv = f32_v.detach().cpu().numpy()
-        fs = f32_s.detach().cpu().numpy()
-        ov = official_v.detach().cpu().numpy()
-        os = official_s.detach().cpu().numpy()
+        lv, ls = np.asarray(litert_out[0]), np.asarray(litert_out[1])
+        fv, fs = f32_v.detach().cpu().numpy(), f32_s.detach().cpu().numpy()
+        ov, os = official_v.detach().cpu().numpy(), official_s.detach().cpu().numpy()
         report['litert_output_shapes'] = [list(lv.shape), list(ls.shape)]
-        report['litert_vs_f32_vertices_max_abs'] = float(np.max(np.abs(lv - fv)))
-        report['litert_vs_f32_skeleton_max_abs'] = float(np.max(np.abs(ls - fs)))
-        report['litert_vs_official_vertices_max_abs'] = float(np.max(np.abs(lv - ov)))
-        report['litert_vs_official_skeleton_max_abs'] = float(np.max(np.abs(ls - os)))
+        report['litert_vs_f32_vertices_max_abs'] = float(np.max(np.abs(lv-fv)))
+        report['litert_vs_f32_skeleton_max_abs'] = float(np.max(np.abs(ls-fs)))
+        report['litert_vs_official_vertices_max_abs'] = float(np.max(np.abs(lv-ov)))
+        report['litert_vs_official_skeleton_max_abs'] = float(np.max(np.abs(ls-os)))
         report['passed'] = (
             not f64_nodes
             and report['litert_vs_official_vertices_max_abs'] < 0.001
@@ -141,8 +169,8 @@ def main() -> int:
         report['error'] = repr(exc)
         report['traceback'] = traceback.format_exc()
 
-    (args.output_dir / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
-    print(json.dumps({k: v for k, v in report.items() if k != 'traceback'}, indent=2))
+    (args.output_dir/'report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+    print(json.dumps({k:v for k,v in report.items() if k!='traceback'},indent=2))
     return 0 if report.get('passed') else 1
 
 
