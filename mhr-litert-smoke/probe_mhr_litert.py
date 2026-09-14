@@ -26,13 +26,14 @@ def main() -> int:
         import torchao
         import litert_torch
         from mhr.mhr import MHR
+        from pymomentum.backend import skel_state_backend
 
-        class MHRFloat32Base(torch.nn.Module):
+        class MHRBackendF32FK(torch.nn.Module):
+            """Official MHR math; only global FK precision changes from fp64 to fp32."""
             def __init__(self, inner):
                 super().__init__()
                 self.inner = inner
-            def make_skeleton(self, joints):
-                raise NotImplementedError
+
             def forward(self, identity, params, face):
                 identity = identity.expand(params.shape[0], -1)
                 coeffs = torch.cat([identity, face], dim=1)
@@ -45,7 +46,20 @@ def main() -> int:
                 joints = self.inner.character_torch.model_parameters_to_joint_parameters(
                     torch.concatenate((params, padding), axis=1)
                 )
-                skel = self.make_skeleton(joints)
+                skeleton = self.inner.character_torch.skeleton
+                local = skeleton.joint_parameters_to_local_skeleton_state(joints)
+                prefix_parts = list(
+                    skeleton.pmi.split(
+                        split_size=skeleton._pmi_buffer_sizes,
+                        dim=1,
+                    )
+                )
+                skel, _ = skel_state_backend.global_skel_state_from_local_skel_state_impl(
+                    local,
+                    prefix_parts,
+                    save_intermediate_results=False,
+                    use_double_precision=False,
+                )
                 unposed = rest_pose + self.inner.pose_correctives_model.forward(
                     joint_parameters=joints
                 )
@@ -53,25 +67,6 @@ def main() -> int:
                     skel_state=skel, rest_vertex_positions=unposed
                 )
                 return verts, skel
-
-        class CharacterF32FK(MHRFloat32Base):
-            def make_skeleton(self, joints):
-                return self.inner.character_torch.joint_parameters_to_skeleton_state(
-                    joints, use_double_precision=False
-                )
-
-        class SkeletonF32FK(MHRFloat32Base):
-            def make_skeleton(self, joints):
-                return self.inner.character_torch.skeleton.joint_parameters_to_skeleton_state(
-                    joints, use_double_precision=False
-                )
-
-        class LocalGlobalF32FK(MHRFloat32Base):
-            def make_skeleton(self, joints):
-                local = self.inner.character_torch.joint_parameters_to_local_skeleton_state(joints)
-                return self.inner.character_torch.skeleton.local_skeleton_state_to_skeleton_state(
-                    local, use_double_precision=False
-                )
 
         report.update(
             torch_version=torch.__version__,
@@ -88,28 +83,17 @@ def main() -> int:
         official = MHR.from_files(
             folder=assets, device=torch.device('cpu'), lod=1, wants_pose_correctives=True
         ).eval()
+        f32_model = MHRBackendF32FK(official).eval()
         report['mhr_load_ok'] = True
         report['mhr_load_seconds'] = time.time() - t0
-
-        char_fk = official.character_torch.joint_parameters_to_skeleton_state
-        report['character_fk_signature'] = str(inspect.signature(char_fk))
-        skeleton = getattr(official.character_torch, 'skeleton', None)
-        skel_fk = getattr(skeleton, 'joint_parameters_to_skeleton_state', None)
-        local_global = getattr(skeleton, 'local_skeleton_state_to_skeleton_state', None)
-        report['skeleton_fk_signature'] = str(inspect.signature(skel_fk)) if skel_fk else None
-        report['local_global_fk_signature'] = str(inspect.signature(local_global)) if local_global else None
-
-        if 'use_double_precision' in report['character_fk_signature']:
-            f32_model = CharacterF32FK(official).eval()
-            report['f32_fk_path'] = 'character_kwarg'
-        elif skel_fk and 'use_double_precision' in report['skeleton_fk_signature']:
-            f32_model = SkeletonF32FK(official).eval()
-            report['f32_fk_path'] = 'skeleton_kwarg'
-        elif local_global and 'use_double_precision' in report['local_global_fk_signature']:
-            f32_model = LocalGlobalF32FK(official).eval()
-            report['f32_fk_path'] = 'local_then_global_kwarg'
-        else:
-            raise RuntimeError('No float32-FK precision control found in installed PyMomentum API')
+        skeleton = official.character_torch.skeleton
+        report['skeleton_type'] = str(type(skeleton))
+        report['pmi_shape'] = list(skeleton.pmi.shape)
+        report['pmi_buffer_sizes'] = list(skeleton._pmi_buffer_sizes)
+        report['backend_impl_signature'] = str(
+            inspect.signature(skel_state_backend.global_skel_state_from_local_skel_state_impl)
+        )
+        report['f32_fk_path'] = 'skel_state_backend.global_skel_state_from_local_skel_state_impl'
 
         torch.manual_seed(1234)
         inputs = (
@@ -161,6 +145,7 @@ def main() -> int:
         report['litert_vs_official_skeleton_max_abs'] = float(np.max(np.abs(ls-os)))
         report['passed'] = (
             not f64_nodes
+            and report['f32_vs_official_vertices_max_abs'] < 0.001
             and report['litert_vs_official_vertices_max_abs'] < 0.001
             and report['litert_vs_official_skeleton_max_abs'] < 0.001
         )
