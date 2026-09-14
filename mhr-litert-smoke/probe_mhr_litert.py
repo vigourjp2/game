@@ -33,6 +33,11 @@ def main() -> int:
             litert_torch_file=str(Path(litert_torch.__file__).resolve()),
         )
         assets = args.mhr_root / 'assets'
+        if not (assets / 'lod1.fbx').is_file() and (assets / 'assets' / 'lod1.fbx').is_file():
+            assets = assets / 'assets'
+        report['assets_dir'] = str(assets)
+        report['lod1_fbx_exists'] = (assets / 'lod1.fbx').is_file()
+
         t0 = time.time()
         model = MHR.from_files(
             folder=assets,
