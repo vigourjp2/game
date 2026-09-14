@@ -1,0 +1,58 @@
+name: MHR LiteRT Smoke
+
+on:
+  push:
+    branches:
+      - mhr-litert-smoke-20260914
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout pinned Meta MHR source
+        run: |
+          git clone https://github.com/facebookresearch/MHR.git mhr-official
+          cd mhr-official
+          git checkout d96fafa33bbf018647c70c3525e91f53e79d2a14
+
+      - name: Set up Meta MHR environment
+        uses: prefix-dev/setup-pixi@v0.10.0
+        with:
+          working-directory: mhr-official
+          pixi-version: v0.77.0
+          cache: true
+
+      - name: Download official MHR assets
+        working-directory: mhr-official
+        run: pixi run python -m mhr.download_assets --dest assets
+
+      - name: Install LiteRT converter with torch-2.8-compatible torchao
+        working-directory: mhr-official
+        run: |
+          pixi run python -m ensurepip --upgrade
+          pixi run python -m pip install 'litert-torch==0.9.4'
+          pixi run python -m pip install --force-reinstall --no-deps 'torchao==0.16.0'
+          pixi run python -c "import torch, torchao, litert_torch; print('TORCH', torch.__version__); print('TORCHAO', getattr(torchao,'__version__','unknown')); print('LITERT', litert_torch.__file__)"
+
+      - name: Convert official eager MHR to LiteRT and compare
+        working-directory: mhr-official
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          pixi run python "$GITHUB_WORKSPACE/mhr-litert-smoke/probe_mhr_litert.py" \
+            --mhr-root "$GITHUB_WORKSPACE/mhr-official" \
+            --output-dir "$GITHUB_WORKSPACE/out"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mhr-litert-smoke
+          path: out/
+          if-no-files-found: warn
