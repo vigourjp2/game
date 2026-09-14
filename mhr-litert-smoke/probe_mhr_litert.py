@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, hashlib, inspect, json, time, traceback
+import argparse, hashlib, json, time, traceback
 from pathlib import Path
 
 
@@ -90,9 +90,6 @@ def main() -> int:
         report['skeleton_type'] = str(type(skeleton))
         report['pmi_shape'] = list(skeleton.pmi.shape)
         report['pmi_buffer_sizes'] = list(skeleton._pmi_buffer_sizes)
-        report['backend_impl_signature'] = str(
-            inspect.signature(skel_state_backend.global_skel_state_from_local_skel_state_impl)
-        )
         report['f32_fk_path'] = 'skel_state_backend.global_skel_state_from_local_skel_state_impl'
 
         torch.manual_seed(1234)
