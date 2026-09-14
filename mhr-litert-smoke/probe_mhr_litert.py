@@ -26,13 +26,62 @@ def main() -> int:
         import torchao
         import litert_torch
         from mhr.mhr import MHR
-        from pymomentum.backend import skel_state_backend
+        from mhr.utils import SparseLinear
+        from pymomentum import skel_state
 
-        class MHRBackendF32FK(torch.nn.Module):
-            """Official MHR math; only global FK precision changes from fp64 to fp32."""
+        def bake_sparse_linears(module: torch.nn.Module) -> int:
+            count = 0
+            for name, child in list(module.named_children()):
+                if isinstance(child, SparseLinear):
+                    shape = tuple(int(x) for x in child.sparse_shape)
+                    dense = torch.zeros(
+                        shape,
+                        dtype=child.sparse_weight.dtype,
+                        device=child.sparse_weight.device,
+                    )
+                    dense[
+                        child.sparse_indices[0], child.sparse_indices[1]
+                    ] = child.sparse_weight.detach()
+                    linear = torch.nn.Linear(
+                        shape[1], shape[0], bias=child.bias is not None
+                    )
+                    with torch.no_grad():
+                        linear.weight.copy_(dense)
+                        if child.bias is not None:
+                            linear.bias.copy_(child.bias.detach())
+                    setattr(module, name, linear.eval())
+                    count += 1
+                else:
+                    count += bake_sparse_linears(child)
+            return count
+
+        class MHRScatterFreeF32(torch.nn.Module):
+            """Official MHR math with fp32 FK and scatter-free inference updates."""
             def __init__(self, inner):
                 super().__init__()
                 self.inner = inner
+                skeleton = inner.character_torch.skeleton
+                parts = list(
+                    skeleton.pmi.split(
+                        split_size=skeleton._pmi_buffer_sizes,
+                        dim=1,
+                    )
+                )
+                self.num_joints = int(skeleton.joint_translation_offsets.shape[0])
+                self.levels = len(parts)
+                for i, part in enumerate(parts):
+                    source = part[0].long().clone()
+                    target = part[1].long().clone()
+                    selector = torch.zeros(
+                        self.num_joints, source.numel(), dtype=torch.float32
+                    )
+                    for k, joint in enumerate(source.tolist()):
+                        selector[joint, k] = 1.0
+                    mask = (selector.sum(dim=1) > 0).view(1, self.num_joints, 1)
+                    self.register_buffer(f'source_{i}', source)
+                    self.register_buffer(f'target_{i}', target)
+                    self.register_buffer(f'selector_{i}', selector)
+                    self.register_buffer(f'mask_{i}', mask)
 
             def forward(self, identity, params, face):
                 identity = identity.expand(params.shape[0], -1)
@@ -44,29 +93,29 @@ def main() -> int:
                     + self.inner.get_num_identity_blendshapes(),
                 ).to(params)
                 joints = self.inner.character_torch.model_parameters_to_joint_parameters(
-                    torch.concatenate((params, padding), axis=1)
+                    torch.cat((params, padding), dim=1)
                 )
                 skeleton = self.inner.character_torch.skeleton
-                local = skeleton.joint_parameters_to_local_skeleton_state(joints)
-                prefix_parts = list(
-                    skeleton.pmi.split(
-                        split_size=skeleton._pmi_buffer_sizes,
-                        dim=1,
+                global_state = skeleton.joint_parameters_to_local_skeleton_state(joints)
+                for i in range(self.levels):
+                    source = getattr(self, f'source_{i}')
+                    target = getattr(self, f'target_{i}')
+                    selector = getattr(self, f'selector_{i}')
+                    mask = getattr(self, f'mask_{i}')
+                    product = skel_state.multiply(
+                        global_state.index_select(-2, target),
+                        global_state.index_select(-2, source),
                     )
-                )
-                skel, _ = skel_state_backend.global_skel_state_from_local_skel_state_impl(
-                    local,
-                    prefix_parts,
-                    save_intermediate_results=False,
-                    use_double_precision=False,
-                )
+                    updates = torch.einsum('jk,bkd->bjd', selector, product)
+                    global_state = torch.where(mask, updates, global_state)
                 unposed = rest_pose + self.inner.pose_correctives_model.forward(
                     joint_parameters=joints
                 )
-                verts = self.inner.character_torch.skin_points(
-                    skel_state=skel, rest_vertex_positions=unposed
+                vertices = self.inner.character_torch.skin_points(
+                    skel_state=global_state,
+                    rest_vertex_positions=unposed,
                 )
-                return verts, skel
+                return vertices, global_state
 
         report.update(
             torch_version=torch.__version__,
@@ -81,16 +130,13 @@ def main() -> int:
 
         t0 = time.time()
         official = MHR.from_files(
-            folder=assets, device=torch.device('cpu'), lod=1, wants_pose_correctives=True
+            folder=assets,
+            device=torch.device('cpu'),
+            lod=1,
+            wants_pose_correctives=True,
         ).eval()
-        f32_model = MHRBackendF32FK(official).eval()
         report['mhr_load_ok'] = True
         report['mhr_load_seconds'] = time.time() - t0
-        skeleton = official.character_torch.skeleton
-        report['skeleton_type'] = str(type(skeleton))
-        report['pmi_shape'] = list(skeleton.pmi.shape)
-        report['pmi_buffer_sizes'] = list(skeleton._pmi_buffer_sizes)
-        report['f32_fk_path'] = 'skel_state_backend.global_skel_state_from_local_skel_state_impl'
 
         torch.manual_seed(1234)
         inputs = (
@@ -100,49 +146,91 @@ def main() -> int:
         )
         with torch.no_grad():
             official_v, official_s = official(*inputs)
-            f32_v, f32_s = f32_model(*inputs)
-        report['pytorch_output_shapes'] = [list(f32_v.shape), list(f32_s.shape)]
-        report['pytorch_output_dtypes'] = [str(f32_v.dtype), str(f32_s.dtype)]
-        report['f32_vs_official_vertices_max_abs'] = float((f32_v-official_v).abs().max())
-        report['f32_vs_official_vertices_mean_abs'] = float((f32_v-official_v).abs().mean())
-        report['f32_vs_official_skeleton_max_abs'] = float((f32_s-official_s).abs().max())
-        report['f32_vs_official_skeleton_mean_abs'] = float((f32_s-official_s).abs().mean())
+
+        report['baked_sparse_linears'] = bake_sparse_linears(
+            official.pose_correctives_model
+        )
+        converted_model = MHRScatterFreeF32(official).eval()
+        report['f32_fk_path'] = 'scatter_free_gather_matmul_where'
+
+        with torch.no_grad():
+            converted_v, converted_s = converted_model(*inputs)
+        report['pytorch_output_shapes'] = [
+            list(converted_v.shape), list(converted_s.shape)
+        ]
+        report['pytorch_output_dtypes'] = [
+            str(converted_v.dtype), str(converted_s.dtype)
+        ]
+        report['converted_vs_official_vertices_max_abs'] = float(
+            (converted_v - official_v).abs().max()
+        )
+        report['converted_vs_official_vertices_mean_abs'] = float(
+            (converted_v - official_v).abs().mean()
+        )
+        report['converted_vs_official_skeleton_max_abs'] = float(
+            (converted_s - official_s).abs().max()
+        )
+        report['converted_vs_official_skeleton_mean_abs'] = float(
+            (converted_s - official_s).abs().mean()
+        )
 
         t0 = time.time()
-        ep = torch.export.export(f32_model, inputs)
+        ep = torch.export.export(converted_model, inputs)
         report['torch_export_ok'] = True
         report['torch_export_seconds'] = time.time() - t0
         report['torch_export_graph_nodes'] = sum(1 for _ in ep.graph.nodes)
         f64_nodes = []
+        scatter_nodes = []
         for node in ep.graph.nodes:
             val = node.meta.get('val')
+            target = str(node.target)
             if getattr(val, 'dtype', None) == torch.float64:
-                f64_nodes.append({'op': node.op, 'target': str(node.target), 'name': node.name})
+                f64_nodes.append({'op': node.op, 'target': target, 'name': node.name})
+            lower_target = target.lower()
+            if any(x in lower_target for x in ('scatter', 'index_copy', 'index_put')):
+                scatter_nodes.append({'op': node.op, 'target': target, 'name': node.name})
         report['torch_export_f64_nodes'] = f64_nodes
+        report['torch_export_scatter_nodes'] = scatter_nodes
 
         t0 = time.time()
-        edge = litert_torch.convert(f32_model, inputs)
+        edge = litert_torch.convert(converted_model, inputs)
         report['litert_convert_ok'] = True
         report['litert_convert_seconds'] = time.time() - t0
-        tflite_path = args.output_dir / 'mhr_lod1_f32fk.tflite'
+        tflite_path = args.output_dir / 'mhr_lod1_android.tflite'
         edge.export(str(tflite_path))
         report['tflite_bytes'] = tflite_path.stat().st_size
         report['tflite_sha256'] = sha256(tflite_path)
 
+        t0 = time.time()
         litert_out = edge(*inputs)
+        report['litert_inference_ok'] = True
+        report['litert_inference_seconds'] = time.time() - t0
         if not isinstance(litert_out, (tuple, list)) or len(litert_out) != 2:
-            raise RuntimeError(f'Expected two LiteRT outputs, got {type(litert_out)!r}')
+            raise RuntimeError(
+                f'Expected two LiteRT outputs, got {type(litert_out)!r}'
+            )
         lv, ls = np.asarray(litert_out[0]), np.asarray(litert_out[1])
-        fv, fs = f32_v.detach().cpu().numpy(), f32_s.detach().cpu().numpy()
-        ov, os = official_v.detach().cpu().numpy(), official_s.detach().cpu().numpy()
+        cv = converted_v.detach().cpu().numpy()
+        cs = converted_s.detach().cpu().numpy()
+        ov = official_v.detach().cpu().numpy()
+        os = official_s.detach().cpu().numpy()
         report['litert_output_shapes'] = [list(lv.shape), list(ls.shape)]
-        report['litert_vs_f32_vertices_max_abs'] = float(np.max(np.abs(lv-fv)))
-        report['litert_vs_f32_skeleton_max_abs'] = float(np.max(np.abs(ls-fs)))
-        report['litert_vs_official_vertices_max_abs'] = float(np.max(np.abs(lv-ov)))
-        report['litert_vs_official_skeleton_max_abs'] = float(np.max(np.abs(ls-os)))
+        report['litert_vs_converted_vertices_max_abs'] = float(
+            np.max(np.abs(lv - cv))
+        )
+        report['litert_vs_converted_skeleton_max_abs'] = float(
+            np.max(np.abs(ls - cs))
+        )
+        report['litert_vs_official_vertices_max_abs'] = float(
+            np.max(np.abs(lv - ov))
+        )
+        report['litert_vs_official_skeleton_max_abs'] = float(
+            np.max(np.abs(ls - os))
+        )
         report['passed'] = (
             not f64_nodes
-            and report['f32_vs_official_vertices_max_abs'] < 0.001
+            and not scatter_nodes
+            and report['converted_vs_official_vertices_max_abs'] < 0.001
             and report['litert_vs_official_vertices_max_abs'] < 0.001
             and report['litert_vs_official_skeleton_max_abs'] < 0.001
         )
@@ -151,8 +239,10 @@ def main() -> int:
         report['error'] = repr(exc)
         report['traceback'] = traceback.format_exc()
 
-    (args.output_dir/'report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
-    print(json.dumps({k:v for k,v in report.items() if k!='traceback'},indent=2))
+    (args.output_dir / 'report.json').write_text(
+        json.dumps(report, indent=2), encoding='utf-8'
+    )
+    print(json.dumps({k: v for k, v in report.items() if k != 'traceback'}, indent=2))
     return 0 if report.get('passed') else 1
 
 
