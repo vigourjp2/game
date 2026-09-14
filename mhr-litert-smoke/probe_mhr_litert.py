@@ -128,7 +128,7 @@ def main() -> int:
                     states = joint_state.index_select(-2, self.skin_idx[:, k])
                     transformed = skel_state.transform_points(states, unposed)
                     vertices = vertices + transformed * self.skin_w[:, k][None, :, None]
-                return vertices, global_state
+                return vertices, global_state, unposed
 
         report.update(
             torch_version=torch.__version__,
@@ -154,19 +154,40 @@ def main() -> int:
         )
         with torch.no_grad():
             official_v, official_s = official(*inputs)
+            identity = inputs[0].expand(inputs[1].shape[0], -1)
+            official_rest = official.character_torch.blend_shape.forward(
+                torch.cat([identity, inputs[2]], dim=1)
+            )
+            padding = torch.zeros(
+                inputs[1].shape[0],
+                official.get_num_face_expression_blendshapes() + official.get_num_identity_blendshapes(),
+            ).to(inputs[1])
+            official_joints = official.character_torch.model_parameters_to_joint_parameters(
+                torch.cat((inputs[1], padding), dim=1)
+            )
+            official_unposed = official_rest + official.pose_correctives_model.forward(
+                joint_parameters=official_joints
+            )
 
         report['baked_sparse_linears'] = bake_sparse_linears(official.pose_correctives_model)
         converted_model = AndroidMHR(official).eval()
         report['android_rewrite'] = 'fp32_fk + baked_sparse_linear + functional_pose_features + fixed4_lbs'
+        report['body_package_outputs'] = ['vertices', 'skeleton', 'unposed_vertices']
 
         with torch.no_grad():
-            converted_v, converted_s = converted_model(*inputs)
-        report['pytorch_output_shapes'] = [list(converted_v.shape), list(converted_s.shape)]
-        report['pytorch_output_dtypes'] = [str(converted_v.dtype), str(converted_s.dtype)]
+            converted_v, converted_s, converted_u = converted_model(*inputs)
+        report['pytorch_output_shapes'] = [
+            list(converted_v.shape), list(converted_s.shape), list(converted_u.shape)
+        ]
+        report['pytorch_output_dtypes'] = [
+            str(converted_v.dtype), str(converted_s.dtype), str(converted_u.dtype)
+        ]
         report['converted_vs_official_vertices_max_abs'] = float((converted_v - official_v).abs().max())
         report['converted_vs_official_vertices_mean_abs'] = float((converted_v - official_v).abs().mean())
         report['converted_vs_official_skeleton_max_abs'] = float((converted_s - official_s).abs().max())
         report['converted_vs_official_skeleton_mean_abs'] = float((converted_s - official_s).abs().mean())
+        report['converted_vs_official_unposed_max_abs'] = float((converted_u - official_unposed).abs().max())
+        report['converted_vs_official_unposed_mean_abs'] = float((converted_u - official_unposed).abs().mean())
 
         t0 = time.time()
         ep = torch.export.export(converted_model, inputs)
@@ -198,22 +219,38 @@ def main() -> int:
         litert_out = edge(*inputs)
         report['litert_inference_ok'] = True
         report['litert_inference_seconds'] = time.time() - t0
-        if not isinstance(litert_out, (tuple, list)) or len(litert_out) != 2:
-            raise RuntimeError(f'Expected two LiteRT outputs, got {type(litert_out)!r}')
-        lv, ls = np.asarray(litert_out[0]), np.asarray(litert_out[1])
-        cv, cs = converted_v.detach().cpu().numpy(), converted_s.detach().cpu().numpy()
-        ov, os = official_v.detach().cpu().numpy(), official_s.detach().cpu().numpy()
-        report['litert_output_shapes'] = [list(lv.shape), list(ls.shape)]
+        if not isinstance(litert_out, (tuple, list)) or len(litert_out) != 3:
+            raise RuntimeError(f'Expected three LiteRT outputs, got {type(litert_out)!r}')
+        lv, ls, lu = (
+            np.asarray(litert_out[0]),
+            np.asarray(litert_out[1]),
+            np.asarray(litert_out[2]),
+        )
+        cv, cs, cu = (
+            converted_v.detach().cpu().numpy(),
+            converted_s.detach().cpu().numpy(),
+            converted_u.detach().cpu().numpy(),
+        )
+        ov, os, ou = (
+            official_v.detach().cpu().numpy(),
+            official_s.detach().cpu().numpy(),
+            official_unposed.detach().cpu().numpy(),
+        )
+        report['litert_output_shapes'] = [list(lv.shape), list(ls.shape), list(lu.shape)]
         report['litert_vs_converted_vertices_max_abs'] = float(np.max(np.abs(lv - cv)))
         report['litert_vs_converted_skeleton_max_abs'] = float(np.max(np.abs(ls - cs)))
+        report['litert_vs_converted_unposed_max_abs'] = float(np.max(np.abs(lu - cu)))
         report['litert_vs_official_vertices_max_abs'] = float(np.max(np.abs(lv - ov)))
         report['litert_vs_official_skeleton_max_abs'] = float(np.max(np.abs(ls - os)))
+        report['litert_vs_official_unposed_max_abs'] = float(np.max(np.abs(lu - ou)))
         report['passed'] = (
             not f64_nodes
             and not mutation_nodes
             and report['converted_vs_official_vertices_max_abs'] < 0.001
+            and report['converted_vs_official_unposed_max_abs'] < 0.001
             and report['litert_vs_official_vertices_max_abs'] < 0.001
             and report['litert_vs_official_skeleton_max_abs'] < 0.001
+            and report['litert_vs_official_unposed_max_abs'] < 0.001
         )
     except Exception as exc:
         report['passed'] = False
