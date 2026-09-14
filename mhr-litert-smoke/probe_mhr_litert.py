@@ -48,10 +48,14 @@ def main() -> int:
             return count
 
         class AndroidMHR(torch.nn.Module):
-            """Official MHR inference math, rewritten only to avoid unsupported mutations."""
+            """Windows-worker-equivalent canonical MHR, rewritten for LiteRT-supported ops."""
             def __init__(self, inner):
                 super().__init__()
                 self.inner = inner
+                body_mask = torch.zeros(204, dtype=torch.float32)
+                body_mask[130:204] = 1.0
+                self.register_buffer('body_mask', body_mask)
+
                 skeleton = inner.character_torch.skeleton
                 parts = list(skeleton.pmi.split(split_size=skeleton._pmi_buffer_sizes, dim=1))
                 self.num_joints = int(skeleton.joint_translation_offsets.shape[0])
@@ -89,8 +93,9 @@ def main() -> int:
                 self.register_buffer('inverse_bind_pose', lbs.inverse_bind_pose.clone())
                 self.register_buffer('pose_neutral', torch.tensor([1., 0., 0., 0., 1., 0.]).view(1, 1, 6))
 
-            def forward(self, identity, params, face):
-                identity = identity.expand(params.shape[0], -1)
+            def forward(self, identity, source_params, face):
+                identity = identity.expand(source_params.shape[0], -1)
+                params = source_params * self.body_mask.unsqueeze(0)
                 rest_pose = self.inner.character_torch.blend_shape.forward(torch.cat([identity, face], dim=1))
                 padding = torch.zeros(
                     params.shape[0],
@@ -117,18 +122,19 @@ def main() -> int:
                 offsets = self.inner.pose_correctives_model.pose_dirs_predictor(pose_features).reshape(
                     pose_features.shape[0], -1, 3
                 )
-                unposed = rest_pose + offsets
+                corrected = rest_pose + offsets
 
                 inverse_bind = self.inverse_bind_pose
                 while inverse_bind.ndim < global_state.ndim:
                     inverse_bind = inverse_bind.unsqueeze(0)
                 joint_state = skel_state.multiply(global_state, inverse_bind)
-                vertices = torch.zeros_like(unposed)
+                vertices = torch.zeros_like(corrected)
                 for k in range(4):
                     states = joint_state.index_select(-2, self.skin_idx[:, k])
-                    transformed = skel_state.transform_points(states, unposed)
+                    transformed = skel_state.transform_points(states, corrected)
                     vertices = vertices + transformed * self.skin_w[:, k][None, :, None]
-                return vertices, global_state, unposed
+                # .mhrb third output is the pre-corrective/pre-skin rest shape.
+                return vertices, global_state, rest_pose
 
         report.update(
             torch_version=torch.__version__,
@@ -138,13 +144,29 @@ def main() -> int:
         assets = args.mhr_root / 'assets'
         if not (assets / 'lod1.fbx').is_file() and (assets / 'assets' / 'lod1.fbx').is_file():
             assets = assets / 'assets'
+        scripted_path = assets / 'mhr_model.pt'
         report['assets_dir'] = str(assets)
-        report['official_torchscript_exists'] = (assets / 'mhr_model.pt').is_file()
+        report['official_torchscript_exists'] = scripted_path.is_file()
+        report['official_torchscript_sha256'] = sha256(scripted_path)
 
         t0 = time.time()
         official = MHR.from_files(folder=assets, device=torch.device('cpu'), lod=1, wants_pose_correctives=True).eval()
+        scripted = torch.jit.load(str(scripted_path), map_location='cpu').eval()
         report['mhr_load_ok'] = True
         report['mhr_load_seconds'] = time.time() - t0
+
+        transform = scripted.get_parameter_transform()[:, :204].reshape(127, 7, 204)
+        rotations = transform[:, 3:6, :].abs().sum(dim=(0, 1))
+        translations_or_scale = transform[:, [0, 1, 2, 6], :].abs().sum(dim=(0, 1))
+        scaling = scripted.character_torch.parameter_transform.scaling_parameters[:204].bool()
+        scripted_body_mask = scaling | ((rotations == 0) & (translations_or_scale != 0))
+        for index, name in enumerate(list(scripted.get_parameter_names())[:204]):
+            if name.startswith('root_'):
+                scripted_body_mask[index] = False
+        body_indices = torch.nonzero(scripted_body_mask).flatten().tolist()
+        report['worker_body_parameter_indices'] = body_indices
+        if body_indices != list(range(130, 204)):
+            raise RuntimeError(f'Worker body mask changed: {body_indices}')
 
         torch.manual_seed(1234)
         inputs = (
@@ -152,42 +174,26 @@ def main() -> int:
             torch.randn(1, 204, dtype=torch.float32) * 0.08,
             torch.randn(1, 72, dtype=torch.float32) * 0.15,
         )
+        canonical_params = inputs[1] * scripted_body_mask.unsqueeze(0)
         with torch.no_grad():
-            official_v, official_s = official(*inputs)
-            identity = inputs[0].expand(inputs[1].shape[0], -1)
-            official_rest = official.character_torch.blend_shape.forward(
-                torch.cat([identity, inputs[2]], dim=1)
-            )
-            padding = torch.zeros(
-                inputs[1].shape[0],
-                official.get_num_face_expression_blendshapes() + official.get_num_identity_blendshapes(),
-            ).to(inputs[1])
-            official_joints = official.character_torch.model_parameters_to_joint_parameters(
-                torch.cat((inputs[1], padding), dim=1)
-            )
-            official_unposed = official_rest + official.pose_correctives_model.forward(
-                joint_parameters=official_joints
-            )
+            worker_v, worker_s = scripted(inputs[0], canonical_params, inputs[2], True)
+            worker_u = scripted.character_torch.blend_shape(inputs[0]) + scripted.face_expressions_model(inputs[2])
 
         report['baked_sparse_linears'] = bake_sparse_linears(official.pose_correctives_model)
         converted_model = AndroidMHR(official).eval()
-        report['android_rewrite'] = 'fp32_fk + baked_sparse_linear + functional_pose_features + fixed4_lbs'
-        report['body_package_outputs'] = ['vertices', 'skeleton', 'unposed_vertices']
+        report['android_rewrite'] = 'worker_body_mask + fp32_fk + baked_sparse_linear + functional_pose_features + fixed4_lbs'
+        report['body_package_outputs'] = ['vertices', 'skeleton', 'unposed_vertices_pre_corrective']
 
         with torch.no_grad():
             converted_v, converted_s, converted_u = converted_model(*inputs)
-        report['pytorch_output_shapes'] = [
-            list(converted_v.shape), list(converted_s.shape), list(converted_u.shape)
-        ]
-        report['pytorch_output_dtypes'] = [
-            str(converted_v.dtype), str(converted_s.dtype), str(converted_u.dtype)
-        ]
-        report['converted_vs_official_vertices_max_abs'] = float((converted_v - official_v).abs().max())
-        report['converted_vs_official_vertices_mean_abs'] = float((converted_v - official_v).abs().mean())
-        report['converted_vs_official_skeleton_max_abs'] = float((converted_s - official_s).abs().max())
-        report['converted_vs_official_skeleton_mean_abs'] = float((converted_s - official_s).abs().mean())
-        report['converted_vs_official_unposed_max_abs'] = float((converted_u - official_unposed).abs().max())
-        report['converted_vs_official_unposed_mean_abs'] = float((converted_u - official_unposed).abs().mean())
+        report['pytorch_output_shapes'] = [list(converted_v.shape), list(converted_s.shape), list(converted_u.shape)]
+        report['pytorch_output_dtypes'] = [str(converted_v.dtype), str(converted_s.dtype), str(converted_u.dtype)]
+        report['converted_vs_worker_vertices_max_abs'] = float((converted_v - worker_v).abs().max())
+        report['converted_vs_worker_vertices_mean_abs'] = float((converted_v - worker_v).abs().mean())
+        report['converted_vs_worker_skeleton_max_abs'] = float((converted_s - worker_s).abs().max())
+        report['converted_vs_worker_skeleton_mean_abs'] = float((converted_s - worker_s).abs().mean())
+        report['converted_vs_worker_unposed_max_abs'] = float((converted_u - worker_u).abs().max())
+        report['converted_vs_worker_unposed_mean_abs'] = float((converted_u - worker_u).abs().mean())
 
         t0 = time.time()
         ep = torch.export.export(converted_model, inputs)
@@ -221,36 +227,25 @@ def main() -> int:
         report['litert_inference_seconds'] = time.time() - t0
         if not isinstance(litert_out, (tuple, list)) or len(litert_out) != 3:
             raise RuntimeError(f'Expected three LiteRT outputs, got {type(litert_out)!r}')
-        lv, ls, lu = (
-            np.asarray(litert_out[0]),
-            np.asarray(litert_out[1]),
-            np.asarray(litert_out[2]),
-        )
-        cv, cs, cu = (
-            converted_v.detach().cpu().numpy(),
-            converted_s.detach().cpu().numpy(),
-            converted_u.detach().cpu().numpy(),
-        )
-        ov, os, ou = (
-            official_v.detach().cpu().numpy(),
-            official_s.detach().cpu().numpy(),
-            official_unposed.detach().cpu().numpy(),
-        )
+        lv, ls, lu = np.asarray(litert_out[0]), np.asarray(litert_out[1]), np.asarray(litert_out[2])
+        cv, cs, cu = converted_v.detach().cpu().numpy(), converted_s.detach().cpu().numpy(), converted_u.detach().cpu().numpy()
+        wv, ws, wu = worker_v.detach().cpu().numpy(), worker_s.detach().cpu().numpy(), worker_u.detach().cpu().numpy()
         report['litert_output_shapes'] = [list(lv.shape), list(ls.shape), list(lu.shape)]
         report['litert_vs_converted_vertices_max_abs'] = float(np.max(np.abs(lv - cv)))
         report['litert_vs_converted_skeleton_max_abs'] = float(np.max(np.abs(ls - cs)))
         report['litert_vs_converted_unposed_max_abs'] = float(np.max(np.abs(lu - cu)))
-        report['litert_vs_official_vertices_max_abs'] = float(np.max(np.abs(lv - ov)))
-        report['litert_vs_official_skeleton_max_abs'] = float(np.max(np.abs(ls - os)))
-        report['litert_vs_official_unposed_max_abs'] = float(np.max(np.abs(lu - ou)))
+        report['litert_vs_worker_vertices_max_abs'] = float(np.max(np.abs(lv - wv)))
+        report['litert_vs_worker_skeleton_max_abs'] = float(np.max(np.abs(ls - ws)))
+        report['litert_vs_worker_unposed_max_abs'] = float(np.max(np.abs(lu - wu)))
         report['passed'] = (
             not f64_nodes
             and not mutation_nodes
-            and report['converted_vs_official_vertices_max_abs'] < 0.001
-            and report['converted_vs_official_unposed_max_abs'] < 0.001
-            and report['litert_vs_official_vertices_max_abs'] < 0.001
-            and report['litert_vs_official_skeleton_max_abs'] < 0.001
-            and report['litert_vs_official_unposed_max_abs'] < 0.001
+            and report['converted_vs_worker_vertices_max_abs'] < 0.001
+            and report['converted_vs_worker_skeleton_max_abs'] < 0.001
+            and report['converted_vs_worker_unposed_max_abs'] < 0.001
+            and report['litert_vs_worker_vertices_max_abs'] < 0.001
+            and report['litert_vs_worker_skeleton_max_abs'] < 0.001
+            and report['litert_vs_worker_unposed_max_abs'] < 0.001
         )
     except Exception as exc:
         report['passed'] = False
